@@ -17,8 +17,12 @@ class ShellScreen extends ConsumerWidget {
     return Scaffold(
       body: Column(
         children: [
-          if (sdeState.isDownloading)
-            LinearProgressIndicator(value: sdeState.downloadProgress),
+          if (sdeState.isDownloading || (!sdeState.isReady && sdeState.error == null))
+            LinearProgressIndicator(
+              // null = indeterminate (animated); switch to determinate once we have real progress
+              value: sdeState.downloadProgress > 0 ? sdeState.downloadProgress : null,
+              minHeight: 3,
+            ),
           Expanded(
             child: Row(
               children: [

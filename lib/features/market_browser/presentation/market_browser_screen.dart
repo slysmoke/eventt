@@ -124,14 +124,16 @@ class _SdeLoadingView extends StatelessWidget {
               style: theme.textTheme.titleMedium,
             ),
             const SizedBox(height: 16),
-            LinearProgressIndicator(value: progress),
-            if (progress != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                '${(progress! * 100).toStringAsFixed(0)}%',
-                style: theme.textTheme.bodySmall,
-              ),
-            ],
+            LinearProgressIndicator(
+              value: (progress != null && progress! > 0) ? progress : null,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              (progress != null && progress! > 0)
+                  ? '${(progress! * 100).toStringAsFixed(0)}%'
+                  : 'Connecting…',
+              style: theme.textTheme.bodySmall,
+            ),
           ],
         ),
       ),
