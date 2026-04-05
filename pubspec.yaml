@@ -1,0 +1,48 @@
+name: eventt
+description: "EVE Online trading assistant"
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.11.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.5.0
+  riverpod_annotation: ^2.3.0
+
+  # Database
+  drift: ^2.18.0
+  sqlite3_flutter_libs: ^0.5.0
+  path_provider: ^2.1.0
+  path: ^1.9.0
+
+  # HTTP
+  dio: ^5.4.0
+
+  # Auth
+  url_launcher: ^6.2.0
+  flutter_secure_storage: ^9.0.0
+  crypto: ^3.0.0
+
+  # Utils
+  package_info_plus: ^8.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+  # Codegen
+  build_runner: ^2.4.0
+  drift_dev: ^2.18.0
+  riverpod_generator: ^2.3.0
+
+  # Testing
+  mocktail: ^1.0.0
+
+flutter:
+  uses-material-design: true
