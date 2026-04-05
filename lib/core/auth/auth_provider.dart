@@ -14,5 +14,17 @@ final eveAuthServiceProvider = Provider<EveAuthService>((ref) {
 });
 
 /// Global active character ID. null = no character selected.
+///
+/// Use `ref.read(activeCharacterIdProvider.notifier).state = id` to change.
 final activeCharacterIdProvider =
-    StateProvider<int?>((ref) => null);
+    NotifierProvider<ActiveCharacterNotifier, int?>(
+  ActiveCharacterNotifier.new,
+);
+
+class ActiveCharacterNotifier extends Notifier<int?> {
+  @override
+  int? build() => null;
+
+  void select(int characterId) => state = characterId;
+  void clear() => state = null;
+}

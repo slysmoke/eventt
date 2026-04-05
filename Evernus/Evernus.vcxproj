@@ -1,0 +1,1586 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="16.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="MinSizeRel|x64">
+      <Configuration>MinSizeRel</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="RelWithDebInfo|x64">
+      <Configuration>RelWithDebInfo</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{6A556DE4-F142-36DE-ADBD-92FA71048E03}</ProjectGuid>
+    <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
+    <Keyword>Win32Proj</Keyword>
+    <Platform>x64</Platform>
+    <ProjectName>Evernus</ProjectName>
+    <VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v142</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v142</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v142</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v142</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.20506.1</_ProjectFileVersion>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">D:\github\evernus\Evernus\Debug\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Evernus.dir\Debug\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Evernus</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</GenerateManifest>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">D:\github\evernus\Evernus\Release\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Evernus.dir\Release\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Evernus</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</GenerateManifest>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">D:\github\evernus\Evernus\MinSizeRel\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Evernus.dir\MinSizeRel\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Evernus</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">true</GenerateManifest>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">D:\github\evernus\Evernus\RelWithDebInfo\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Evernus.dir\RelWithDebInfo\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Evernus</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">true</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">true</GenerateManifest>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>D:\github\evernus\Evernus;D:\github\evernus\Evernus\Evernus_autogen\include_Debug;D:\boost;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtConcurrent;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\.\mkspecs\win32-msvc;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtDataVisualization;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtANGLE;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui\5.12.7;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui\5.12.7\QtGui;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore\5.12.7;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore\5.12.7\QtCore;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtMultimedia;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtNetwork;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtNetworkAuth;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtPrintSupport;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtWidgets;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQml;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQuickWidgets;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQuick;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtSql;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtWinExtras;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <DisableSpecificWarnings>4503</DisableSpecificWarnings>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>Disabled</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;EVERNUS_CREATE_DUMPS=0;EVERNUS_CLIENT_ID=9690dbe6c0874b4ca7a57ca53f3d5635;EVERNUS_CLIENT_SECRET=8znGhFVq4QwLx9SbESjEyEuaNkvDRLmv3NvnpCHF;QXT_STATIC;QTDROPBOX_DEBUG;QT_CONCURRENT_LIB;QT_CORE_LIB;QT_DATAVISUALIZATION_LIB;QT_GUI_LIB;QT_MULTIMEDIA_LIB;QT_NETWORK_LIB;QT_NETWORKAUTH_LIB;QT_PRINTSUPPORT_LIB;QT_WIDGETS_LIB;QT_QML_LIB;QT_QUICKWIDGETS_LIB;QT_QUICK_LIB;QT_SQL_LIB;QT_WINEXTRAS_LIB;CMAKE_INTDIR="Debug";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;EVERNUS_CREATE_DUMPS=0;EVERNUS_CLIENT_ID=9690dbe6c0874b4ca7a57ca53f3d5635;EVERNUS_CLIENT_SECRET=8znGhFVq4QwLx9SbESjEyEuaNkvDRLmv3NvnpCHF;QXT_STATIC;QTDROPBOX_DEBUG;QT_CONCURRENT_LIB;QT_CORE_LIB;QT_DATAVISUALIZATION_LIB;QT_GUI_LIB;QT_MULTIMEDIA_LIB;QT_NETWORK_LIB;QT_NETWORKAUTH_LIB;QT_PRINTSUPPORT_LIB;QT_WIDGETS_LIB;QT_QML_LIB;QT_QUICKWIDGETS_LIB;QT_QUICK_LIB;QT_SQL_LIB;QT_WINEXTRAS_LIB;CMAKE_INTDIR=\"Debug\";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>D:\github\evernus\Evernus;D:\github\evernus\Evernus\Evernus_autogen\include_Debug;D:\boost;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtConcurrent;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\.\mkspecs\win32-msvc;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtDataVisualization;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtANGLE;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui\5.12.7;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui\5.12.7\QtGui;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore\5.12.7;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore\5.12.7\QtCore;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtMultimedia;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtNetwork;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtNetworkAuth;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtPrintSupport;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtWidgets;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQml;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQuickWidgets;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQuick;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtSql;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtWinExtras;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>D:\github\evernus\Evernus;D:\github\evernus\Evernus\Evernus_autogen\include_Debug;D:\boost;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtConcurrent;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\.\mkspecs\win32-msvc;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtDataVisualization;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtANGLE;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui\5.12.7;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui\5.12.7\QtGui;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore\5.12.7;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore\5.12.7\QtCore;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtMultimedia;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtNetwork;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtNetworkAuth;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtPrintSupport;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtWidgets;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQml;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQuickWidgets;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQuick;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtSql;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtWinExtras;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <PreBuildEvent>
+      <StdOutEncoding>UTF-8</StdOutEncoding>
+      <Message>Automatic MOC for target Evernus</Message>
+      <Command>setlocal
+cd D:\github\evernus\Evernus
+if %errorlevel% neq 0 goto :cmEnd
+D:
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E cmake_autogen D:/github/evernus/Evernus/CMakeFiles/Evernus_autogen.dir/AutogenInfo.json Debug
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+    </PreBuildEvent>
+    <Link>
+      <AdditionalDependencies>D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Concurrentd.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5DataVisualizationd.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Multimediad.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5NetworkAuthd.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5PrintSupportd.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5QuickWidgetsd.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Sqld.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Widgetsd.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5WinExtrasd.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Quickd.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Qmld.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Networkd.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Guid.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Cored.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\qtmaind.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64 /machine:x64</AdditionalOptions>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImportLibrary>D:/github/evernus/Evernus/Debug/Evernus.lib</ImportLibrary>
+      <ProgramDataBaseFile>D:/github/evernus/Evernus/Debug/Evernus.pdb</ProgramDataBaseFile>
+      <SubSystem>Windows</SubSystem>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>D:\github\evernus\Evernus;D:\github\evernus\Evernus\Evernus_autogen\include_Release;D:\boost;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtConcurrent;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\.\mkspecs\win32-msvc;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtDataVisualization;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtANGLE;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui\5.12.7;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui\5.12.7\QtGui;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore\5.12.7;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore\5.12.7\QtCore;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtMultimedia;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtNetwork;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtNetworkAuth;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtPrintSupport;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtWidgets;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQml;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQuickWidgets;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQuick;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtSql;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtWinExtras;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <DisableSpecificWarnings>4503</DisableSpecificWarnings>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;EVERNUS_CREATE_DUMPS=0;EVERNUS_CLIENT_ID=9690dbe6c0874b4ca7a57ca53f3d5635;EVERNUS_CLIENT_SECRET=8znGhFVq4QwLx9SbESjEyEuaNkvDRLmv3NvnpCHF;QXT_STATIC;QTDROPBOX_DEBUG;QT_CONCURRENT_LIB;QT_CORE_LIB;QT_NO_DEBUG;QT_DATAVISUALIZATION_LIB;QT_GUI_LIB;QT_MULTIMEDIA_LIB;QT_NETWORK_LIB;QT_NETWORKAUTH_LIB;QT_PRINTSUPPORT_LIB;QT_WIDGETS_LIB;QT_QML_LIB;QT_QUICKWIDGETS_LIB;QT_QUICK_LIB;QT_SQL_LIB;QT_WINEXTRAS_LIB;CMAKE_INTDIR="Release";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;EVERNUS_CREATE_DUMPS=0;EVERNUS_CLIENT_ID=9690dbe6c0874b4ca7a57ca53f3d5635;EVERNUS_CLIENT_SECRET=8znGhFVq4QwLx9SbESjEyEuaNkvDRLmv3NvnpCHF;QXT_STATIC;QTDROPBOX_DEBUG;QT_CONCURRENT_LIB;QT_CORE_LIB;QT_NO_DEBUG;QT_DATAVISUALIZATION_LIB;QT_GUI_LIB;QT_MULTIMEDIA_LIB;QT_NETWORK_LIB;QT_NETWORKAUTH_LIB;QT_PRINTSUPPORT_LIB;QT_WIDGETS_LIB;QT_QML_LIB;QT_QUICKWIDGETS_LIB;QT_QUICK_LIB;QT_SQL_LIB;QT_WINEXTRAS_LIB;CMAKE_INTDIR=\"Release\";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>D:\github\evernus\Evernus;D:\github\evernus\Evernus\Evernus_autogen\include_Release;D:\boost;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtConcurrent;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\.\mkspecs\win32-msvc;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtDataVisualization;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtANGLE;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui\5.12.7;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui\5.12.7\QtGui;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore\5.12.7;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore\5.12.7\QtCore;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtMultimedia;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtNetwork;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtNetworkAuth;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtPrintSupport;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtWidgets;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQml;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQuickWidgets;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQuick;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtSql;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtWinExtras;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>D:\github\evernus\Evernus;D:\github\evernus\Evernus\Evernus_autogen\include_Release;D:\boost;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtConcurrent;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\.\mkspecs\win32-msvc;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtDataVisualization;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtANGLE;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui\5.12.7;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui\5.12.7\QtGui;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore\5.12.7;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore\5.12.7\QtCore;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtMultimedia;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtNetwork;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtNetworkAuth;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtPrintSupport;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtWidgets;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQml;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQuickWidgets;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQuick;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtSql;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtWinExtras;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <PreBuildEvent>
+      <StdOutEncoding>UTF-8</StdOutEncoding>
+      <Message>Automatic MOC for target Evernus</Message>
+      <Command>setlocal
+cd D:\github\evernus\Evernus
+if %errorlevel% neq 0 goto :cmEnd
+D:
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E cmake_autogen D:/github/evernus/Evernus/CMakeFiles/Evernus_autogen.dir/AutogenInfo.json Release
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+    </PreBuildEvent>
+    <Link>
+      <AdditionalDependencies>D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Concurrent.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5DataVisualization.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Multimedia.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5NetworkAuth.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5PrintSupport.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5QuickWidgets.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Sql.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Widgets.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5WinExtras.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Quick.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Qml.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Network.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Gui.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Core.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\qtmain.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64 /machine:x64</AdditionalOptions>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImportLibrary>D:/github/evernus/Evernus/Release/Evernus.lib</ImportLibrary>
+      <ProgramDataBaseFile>D:/github/evernus/Evernus/Release/Evernus.pdb</ProgramDataBaseFile>
+      <SubSystem>Windows</SubSystem>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>D:\github\evernus\Evernus;D:\github\evernus\Evernus\Evernus_autogen\include_MinSizeRel;D:\boost;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtConcurrent;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\.\mkspecs\win32-msvc;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtDataVisualization;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtANGLE;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui\5.12.7;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui\5.12.7\QtGui;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore\5.12.7;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore\5.12.7\QtCore;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtMultimedia;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtNetwork;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtNetworkAuth;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtPrintSupport;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtWidgets;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQml;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQuickWidgets;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQuick;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtSql;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtWinExtras;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <DisableSpecificWarnings>4503</DisableSpecificWarnings>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>MinSpace</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;EVERNUS_CREATE_DUMPS=0;EVERNUS_CLIENT_ID=9690dbe6c0874b4ca7a57ca53f3d5635;EVERNUS_CLIENT_SECRET=8znGhFVq4QwLx9SbESjEyEuaNkvDRLmv3NvnpCHF;QXT_STATIC;QTDROPBOX_DEBUG;QT_CONCURRENT_LIB;QT_CORE_LIB;QT_NO_DEBUG;QT_DATAVISUALIZATION_LIB;QT_GUI_LIB;QT_MULTIMEDIA_LIB;QT_NETWORK_LIB;QT_NETWORKAUTH_LIB;QT_PRINTSUPPORT_LIB;QT_WIDGETS_LIB;QT_QML_LIB;QT_QUICKWIDGETS_LIB;QT_QUICK_LIB;QT_SQL_LIB;QT_WINEXTRAS_LIB;CMAKE_INTDIR="MinSizeRel";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;EVERNUS_CREATE_DUMPS=0;EVERNUS_CLIENT_ID=9690dbe6c0874b4ca7a57ca53f3d5635;EVERNUS_CLIENT_SECRET=8znGhFVq4QwLx9SbESjEyEuaNkvDRLmv3NvnpCHF;QXT_STATIC;QTDROPBOX_DEBUG;QT_CONCURRENT_LIB;QT_CORE_LIB;QT_NO_DEBUG;QT_DATAVISUALIZATION_LIB;QT_GUI_LIB;QT_MULTIMEDIA_LIB;QT_NETWORK_LIB;QT_NETWORKAUTH_LIB;QT_PRINTSUPPORT_LIB;QT_WIDGETS_LIB;QT_QML_LIB;QT_QUICKWIDGETS_LIB;QT_QUICK_LIB;QT_SQL_LIB;QT_WINEXTRAS_LIB;CMAKE_INTDIR=\"MinSizeRel\";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>D:\github\evernus\Evernus;D:\github\evernus\Evernus\Evernus_autogen\include_MinSizeRel;D:\boost;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtConcurrent;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\.\mkspecs\win32-msvc;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtDataVisualization;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtANGLE;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui\5.12.7;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui\5.12.7\QtGui;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore\5.12.7;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore\5.12.7\QtCore;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtMultimedia;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtNetwork;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtNetworkAuth;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtPrintSupport;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtWidgets;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQml;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQuickWidgets;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQuick;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtSql;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtWinExtras;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>D:\github\evernus\Evernus;D:\github\evernus\Evernus\Evernus_autogen\include_MinSizeRel;D:\boost;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtConcurrent;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\.\mkspecs\win32-msvc;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtDataVisualization;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtANGLE;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui\5.12.7;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui\5.12.7\QtGui;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore\5.12.7;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore\5.12.7\QtCore;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtMultimedia;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtNetwork;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtNetworkAuth;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtPrintSupport;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtWidgets;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQml;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQuickWidgets;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQuick;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtSql;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtWinExtras;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <PreBuildEvent>
+      <StdOutEncoding>UTF-8</StdOutEncoding>
+      <Message>Automatic MOC for target Evernus</Message>
+      <Command>setlocal
+cd D:\github\evernus\Evernus
+if %errorlevel% neq 0 goto :cmEnd
+D:
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E cmake_autogen D:/github/evernus/Evernus/CMakeFiles/Evernus_autogen.dir/AutogenInfo.json MinSizeRel
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+    </PreBuildEvent>
+    <Link>
+      <AdditionalDependencies>D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Concurrent.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5DataVisualization.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Multimedia.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5NetworkAuth.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5PrintSupport.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5QuickWidgets.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Sql.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Widgets.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5WinExtras.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Quick.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Qml.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Network.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Gui.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Core.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\qtmain.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64 /machine:x64</AdditionalOptions>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImportLibrary>D:/github/evernus/Evernus/MinSizeRel/Evernus.lib</ImportLibrary>
+      <ProgramDataBaseFile>D:/github/evernus/Evernus/MinSizeRel/Evernus.pdb</ProgramDataBaseFile>
+      <SubSystem>Windows</SubSystem>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>D:\github\evernus\Evernus;D:\github\evernus\Evernus\Evernus_autogen\include_RelWithDebInfo;D:\boost;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtConcurrent;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\.\mkspecs\win32-msvc;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtDataVisualization;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtANGLE;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui\5.12.7;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui\5.12.7\QtGui;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore\5.12.7;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore\5.12.7\QtCore;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtMultimedia;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtNetwork;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtNetworkAuth;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtPrintSupport;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtWidgets;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQml;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQuickWidgets;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQuick;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtSql;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtWinExtras;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <DisableSpecificWarnings>4503</DisableSpecificWarnings>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;EVERNUS_CREATE_DUMPS=0;EVERNUS_CLIENT_ID=9690dbe6c0874b4ca7a57ca53f3d5635;EVERNUS_CLIENT_SECRET=8znGhFVq4QwLx9SbESjEyEuaNkvDRLmv3NvnpCHF;QXT_STATIC;QTDROPBOX_DEBUG;QT_CONCURRENT_LIB;QT_CORE_LIB;QT_NO_DEBUG;QT_DATAVISUALIZATION_LIB;QT_GUI_LIB;QT_MULTIMEDIA_LIB;QT_NETWORK_LIB;QT_NETWORKAUTH_LIB;QT_PRINTSUPPORT_LIB;QT_WIDGETS_LIB;QT_QML_LIB;QT_QUICKWIDGETS_LIB;QT_QUICK_LIB;QT_SQL_LIB;QT_WINEXTRAS_LIB;CMAKE_INTDIR="RelWithDebInfo";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;EVERNUS_CREATE_DUMPS=0;EVERNUS_CLIENT_ID=9690dbe6c0874b4ca7a57ca53f3d5635;EVERNUS_CLIENT_SECRET=8znGhFVq4QwLx9SbESjEyEuaNkvDRLmv3NvnpCHF;QXT_STATIC;QTDROPBOX_DEBUG;QT_CONCURRENT_LIB;QT_CORE_LIB;QT_NO_DEBUG;QT_DATAVISUALIZATION_LIB;QT_GUI_LIB;QT_MULTIMEDIA_LIB;QT_NETWORK_LIB;QT_NETWORKAUTH_LIB;QT_PRINTSUPPORT_LIB;QT_WIDGETS_LIB;QT_QML_LIB;QT_QUICKWIDGETS_LIB;QT_QUICK_LIB;QT_SQL_LIB;QT_WINEXTRAS_LIB;CMAKE_INTDIR=\"RelWithDebInfo\";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>D:\github\evernus\Evernus;D:\github\evernus\Evernus\Evernus_autogen\include_RelWithDebInfo;D:\boost;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtConcurrent;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\.\mkspecs\win32-msvc;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtDataVisualization;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtANGLE;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui\5.12.7;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui\5.12.7\QtGui;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore\5.12.7;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore\5.12.7\QtCore;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtMultimedia;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtNetwork;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtNetworkAuth;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtPrintSupport;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtWidgets;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQml;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQuickWidgets;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQuick;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtSql;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtWinExtras;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>D:\github\evernus\Evernus;D:\github\evernus\Evernus\Evernus_autogen\include_RelWithDebInfo;D:\boost;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtConcurrent;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\.\mkspecs\win32-msvc;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtDataVisualization;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtANGLE;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui\5.12.7;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtGui\5.12.7\QtGui;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore\5.12.7;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtCore\5.12.7\QtCore;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtMultimedia;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtNetwork;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtNetworkAuth;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtPrintSupport;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtWidgets;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQml;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQuickWidgets;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtQuick;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtSql;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\include\QtWinExtras;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <PreBuildEvent>
+      <StdOutEncoding>UTF-8</StdOutEncoding>
+      <Message>Automatic MOC for target Evernus</Message>
+      <Command>setlocal
+cd D:\github\evernus\Evernus
+if %errorlevel% neq 0 goto :cmEnd
+D:
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E cmake_autogen D:/github/evernus/Evernus/CMakeFiles/Evernus_autogen.dir/AutogenInfo.json RelWithDebInfo
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+    </PreBuildEvent>
+    <Link>
+      <AdditionalDependencies>D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Concurrent.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5DataVisualization.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Multimedia.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5NetworkAuth.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5PrintSupport.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5QuickWidgets.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Sql.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Widgets.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5WinExtras.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Quick.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Qml.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Network.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Gui.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\Qt5Core.lib;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\qtmain.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64 /machine:x64</AdditionalOptions>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImportLibrary>D:/github/evernus/Evernus/RelWithDebInfo/Evernus.lib</ImportLibrary>
+      <ProgramDataBaseFile>D:/github/evernus/Evernus/RelWithDebInfo/Evernus.pdb</ProgramDataBaseFile>
+      <SubSystem>Windows</SubSystem>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <CustomBuild Include="D:\github\evernus\CMakeFiles\c36cb02200ee8a49034d4b640d0c5122\lang_ru_RU.ts.rule">
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Generating lang/lang_ru_RU.ts</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\lupdate.exe @D:/github/evernus/Evernus/CMakeFiles/lang_ru_RU.ts_lst_file -ts D:/github/evernus/Evernus/lang/lang_ru_RU.ts
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">D:\github\evernus;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">D:\github\evernus\Evernus\lang\lang_ru_RU.ts</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Generating lang/lang_ru_RU.ts</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\lupdate.exe @D:/github/evernus/Evernus/CMakeFiles/lang_ru_RU.ts_lst_file -ts D:/github/evernus/Evernus/lang/lang_ru_RU.ts
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">D:\github\evernus;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">D:\github\evernus\Evernus\lang\lang_ru_RU.ts</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Generating lang/lang_ru_RU.ts</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\lupdate.exe @D:/github/evernus/Evernus/CMakeFiles/lang_ru_RU.ts_lst_file -ts D:/github/evernus/Evernus/lang/lang_ru_RU.ts
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">D:\github\evernus;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">D:\github\evernus\Evernus\lang\lang_ru_RU.ts</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Generating lang/lang_ru_RU.ts</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\lupdate.exe @D:/github/evernus/Evernus/CMakeFiles/lang_ru_RU.ts_lst_file -ts D:/github/evernus/Evernus/lang/lang_ru_RU.ts
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">D:\github\evernus;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">D:\github\evernus\Evernus\lang\lang_ru_RU.ts</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="D:\github\evernus\CMakeFiles\c36cb02200ee8a49034d4b640d0c5122\lang_pl_PL.ts.rule">
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Generating lang/lang_pl_PL.ts</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\lupdate.exe @D:/github/evernus/Evernus/CMakeFiles/lang_pl_PL.ts_lst_file -ts D:/github/evernus/Evernus/lang/lang_pl_PL.ts
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">D:\github\evernus;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">D:\github\evernus\Evernus\lang\lang_pl_PL.ts</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Generating lang/lang_pl_PL.ts</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\lupdate.exe @D:/github/evernus/Evernus/CMakeFiles/lang_pl_PL.ts_lst_file -ts D:/github/evernus/Evernus/lang/lang_pl_PL.ts
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">D:\github\evernus;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">D:\github\evernus\Evernus\lang\lang_pl_PL.ts</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Generating lang/lang_pl_PL.ts</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\lupdate.exe @D:/github/evernus/Evernus/CMakeFiles/lang_pl_PL.ts_lst_file -ts D:/github/evernus/Evernus/lang/lang_pl_PL.ts
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">D:\github\evernus;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">D:\github\evernus\Evernus\lang\lang_pl_PL.ts</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Generating lang/lang_pl_PL.ts</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\lupdate.exe @D:/github/evernus/Evernus/CMakeFiles/lang_pl_PL.ts_lst_file -ts D:/github/evernus/Evernus/lang/lang_pl_PL.ts
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">D:\github\evernus;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">D:\github\evernus\Evernus\lang\lang_pl_PL.ts</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="D:\github\evernus\CMakeFiles\c36cb02200ee8a49034d4b640d0c5122\lang_de_DE.ts.rule">
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Generating lang/lang_de_DE.ts</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\lupdate.exe @D:/github/evernus/Evernus/CMakeFiles/lang_de_DE.ts_lst_file -ts D:/github/evernus/Evernus/lang/lang_de_DE.ts
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">D:\github\evernus;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">D:\github\evernus\Evernus\lang\lang_de_DE.ts</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Generating lang/lang_de_DE.ts</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\lupdate.exe @D:/github/evernus/Evernus/CMakeFiles/lang_de_DE.ts_lst_file -ts D:/github/evernus/Evernus/lang/lang_de_DE.ts
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">D:\github\evernus;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">D:\github\evernus\Evernus\lang\lang_de_DE.ts</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Generating lang/lang_de_DE.ts</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\lupdate.exe @D:/github/evernus/Evernus/CMakeFiles/lang_de_DE.ts_lst_file -ts D:/github/evernus/Evernus/lang/lang_de_DE.ts
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">D:\github\evernus;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">D:\github\evernus\Evernus\lang\lang_de_DE.ts</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Generating lang/lang_de_DE.ts</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\lupdate.exe @D:/github/evernus/Evernus/CMakeFiles/lang_de_DE.ts_lst_file -ts D:/github/evernus/Evernus/lang/lang_de_DE.ts
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">D:\github\evernus;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">D:\github\evernus\Evernus\lang\lang_de_DE.ts</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="D:\github\evernus\CMakeFiles\4553eb78ab6eea7fc6817311b23db10a\lang_ru_RU.qm.rule">
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Generating translations/lang_ru_RU.qm</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\lrelease.exe D:/github/evernus/Evernus/lang/lang_ru_RU.ts -qm D:/github/evernus/Evernus/translations/lang_ru_RU.qm
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">D:\github\evernus\Evernus\lang\lang_ru_RU.ts;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">D:\github\evernus\Evernus\translations\lang_ru_RU.qm</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Generating translations/lang_ru_RU.qm</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\lrelease.exe D:/github/evernus/Evernus/lang/lang_ru_RU.ts -qm D:/github/evernus/Evernus/translations/lang_ru_RU.qm
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">D:\github\evernus\Evernus\lang\lang_ru_RU.ts;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">D:\github\evernus\Evernus\translations\lang_ru_RU.qm</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Generating translations/lang_ru_RU.qm</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\lrelease.exe D:/github/evernus/Evernus/lang/lang_ru_RU.ts -qm D:/github/evernus/Evernus/translations/lang_ru_RU.qm
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">D:\github\evernus\Evernus\lang\lang_ru_RU.ts;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">D:\github\evernus\Evernus\translations\lang_ru_RU.qm</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Generating translations/lang_ru_RU.qm</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\lrelease.exe D:/github/evernus/Evernus/lang/lang_ru_RU.ts -qm D:/github/evernus/Evernus/translations/lang_ru_RU.qm
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">D:\github\evernus\Evernus\lang\lang_ru_RU.ts;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">D:\github\evernus\Evernus\translations\lang_ru_RU.qm</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="D:\github\evernus\CMakeFiles\4553eb78ab6eea7fc6817311b23db10a\lang_pl_PL.qm.rule">
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Generating translations/lang_pl_PL.qm</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\lrelease.exe D:/github/evernus/Evernus/lang/lang_pl_PL.ts -qm D:/github/evernus/Evernus/translations/lang_pl_PL.qm
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">D:\github\evernus\Evernus\lang\lang_pl_PL.ts;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">D:\github\evernus\Evernus\translations\lang_pl_PL.qm</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Generating translations/lang_pl_PL.qm</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\lrelease.exe D:/github/evernus/Evernus/lang/lang_pl_PL.ts -qm D:/github/evernus/Evernus/translations/lang_pl_PL.qm
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">D:\github\evernus\Evernus\lang\lang_pl_PL.ts;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">D:\github\evernus\Evernus\translations\lang_pl_PL.qm</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Generating translations/lang_pl_PL.qm</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\lrelease.exe D:/github/evernus/Evernus/lang/lang_pl_PL.ts -qm D:/github/evernus/Evernus/translations/lang_pl_PL.qm
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">D:\github\evernus\Evernus\lang\lang_pl_PL.ts;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">D:\github\evernus\Evernus\translations\lang_pl_PL.qm</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Generating translations/lang_pl_PL.qm</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\lrelease.exe D:/github/evernus/Evernus/lang/lang_pl_PL.ts -qm D:/github/evernus/Evernus/translations/lang_pl_PL.qm
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">D:\github\evernus\Evernus\lang\lang_pl_PL.ts;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">D:\github\evernus\Evernus\translations\lang_pl_PL.qm</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="D:\github\evernus\CMakeFiles\4553eb78ab6eea7fc6817311b23db10a\lang_de_DE.qm.rule">
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Generating translations/lang_de_DE.qm</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\lrelease.exe D:/github/evernus/Evernus/lang/lang_de_DE.ts -qm D:/github/evernus/Evernus/translations/lang_de_DE.qm
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">D:\github\evernus\Evernus\lang\lang_de_DE.ts;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">D:\github\evernus\Evernus\translations\lang_de_DE.qm</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Generating translations/lang_de_DE.qm</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\lrelease.exe D:/github/evernus/Evernus/lang/lang_de_DE.ts -qm D:/github/evernus/Evernus/translations/lang_de_DE.qm
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">D:\github\evernus\Evernus\lang\lang_de_DE.ts;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">D:\github\evernus\Evernus\translations\lang_de_DE.qm</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Generating translations/lang_de_DE.qm</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\lrelease.exe D:/github/evernus/Evernus/lang/lang_de_DE.ts -qm D:/github/evernus/Evernus/translations/lang_de_DE.qm
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">D:\github\evernus\Evernus\lang\lang_de_DE.ts;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">D:\github\evernus\Evernus\translations\lang_de_DE.qm</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Generating translations/lang_de_DE.qm</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\lrelease.exe D:/github/evernus/Evernus/lang/lang_de_DE.ts -qm D:/github/evernus/Evernus/translations/lang_de_DE.qm
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">D:\github\evernus\Evernus\lang\lang_de_DE.ts;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">D:\github\evernus\Evernus\translations\lang_de_DE.qm</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="D:\github\evernus\CMakeFiles\cc3ebf6db5f09d18e0f1fe5a516ae84d\qrc_evernus.cpp.rule">
+      <StdOutEncoding>UTF-8</StdOutEncoding>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Automatic RCC for evernus.qrc</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+cd D:\github\evernus\Evernus
+if %errorlevel% neq 0 goto :cmEnd
+D:
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E cmake_autorcc D:/github/evernus/Evernus/CMakeFiles/Evernus_autogen.dir/AutoRcc_evernus_EWIEGA46WW_Info.json Debug
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E cmake_autorcc D:/github/evernus/Evernus/CMakeFiles/Evernus_autogen.dir/AutoRcc_evernus_EWIEGA46WW_Info.json Release
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E cmake_autorcc D:/github/evernus/Evernus/CMakeFiles/Evernus_autogen.dir/AutoRcc_evernus_EWIEGA46WW_Info.json MinSizeRel
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E cmake_autorcc D:/github/evernus/Evernus/CMakeFiles/Evernus_autogen.dir/AutoRcc_evernus_EWIEGA46WW_Info.json RelWithDebInfo
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">D:\github\evernus\Evernus\evernus.qrc;D:\github\evernus\Evernus\CMakeFiles\Evernus_autogen.dir\AutoRcc_evernus_EWIEGA46WW_Info.json;D:\github\evernus\Evernus\qml\Industry\Manufacturing\Utils.js;D:\github\evernus\Evernus\qml\Industry\Manufacturing\View.qml;D:\github\evernus\Evernus\qml\Industry\Manufacturing\Type.qml;D:\github\evernus\Evernus\qml\Industry\Manufacturing\TypeDelegateModel.qml;D:\github\evernus\Evernus\images\arrow_out.png;D:\github\evernus\Evernus\images\page_copy.png;D:\github\evernus\Evernus\images\page_excel.png;D:\github\evernus\Evernus\images\arrow_right.png;D:\github\evernus\Evernus\images\arrow_inout.png;D:\github\evernus\Evernus\images\star.png;D:\github\evernus\Evernus\images\add.png;D:\github\evernus\Evernus\images\exclamation.png;D:\github\evernus\Evernus\images\meta_tech3.png;D:\github\evernus\Evernus\images\generic-portrait.jpg;D:\github\evernus\Evernus\images\cross.png;D:\github\evernus\Evernus\images\arrow_refresh_small.png;D:\github\evernus\Evernus\images\paste_plain.png;D:\github\evernus\Evernus\images\splash.png;D:\github\evernus\Evernus\images\tick.png;D:\github\evernus\Evernus\images\meta_tech2.png;D:\github\evernus\Evernus\images\page_white_text.png;D:\github\evernus\Evernus\images\accept.png;D:\github\evernus\Evernus\images\loader.gif;D:\github\evernus\Evernus\images\main-icon.png;D:\github\evernus\Evernus\images\world.png;D:\github\evernus\Evernus\images\information.png;D:\github\evernus\Evernus\images\bin.png;D:\github\evernus\Evernus\images\meta_deadspace.png;D:\github\evernus\Evernus\images\chart_curve.png;D:\github\evernus\Evernus\images\flag_yellow.png;D:\github\evernus\Evernus\images\error.png;D:\github\evernus\Evernus\images\meta_storyline.png;D:\github\evernus\Evernus\images\help.png;D:\github\evernus\Evernus\images\disk.png;D:\github\evernus\Evernus\images\user.png;D:\github\evernus\Evernus\images\meta_faction.png;D:\github\evernus\Evernus\images\page_refresh.png;D:\github\evernus\Evernus\images\image.png;D:\github\evernus\Evernus\images\calendar_view_month.png;D:\github\evernus\Evernus\images\delete.png;D:\github\evernus\Evernus\images\arrow_refresh.png;D:\github\evernus\Evernus\images\meta_officer.png;D:\github\evernus\Evernus\images\flag_blue.png;D:\github\evernus\Evernus\images\flag_green.png;D:\github\evernus\Evernus\images\tag.png;D:\github\evernus\Evernus\images\wrench.png;D:\github\evernus\Evernus\images\pencil.png;D:\github\evernus\Evernus\images\arrow_left.png;D:\github\evernus\Evernus\images\report.png;D:\github\evernus\Evernus\images\hourglass.png;D:\github\evernus\Evernus\images\arrow_in.png;D:\github\evernus\Evernus\images\flags\ru_RU.png;D:\github\evernus\Evernus\images\flags\et_EE.png;D:\github\evernus\Evernus\images\flags\en_US.png;D:\github\evernus\Evernus\images\flags\pl_PL.png;D:\github\evernus\Evernus\images\flags\de_DE.png;D:\github\evernus\Evernus\sounds\click.wav;D:\github\evernus\Evernus\html\http_orders_template.html;D:\github\evernus\Evernus\html\http_index_template.html;D:\github\evernus\Evernus\html\http_template.html;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\rcc.exe;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">D:\github\evernus\Evernus\Evernus_autogen\EWIEGA46WW\qrc_evernus.cpp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Automatic RCC for evernus.qrc</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+cd D:\github\evernus\Evernus
+if %errorlevel% neq 0 goto :cmEnd
+D:
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E cmake_autorcc D:/github/evernus/Evernus/CMakeFiles/Evernus_autogen.dir/AutoRcc_evernus_EWIEGA46WW_Info.json Debug
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E cmake_autorcc D:/github/evernus/Evernus/CMakeFiles/Evernus_autogen.dir/AutoRcc_evernus_EWIEGA46WW_Info.json Release
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E cmake_autorcc D:/github/evernus/Evernus/CMakeFiles/Evernus_autogen.dir/AutoRcc_evernus_EWIEGA46WW_Info.json MinSizeRel
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E cmake_autorcc D:/github/evernus/Evernus/CMakeFiles/Evernus_autogen.dir/AutoRcc_evernus_EWIEGA46WW_Info.json RelWithDebInfo
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">D:\github\evernus\Evernus\evernus.qrc;D:\github\evernus\Evernus\CMakeFiles\Evernus_autogen.dir\AutoRcc_evernus_EWIEGA46WW_Info.json;D:\github\evernus\Evernus\qml\Industry\Manufacturing\Utils.js;D:\github\evernus\Evernus\qml\Industry\Manufacturing\View.qml;D:\github\evernus\Evernus\qml\Industry\Manufacturing\Type.qml;D:\github\evernus\Evernus\qml\Industry\Manufacturing\TypeDelegateModel.qml;D:\github\evernus\Evernus\images\arrow_out.png;D:\github\evernus\Evernus\images\page_copy.png;D:\github\evernus\Evernus\images\page_excel.png;D:\github\evernus\Evernus\images\arrow_right.png;D:\github\evernus\Evernus\images\arrow_inout.png;D:\github\evernus\Evernus\images\star.png;D:\github\evernus\Evernus\images\add.png;D:\github\evernus\Evernus\images\exclamation.png;D:\github\evernus\Evernus\images\meta_tech3.png;D:\github\evernus\Evernus\images\generic-portrait.jpg;D:\github\evernus\Evernus\images\cross.png;D:\github\evernus\Evernus\images\arrow_refresh_small.png;D:\github\evernus\Evernus\images\paste_plain.png;D:\github\evernus\Evernus\images\splash.png;D:\github\evernus\Evernus\images\tick.png;D:\github\evernus\Evernus\images\meta_tech2.png;D:\github\evernus\Evernus\images\page_white_text.png;D:\github\evernus\Evernus\images\accept.png;D:\github\evernus\Evernus\images\loader.gif;D:\github\evernus\Evernus\images\main-icon.png;D:\github\evernus\Evernus\images\world.png;D:\github\evernus\Evernus\images\information.png;D:\github\evernus\Evernus\images\bin.png;D:\github\evernus\Evernus\images\meta_deadspace.png;D:\github\evernus\Evernus\images\chart_curve.png;D:\github\evernus\Evernus\images\flag_yellow.png;D:\github\evernus\Evernus\images\error.png;D:\github\evernus\Evernus\images\meta_storyline.png;D:\github\evernus\Evernus\images\help.png;D:\github\evernus\Evernus\images\disk.png;D:\github\evernus\Evernus\images\user.png;D:\github\evernus\Evernus\images\meta_faction.png;D:\github\evernus\Evernus\images\page_refresh.png;D:\github\evernus\Evernus\images\image.png;D:\github\evernus\Evernus\images\calendar_view_month.png;D:\github\evernus\Evernus\images\delete.png;D:\github\evernus\Evernus\images\arrow_refresh.png;D:\github\evernus\Evernus\images\meta_officer.png;D:\github\evernus\Evernus\images\flag_blue.png;D:\github\evernus\Evernus\images\flag_green.png;D:\github\evernus\Evernus\images\tag.png;D:\github\evernus\Evernus\images\wrench.png;D:\github\evernus\Evernus\images\pencil.png;D:\github\evernus\Evernus\images\arrow_left.png;D:\github\evernus\Evernus\images\report.png;D:\github\evernus\Evernus\images\hourglass.png;D:\github\evernus\Evernus\images\arrow_in.png;D:\github\evernus\Evernus\images\flags\ru_RU.png;D:\github\evernus\Evernus\images\flags\et_EE.png;D:\github\evernus\Evernus\images\flags\en_US.png;D:\github\evernus\Evernus\images\flags\pl_PL.png;D:\github\evernus\Evernus\images\flags\de_DE.png;D:\github\evernus\Evernus\sounds\click.wav;D:\github\evernus\Evernus\html\http_orders_template.html;D:\github\evernus\Evernus\html\http_index_template.html;D:\github\evernus\Evernus\html\http_template.html;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\rcc.exe;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">D:\github\evernus\Evernus\Evernus_autogen\EWIEGA46WW\qrc_evernus.cpp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Automatic RCC for evernus.qrc</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+cd D:\github\evernus\Evernus
+if %errorlevel% neq 0 goto :cmEnd
+D:
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E cmake_autorcc D:/github/evernus/Evernus/CMakeFiles/Evernus_autogen.dir/AutoRcc_evernus_EWIEGA46WW_Info.json Debug
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E cmake_autorcc D:/github/evernus/Evernus/CMakeFiles/Evernus_autogen.dir/AutoRcc_evernus_EWIEGA46WW_Info.json Release
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E cmake_autorcc D:/github/evernus/Evernus/CMakeFiles/Evernus_autogen.dir/AutoRcc_evernus_EWIEGA46WW_Info.json MinSizeRel
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E cmake_autorcc D:/github/evernus/Evernus/CMakeFiles/Evernus_autogen.dir/AutoRcc_evernus_EWIEGA46WW_Info.json RelWithDebInfo
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">D:\github\evernus\Evernus\evernus.qrc;D:\github\evernus\Evernus\CMakeFiles\Evernus_autogen.dir\AutoRcc_evernus_EWIEGA46WW_Info.json;D:\github\evernus\Evernus\qml\Industry\Manufacturing\Utils.js;D:\github\evernus\Evernus\qml\Industry\Manufacturing\View.qml;D:\github\evernus\Evernus\qml\Industry\Manufacturing\Type.qml;D:\github\evernus\Evernus\qml\Industry\Manufacturing\TypeDelegateModel.qml;D:\github\evernus\Evernus\images\arrow_out.png;D:\github\evernus\Evernus\images\page_copy.png;D:\github\evernus\Evernus\images\page_excel.png;D:\github\evernus\Evernus\images\arrow_right.png;D:\github\evernus\Evernus\images\arrow_inout.png;D:\github\evernus\Evernus\images\star.png;D:\github\evernus\Evernus\images\add.png;D:\github\evernus\Evernus\images\exclamation.png;D:\github\evernus\Evernus\images\meta_tech3.png;D:\github\evernus\Evernus\images\generic-portrait.jpg;D:\github\evernus\Evernus\images\cross.png;D:\github\evernus\Evernus\images\arrow_refresh_small.png;D:\github\evernus\Evernus\images\paste_plain.png;D:\github\evernus\Evernus\images\splash.png;D:\github\evernus\Evernus\images\tick.png;D:\github\evernus\Evernus\images\meta_tech2.png;D:\github\evernus\Evernus\images\page_white_text.png;D:\github\evernus\Evernus\images\accept.png;D:\github\evernus\Evernus\images\loader.gif;D:\github\evernus\Evernus\images\main-icon.png;D:\github\evernus\Evernus\images\world.png;D:\github\evernus\Evernus\images\information.png;D:\github\evernus\Evernus\images\bin.png;D:\github\evernus\Evernus\images\meta_deadspace.png;D:\github\evernus\Evernus\images\chart_curve.png;D:\github\evernus\Evernus\images\flag_yellow.png;D:\github\evernus\Evernus\images\error.png;D:\github\evernus\Evernus\images\meta_storyline.png;D:\github\evernus\Evernus\images\help.png;D:\github\evernus\Evernus\images\disk.png;D:\github\evernus\Evernus\images\user.png;D:\github\evernus\Evernus\images\meta_faction.png;D:\github\evernus\Evernus\images\page_refresh.png;D:\github\evernus\Evernus\images\image.png;D:\github\evernus\Evernus\images\calendar_view_month.png;D:\github\evernus\Evernus\images\delete.png;D:\github\evernus\Evernus\images\arrow_refresh.png;D:\github\evernus\Evernus\images\meta_officer.png;D:\github\evernus\Evernus\images\flag_blue.png;D:\github\evernus\Evernus\images\flag_green.png;D:\github\evernus\Evernus\images\tag.png;D:\github\evernus\Evernus\images\wrench.png;D:\github\evernus\Evernus\images\pencil.png;D:\github\evernus\Evernus\images\arrow_left.png;D:\github\evernus\Evernus\images\report.png;D:\github\evernus\Evernus\images\hourglass.png;D:\github\evernus\Evernus\images\arrow_in.png;D:\github\evernus\Evernus\images\flags\ru_RU.png;D:\github\evernus\Evernus\images\flags\et_EE.png;D:\github\evernus\Evernus\images\flags\en_US.png;D:\github\evernus\Evernus\images\flags\pl_PL.png;D:\github\evernus\Evernus\images\flags\de_DE.png;D:\github\evernus\Evernus\sounds\click.wav;D:\github\evernus\Evernus\html\http_orders_template.html;D:\github\evernus\Evernus\html\http_index_template.html;D:\github\evernus\Evernus\html\http_template.html;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\rcc.exe;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">D:\github\evernus\Evernus\Evernus_autogen\EWIEGA46WW\qrc_evernus.cpp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Automatic RCC for evernus.qrc</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+cd D:\github\evernus\Evernus
+if %errorlevel% neq 0 goto :cmEnd
+D:
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E cmake_autorcc D:/github/evernus/Evernus/CMakeFiles/Evernus_autogen.dir/AutoRcc_evernus_EWIEGA46WW_Info.json Debug
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E cmake_autorcc D:/github/evernus/Evernus/CMakeFiles/Evernus_autogen.dir/AutoRcc_evernus_EWIEGA46WW_Info.json Release
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E cmake_autorcc D:/github/evernus/Evernus/CMakeFiles/Evernus_autogen.dir/AutoRcc_evernus_EWIEGA46WW_Info.json MinSizeRel
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E cmake_autorcc D:/github/evernus/Evernus/CMakeFiles/Evernus_autogen.dir/AutoRcc_evernus_EWIEGA46WW_Info.json RelWithDebInfo
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">D:\github\evernus\Evernus\evernus.qrc;D:\github\evernus\Evernus\CMakeFiles\Evernus_autogen.dir\AutoRcc_evernus_EWIEGA46WW_Info.json;D:\github\evernus\Evernus\qml\Industry\Manufacturing\Utils.js;D:\github\evernus\Evernus\qml\Industry\Manufacturing\View.qml;D:\github\evernus\Evernus\qml\Industry\Manufacturing\Type.qml;D:\github\evernus\Evernus\qml\Industry\Manufacturing\TypeDelegateModel.qml;D:\github\evernus\Evernus\images\arrow_out.png;D:\github\evernus\Evernus\images\page_copy.png;D:\github\evernus\Evernus\images\page_excel.png;D:\github\evernus\Evernus\images\arrow_right.png;D:\github\evernus\Evernus\images\arrow_inout.png;D:\github\evernus\Evernus\images\star.png;D:\github\evernus\Evernus\images\add.png;D:\github\evernus\Evernus\images\exclamation.png;D:\github\evernus\Evernus\images\meta_tech3.png;D:\github\evernus\Evernus\images\generic-portrait.jpg;D:\github\evernus\Evernus\images\cross.png;D:\github\evernus\Evernus\images\arrow_refresh_small.png;D:\github\evernus\Evernus\images\paste_plain.png;D:\github\evernus\Evernus\images\splash.png;D:\github\evernus\Evernus\images\tick.png;D:\github\evernus\Evernus\images\meta_tech2.png;D:\github\evernus\Evernus\images\page_white_text.png;D:\github\evernus\Evernus\images\accept.png;D:\github\evernus\Evernus\images\loader.gif;D:\github\evernus\Evernus\images\main-icon.png;D:\github\evernus\Evernus\images\world.png;D:\github\evernus\Evernus\images\information.png;D:\github\evernus\Evernus\images\bin.png;D:\github\evernus\Evernus\images\meta_deadspace.png;D:\github\evernus\Evernus\images\chart_curve.png;D:\github\evernus\Evernus\images\flag_yellow.png;D:\github\evernus\Evernus\images\error.png;D:\github\evernus\Evernus\images\meta_storyline.png;D:\github\evernus\Evernus\images\help.png;D:\github\evernus\Evernus\images\disk.png;D:\github\evernus\Evernus\images\user.png;D:\github\evernus\Evernus\images\meta_faction.png;D:\github\evernus\Evernus\images\page_refresh.png;D:\github\evernus\Evernus\images\image.png;D:\github\evernus\Evernus\images\calendar_view_month.png;D:\github\evernus\Evernus\images\delete.png;D:\github\evernus\Evernus\images\arrow_refresh.png;D:\github\evernus\Evernus\images\meta_officer.png;D:\github\evernus\Evernus\images\flag_blue.png;D:\github\evernus\Evernus\images\flag_green.png;D:\github\evernus\Evernus\images\tag.png;D:\github\evernus\Evernus\images\wrench.png;D:\github\evernus\Evernus\images\pencil.png;D:\github\evernus\Evernus\images\arrow_left.png;D:\github\evernus\Evernus\images\report.png;D:\github\evernus\Evernus\images\hourglass.png;D:\github\evernus\Evernus\images\arrow_in.png;D:\github\evernus\Evernus\images\flags\ru_RU.png;D:\github\evernus\Evernus\images\flags\et_EE.png;D:\github\evernus\Evernus\images\flags\en_US.png;D:\github\evernus\Evernus\images\flags\pl_PL.png;D:\github\evernus\Evernus\images\flags\de_DE.png;D:\github\evernus\Evernus\sounds\click.wav;D:\github\evernus\Evernus\html\http_orders_template.html;D:\github\evernus\Evernus\html\http_index_template.html;D:\github\evernus\Evernus\html\http_template.html;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\bin\rcc.exe;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">D:\github\evernus\Evernus\Evernus_autogen\EWIEGA46WW\qrc_evernus.cpp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="D:\github\evernus\Evernus\CMakeLists.txt">
+      <StdOutEncoding>UTF-8</StdOutEncoding>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Building Custom Rule D:/github/evernus/Evernus/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SD:/github/evernus -BD:/github/evernus --check-stamp-file D:/github/evernus/Evernus/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CMakeParseArguments.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CMakePrintHelpers.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CPack.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CPackComponent.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CPackIFW.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CheckCXXSourceCompiles.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CheckIncludeFileCXX.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CheckLibraryExists.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\FindBoost.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\FindOpenSSL.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\FindPackageHandleStandardArgs.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\FindPackageMessage.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\FindThreads.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\GNUInstallDirs.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\InstallRequiredSystemLibraries.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\Internal\CheckSourceCompiles.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\SelectLibraryConfigurations.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Templates\CPackConfig.cmake.in;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Concurrent\Qt5ConcurrentConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Concurrent\Qt5ConcurrentConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Core\Qt5CoreConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Core\Qt5CoreConfigExtras.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Core\Qt5CoreConfigExtrasMkspecDir.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Core\Qt5CoreConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Core\Qt5CoreMacros.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5DataVisualization\Qt5DataVisualizationConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5DataVisualization\Qt5DataVisualizationConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5GuiConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5GuiConfigExtras.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5GuiConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QGifPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QICNSPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QICOPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QJpegPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QMinimalIntegrationPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QOffscreenIntegrationPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QTgaPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QTiffPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QTuioTouchPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QVirtualKeyboardPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QWbmpPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QWebGLIntegrationPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QWebpPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QWindowsDirect2DIntegrationPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QWindowsIntegrationPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QXdgDesktopPortalThemePlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5LinguistTools\Qt5LinguistToolsConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5LinguistTools\Qt5LinguistToolsConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5LinguistTools\Qt5LinguistToolsMacros.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5MultimediaConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5MultimediaConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5Multimedia_AudioCaptureServicePlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5Multimedia_DSServicePlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5Multimedia_QM3uPlaylistPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5Multimedia_QWasapiPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5Multimedia_QWindowsAudioPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5Multimedia_WMFServicePlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Network\Qt5NetworkConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Network\Qt5NetworkConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Network\Qt5Network_QGenericEnginePlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5NetworkAuth\Qt5NetworkAuthConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5NetworkAuth\Qt5NetworkAuthConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5PrintSupport\Qt5PrintSupportConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5PrintSupport\Qt5PrintSupportConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5PrintSupport\Qt5PrintSupport_QWindowsPrinterSupportPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5QmlConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5QmlConfigExtras.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5QmlConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QDebugMessageServiceFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QLocalClientConnectionFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlDebugServerFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlDebuggerServiceFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlInspectorServiceFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlNativeDebugConnectorFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlNativeDebugServiceFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlPreviewServiceFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlProfilerServiceFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQuickProfilerAdapterFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QTcpServerConnectionFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Quick\Qt5QuickConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Quick\Qt5QuickConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5QuickWidgets\Qt5QuickWidgetsConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5QuickWidgets\Qt5QuickWidgetsConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Sql\Qt5SqlConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Sql\Qt5SqlConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Sql\Qt5Sql_QODBCDriverPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Sql\Qt5Sql_QPSQLDriverPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Sql\Qt5Sql_QSQLiteDriverPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Widgets\Qt5WidgetsConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Widgets\Qt5WidgetsConfigExtras.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Widgets\Qt5WidgetsConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Widgets\Qt5WidgetsMacros.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Widgets\Qt5Widgets_QWindowsVistaStylePlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5WinExtras\Qt5WinExtrasConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5WinExtras\Qt5WinExtrasConfigVersion.cmake;D:\github\evernus\Evernus\CMakeHelpers\VersionInfo.in;D:\github\evernus\Evernus\CMakeHelpers\VersionResource.rc;D:\github\evernus\Evernus\CMakeHelpers\generate_product_version.cmake;D:\github\evernus\Evernus\Version.h.in;D:\github\evernus\Evernus\deploy-qt-windows.cmake.in;D:\github\evernus\Evernus\evernus.qrc;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">D:\github\evernus\Evernus\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Building Custom Rule D:/github/evernus/Evernus/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SD:/github/evernus -BD:/github/evernus --check-stamp-file D:/github/evernus/Evernus/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CMakeParseArguments.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CMakePrintHelpers.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CPack.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CPackComponent.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CPackIFW.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CheckCXXSourceCompiles.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CheckIncludeFileCXX.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CheckLibraryExists.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\FindBoost.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\FindOpenSSL.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\FindPackageHandleStandardArgs.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\FindPackageMessage.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\FindThreads.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\GNUInstallDirs.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\InstallRequiredSystemLibraries.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\Internal\CheckSourceCompiles.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\SelectLibraryConfigurations.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Templates\CPackConfig.cmake.in;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Concurrent\Qt5ConcurrentConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Concurrent\Qt5ConcurrentConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Core\Qt5CoreConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Core\Qt5CoreConfigExtras.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Core\Qt5CoreConfigExtrasMkspecDir.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Core\Qt5CoreConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Core\Qt5CoreMacros.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5DataVisualization\Qt5DataVisualizationConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5DataVisualization\Qt5DataVisualizationConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5GuiConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5GuiConfigExtras.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5GuiConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QGifPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QICNSPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QICOPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QJpegPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QMinimalIntegrationPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QOffscreenIntegrationPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QTgaPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QTiffPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QTuioTouchPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QVirtualKeyboardPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QWbmpPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QWebGLIntegrationPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QWebpPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QWindowsDirect2DIntegrationPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QWindowsIntegrationPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QXdgDesktopPortalThemePlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5LinguistTools\Qt5LinguistToolsConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5LinguistTools\Qt5LinguistToolsConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5LinguistTools\Qt5LinguistToolsMacros.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5MultimediaConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5MultimediaConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5Multimedia_AudioCaptureServicePlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5Multimedia_DSServicePlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5Multimedia_QM3uPlaylistPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5Multimedia_QWasapiPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5Multimedia_QWindowsAudioPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5Multimedia_WMFServicePlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Network\Qt5NetworkConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Network\Qt5NetworkConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Network\Qt5Network_QGenericEnginePlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5NetworkAuth\Qt5NetworkAuthConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5NetworkAuth\Qt5NetworkAuthConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5PrintSupport\Qt5PrintSupportConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5PrintSupport\Qt5PrintSupportConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5PrintSupport\Qt5PrintSupport_QWindowsPrinterSupportPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5QmlConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5QmlConfigExtras.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5QmlConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QDebugMessageServiceFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QLocalClientConnectionFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlDebugServerFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlDebuggerServiceFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlInspectorServiceFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlNativeDebugConnectorFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlNativeDebugServiceFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlPreviewServiceFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlProfilerServiceFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQuickProfilerAdapterFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QTcpServerConnectionFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Quick\Qt5QuickConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Quick\Qt5QuickConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5QuickWidgets\Qt5QuickWidgetsConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5QuickWidgets\Qt5QuickWidgetsConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Sql\Qt5SqlConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Sql\Qt5SqlConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Sql\Qt5Sql_QODBCDriverPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Sql\Qt5Sql_QPSQLDriverPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Sql\Qt5Sql_QSQLiteDriverPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Widgets\Qt5WidgetsConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Widgets\Qt5WidgetsConfigExtras.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Widgets\Qt5WidgetsConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Widgets\Qt5WidgetsMacros.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Widgets\Qt5Widgets_QWindowsVistaStylePlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5WinExtras\Qt5WinExtrasConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5WinExtras\Qt5WinExtrasConfigVersion.cmake;D:\github\evernus\Evernus\CMakeHelpers\VersionInfo.in;D:\github\evernus\Evernus\CMakeHelpers\VersionResource.rc;D:\github\evernus\Evernus\CMakeHelpers\generate_product_version.cmake;D:\github\evernus\Evernus\Version.h.in;D:\github\evernus\Evernus\deploy-qt-windows.cmake.in;D:\github\evernus\Evernus\evernus.qrc;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">D:\github\evernus\Evernus\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Building Custom Rule D:/github/evernus/Evernus/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SD:/github/evernus -BD:/github/evernus --check-stamp-file D:/github/evernus/Evernus/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CMakeParseArguments.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CMakePrintHelpers.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CPack.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CPackComponent.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CPackIFW.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CheckCXXSourceCompiles.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CheckIncludeFileCXX.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CheckLibraryExists.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\FindBoost.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\FindOpenSSL.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\FindPackageHandleStandardArgs.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\FindPackageMessage.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\FindThreads.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\GNUInstallDirs.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\InstallRequiredSystemLibraries.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\Internal\CheckSourceCompiles.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\SelectLibraryConfigurations.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Templates\CPackConfig.cmake.in;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Concurrent\Qt5ConcurrentConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Concurrent\Qt5ConcurrentConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Core\Qt5CoreConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Core\Qt5CoreConfigExtras.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Core\Qt5CoreConfigExtrasMkspecDir.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Core\Qt5CoreConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Core\Qt5CoreMacros.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5DataVisualization\Qt5DataVisualizationConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5DataVisualization\Qt5DataVisualizationConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5GuiConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5GuiConfigExtras.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5GuiConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QGifPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QICNSPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QICOPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QJpegPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QMinimalIntegrationPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QOffscreenIntegrationPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QTgaPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QTiffPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QTuioTouchPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QVirtualKeyboardPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QWbmpPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QWebGLIntegrationPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QWebpPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QWindowsDirect2DIntegrationPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QWindowsIntegrationPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QXdgDesktopPortalThemePlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5LinguistTools\Qt5LinguistToolsConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5LinguistTools\Qt5LinguistToolsConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5LinguistTools\Qt5LinguistToolsMacros.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5MultimediaConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5MultimediaConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5Multimedia_AudioCaptureServicePlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5Multimedia_DSServicePlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5Multimedia_QM3uPlaylistPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5Multimedia_QWasapiPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5Multimedia_QWindowsAudioPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5Multimedia_WMFServicePlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Network\Qt5NetworkConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Network\Qt5NetworkConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Network\Qt5Network_QGenericEnginePlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5NetworkAuth\Qt5NetworkAuthConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5NetworkAuth\Qt5NetworkAuthConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5PrintSupport\Qt5PrintSupportConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5PrintSupport\Qt5PrintSupportConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5PrintSupport\Qt5PrintSupport_QWindowsPrinterSupportPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5QmlConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5QmlConfigExtras.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5QmlConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QDebugMessageServiceFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QLocalClientConnectionFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlDebugServerFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlDebuggerServiceFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlInspectorServiceFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlNativeDebugConnectorFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlNativeDebugServiceFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlPreviewServiceFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlProfilerServiceFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQuickProfilerAdapterFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QTcpServerConnectionFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Quick\Qt5QuickConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Quick\Qt5QuickConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5QuickWidgets\Qt5QuickWidgetsConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5QuickWidgets\Qt5QuickWidgetsConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Sql\Qt5SqlConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Sql\Qt5SqlConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Sql\Qt5Sql_QODBCDriverPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Sql\Qt5Sql_QPSQLDriverPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Sql\Qt5Sql_QSQLiteDriverPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Widgets\Qt5WidgetsConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Widgets\Qt5WidgetsConfigExtras.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Widgets\Qt5WidgetsConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Widgets\Qt5WidgetsMacros.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Widgets\Qt5Widgets_QWindowsVistaStylePlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5WinExtras\Qt5WinExtrasConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5WinExtras\Qt5WinExtrasConfigVersion.cmake;D:\github\evernus\Evernus\CMakeHelpers\VersionInfo.in;D:\github\evernus\Evernus\CMakeHelpers\VersionResource.rc;D:\github\evernus\Evernus\CMakeHelpers\generate_product_version.cmake;D:\github\evernus\Evernus\Version.h.in;D:\github\evernus\Evernus\deploy-qt-windows.cmake.in;D:\github\evernus\Evernus\evernus.qrc;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">D:\github\evernus\Evernus\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Building Custom Rule D:/github/evernus/Evernus/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SD:/github/evernus -BD:/github/evernus --check-stamp-file D:/github/evernus/Evernus/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CMakeParseArguments.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CMakePrintHelpers.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CPack.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CPackComponent.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CPackIFW.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CheckCXXSourceCompiles.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CheckIncludeFileCXX.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\CheckLibraryExists.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\FindBoost.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\FindOpenSSL.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\FindPackageHandleStandardArgs.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\FindPackageMessage.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\FindThreads.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\GNUInstallDirs.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\InstallRequiredSystemLibraries.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\Internal\CheckSourceCompiles.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Modules\SelectLibraryConfigurations.cmake;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.20\Templates\CPackConfig.cmake.in;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Concurrent\Qt5ConcurrentConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Concurrent\Qt5ConcurrentConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Core\Qt5CoreConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Core\Qt5CoreConfigExtras.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Core\Qt5CoreConfigExtrasMkspecDir.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Core\Qt5CoreConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Core\Qt5CoreMacros.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5DataVisualization\Qt5DataVisualizationConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5DataVisualization\Qt5DataVisualizationConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5GuiConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5GuiConfigExtras.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5GuiConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QGifPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QICNSPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QICOPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QJpegPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QMinimalIntegrationPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QOffscreenIntegrationPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QTgaPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QTiffPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QTuioTouchPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QVirtualKeyboardPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QWbmpPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QWebGLIntegrationPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QWebpPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QWindowsDirect2DIntegrationPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QWindowsIntegrationPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Gui\Qt5Gui_QXdgDesktopPortalThemePlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5LinguistTools\Qt5LinguistToolsConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5LinguistTools\Qt5LinguistToolsConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5LinguistTools\Qt5LinguistToolsMacros.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5MultimediaConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5MultimediaConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5Multimedia_AudioCaptureServicePlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5Multimedia_DSServicePlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5Multimedia_QM3uPlaylistPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5Multimedia_QWasapiPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5Multimedia_QWindowsAudioPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Multimedia\Qt5Multimedia_WMFServicePlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Network\Qt5NetworkConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Network\Qt5NetworkConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Network\Qt5Network_QGenericEnginePlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5NetworkAuth\Qt5NetworkAuthConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5NetworkAuth\Qt5NetworkAuthConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5PrintSupport\Qt5PrintSupportConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5PrintSupport\Qt5PrintSupportConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5PrintSupport\Qt5PrintSupport_QWindowsPrinterSupportPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5QmlConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5QmlConfigExtras.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5QmlConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QDebugMessageServiceFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QLocalClientConnectionFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlDebugServerFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlDebuggerServiceFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlInspectorServiceFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlNativeDebugConnectorFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlNativeDebugServiceFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlPreviewServiceFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQmlProfilerServiceFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QQuickProfilerAdapterFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Qml\Qt5Qml_QTcpServerConnectionFactory.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Quick\Qt5QuickConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Quick\Qt5QuickConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5QuickWidgets\Qt5QuickWidgetsConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5QuickWidgets\Qt5QuickWidgetsConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Sql\Qt5SqlConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Sql\Qt5SqlConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Sql\Qt5Sql_QODBCDriverPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Sql\Qt5Sql_QPSQLDriverPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Sql\Qt5Sql_QSQLiteDriverPlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Widgets\Qt5WidgetsConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Widgets\Qt5WidgetsConfigExtras.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Widgets\Qt5WidgetsConfigVersion.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Widgets\Qt5WidgetsMacros.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5Widgets\Qt5Widgets_QWindowsVistaStylePlugin.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5WinExtras\Qt5WinExtrasConfig.cmake;D:\Qt\Qt5.12.7\5.12.7\msvc2017_64\lib\cmake\Qt5WinExtras\Qt5WinExtrasConfigVersion.cmake;D:\github\evernus\Evernus\CMakeHelpers\VersionInfo.in;D:\github\evernus\Evernus\CMakeHelpers\VersionResource.rc;D:\github\evernus\Evernus\CMakeHelpers\generate_product_version.cmake;D:\github\evernus\Evernus\Version.h.in;D:\github\evernus\Evernus\deploy-qt-windows.cmake.in;D:\github\evernus\Evernus\evernus.qrc;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">D:\github\evernus\Evernus\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="D:\github\evernus\Evernus\Evernus_autogen\mocs_compilation_Debug.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="D:\github\evernus\Evernus\AboutDialog.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\AboutDialog.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ActiveTasksDialog.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ActiveTasksDialog.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\AdjustableTableView.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\AdjustableTableView.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\AdvancedStatisticsWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\AdvancedStatisticsWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\AggregatedAssetModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\AggregatedAssetModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\AggregatedEventProcessor.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\AggregatedEventProcessor.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\AggregatedStatisticsModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\AggregatedStatisticsModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ArbitrageUtils.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ArbitrageUtils.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\AssetList.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\AssetList.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\AssetListRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\AssetListRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\AssetModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\AssetModel.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\AssetProvider.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\AssetsImportPreferencesWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\AssetsImportPreferencesWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\AssetsWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\AssetsWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\AssetValueSnapshot.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\AssetValueSnapshot.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\AssetValueSnapshotRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\AssetValueSnapshotRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\AssignedContractModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\AssignedContractModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\BasicStatisticsWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\BasicStatisticsWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ButtonWithTimer.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ButtonWithTimer.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\BezierCurve.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\BezierCurve.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\Blueprint.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\Blueprint.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CacheTimer.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CacheTimer.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\CacheTimerProvider.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CacheTimerRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CacheTimerRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CachingAssetProvider.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CachingAssetProvider.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CachingContractProvider.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CachingContractProvider.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CachingEveDataProvider.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CachingEveDataProvider.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CachingMarketOrderProvider.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CachingMarketOrderProvider.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CachingNetworkAccessManagerFactory.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CachingNetworkAccessManagerFactory.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CalculatingDataWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CalculatingDataWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CallbackEvent.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CallbackEvent.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CallbackExternalOrderImporter.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CallbackExternalOrderImporter.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ChainableFileLogger.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ChainableFileLogger.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\Character.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\Character.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CharacterBoundWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CharacterBoundWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CharacterCorporationCombinedMarketOrderProvider.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CharacterCorporationCombinedMarketOrderProvider.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\CharacterData.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CharacterImportPreferencesWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CharacterImportPreferencesWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CharacterManagerDialog.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CharacterManagerDialog.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CharacterModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CharacterModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CharacterRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CharacterRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CharacterWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CharacterWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CheckableTreeView.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CheckableTreeView.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\Citadel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\Citadel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CitadelAccessCache.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CitadelAccessCache.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CitadelEditDialog.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CitadelEditDialog.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CitadelManagementModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CitadelManagementModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CitadelManagementWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CitadelManagementWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CitadelManager.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CitadelManager.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CitadelManagerDialog.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CitadelManagerDialog.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CitadelRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CitadelRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ClickableLabel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ClickableLabel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ColorButton.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ColorButton.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\CommandLineOptions.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CommonScriptAPI.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CommonScriptAPI.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\Contract.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\Contract.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ContractFilterProxyModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ContractFilterProxyModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ContractImportPreferencesWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ContractImportPreferencesWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ContractItem.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ContractItem.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ContractItemRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ContractItemRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ContractModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ContractModel.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\ContractProvider.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ContractRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ContractRepository.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\Contracts.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ContractStatusesWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ContractStatusesWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ContractView.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ContractView.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ContractWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ContractWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CorpAssetValueSnapshot.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CorpAssetValueSnapshot.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CorpAssetValueSnapshotRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CorpAssetValueSnapshotRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CorpImportPreferencesWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CorpImportPreferencesWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CorpMarketOrderValueSnapshot.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CorpMarketOrderValueSnapshot.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CorpMarketOrderValueSnapshotRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CorpMarketOrderValueSnapshotRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CorpWalletSnapshot.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CorpWalletSnapshot.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CorpWalletSnapshotRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CorpWalletSnapshotRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\CustomFPCDialog.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\CustomFPCDialog.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\DatabaseConnectionProvider.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\DatabaseUtils.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\DatabaseUtils.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\DateFilteredPlotWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\DateFilteredPlotWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\DateRangeWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\DateRangeWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\DarkModeColor.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\DarkModeColor.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\DbSettings.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\Defines.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\DeviationSourceWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\DeviationSourceWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\DontSaveImportedOrdersCheckBox.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\DontSaveImportedOrdersCheckBox.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\DoubleTypeAggregatedDetailsWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\DoubleTypeAggregatedDetailsWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\DoubleTypeCompareWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\DoubleTypeCompareWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\DumpUploader.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\DumpUploader.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\Entity.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ESIExternalOrderImporter.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ESIExternalOrderImporter.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ESIIndividualExternalOrderImporter.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ESIIndividualExternalOrderImporter.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ESIInterface.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ESIInterface.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ESIInterfaceErrorLimiter.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ESIInterfaceErrorLimiter.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ESIInterfaceManager.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ESIInterfaceManager.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ESIManager.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ESIManager.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ESINetworkAccessManager.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ESINetworkAccessManager.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ESIOAuth.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ESIOAuth.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ESIOAuth2AuthorizationCodeFlow.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ESIOAuth2AuthorizationCodeFlow.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ESIOAuth2CharacterAuthorizationCodeFlow.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ESIOAuth2CharacterAuthorizationCodeFlow.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ESIOAuth2UnknownCharacterAuthorizationCodeFlow.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ESIOAuth2UnknownCharacterAuthorizationCodeFlow.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ESIOAuthReplyHandler.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ESIOAuthReplyHandler.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\ESIUrls.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ESIWholeExternalOrderImporter.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ESIWholeExternalOrderImporter.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\EveDatabaseConnectionProvider.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\EveDatabaseConnectionProvider.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\EveDatabaseUpdater.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\EveDatabaseUpdater.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\EveDataManagerProvider.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\EveDataProvider.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\EveDataProvider.h" />
+    <None Include="D:\github\evernus\Evernus\evernus.qrc">
+    </None>
+    <ClCompile Include="D:\github\evernus\Evernus\EvernusApplication.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\EvernusApplication.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\EveType.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\EveType.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\EveTypeProvider.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\EveTypeRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\EveTypeRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ExcelDoubleSpinBox.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ExcelDoubleSpinBox.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ExternalOrder.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ExternalOrder.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ExternalOrderBuyModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ExternalOrderBuyModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ExternalOrderFilterProxyModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ExternalOrderFilterProxyModel.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\ExternalOrderImporter.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\ExternalOrderImporterNames.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\ExternalOrderImporterRegistry.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ExternalOrderModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ExternalOrderModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ExternalOrderRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ExternalOrderRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ExternalOrderSellModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ExternalOrderSellModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ExternalOrderView.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ExternalOrderView.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\FavoriteItem.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\FavoriteItemRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\FavoriteItemRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\FavoriteLocationsButton.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\FavoriteLocationsButton.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\FileDownload.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\FileDownload.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\FilterText.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\FilterText.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\FilterTextRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\FilterTextRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\FlowLayout.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\FlowLayout.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\FPCController.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\FPCController.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\GeneralPreferencesWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\GeneralPreferencesWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\GenericMarketOrdersInfoWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\GenericMarketOrdersInfoWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\HttpPreferencesWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\HttpPreferencesWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\HttpService.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\HttpService.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\HttpSettings.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\IconUtils.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\IconUtils.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ImportingAnalysisWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ImportingAnalysisWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ImportingDataModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ImportingDataModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ImportingDataModelProxyModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ImportingDataModelProxyModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ImportPreferencesWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ImportPreferencesWidget.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\ImportSettings.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ImportSourcePreferencesWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ImportSourcePreferencesWidget.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\IndustryCostIndices.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\IndustryImportPreferencesWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\IndustryImportPreferencesWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\IndustryManufacturingSetup.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\IndustryManufacturingSetup.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\IndustryManufacturingSetupController.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\IndustryManufacturingSetupController.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\IndustryManufacturingSetupEntity.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\IndustryManufacturingSetupEntity.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\IndustryManufacturingSetupModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\IndustryManufacturingSetupModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\IndustryManufacturingSetupRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\IndustryManufacturingSetupRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\IndustryManufacturingWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\IndustryManufacturingWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\IndustryMiningLedgerWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\IndustryMiningLedgerWidget.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\IndustrySettings.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\IndustryUtils.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\IndustryUtils.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\IndustryWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\IndustryWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\InterRegionAnalysisWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\InterRegionAnalysisWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\InterRegionMarketDataFilterProxyModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\InterRegionMarketDataFilterProxyModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\InterRegionMarketDataModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\InterRegionMarketDataModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\InterRegionTypeDetailsWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\InterRegionTypeDetailsWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\IssuedContractModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\IssuedContractModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\Item.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\Item.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ItemCost.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ItemCost.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ItemCostEditDialog.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ItemCostEditDialog.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ItemCostModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ItemCostModel.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\ItemCostProvider.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ItemCostRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ItemCostRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ItemCostWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ItemCostWidget.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\ItemData.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ItemHistoriesWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ItemHistoriesWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ItemHistoryWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ItemHistoryWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ItemNameModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ItemNameModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ItemRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ItemRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ItemTypeSelectDialog.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ItemTypeSelectDialog.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\JSEveDataProvider.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\JSEveDataProvider.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\LanguageComboBox.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\LanguageComboBox.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\LanguageSelectDialog.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\LanguageSelectDialog.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\LeafFilterProxyModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\LeafFilterProxyModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\LMeveAPIManager.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\LMeveAPIManager.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\LMeveAPIInterface.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\LMeveAPIInterface.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\LMeveDataProvider.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\LMevePreferencesWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\LMevePreferencesWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\LMeveTaskModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\LMeveTaskModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\LMeveTaskRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\LMeveTaskRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\LMeveWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\LMeveWidget.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\LMeveSettings.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\LMeveTask.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\LMeveTask.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\LocationBookmark.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\LocationBookmark.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\LocationBookmarkRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\LocationBookmarkRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\LocationBookmarkSelectDialog.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\LocationBookmarkSelectDialog.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\LookupActionGroup.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\LookupActionGroup.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\LookupActionGroupModelConnector.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\LookupActionGroupModelConnector.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\main.cpp" />
+    <ClCompile Include="D:\github\evernus\Evernus\MainDatabaseConnectionProvider.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MainDatabaseConnectionProvider.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MainWindow.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MainWindow.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarginToolDialog.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarginToolDialog.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarginToolSettings.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketAnalysisDataFetcher.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketAnalysisDataFetcher.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketAnalysisSettings.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketAnalysisUtils.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketAnalysisUtils.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketAnalysisWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketAnalysisWidget.cpp" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketBrowserWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketBrowserWidget.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketDataProvider.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketGroup.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketGroup.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketGroupRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketGroupRepository.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketHistory.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketHistoryEntry.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketLogExternalOrderImporter.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketLogExternalOrderImporter.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketLogExternalOrderImporterThread.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketLogExternalOrderImporterThread.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketOrder.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketOrder.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketOrderArchiveModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketOrderArchiveModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketOrderBuyModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketOrderBuyModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketOrderDataFetcher.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketOrderDataFetcher.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketOrderFilterProxyModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketOrderFilterProxyModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketOrderFilterWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketOrderFilterWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketOrderInfoWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketOrderInfoWidget.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketOrderModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketOrderPerformanceModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketOrderPerformanceModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketOrderPriceStatusesWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketOrderPriceStatusesWidget.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketOrderProvider.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketOrderRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketOrderRepository.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketOrders.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketOrderSellModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketOrderSellModel.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketOrdersInfoWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketOrderStatesWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketOrderStatesWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketOrderTreeModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketOrderTreeModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketOrderValueSnapshot.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketOrderValueSnapshot.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketOrderValueSnapshotRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketOrderValueSnapshotRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketOrderView.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketOrderView.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketOrderViewWithTransactions.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketOrderViewWithTransactions.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketOrderVolumeItemDelegate.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketOrderVolumeItemDelegate.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MarketOrderWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketOrderWidget.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\MarketPrices.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\MathUtils.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MenuBarWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MenuBarWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MetaGroup.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MetaGroup.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MetaGroupRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MetaGroupRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MiningLedger.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MiningLedger.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MiningLedgerBarGraph.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MiningLedgerBarGraph.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MiningLedgerModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MiningLedgerModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MiningLedgerRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MiningLedgerRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MiningLedgerSolarSystemsModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MiningLedgerSolarSystemsModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\MiningLedgerTypesModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\MiningLedgerTypesModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ModelUtils.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ModelUtils.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\ModelWithTypes.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\NetworkPreferencesWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\NetworkPreferencesWidget.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\NetworkSettings.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\NewCharacterController.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\NewCharacterController.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\NumberFormatDelegate.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\NumberFormatDelegate.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\OrderScript.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\OrderScript.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\OrderScriptRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\OrderScriptRepository.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\OrderSettings.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\OreReprocessingArbitrageModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\OreReprocessingArbitrageModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\OreReprocessingArbitrageWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\OreReprocessingArbitrageWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\OrderPreferencesWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\OrderPreferencesWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\PathPreferencesWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\PathPreferencesWidget.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\PathSettings.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\PathUtils.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\PathUtils.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\PreferencesDialog.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\PreferencesDialog.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\PricePreferencesWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\PricePreferencesWidget.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\PriceSettings.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\PriceType.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\PriceTypeComboBox.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\PriceTypeComboBox.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\PriceUtils.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\PriceUtils.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ProgressiveCounter.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ProgressiveCounter.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ProxyWebExternalOrderImporter.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ProxyWebExternalOrderImporter.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qcustomplot.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qcustomplot.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\QDataStreamUtils.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qdropbox2.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qdropbox2.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qdropbox2account.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qdropbox2account.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\qdropbox2common.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\qdropbox2entity.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qdropbox2entityinfo.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qdropbox2entityinfo.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qdropbox2file.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qdropbox2file.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qdropbox2folder.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qdropbox2folder.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\qdropbox2global.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qhttpheader.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qhttpheader.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\QObjectDeleteLaterDeleter.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\QtScriptSyntaxHighlighter.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\QtScriptSyntaxHighlighter.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qxtabstracthttpconnector.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtabstracthttpconnector.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qxtabstractwebservice.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtabstractwebservice.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtabstractwebsessionmanager_p.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qxtabstractwebsessionmanager.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtabstractwebsessionmanager.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtboundcfunction.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtboundfunction.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtboundfunctionbase.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qxtcsvmodel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtcsvmodel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qxtfifo.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtfifo.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qxtglobal.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtglobal.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qxtglobalshortcut.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtglobalshortcut.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtglobalshortcut_p.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qxthmac.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxthmac.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qxthtmltemplate.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxthtmltemplate.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qxthttpserverconnector.cpp" />
+    <ClCompile Include="D:\github\evernus\Evernus\qxthttpsessionmanager.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxthttpsessionmanager.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtmail_p.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qxtmailattachment.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtmailattachment.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qxtmailmessage.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtmailmessage.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qxtmetaobject.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtmetaobject.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtmetatype.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qxtnull.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtnull.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtnullable.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qxtscgiserverconnector.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtsmtp_p.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qxtsmtp.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtsmtp.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qxtsslserver.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtsslserver.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qxtwebcontent.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtwebcontent.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qxtwebevent.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtwebevent.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\qxtwebslotservice.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\qxtwebslotservice.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\RegionAnalysisWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\RegionAnalysisWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\RegionComboBox.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\RegionComboBox.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\RegionStationPreset.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\RegionStationPreset.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\RegionStationPresetDialog.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\RegionStationPresetDialog.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\RegionStationPresetRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\RegionStationPresetRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\RegionTypePreset.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\RegionTypePreset.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\RegionTypePresetRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\RegionTypePresetRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\RegionTypeSelectDialog.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\RegionTypeSelectDialog.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ReplyTimeout.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ReplyTimeout.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ReportsWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ReportsWidget.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\Repository.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\RepositoryProvider.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ReprocessingArbitrageModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ReprocessingArbitrageModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ReprocessingArbitrageWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ReprocessingArbitrageWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ScrapmetalReprocessingArbitrageModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ScrapmetalReprocessingArbitrageModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ScrapmetalReprocessingArbitrageWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ScrapmetalReprocessingArbitrageWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ScriptOrderProcessingModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ScriptOrderProcessingModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\ScriptUtils.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\ScriptUtils.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\SecurityHelper.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\SecurityHelper.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\SellMarketOrdersInfoWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\SellMarketOrdersInfoWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\SimpleCrypt.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\SimpleCrypt.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\SingleRegionComboBox.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\SingleRegionComboBox.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\SizeRememberingWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\SizeRememberingWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\SolarSystemComboBox.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\SolarSystemComboBox.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\SoundPreferencesWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\SoundPreferencesWidget.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\SoundSettings.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\SourceDestinationSelectWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\SourceDestinationSelectWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\SSOAuthDialog.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\SSOAuthDialog.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\SSOMessageBox.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\SSOMessageBox.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\SSOSettings.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\SSOUtils.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\SSOUtils.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\StandardExceptionQtWrapperException.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\StandardModelProxyWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\StandardModelProxyWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\StationModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\StationModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\StationSelectButton.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\StationSelectButton.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\StationSelectDialog.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\StationSelectDialog.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\StationView.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\StationView.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\StatisticsPreferencesWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\StatisticsPreferencesWidget.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\StatisticsSettings.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\StatisticsWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\StatisticsWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\StructureHuntInterface.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\StructureHuntInterface.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\StyledTreeView.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\StyledTreeView.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\StyledTreeViewItemDelegate.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\StyledTreeViewItemDelegate.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\SyncDialog.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\SyncDialog.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\SyncPreferencesWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\SyncPreferencesWidget.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\SyncSettings.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\TaskConstants.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\TaskManager.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\TextFilterWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\TextFilterWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\TextUtils.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\TextUtils.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\TimerTypes.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\TradeableTypesTreeModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\TradeableTypesTreeModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\TradeableTypesTreeView.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\TradeableTypesTreeView.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\TypeAggregatedDetailsFilterWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\TypeAggregatedDetailsFilterWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\TypeAggregatedDetailsWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\TypeAggregatedDetailsWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\TypeAggregatedGraphWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\TypeAggregatedGraphWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\TypeAggregatedMarketDataFilterProxyModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\TypeAggregatedMarketDataFilterProxyModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\TypeAggregatedMarketDataModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\TypeAggregatedMarketDataModel.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\TypeLocationPairs.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\TypeLookupUtils.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\TypeLookupUtils.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\TypePerformanceModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\TypePerformanceModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\TypeSellPriceResolver.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\TypeSellPriceResolver.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\UISettings.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\Updater.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\Updater.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\UpdaterSettings.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\UpdateTimer.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\UpdateTimer.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\UpdateTimerRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\UpdateTimerRepository.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\Version.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\VolumeType.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\WalletEntryFilterWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\WalletEntryFilterWidget.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\WalletJournal.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\WalletJournalEntry.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\WalletJournalEntry.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\WalletJournalEntryRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\WalletJournalEntryRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\WalletJournalModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\WalletJournalModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\WalletJournalWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\WalletJournalWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\WalletPreferencesWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\WalletPreferencesWidget.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\WalletSettings.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\WalletSnapshot.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\WalletSnapshot.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\WalletSnapshotRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\WalletSnapshotRepository.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\WalletTransaction.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\WalletTransaction.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\WalletTransactionRepository.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\WalletTransactionRepository.h" />
+    <ClInclude Include="D:\github\evernus\Evernus\WalletTransactions.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\WalletTransactionsModel.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\WalletTransactionsModel.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\WalletTransactionsWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\WalletTransactionsWidget.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\WalletTransactionView.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\WalletTransactionView.h" />
+    <ClCompile Include="D:\github\evernus\Evernus\WarningBarWidget.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\WarningBarWidget.h" />
+    <None Include="D:\github\evernus\Evernus\lang\lang_ru_RU.ts">
+    </None>
+    <None Include="D:\github\evernus\Evernus\lang\lang_pl_PL.ts">
+    </None>
+    <None Include="D:\github\evernus\Evernus\lang\lang_de_DE.ts">
+    </None>
+    <None Include="D:\github\evernus\Evernus\translations\lang_ru_RU.qm">
+    </None>
+    <None Include="D:\github\evernus\Evernus\translations\lang_pl_PL.qm">
+    </None>
+    <None Include="D:\github\evernus\Evernus\translations\lang_de_DE.qm">
+    </None>
+    <ClCompile Include="D:\github\evernus\Evernus\qxtglobalshortcut_win.cpp" />
+    <ClInclude Include="D:\github\evernus\Evernus\VersionInfo.h" />
+    <ResourceCompile Include="D:\github\evernus\Evernus\VersionResource.rc" />
+    <ClCompile Include="D:\github\evernus\Evernus\Evernus_autogen\EWIEGA46WW\qrc_evernus.cpp" />
+    <ClCompile Include="D:\github\evernus\Evernus\Evernus_autogen\mocs_compilation_Release.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="D:\github\evernus\Evernus\Evernus_autogen\mocs_compilation_MinSizeRel.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="D:\github\evernus\Evernus\Evernus_autogen\mocs_compilation_RelWithDebInfo.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="D:\github\evernus\ZERO_CHECK.vcxproj">
+      <Project>{99339A51-2920-3319-B3F6-ABA68A939C33}</Project>
+      <Name>ZERO_CHECK</Name>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

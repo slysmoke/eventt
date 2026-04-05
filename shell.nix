@@ -13,6 +13,7 @@ in
       gtk3
       # Ключевой момент: добавляем sysprof напрямую
       sysprof
+      glib
       # Иногда требуется явно пробросить glib
       glib
       # SQLite — нужен для flutter test (drift unit tests)

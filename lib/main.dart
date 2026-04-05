@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/ui/app_theme.dart';
+import 'features/shell/presentation/shell_screen.dart';
+
 void main() {
   runApp(const ProviderScope(child: App()));
 }
@@ -13,24 +16,8 @@ class App extends StatelessWidget {
     return MaterialApp(
       title: 'eventt',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark(useMaterial3: true),
-      home: const _Shell(),
-    );
-  }
-}
-
-class _Shell extends StatelessWidget {
-  const _Shell();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: Text(
-          'eventt',
-          style: TextStyle(fontSize: 32),
-        ),
-      ),
+      theme: AppTheme.dark,
+      home: const ShellScreen(),
     );
   }
 }

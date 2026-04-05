@@ -14,6 +14,7 @@ part 'app_database.g.dart';
 @DriftDatabase(tables: [Characters, EsiCache, AppSettings])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
+  // ignore: use_super_parameters — optional positional arg can't be super param
 
   /// Constructor for unit tests — pass NativeDatabase.memory().
   AppDatabase.forTesting(QueryExecutor executor) : super(executor);

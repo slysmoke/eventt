@@ -36,7 +36,7 @@ class SdeUpdater {
         _overrideDbPath = overrideDbPath;
 
   Future<String> get dbPath async {
-    if (_overrideDbPath != null) return _overrideDbPath!;
+    if (_overrideDbPath != null) return _overrideDbPath;
     final dir = await getApplicationSupportDirectory();
     return p.join(dir.path, 'eve.db');
   }

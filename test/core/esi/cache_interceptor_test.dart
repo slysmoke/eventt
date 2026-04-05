@@ -160,8 +160,8 @@ class _ThrowingAdapter implements HttpClientAdapter {
   @override
   Future<ResponseBody> fetch(
     RequestOptions options,
-    Stream<List<int>>? _,
-    Future<void>? __,
+    Stream<List<int>>? requestStream,
+    Future<void>? cancelFuture,
   ) =>
       Future.error(DioException(
         requestOptions: options, // must carry the real options so onError sees the correct URL

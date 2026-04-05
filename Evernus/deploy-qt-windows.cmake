@@ -1,0 +1,6 @@
+set(WINDEPLOYQT "WINDEPLOYQT-NOTFOUND")
+set(COMPONENT_NAME_MAIN "Evernus")
+set(CMAKE_CURRENT_SOURCE_DIR "/home/devnull/develop/build/evernus/Evernus")
+
+
+execute_process(COMMAND ${WINDEPLOYQT} --qmldir=${CMAKE_CURRENT_SOURCE_DIR}/qml  ${COMPONENT_NAME_MAIN}/data/bin WORKING_DIRECTORY ${CPACK_TEMPORARY_INSTALL_DIRECTORY}/packages)
