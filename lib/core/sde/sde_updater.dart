@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -49,7 +50,8 @@ class SdeUpdater {
 
     try {
       final response = await _dio.get(versionUrl);
-      final remote = (response.data as Map<String, dynamic>)['sdeVersion'] as String;
+      final data = _parseJson(response.data);
+      final remote = data['sdeVersion'] as String;
       final local = await _db.getSetting(_versionKey);
       return remote != local;
     } catch (_) {
@@ -62,8 +64,7 @@ class SdeUpdater {
     void Function(int received, int total)? onProgress,
   }) async {
     final versionResponse = await _dio.get(versionUrl);
-    final version =
-        (versionResponse.data as Map<String, dynamic>)['sdeVersion'] as String;
+    final version = _parseJson(versionResponse.data)['sdeVersion'] as String;
 
     final path = await dbPath;
     await _dio.download(
@@ -73,5 +74,10 @@ class SdeUpdater {
     );
 
     await _db.setSetting(_versionKey, version);
+  }
+
+  static Map<String, dynamic> _parseJson(dynamic data) {
+    if (data is Map<String, dynamic>) return data;
+    return jsonDecode(data as String) as Map<String, dynamic>;
   }
 }
