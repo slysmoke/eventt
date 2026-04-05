@@ -39,6 +39,27 @@ class InvType {
       );
 }
 
+/// One material produced when reprocessing a scrapmetal item.
+class ScrapmetalMaterial {
+  final int typeId;
+  final int quantity;
+
+  const ScrapmetalMaterial({required this.typeId, required this.quantity});
+}
+
+/// Reprocessing data for one scrapmetal item (from invTypeMaterials).
+class ScrapmetalInfo {
+  final int typeId;
+  final int portionSize;
+  final List<ScrapmetalMaterial> materials;
+
+  const ScrapmetalInfo({
+    required this.typeId,
+    required this.portionSize,
+    required this.materials,
+  });
+}
+
 class MapRegion {
   final int regionId;
   final String regionName;

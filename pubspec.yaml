@@ -29,6 +29,18 @@ dependencies:
   flutter_secure_storage: ^10.0.0
   crypto: ^3.0.0
 
+  # Charts
+  fl_chart: ^0.69.0
+
+  # Window management (always-on-top floating Margin Tool window)
+  window_manager: ^0.4.3
+
+  # Global hotkeys (work when app is backgrounded)
+  hotkey_manager: ^0.2.3
+
+  # File picker (for selecting market log directory in settings)
+  file_picker: ^8.1.7
+
   # Utils
   package_info_plus: ^9.0.1
 

@@ -32,7 +32,7 @@ class MarketOrder {
 
 /// Some items bypass the normal region market and trade in a dedicated ESI region.
 /// Key: typeId → fixed regionId to use regardless of selected region.
-const Map<int, int> _fixedMarketRegions = {
+const Map<int, int> fixedMarketRegions = {
   44992: 19000001, // PLEX — New Eden market
 };
 
@@ -46,7 +46,7 @@ class MarketOrderRepository {
   /// For items with a fixed market region (e.g. PLEX), [regionId] is ignored.
   /// Sell orders are sorted ascending by price; buy orders descending.
   Future<List<MarketOrder>> fetchOrders(int regionId, int typeId) async {
-    final effectiveRegion = _fixedMarketRegions[typeId] ?? regionId;
+    final effectiveRegion = fixedMarketRegions[typeId] ?? regionId;
     final response = await _esi.get(
       '/markets/$effectiveRegion/orders/',
       queryParameters: {'type_id': typeId, 'order_type': 'all'},

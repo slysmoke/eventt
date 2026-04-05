@@ -19,13 +19,16 @@ in
       # SQLite — нужен для flutter test (drift unit tests)
       sqlite
 
+      # keybinder-3.0 — нужен для hotkey_manager (глобальные хоткеи на Linux)
+      keybinder3
+
       # И, конечно же, наш старый добрый claude-code
       oldPkgs.claude-code
     ];
 
     shellHook = ''
       # Принудительно обновляем пути для pkg-config
-      export PKG_CONFIG_PATH="${pkgs.sysprof.dev}/lib/pkgconfig:${pkgs.glib.dev}/lib/pkgconfig:$PKG_CONFIG_PATH"
+      export PKG_CONFIG_PATH="${pkgs.sysprof.dev}/lib/pkgconfig:${pkgs.glib.dev}/lib/pkgconfig:${pkgs.keybinder3}/lib/pkgconfig:$PKG_CONFIG_PATH"
 
       # sqlite3 нужен для flutter test (drift unit tests используют libsqlite3.so напрямую)
       export LD_LIBRARY_PATH="${pkgs.sqlite.out}/lib:$LD_LIBRARY_PATH"
