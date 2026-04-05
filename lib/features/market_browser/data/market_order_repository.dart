@@ -34,8 +34,6 @@ class MarketOrder {
 /// Key: typeId → fixed regionId to use regardless of selected region.
 const Map<int, int> _fixedMarketRegions = {
   44992: 19000001, // PLEX — New Eden market
-  40520: 19000001, // Skill Injector
-  40519: 19000001, // Skill Extractor
 };
 
 /// Fetches and sorts market orders from ESI for a given region + type.
