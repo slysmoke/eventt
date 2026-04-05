@@ -21,7 +21,6 @@ import 'token_storage.dart';
 /// 5. Save tokens to [TokenStorage]
 class EveAuthService {
   static const _ssoBase = 'https://login.eveonline.com/v2/oauth';
-  static const _verifyUrl = 'https://esi.evetech.net/verify/';
 
   // Must match the registered callback URL exactly
   static const callbackPort = 8000;
@@ -103,12 +102,19 @@ class EveAuthService {
     required this.clientSecret,
     Dio? dio,
     TokenStorage? tokenStorage,
-  })  : _dio = dio ?? Dio(),
+  })  : _dio = dio ??
+            (Dio()..interceptors.add(LogInterceptor(requestBody: true, responseBody: true))),
         _tokenStorage = tokenStorage ?? TokenStorage();
 
   /// Launches browser, awaits OAuth callback, exchanges tokens,
   /// saves them, and returns the authenticated EVE character ID.
   Future<int> authenticate() async {
+    if (clientId.isEmpty) {
+      throw StateError(
+        'EVE_CLIENT_ID is not set.\n'
+        'Run with: flutter run -d linux --dart-define-from-file=dart_defines.json',
+      );
+    }
     final pkce = Pkce.generate();
     final state = _randomState();
 
@@ -126,7 +132,7 @@ class EveAuthService {
 
     final code = await _waitForCallback(authUri, state);
     final tokens = await _exchangeCode(code, pkce.codeVerifier);
-    final characterId = await _verifyAndGetCharacterId(tokens['access_token'] as String);
+    final characterId = _extractCharacterIdFromJwt(tokens['access_token'] as String);
 
     await _tokenStorage.saveTokens(
       characterId: characterId,
@@ -153,11 +159,6 @@ class EveAuthService {
 
   // ---------------------------------------------------------------------------
 
-  String _basicAuth() {
-    final credentials = base64.encode(utf8.encode('$clientId:$clientSecret'));
-    return 'Basic $credentials';
-  }
-
   Future<void> _refreshTokens(int characterId) async {
     final refreshToken = await _tokenStorage.getRefreshToken(characterId);
     if (refreshToken == null) {
@@ -172,7 +173,9 @@ class EveAuthService {
       },
       options: Options(
         contentType: Headers.formUrlEncodedContentType,
-        headers: {'Authorization': _basicAuth()},
+        headers: clientSecret.isNotEmpty
+            ? {'Authorization': _basicAuth()}
+            : {'client_id': clientId},
       ),
     );
 
@@ -229,6 +232,11 @@ class EveAuthService {
     );
   }
 
+  String _basicAuth() {
+    final credentials = base64.encode(utf8.encode('$clientId:$clientSecret'));
+    return 'Basic $credentials';
+  }
+
   Future<Map<String, dynamic>> _exchangeCode(
     String code,
     String codeVerifier,
@@ -243,19 +251,33 @@ class EveAuthService {
       },
       options: Options(
         contentType: Headers.formUrlEncodedContentType,
-        headers: {'Authorization': _basicAuth()},
+        headers: clientSecret.isNotEmpty
+            ? {'Authorization': _basicAuth()}
+            : {'client_id': clientId},
       ),
     );
     return response.data as Map<String, dynamic>;
   }
 
-  Future<int> _verifyAndGetCharacterId(String accessToken) async {
-    final response = await _dio.get(
-      _verifyUrl,
-      options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
-    );
-    final data = response.data as Map<String, dynamic>;
-    return (data['CharacterID'] as num).toInt();
+  /// Extracts character ID from the EVE SSO JWT without a network call.
+  /// JWT sub field format: "CHARACTER:EVE:{characterId}"
+  int _extractCharacterIdFromJwt(String accessToken) {
+    final parts = accessToken.split('.');
+    if (parts.length != 3) throw StateError('Invalid JWT format');
+
+    var payload = parts[1];
+    // Restore base64url padding
+    switch (payload.length % 4) {
+      case 2:
+        payload += '==';
+      case 3:
+        payload += '=';
+    }
+
+    final decoded = utf8.decode(base64Url.decode(payload));
+    final data = jsonDecode(decoded) as Map<String, dynamic>;
+    final sub = data['sub'] as String; // "CHARACTER:EVE:12345678"
+    return int.parse(sub.split(':').last);
   }
 
   static String _randomState() {

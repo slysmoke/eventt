@@ -93,29 +93,31 @@ class _AddCharacterDialogState extends ConsumerState<AddCharacterDialog> {
       title: const Text('Add Character'),
       content: SizedBox(
         width: 360,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (!hasError) ...[
-              const CircularProgressIndicator(),
-              const SizedBox(height: 24),
-              Text(
-                _step.message,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium,
-              ),
-            ] else ...[
-              Icon(Icons.error_outline,
-                  size: 48, color: theme.colorScheme.error),
-              const SizedBox(height: 16),
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(color: theme.colorScheme.error),
-              ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!hasError) ...[
+                const CircularProgressIndicator(),
+                const SizedBox(height: 24),
+                Text(
+                  _step.message,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium,
+                ),
+              ] else ...[
+                Icon(Icons.error_outline,
+                    size: 48, color: theme.colorScheme.error),
+                const SizedBox(height: 16),
+                Text(
+                  _error!,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(color: theme.colorScheme.error),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
       actions: [

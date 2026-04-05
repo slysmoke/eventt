@@ -15,8 +15,8 @@ class CharacterChip extends ConsumerWidget {
     final activeId = ref.watch(activeCharacterIdProvider);
     final db = ref.watch(databaseProvider);
 
-    return FutureBuilder(
-      future: db.select(db.characters).get(),
+    return StreamBuilder(
+      stream: db.select(db.characters).watch(),
       builder: (context, snapshot) {
         final characters = snapshot.data ?? [];
 

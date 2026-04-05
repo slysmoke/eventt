@@ -26,7 +26,7 @@ nix-shell          # войти в окружение (flutter, ninja, pkg-confi
 ```bash
 flutter pub get                          # установить зависимости
 # Запуск с EVE SSO credentials (из dart_defines.json, не коммитится в репо):
-flutter run -d linux --dart-defines-from-file=dart_defines.json
+flutter run -d linux --dart-define-from-file=dart_defines.json
 ```
 
 `dart_defines.json.example` — шаблон, скопировать в `dart_defines.json` и заполнить credentials.
