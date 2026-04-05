@@ -115,6 +115,25 @@ void main() {
       expect(buys[1].price, 6.0);
       expect(buys[2].price, 4.0);
     });
+
+    test('PLEX (44992) always uses region 19000001 regardless of selected region', () async {
+      const plexId = 44992;
+      const newEdenRegion = 19000001;
+
+      when(() => esi.get(
+            '/markets/$newEdenRegion/orders/',
+            queryParameters: {'type_id': plexId, 'order_type': 'all'},
+          )).thenAnswer((_) async => Response(
+            requestOptions: RequestOptions(path: ''),
+            statusCode: 200,
+            data: [_order(id: 1, buy: false, price: 1500000000.0)],
+          ));
+
+      // Pass The Forge (10000002) as selected region — should be overridden.
+      final orders = await repo.fetchOrders(10000002, plexId);
+      expect(orders.length, 1);
+      expect(orders.first.price, 1500000000.0);
+    });
   });
 }
 
