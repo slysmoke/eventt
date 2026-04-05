@@ -30,8 +30,8 @@ in
       # sqlite3 нужен для flutter test (drift unit tests используют libsqlite3.so напрямую)
       export LD_LIBRARY_PATH="${pkgs.sqlite.out}/lib:$LD_LIBRARY_PATH"
 
-      # Чтобы CMake не лез в /usr/local
-      export CMAKE_INSTALL_PREFIX=$PWD/build/install
+      # Для ручной сборки C++ проектов (не Flutter) — чтобы CMake не лез в /usr/local
+      # Не устанавливать CMAKE_INSTALL_PREFIX глобально — это ломает flutter run
 
       echo "--- Environment Ready ---"
     '';

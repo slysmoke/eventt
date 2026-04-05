@@ -7,15 +7,17 @@ final tokenStorageProvider = Provider<TokenStorage>((ref) => TokenStorage());
 
 final eveAuthServiceProvider = Provider<EveAuthService>((ref) {
   const clientId = String.fromEnvironment('EVE_CLIENT_ID');
+  const clientSecret = String.fromEnvironment('EVE_CLIENT_SECRET');
   return EveAuthService(
     clientId: clientId,
+    clientSecret: clientSecret,
     tokenStorage: ref.watch(tokenStorageProvider),
   );
 });
 
 /// Global active character ID. null = no character selected.
 ///
-/// Use `ref.read(activeCharacterIdProvider.notifier).state = id` to change.
+/// Use `ref.read(activeCharacterIdProvider.notifier).select(id)` to change.
 final activeCharacterIdProvider =
     NotifierProvider<ActiveCharacterNotifier, int?>(
   ActiveCharacterNotifier.new,
