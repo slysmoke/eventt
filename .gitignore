@@ -52,3 +52,7 @@ web/
 .metadata
 shell.nix~
 dart_defines.json
+
+# AI assistant artifacts
+.qwen/
+2026-*-this-session-*.txt
