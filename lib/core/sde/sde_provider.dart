@@ -112,5 +112,8 @@ final sdeDatabaseProvider = Provider<SdeDatabase?>((ref) {
 
   final db = SdeDatabase.open(path);
   ref.onDispose(db.close);
+
+  // Link SDE database to user database for type name resolution
+  // (this is set after databaseProvider is created)
   return db;
 });
