@@ -11,23 +11,37 @@ class Asset {
   final int typeId;
   final String? typeName;
   final int locationId;
-  final String? locationName;
   final int quantity;
   final bool isBlueprintCopy;
+
+  // Resolved location hierarchy
+  final int? regionId;
+  final String? regionName;
+  final int? systemId;
+  final String? systemName;
+  final String? stationName;
+
+  // Price data
+  final double? unitPrice;
+  double get totalPrice => unitPrice != null ? unitPrice! * quantity : 0;
 
   const Asset({
     required this.itemId,
     required this.typeId,
     this.typeName,
     required this.locationId,
-    this.locationName,
     required this.quantity,
     this.isBlueprintCopy = false,
+    this.regionId,
+    this.regionName,
+    this.systemId,
+    this.systemName,
+    this.stationName,
+    this.unitPrice,
   });
 
   factory Asset.fromJson(Map<String, dynamic> json) {
     final rawQuantity = json['quantity'] as int;
-    // Blueprint copies may have negative quantity — treat as 1
     final quantity = rawQuantity < 0 ? 1 : rawQuantity;
 
     return Asset(
@@ -39,15 +53,46 @@ class Asset {
     );
   }
 
-  Asset copyWith({String? typeName, String? locationName}) => Asset(
+  Asset copyWith({
+    String? typeName,
+    int? regionId,
+    String? regionName,
+    int? systemId,
+    String? systemName,
+    String? stationName,
+    double? unitPrice,
+  }) =>
+      Asset(
         itemId: itemId,
         typeId: typeId,
         typeName: typeName ?? this.typeName,
         locationId: locationId,
-        locationName: locationName ?? this.locationName,
         quantity: quantity,
         isBlueprintCopy: isBlueprintCopy,
+        regionId: regionId ?? this.regionId,
+        regionName: regionName ?? this.regionName,
+        systemId: systemId ?? this.systemId,
+        systemName: systemName ?? this.systemName,
+        stationName: stationName ?? this.stationName,
+        unitPrice: unitPrice ?? this.unitPrice,
       );
+}
+
+/// Location info resolved from ESI.
+class _LocationInfo {
+  final int? regionId;
+  final String? regionName;
+  final int? systemId;
+  final String? systemName;
+  final String? stationName;
+
+  const _LocationInfo({
+    this.regionId,
+    this.regionName,
+    this.systemId,
+    this.systemName,
+    this.stationName,
+  });
 }
 
 /// Fetches the active character's assets from ESI.
@@ -62,7 +107,7 @@ class AssetRepository {
         _db = db;
 
   /// Fetches all assets for [characterId].
-  /// Resolves type names from SDE and location names via ESI universe/names.
+  /// Resolves type names, location hierarchy, and prices.
   Future<List<Asset>> fetchAssets({
     required int characterId,
     required String accessToken,
@@ -108,43 +153,121 @@ class AssetRepository {
       typeNames = {for (final entry in typeMap.entries) entry.key: entry.value.typeName};
     }
 
-    // Resolve location names for non-station locations
-    final locationIds = allAssets
-        .map((a) => a.locationId)
-        .where((id) => !_isStationId(id))
-        .toSet()
-        .toList();
+    // Fetch market prices
+    final priceMap = await _fetchPrices(accessToken);
 
-    Map<int, String> locationNames = {};
-    if (locationIds.isNotEmpty) {
-      locationNames = await _resolveLocationNames(locationIds, accessToken);
-    }
+    // Resolve location hierarchy (region → system → station)
+    final locationIds = allAssets.map((a) => a.locationId).toSet().toList();
+    final locationInfo = await _resolveLocations(locationIds, accessToken);
 
     return allAssets
-        .map((a) => a.copyWith(
-              typeName: typeNames[a.typeId],
-              locationName: locationNames[a.locationId],
-            ))
+        .map((a) {
+          final loc = locationInfo[a.locationId];
+          return a.copyWith(
+            typeName: typeNames[a.typeId],
+            regionId: loc?.regionId,
+            regionName: loc?.regionName,
+            systemId: loc?.systemId,
+            systemName: loc?.systemName,
+            stationName: loc?.stationName,
+            unitPrice: priceMap[a.typeId],
+          );
+        })
         .toList();
   }
 
-  /// Checks if a location ID is a station (has SDE data).
-  bool _isStationId(int id) {
-    // CCP stations: 60000001-61000000 or 66000000-66014933 (offset by -6000001)
-    return (id >= 60000001 && id <= 61000000) ||
-        (id >= 66000000 && id <= 66014933);
+  /// Fetches current market prices from ESI.
+  Future<Map<int, double>> _fetchPrices(String accessToken) async {
+    try {
+      final response = await _esi.get(
+        '/markets/prices/',
+        accessToken: accessToken,
+      );
+
+      if (response.statusCode == 200 && response.data is List) {
+        final prices = <int, double>{};
+        for (final item in response.data as List) {
+          final entry = item as Map<String, dynamic>;
+          final typeId = entry['type_id'] as int?;
+          final avgPrice = (entry['average_price'] as num?)?.toDouble();
+          if (typeId != null && avgPrice != null) {
+            prices[typeId] = avgPrice;
+          }
+        }
+        return prices;
+      }
+    } catch (_) {
+      // Ignore price fetch failures
+    }
+    return {};
   }
 
-  /// Resolves location names via ESI /universe/names/ endpoint.
-  Future<Map<int, String>> _resolveLocationNames(
+  /// Resolves location hierarchy: locationId → region → system → station.
+  Future<Map<int, _LocationInfo>> _resolveLocations(
     List<int> locationIds,
     String accessToken,
   ) async {
-    final result = <int, String>{};
+    final result = <int, _LocationInfo>{};
 
-    // Batch in chunks of 1000 (ESI limit)
-    for (var i = 0; i < locationIds.length; i += 1000) {
-      final chunk = locationIds.skip(i).take(1000).toList();
+    // Batch resolve all location IDs via /universe/names/
+    final namesMap = await _resolveNames(locationIds, accessToken);
+
+    // For each location, determine category and resolve parent
+    for (final locationId in locationIds) {
+      final nameEntry = namesMap[locationId];
+      if (nameEntry == null) continue;
+
+      final category = nameEntry['category'] as String?;
+      final name = nameEntry['name'] as String?;
+
+      if (category == 'solar_system') {
+        // System-level asset — need to find its region
+        final regionInfo = await _getSystemRegion(locationId, accessToken);
+        result[locationId] = _LocationInfo(
+          regionId: regionInfo?['region_id'] as int?,
+          regionName: regionInfo?['region_name'] as String?,
+          systemId: locationId,
+          systemName: name,
+        );
+      } else if (category == 'station' || category == 'structure') {
+        // Station-level asset — need system and region
+        final locationInfo = await _getStationInfo(locationId, accessToken);
+        result[locationId] = _LocationInfo(
+          regionId: locationInfo?['region_id'] as int?,
+          regionName: locationInfo?['region_name'] as String?,
+          systemId: locationInfo?['system_id'] as int?,
+          systemName: locationInfo?['system_name'] as String?,
+          stationName: name,
+        );
+      } else {
+        // Unknown category (e.g., citadel, item) — try as station
+        final locationInfo = await _getStationInfo(locationId, accessToken);
+        if (locationInfo != null) {
+          result[locationId] = _LocationInfo(
+            regionId: locationInfo['region_id'] as int?,
+            regionName: locationInfo['region_name'] as String?,
+            systemId: locationInfo['system_id'] as int?,
+            systemName: locationInfo['system_name'] as String?,
+            stationName: locationInfo['station_name'] as String? ?? name,
+          );
+        } else {
+          result[locationId] = _LocationInfo(stationName: name);
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /// Resolves names for a list of IDs via /universe/names/.
+  Future<Map<int, Map<String, dynamic>>> _resolveNames(
+    List<int> ids,
+    String accessToken,
+  ) async {
+    final result = <int, Map<String, dynamic>>{};
+
+    for (var i = 0; i < ids.length; i += 1000) {
+      final chunk = ids.skip(i).take(1000).toList();
       try {
         final response = await _esi.post(
           '/universe/names/',
@@ -156,17 +279,169 @@ class AssetRepository {
           for (final item in response.data as List) {
             final entry = item as Map<String, dynamic>;
             final id = entry['id'] as int?;
-            final name = entry['name'] as String?;
-            if (id != null && name != null) {
-              result[id] = name;
+            if (id != null) {
+              result[id] = entry;
             }
           }
         }
-      } catch (_) {
-        // Ignore resolution failures
-      }
+      } catch (_) {}
     }
 
     return result;
+  }
+
+  /// Gets region info for a solar system via /universe/systems/{id}/.
+  Future<Map<String, dynamic>?> _getSystemRegion(
+    int systemId,
+    String accessToken,
+  ) async {
+    try {
+      final response = await _esi.get(
+        '/universe/systems/$systemId/',
+        accessToken: accessToken,
+      );
+
+      if (response.statusCode == 200 && response.data is Map) {
+        final data = response.data as Map<String, dynamic>;
+        final constellationId = data['constellation_id'] as int?;
+
+        if (constellationId != null) {
+          final constResponse = await _esi.get(
+            '/universe/constellations/$constellationId/',
+            accessToken: accessToken,
+          );
+
+          if (constResponse.statusCode == 200 && constResponse.data is Map) {
+            final constData = constResponse.data as Map<String, dynamic>;
+            final regionId = constData['region_id'] as int?;
+
+            if (regionId != null) {
+              final regResponse = await _esi.get(
+                '/universe/regions/$regionId/',
+                accessToken: accessToken,
+              );
+
+              if (regResponse.statusCode == 200 && regResponse.data is Map) {
+                final regData = regResponse.data as Map<String, dynamic>;
+                return {
+                  'region_id': regionId,
+                  'region_name': regData['name'] as String?,
+                };
+              }
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Gets station/structure info including system and region.
+  Future<Map<String, dynamic>?> _getStationInfo(
+    int locationId,
+    String accessToken,
+  ) async {
+    // Try as CCP station first
+    try {
+      final response = await _esi.get(
+        '/universe/stations/$locationId/',
+        accessToken: accessToken,
+      );
+
+      if (response.statusCode == 200 && response.data is Map) {
+        final data = response.data as Map<String, dynamic>;
+        final systemId = data['system_id'] as int?;
+        final regionId = data['region_id'] as int?;
+
+        String? systemName;
+        String? regionName;
+
+        if (systemId != null) {
+          final sysResponse = await _esi.get(
+            '/universe/systems/$systemId/',
+            accessToken: accessToken,
+          );
+          if (sysResponse.statusCode == 200 && sysResponse.data is Map) {
+            systemName = (sysResponse.data as Map<String, dynamic>)['name'] as String?;
+          }
+        }
+
+        if (regionId != null) {
+          final regResponse = await _esi.get(
+            '/universe/regions/$regionId/',
+            accessToken: accessToken,
+          );
+          if (regResponse.statusCode == 200 && regResponse.data is Map) {
+            regionName = (regResponse.data as Map<String, dynamic>)['name'] as String?;
+          }
+        }
+
+        return {
+          'system_id': systemId,
+          'system_name': systemName,
+          'region_id': regionId,
+          'region_name': regionName,
+          'station_name': data['name'] as String?,
+        };
+      }
+    } catch (_) {}
+
+    // Try as player structure
+    try {
+      final response = await _esi.get(
+        '/universe/structures/$locationId/',
+        accessToken: accessToken,
+      );
+
+      if (response.statusCode == 200 && response.data is Map) {
+        final data = response.data as Map<String, dynamic>;
+        final systemId = data['solar_system_id'] as int?;
+
+        String? systemName;
+        String? regionName;
+        int? regionId;
+
+        if (systemId != null) {
+          final sysResponse = await _esi.get(
+            '/universe/systems/$systemId/',
+            accessToken: accessToken,
+          );
+          if (sysResponse.statusCode == 200 && sysResponse.data is Map) {
+            systemName = (sysResponse.data as Map<String, dynamic>)['name'] as String?;
+            final constellationId = (sysResponse.data as Map<String, dynamic>)['constellation_id'] as int?;
+
+            if (constellationId != null) {
+              final constResponse = await _esi.get(
+                '/universe/constellations/$constellationId/',
+                accessToken: accessToken,
+              );
+              if (constResponse.statusCode == 200 && constResponse.data is Map) {
+                regionId = (constResponse.data as Map<String, dynamic>)['region_id'] as int?;
+
+                if (regionId != null) {
+                  final regResponse = await _esi.get(
+                    '/universe/regions/$regionId/',
+                    accessToken: accessToken,
+                  );
+                  if (regResponse.statusCode == 200 && regResponse.data is Map) {
+                    regionName = (regResponse.data as Map<String, dynamic>)['name'] as String?;
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        return {
+          'system_id': systemId,
+          'system_name': systemName,
+          'region_id': regionId,
+          'region_name': regionName,
+          'station_name': data['name'] as String?,
+        };
+      }
+    } catch (_) {}
+
+    return null;
   }
 }
