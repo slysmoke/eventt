@@ -1,9 +1,28 @@
 import 'dart:convert';
 
+import 'package:dio/dio.dart' show Response;
 import 'package:drift/drift.dart' show Value;
 
 import '../../../core/database/app_database.dart';
 import '../../../core/esi/esi_client.dart';
+
+/// Safely extract JSON from ESI response, handling both Map and String.
+Map<String, dynamic> _extractData(Response<dynamic> response) {
+  // Dio may have already parsed it as a Map
+  if (response.data is Map<String, dynamic>) {
+    return response.data as Map<String, dynamic>;
+  }
+  // If it's a raw Map (not typed), convert
+  if (response.data is Map) {
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+  // If it's a String, try parsing JSON
+  if (response.data is String) {
+    final str = response.data as String;
+    return jsonDecode(str) as Map<String, dynamic>;
+  }
+  throw FormatException('Unexpected response type: ${response.data.runtimeType}');
+}
 
 /// Fetches corporation info from ESI and persists it to the local database.
 class CorporationRepository {
@@ -21,10 +40,7 @@ class CorporationRepository {
         '/corporations/$corporationId/',
       );
 
-      final data = (response.data is String
-              ? jsonDecode(response.data as String)
-              : response.data)
-          as Map<String, dynamic>;
+      final data = _extractData(response);
 
       final name = data['name'] as String? ?? 'Unknown Corporation';
       final ticker = data['ticker'] as String?;
@@ -36,10 +52,7 @@ class CorporationRepository {
       if (ceoId != null) {
         try {
           final ceoResponse = await _esi.get('/characters/$ceoId/');
-          final ceoData = (ceoResponse.data is String
-                  ? jsonDecode(ceoResponse.data as String)
-                  : ceoResponse.data)
-              as Map<String, dynamic>;
+          final ceoData = _extractData(ceoResponse);
           ceoName = ceoData['name'] as String?;
         } catch (_) {
           // Ignore CEO fetch failures
@@ -51,10 +64,7 @@ class CorporationRepository {
       if (allianceId != null) {
         try {
           final allianceResponse = await _esi.get('/alliances/$allianceId/');
-          final allianceData = (allianceResponse.data is String
-                  ? jsonDecode(allianceResponse.data as String)
-                  : allianceResponse.data)
-              as Map<String, dynamic>;
+          final allianceData = _extractData(allianceResponse);
           allianceName = allianceData['name'] as String?;
         } catch (_) {
           // Ignore alliance fetch failures

@@ -1,10 +1,29 @@
 import 'dart:convert';
 
+import 'package:dio/dio.dart' show Response;
 import 'package:drift/drift.dart' show Value;
 
 import '../../../core/database/app_database.dart';
 import '../../../core/esi/esi_client.dart';
 import 'corporation_repository.dart';
+
+/// Safely extract JSON from ESI response, handling both Map and String.
+Map<String, dynamic> _extractData(Response<dynamic> response) {
+  // Dio may have already parsed it as a Map
+  if (response.data is Map<String, dynamic>) {
+    return response.data as Map<String, dynamic>;
+  }
+  // If it's a raw Map (not typed), convert
+  if (response.data is Map) {
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+  // If it's a String, try parsing JSON
+  if (response.data is String) {
+    final str = response.data as String;
+    return jsonDecode(str) as Map<String, dynamic>;
+  }
+  throw FormatException('Unexpected response type: ${response.data.runtimeType}');
+}
 
 /// Fetches EVE character info from ESI and persists it to the local database.
 class CharacterRepository {
@@ -23,10 +42,7 @@ class CharacterRepository {
       accessToken: accessToken,
     );
 
-    final data = (response.data is String
-            ? jsonDecode(response.data as String)
-            : response.data)
-        as Map<String, dynamic>;
+    final data = _extractData(response);
 
     final name = data['name'] as String;
     final corporationId = (data['corporation_id'] as num?)?.toInt();
