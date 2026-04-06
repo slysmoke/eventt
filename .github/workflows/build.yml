@@ -32,7 +32,6 @@ jobs:
             libsecret-1-dev \
             libsqlite3-dev \
             pkg-config \
-            appstream \
             libfuse2 \
             keybinder-3.0-dev
 
@@ -42,13 +41,19 @@ jobs:
       - name: Build Linux
         run: flutter build linux --release --dart-define=EVE_CLIENT_ID=${{ secrets.EVE_CLIENT_ID }} --dart-define=EVE_CLIENT_SECRET=${{ secrets.EVE_CLIENT_SECRET }}
 
-      - name: Create AppDir
+      - name: Generate AppImage
+        env:
+          VERSION: ${{ github.ref_name }}
         run: |
-          mkdir -p AppDir/usr/bin
-          cp -r build/linux/x64/release/bundle/* AppDir/usr/bin/
+          wget --no-verbose https://github.com/linuxdeploy/linuxdeploy/releases/latest/download/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage
+
+          # Create AppDir from Flutter build
+          mkdir -p appimage/usr/bin
+          cp -r build/linux/x64/release/bundle/* appimage/usr/bin/
 
           # Create desktop entry
-          cat > AppDir/eve_ntt.desktop << 'EOF'
+          cat > appimage/usr/share/applications/eve_ntt.desktop << 'EOF'
           [Desktop Entry]
           Name=EVE Night Trade Tools
           Exec=eve_ntt
@@ -57,16 +62,8 @@ jobs:
           Categories=Game;
           EOF
 
-          # Try to find an icon, fallback to generated one
-          ICON=$(find . -name "icon.png" -o -name "logo.png" 2>/dev/null | head -1)
-          if [ -n "$ICON" ]; then
-            cp "$ICON" AppDir/icon.png
-          else
-            # Generate a simple 128x128 PNG
-            convert -size 128x128 xc:'#00B4BF' -fill white \
-              -gravity center -pointsize 48 -annotate 0 "E" \
-              AppDir/icon.png 2>/dev/null || \
-            python3 -c "
+          # Generate a simple icon
+          python3 -c "
           import struct, zlib
           def png(w,h,r,g,b):
             def chunk(t,d):
@@ -78,36 +75,17 @@ jobs:
             idat=chunk(b'IDAT',zlib.compress(raw))
             iend=chunk(b'IEND',b'')
             return sig+ihdr+idat+iend
-          open('AppDir/icon.png','wb').write(png(128,128,0,180,191))
+          open('appimage/eve_ntt.png','wb').write(png(128,128,0,180,191))
           "
-          fi
 
-      - name: Download linuxdeploy
-        run: |
-          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-          chmod +x linuxdeploy-x86_64.AppImage
-
-      - name: Build AppImage
-        run: |
-          VERSION=${GITHUB_REF_NAME#v}
-          ./linuxdeploy-x86_64.AppImage \
-            --appdir AppDir \
-            --output appimage \
-            --desktop-file=AppDir/eve_ntt.desktop \
-            --icon-file=AppDir/icon.png 2>/dev/null || \
-          (
-            # Fallback: manual AppImage creation
-            cd build/linux/x64/release/bundle
-            tar czf ../../../eve_ntt-${VERSION}-linux-x86_64.tar.gz .
-          )
+          # Build AppImage
+          ./linuxdeploy-x86_64.AppImage --appdir appimage --output appimage
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: eve_ntt-linux
-          path: |
-            *.AppImage
-            build/linux/x64/release/bundle/eve_ntt-*.tar.gz
+          path: "*.AppImage"
 
   # ──────────────────────────────────────────────
   # Windows — ZIP (NSIS requires separate installer build)
