@@ -738,16 +738,17 @@ class _SetPriceAlertDialogState extends ConsumerState<_SetPriceAlertDialog> {
             ),
           ),
           const SizedBox(height: 12),
-          Row(
+          Wrap(
+            spacing: 8,
+            alignment: WrapAlignment.start,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              const Text('Alert when price is:'),
-              const SizedBox(width: 8),
+              const Text('Alert when:'),
               ChoiceChip(
                 label: const Text('Below'),
                 selected: _condition == 'below',
                 onSelected: (v) => setState(() => _condition = 'below'),
               ),
-              const SizedBox(width: 4),
               ChoiceChip(
                 label: const Text('Above'),
                 selected: _condition == 'above',
