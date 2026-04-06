@@ -54,10 +54,9 @@ jobs:
           mkdir -p appimage/usr/share/applications
           cp -r build/linux/x64/release/bundle/* appimage/usr/bin/
 
-          # Bundle libsqlite3.so from sqlite3_flutter_libs
-          if [ -f build/linux/x64/release/bundle/lib/libsqlite3.so ]; then
-            cp build/linux/x64/release/bundle/lib/libsqlite3.so appimage/usr/lib/
-          fi
+          # Bundle libsqlite3.so (loaded via dlopen, not detected by linuxdeploy)
+          cp /lib/x86_64-linux-gnu/libsqlite3.so.0 appimage/usr/lib/
+          ln -sf libsqlite3.so.0 appimage/usr/lib/libsqlite3.so
 
           # Create desktop entry
           cat > appimage/usr/share/applications/eve_ntt.desktop << 'EOF'
