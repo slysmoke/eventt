@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:drift/drift.dart' as drift;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -74,6 +75,26 @@ final _alertCheckOnOrdersProvider = FutureProvider.autoDispose<void>((ref) async
       }
     });
   });
+});
+
+// Provider that returns the next cache expiry time for market orders
+final _nextMarketCacheExpiryProvider = FutureProvider.autoDispose<DateTime?>((ref) async {
+  final type = ref.watch(_selectedTypeProvider);
+  final regionId = ref.watch(_selectedRegionProvider);
+  if (type == null) return null;
+
+  final db = ref.watch(databaseProvider);
+  final effectiveRegion = fixedMarketRegions[type.typeId] ?? regionId;
+  final urlPattern = '/markets/$effectiveRegion/orders/';
+
+  final entries = await (db.select(db.esiCache)
+        ..where((t) => t.url.contains(urlPattern))
+        ..orderBy([(t) => drift.OrderingTerm(expression: t.expiresAt)]))
+      .get();
+
+  if (entries.isEmpty) return null;
+  // Return the earliest expiry
+  return entries.first.expiresAt;
 });
 
 final _marketHistoryRepoProvider = Provider<MarketHistoryRepository>((ref) {
@@ -277,10 +298,8 @@ class _BrowserLayoutState extends ConsumerState<_BrowserLayout>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    // Periodic alert check every 5 minutes
-    _alertCheckTimer = Timer.periodic(const Duration(minutes: 5), (_) {
-      _checkAllAlerts();
-    });
+    // Schedule alert check based on ESI cache expiry
+    _scheduleAlertCheck();
   }
 
   @override
@@ -288,6 +307,43 @@ class _BrowserLayoutState extends ConsumerState<_BrowserLayout>
     _tabController.dispose();
     _alertCheckTimer?.cancel();
     super.dispose();
+  }
+
+  /// Schedules the next alert check based on ESI cache expiry time.
+  /// Falls back to 5 minutes if no cache data available.
+  void _scheduleAlertCheck() {
+    _alertCheckTimer?.cancel();
+    // Use a small delay to ensure providers are ready
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (!mounted) return;
+      final expiry = ref.read(_nextMarketCacheExpiryProvider);
+      expiry.whenData((expiresAt) {
+        if (!mounted) return;
+        if (expiresAt != null) {
+          final now = DateTime.now().toUtc();
+          final delay = expiresAt.difference(now);
+          if (delay.isNegative) {
+            // Already expired — check now and reschedule
+            _checkAllAlerts();
+            _alertCheckTimer = Timer(const Duration(minutes: 5), () {
+              _scheduleAlertCheck();
+            });
+          } else {
+            // Schedule check at expiry time
+            _alertCheckTimer = Timer(delay, () {
+              _checkAllAlerts();
+              _scheduleAlertCheck(); // Reschedule for next expiry
+            });
+          }
+        } else {
+          // No cache data yet — fallback to 5 minutes
+          _alertCheckTimer = Timer(const Duration(minutes: 5), () {
+            _checkAllAlerts();
+            _scheduleAlertCheck();
+          });
+        }
+      });
+    });
   }
 
   void _checkAllAlerts() {
