@@ -50,8 +50,14 @@ jobs:
 
           # Create AppDir from Flutter build
           mkdir -p appimage/usr/bin
+          mkdir -p appimage/usr/lib
           mkdir -p appimage/usr/share/applications
           cp -r build/linux/x64/release/bundle/* appimage/usr/bin/
+
+          # Bundle libsqlite3.so from sqlite3_flutter_libs
+          if [ -f build/linux/x64/release/bundle/lib/libsqlite3.so ]; then
+            cp build/linux/x64/release/bundle/lib/libsqlite3.so appimage/usr/lib/
+          fi
 
           # Create desktop entry
           cat > appimage/usr/share/applications/eve_ntt.desktop << 'EOF'
@@ -116,6 +122,13 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}" -replace '^v', ''
+          # Ensure sqlite3.dll is bundled (from sqlite3_flutter_libs)
+          $sqlite3Src = "build\windows\x64\runner\Release\sqlite3.dll"
+          if (-not (Test-Path $sqlite3Src)) {
+            # Try finding it in the flutter_assets or plugin directories
+            $found = Get-ChildItem -Path build\windows -Recurse -Filter "sqlite3.dll" | Select-Object -First 1
+            if ($found) { Copy-Item $found.FullName "build\windows\x64\runner\Release\" }
+          }
           Compress-Archive -Path "build\windows\x64\runner\Release\*" `
             -DestinationPath "eve_ntt-${version}-windows-x64.zip"
 
@@ -158,6 +171,18 @@ jobs:
             find build/macos -name "*.app" -type d
             exit 1
           fi
+
+          # Ensure libsqlite3.dylib is bundled (from sqlite3_flutter_libs)
+          SQLITE3_DYLIB=$(find build/macos -name "libsqlite3.dylib" -type f | head -1)
+          if [ -n "$SQLITE3_DYLIB" ]; then
+            FRAMEWORKS_DIR="$APP/Contents/Frameworks"
+            mkdir -p "$FRAMEWORKS_DIR"
+            cp "$SQLITE3_DYLIB" "$FRAMEWORKS_DIR/"
+            echo "Bundled libsqlite3.dylib into $FRAMEWORKS_DIR"
+          else
+            echo "Warning: libsqlite3.dylib not found, may rely on system SQLite"
+          fi
+
           DMG="eve_ntt-${VERSION}-macos-universal.dmg"
 
           # Create DMG with app inside
