@@ -1,0 +1,213 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Linux — AppImage
+  # ──────────────────────────────────────────────
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.41.3'
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ninja-build \
+            libgtk-3-dev \
+            libsecret-1-dev \
+            libsqlite3-dev \
+            pkg-config \
+            appstream \
+            libfuse2
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build Linux
+        run: flutter build linux --release
+
+      - name: Create AppDir
+        run: |
+          mkdir -p AppDir/usr/bin
+          cp -r build/linux/x64/release/bundle/* AppDir/usr/bin/
+
+          # Create desktop entry
+          cat > AppDir/eve_ntt.desktop << 'EOF'
+          [Desktop Entry]
+          Name=EVE Night Trade Tools
+          Exec=eve_ntt
+          Icon=eve_ntt
+          Type=Application
+          Categories=Game;
+          EOF
+
+          # Try to find an icon, fallback to generated one
+          ICON=$(find . -name "icon.png" -o -name "logo.png" 2>/dev/null | head -1)
+          if [ -n "$ICON" ]; then
+            cp "$ICON" AppDir/icon.png
+          else
+            # Generate a simple 128x128 PNG
+            convert -size 128x128 xc:'#00B4BF' -fill white \
+              -gravity center -pointsize 48 -annotate 0 "E" \
+              AppDir/icon.png 2>/dev/null || \
+            python3 -c "
+          import struct, zlib
+          def png(w,h,r,g,b):
+            def chunk(t,d):
+              c=t+d;_crc=struct.pack('>I',zlib.crc32(c)&0xffffffff)
+              return struct.pack('>I',len(d))+t+d+crc
+            sig=b'\\x89PNG\\r\\n\\x1a\\n'
+            ihdr=chunk(b'IHDR',struct.pack('>IIBBBBB',w,h,8,2,0,0,0))
+            raw=b''.join(b'\\x00'+bytes([r,g,b])*w for _ in range(h))
+            idat=chunk(b'IDAT',zlib.compress(raw))
+            iend=chunk(b'IEND',b'')
+            return sig+ihdr+idat+iend
+          open('AppDir/icon.png','wb').write(png(128,128,0,180,191))
+          "
+          fi
+
+      - name: Download linuxdeploy
+        run: |
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage
+
+      - name: Build AppImage
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          ./linuxdeploy-x86_64.AppImage \
+            --appdir AppDir \
+            --output appimage \
+            --desktop-file=AppDir/eve_ntt.desktop \
+            --icon-file=AppDir/icon.png 2>/dev/null || \
+          (
+            # Fallback: manual AppImage creation
+            cd build/linux/x64/release/bundle
+            tar czf ../../../eve_ntt-${VERSION}-linux-x86_64.tar.gz .
+          )
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: eve_ntt-linux
+          path: |
+            *.AppImage
+            build/linux/x64/release/bundle/eve_ntt-*.tar.gz
+
+  # ──────────────────────────────────────────────
+  # Windows — ZIP (NSIS requires separate installer build)
+  # ──────────────────────────────────────────────
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.41.3'
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build Windows
+        run: flutter build windows --release
+
+      - name: Create ZIP
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          Compress-Archive -Path "build\windows\x64\runner\Release\*" `
+            -DestinationPath "eve_ntt-${version}-windows-x64.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: eve_ntt-windows
+          path: eve_ntt-*.zip
+
+  # ──────────────────────────────────────────────
+  # macOS — DMG
+  # ──────────────────────────────────────────────
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.41.3'
+
+      - name: Enable macOS desktop
+        run: flutter config --enable-macos-desktop
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build macOS
+        run: flutter build macos --release
+
+      - name: Create DMG
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          APP="build/macos/Build/Products/Release/eve_ntt.app"
+          DMG="eve_ntt-${VERSION}-macos-universal.dmg"
+
+          # Create DMG with app inside
+          hdiutil create -volname "EVE NTT" -srcfolder "$APP" -ov -format UDZO "$DMG"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: eve_ntt-macos
+          path: eve_ntt-*.dmg
+
+  # ──────────────────────────────────────────────
+  # Create GitHub Release with all artifacts
+  # ──────────────────────────────────────────────
+  release:
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten artifacts
+        run: |
+          mkdir -p release
+          find artifacts -type f -exec cp {} release/ \;
+          ls -la release/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
