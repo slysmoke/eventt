@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io' show HttpDate;
 
 import 'package:dio/dio.dart';
@@ -32,6 +33,16 @@ class CacheInterceptor extends Interceptor {
     final cached = await _getCached(url);
 
     if (cached != null) {
+      // Validate cache body is proper JSON
+      try {
+        jsonDecode(cached.body);
+      } catch (_) {
+        // Bad cache entry (e.g., old .toString() format) — delete it
+        await (_db.delete(_db.esiCache)..where((t) => t.url.equals(url))).go();
+        handler.next(options);
+        return;
+      }
+
       if (cached.expiresAt.isAfter(DateTime.now())) {
         // Fresh cache — return without hitting network
         handler.resolve(
@@ -57,6 +68,10 @@ class CacheInterceptor extends Interceptor {
       if (response.statusCode == 200) {
         final expires = _parseExpires(response.headers);
         final etag = response.headers.value('etag');
+        // Serialize to proper JSON string for storage
+        final body = response.data is String
+            ? response.data as String
+            : jsonEncode(response.data);
 
         await _db.into(_db.esiCache).insertOnConflictUpdate(
               EsiCacheCompanion.insert(
@@ -64,7 +79,7 @@ class CacheInterceptor extends Interceptor {
                 etag: Value(etag),
                 expiresAt: expires,
                 cachedAt: DateTime.now(),
-                body: response.data.toString(),
+                body: body,
               ),
             );
       } else if (response.statusCode == 304) {
@@ -115,10 +130,19 @@ class CacheInterceptor extends Interceptor {
     String body, {
     bool stale = false,
   }) {
+    // Parse JSON string back to Map so Dio consumers get proper data
+    dynamic parsedData;
+    try {
+      parsedData = jsonDecode(body);
+    } catch (_) {
+      // Fallback: return raw string if not valid JSON
+      parsedData = body;
+    }
+
     return Response(
       requestOptions: options,
       statusCode: 200,
-      data: body,
+      data: parsedData,
       headers: Headers.fromMap({
         'x-from-cache': ['true'],
         if (stale) 'x-stale': ['true'],
