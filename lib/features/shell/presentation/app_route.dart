@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../assets/presentation/assets_screen.dart';
+import '../../corporations/presentation/corporations_screen.dart';
 import '../../dashboard/presentation/dashboard_screen.dart';
 import '../../journal/presentation/journal_screen.dart';
 import '../../margin_tool/presentation/margin_tool_screen.dart';
@@ -16,6 +17,7 @@ enum AppRoute {
   marketAnalysis,
   orders,
   marginTool,
+  corporations,
   assets,
   transactions,
   journal,
@@ -40,6 +42,7 @@ extension AppRouteX on AppRoute {
         AppRoute.marketAnalysis => 'Market Analysis',
         AppRoute.orders => 'My Orders',
         AppRoute.marginTool => 'Margin Tool',
+        AppRoute.corporations => 'Corporations',
         AppRoute.assets => 'Assets',
         AppRoute.transactions => 'Transactions',
         AppRoute.journal => 'Journal',
@@ -51,6 +54,7 @@ extension AppRouteX on AppRoute {
         AppRoute.marketAnalysis => Icons.candlestick_chart_outlined,
         AppRoute.orders => Icons.list_alt_outlined,
         AppRoute.marginTool => Icons.calculate_outlined,
+        AppRoute.corporations => Icons.business_outlined,
         AppRoute.assets => Icons.inventory_2_outlined,
         AppRoute.transactions => Icons.receipt_long_outlined,
         AppRoute.journal => Icons.account_balance_wallet_outlined,
@@ -62,6 +66,7 @@ extension AppRouteX on AppRoute {
         AppRoute.marketAnalysis => Icons.candlestick_chart,
         AppRoute.orders => Icons.list_alt,
         AppRoute.marginTool => Icons.calculate,
+        AppRoute.corporations => Icons.business,
         AppRoute.assets => Icons.inventory_2,
         AppRoute.transactions => Icons.receipt_long,
         AppRoute.journal => Icons.account_balance_wallet,
@@ -73,6 +78,7 @@ extension AppRouteX on AppRoute {
         AppRoute.marketAnalysis => const MarketAnalysisScreen(),
         AppRoute.orders => const OrdersScreen(),
         AppRoute.marginTool => const MarginToolScreen(),
+        AppRoute.corporations => const CorporationsScreen(),
         AppRoute.assets => const AssetsScreen(),
         AppRoute.transactions => const TransactionsScreen(),
         AppRoute.journal => const JournalScreen(),
@@ -87,6 +93,9 @@ const navGroups = [
     AppRoute.marketAnalysis,
     AppRoute.orders,
     AppRoute.marginTool,
+  ]),
+  _NavGroup(label: 'Organizations', routes: [
+    AppRoute.corporations,
   ]),
   _NavGroup(label: 'Wallet', routes: [
     AppRoute.assets,

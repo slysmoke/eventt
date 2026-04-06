@@ -7,12 +7,13 @@ import 'package:eve_ntt/features/shell/presentation/app_route.dart';
 void main() {
   group('AppRoute enum', () {
     test('has all expected routes', () {
-      expect(AppRoute.values, hasLength(8));
+      expect(AppRoute.values, hasLength(9));
       expect(AppRoute.values, contains(AppRoute.dashboard));
       expect(AppRoute.values, contains(AppRoute.marketBrowser));
       expect(AppRoute.values, contains(AppRoute.marketAnalysis));
       expect(AppRoute.values, contains(AppRoute.orders));
       expect(AppRoute.values, contains(AppRoute.marginTool));
+      expect(AppRoute.values, contains(AppRoute.corporations));
       expect(AppRoute.values, contains(AppRoute.assets));
       expect(AppRoute.values, contains(AppRoute.transactions));
       expect(AppRoute.values, contains(AppRoute.journal));
@@ -38,6 +39,10 @@ void main() {
 
     test('marginTool has correct label', () {
       expect(AppRoute.marginTool.label, 'Margin Tool');
+    });
+
+    test('corporations has correct label', () {
+      expect(AppRoute.corporations.label, 'Corporations');
     });
 
     test('assets has correct label', () {
@@ -74,6 +79,10 @@ void main() {
       expect(AppRoute.marginTool.icon, Icons.calculate_outlined);
     });
 
+    test('corporations has correct icon', () {
+      expect(AppRoute.corporations.icon, Icons.business_outlined);
+    });
+
     test('assets has correct icon', () {
       expect(AppRoute.assets.icon, Icons.inventory_2_outlined);
     });
@@ -108,6 +117,10 @@ void main() {
       expect(AppRoute.marginTool.selectedIcon, Icons.calculate);
     });
 
+    test('corporations has correct selectedIcon', () {
+      expect(AppRoute.corporations.selectedIcon, Icons.business);
+    });
+
     test('assets has correct selectedIcon', () {
       expect(AppRoute.assets.selectedIcon, Icons.inventory_2);
     });
@@ -137,8 +150,8 @@ void main() {
   });
 
   group('navGroups', () {
-    test('has two groups', () {
-      expect(navGroups, hasLength(2));
+    test('has three groups', () {
+      expect(navGroups, hasLength(3));
     });
 
     test('Trading group has correct routes', () {
@@ -156,8 +169,14 @@ void main() {
       );
     });
 
+    test('Organizations group has correct routes', () {
+      final orgs = navGroups[1];
+      expect(orgs.label, 'Organizations');
+      expect(orgs.routes, [AppRoute.corporations]);
+    });
+
     test('Wallet group has correct routes', () {
-      final wallet = navGroups[1];
+      final wallet = navGroups[2];
       expect(wallet.label, 'Wallet');
       expect(
         wallet.routes,
