@@ -1,6 +1,5 @@
-import '../../../core/database/app_database.dart';
 import '../../../core/esi/esi_client.dart';
-import '../../../core/sde/sde_database.dart' show LocationHierarchy;
+import '../../../core/sde/sde_database.dart' show LocationHierarchy, SdeDatabase;
 
 /// One asset (item) belonging to a character.
 class Asset {
@@ -78,13 +77,13 @@ class Asset {
 /// Fetches the active character's assets from ESI.
 class AssetRepository {
   final EsiClient _esi;
-  final AppDatabase _db;
+  final SdeDatabase? _sde;
 
   const AssetRepository({
     required EsiClient esi,
-    required AppDatabase db,
+    SdeDatabase? sde,
   })  : _esi = esi,
-        _db = db;
+        _sde = sde;
 
   /// Fetches all assets for [characterId].
   /// Resolves type names and location hierarchy from SDE.
@@ -127,18 +126,17 @@ class AssetRepository {
 
     // Resolve type names from SDE
     final typeIds = allAssets.map((a) => a.typeId).toSet().toList();
-    final sde = _db.sdeDatabase;
     Map<int, String> typeNames = {};
-    if (sde != null) {
-      final typeMap = sde.getTypesByIds(typeIds);
+    if (_sde != null) {
+      final typeMap = _sde!.getTypesByIds(typeIds);
       typeNames = {for (final entry in typeMap.entries) entry.key: entry.value.typeName};
     }
 
     // Resolve location hierarchy from SDE (region → system → station)
     Map<int, LocationHierarchy> locationHierarchies = {};
-    if (sde != null) {
+    if (_sde != null) {
       final locationIds = allAssets.map((a) => a.locationId).toSet().toList();
-      locationHierarchies = sde.getLocationHierarchies(locationIds);
+      locationHierarchies = _sde!.getLocationHierarchies(locationIds);
     }
 
     // Fetch market prices from ESI

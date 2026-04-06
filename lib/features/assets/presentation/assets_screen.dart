@@ -4,8 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/auth/active_character_provider.dart';
 import '../../../core/auth/eve_auth_service.dart';
-import '../../../core/database/database_provider.dart';
 import '../../../core/esi/esi_provider.dart';
+import '../../../core/sde/sde_provider.dart';
 import '../data/asset_repository.dart';
 
 final _assetsProvider = FutureProvider.autoDispose<List<Asset>>((ref) async {
@@ -13,13 +13,13 @@ final _assetsProvider = FutureProvider.autoDispose<List<Asset>>((ref) async {
   final character = characterAsync.value;
   if (character == null) return [];
 
-  final db = ref.watch(databaseProvider);
   final esi = ref.watch(esiClientProvider);
+  final sde = ref.watch(sdeDatabaseProvider);
   final authService = ref.watch(eveAuthServiceProvider);
 
   try {
     final token = await authService.getValidAccessToken(character.id);
-    final repo = AssetRepository(esi: esi, db: db);
+    final repo = AssetRepository(esi: esi, sde: sde);
     return repo.fetchAssets(characterId: character.id, accessToken: token);
   } catch (_) {
     return [];

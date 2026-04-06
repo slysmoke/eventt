@@ -2,8 +2,8 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart' show Response;
 
-import '../../../core/database/app_database.dart';
 import '../../../core/esi/esi_client.dart';
+import '../../../core/sde/sde_database.dart' show SdeDatabase;
 
 /// One of the active character's market orders.
 class CharacterOrder {
@@ -76,13 +76,13 @@ class CharacterOrder {
 /// Fetches the active character's market orders from ESI.
 class CharacterOrderRepository {
   final EsiClient _esi;
-  final AppDatabase _db;
+  final SdeDatabase? _sde;
 
   const CharacterOrderRepository({
     required EsiClient esi,
-    required AppDatabase db,
+    SdeDatabase? sde,
   })  : _esi = esi,
-        _db = db;
+        _sde = sde;
 
   /// Fetches all open orders for [characterId].
   /// Resolves type names from SDE database.
@@ -105,9 +105,8 @@ class CharacterOrderRepository {
 
     // Resolve type names from SDE
     final typeIds = orders.map((o) => o.typeId).toSet().toList();
-    final sde = _db.sdeDatabase;
-    if (sde != null) {
-      final typeMap = sde.getTypesByIds(typeIds);
+    if (_sde != null) {
+      final typeMap = _sde!.getTypesByIds(typeIds);
       return orders
           .map((o) => o.copyWith(
                 typeName: typeMap[o.typeId]?.typeName,

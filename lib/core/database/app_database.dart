@@ -10,7 +10,6 @@ import 'tables/characters.dart';
 import 'tables/corporations.dart';
 import 'tables/esi_cache.dart';
 import 'tables/price_alerts.dart';
-import '../sde/sde_database.dart';
 
 part 'app_database.g.dart';
 
@@ -21,9 +20,6 @@ class AppDatabase extends _$AppDatabase {
 
   /// Constructor for unit tests — pass NativeDatabase.memory().
   AppDatabase.forTesting(QueryExecutor executor) : super(executor);
-
-  /// Reference to the SDE database (set by sdeDatabaseProvider when ready).
-  SdeDatabase? sdeDatabase;
 
   @override
   int get schemaVersion => 3;
