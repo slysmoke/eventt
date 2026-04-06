@@ -3,10 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:eventt/core/database/app_database.dart';
-import 'package:eventt/core/database/database_provider.dart';
-import 'package:eventt/core/sde/sde_provider.dart';
-import 'package:eventt/main.dart';
+import 'package:eve_ntt/core/database/app_database.dart';
+import 'package:eve_ntt/core/database/database_provider.dart';
+import 'package:eve_ntt/core/sde/sde_provider.dart';
+import 'package:eve_ntt/features/shell/presentation/shell_screen.dart';
+import 'package:eve_ntt/main.dart';
 
 void main() {
   testWidgets('App renders without crashing', (tester) async {
@@ -22,7 +23,7 @@ void main() {
       ),
     );
 
-    expect(find.text('eventt'), findsOneWidget);
+    expect(find.byType(ShellScreen), findsOneWidget);
 
     // Unmount widget tree and flush drift stream cleanup timers.
     await tester.pumpWidget(const SizedBox.shrink());

@@ -1,5 +1,5 @@
-import 'package:eventt/features/dashboard/domain/dashboard_stats_computer.dart';
-import 'package:eventt/features/dashboard/domain/wallet_journal_entry.dart';
+import 'package:eve_ntt/features/dashboard/domain/dashboard_stats_computer.dart';
+import 'package:eve_ntt/features/dashboard/domain/wallet_journal_entry.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

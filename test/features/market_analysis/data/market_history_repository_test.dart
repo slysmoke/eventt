@@ -2,8 +2,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-import 'package:eventt/core/esi/esi_client.dart';
-import 'package:eventt/features/market_analysis/data/market_history_repository.dart';
+import 'package:eve_ntt/core/esi/esi_client.dart';
+import 'package:eve_ntt/features/market_analysis/data/market_history_repository.dart';
 
 class _MockEsiClient extends Mock implements EsiClient {}
 

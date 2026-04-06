@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:eventt/core/sde/sde_models.dart';
-import 'package:eventt/features/market_browser/data/market_order_repository.dart';
-import 'package:eventt/features/market_analysis/domain/ore_reprocessing_computer.dart';
-import 'package:eventt/features/market_analysis/domain/ore_reprocessing_row.dart';
-import 'package:eventt/features/market_analysis/domain/import_params.dart';
+import 'package:eve_ntt/core/sde/sde_models.dart';
+import 'package:eve_ntt/features/market_browser/data/market_order_repository.dart';
+import 'package:eve_ntt/features/market_analysis/domain/ore_reprocessing_computer.dart';
+import 'package:eve_ntt/features/market_analysis/domain/ore_reprocessing_row.dart';
+import 'package:eve_ntt/features/market_analysis/domain/import_params.dart';
 
 void main() {
   // Veldspar reprocessing: 1 portion (333 units) → 408 Tritanium + 170 Pyerite

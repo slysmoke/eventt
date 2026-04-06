@@ -3,8 +3,8 @@ import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:eventt/core/database/app_database.dart';
-import 'package:eventt/core/esi/interceptors/cache_interceptor.dart';
+import 'package:eve_ntt/core/database/app_database.dart';
+import 'package:eve_ntt/core/esi/interceptors/cache_interceptor.dart';
 
 // Minimal Dio adapter that records the last request and returns a preset response.
 class _FakeAdapter implements HttpClientAdapter {
@@ -105,7 +105,7 @@ void main() {
 
       final response = await dio.get(testUrl);
 
-      expect(response.data, '{"name":"CachedPilot"}');
+      expect(response.data, {'name': 'CachedPilot'});
       // Adapter should NOT have been called
       expect(adapter.lastRequest, isNull);
     });
@@ -133,7 +133,7 @@ void main() {
 
       expect(adapter.lastRequest!.headers['If-None-Match'], 'W/"stale-etag"');
       // Should return stale cached body on 304
-      expect(response.data, '{"name":"StaleData"}');
+      expect(response.data, {'name': 'StaleData'});
     });
 
     test('returns stale cache on network error', () async {
@@ -151,7 +151,7 @@ void main() {
       dio.httpClientAdapter = _ThrowingAdapter();
 
       final response = await dio.get(testUrl);
-      expect(response.data, '{"name":"StaleOnError"}');
+      expect(response.data, {'name': 'StaleOnError'});
     });
   });
 }

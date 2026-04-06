@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:eventt/core/margin/margin_calculator.dart';
+import 'package:eve_ntt/core/margin/margin_calculator.dart';
 
 void main() {
   group('MarginCalculator.compute()', () {

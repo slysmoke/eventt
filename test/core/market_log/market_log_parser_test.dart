@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:eventt/core/market_log/market_log_parser.dart';
+import 'package:eve_ntt/core/market_log/market_log_parser.dart';
 
 // Sample CSV content matching the real EVE export format.
 // Header ends with a comma; each data row also ends with a trailing comma.

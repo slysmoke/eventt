@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:eventt/features/market_analysis/domain/market_indicators.dart';
+import 'package:eve_ntt/features/market_analysis/domain/market_indicators.dart';
 
 void main() {
   group('MarketIndicators.computeSma()', () {

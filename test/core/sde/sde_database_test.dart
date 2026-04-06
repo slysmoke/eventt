@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
-import 'package:eventt/core/sde/sde_database.dart';
+import 'package:eve_ntt/core/sde/sde_database.dart';
 
 void main() {
   late Database raw;

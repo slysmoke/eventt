@@ -2,7 +2,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:drift/drift.dart' show Value;
 
-import 'package:eventt/core/database/app_database.dart';
+import 'package:eve_ntt/core/database/app_database.dart';
 
 void main() {
   late AppDatabase db;

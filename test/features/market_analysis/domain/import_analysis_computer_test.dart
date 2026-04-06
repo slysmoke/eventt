@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:eventt/core/sde/sde_models.dart';
-import 'package:eventt/features/market_browser/data/market_order_repository.dart';
-import 'package:eventt/features/market_analysis/domain/import_analysis_computer.dart';
-import 'package:eventt/features/market_analysis/domain/import_params.dart';
+import 'package:eve_ntt/core/sde/sde_models.dart';
+import 'package:eve_ntt/features/market_browser/data/market_order_repository.dart';
+import 'package:eve_ntt/features/market_analysis/domain/import_analysis_computer.dart';
+import 'package:eve_ntt/features/market_analysis/domain/import_params.dart';
 
 const _srcStation = 60003760; // Jita 4-4
 const _dstStation = 60008494; // Amarr VIII

@@ -2,10 +2,38 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-import 'package:eventt/core/esi/esi_client.dart';
-import 'package:eventt/features/market_browser/data/market_order_repository.dart';
+import 'package:eve_ntt/core/esi/esi_client.dart';
+import 'package:eve_ntt/core/sde/sde_database.dart';
+import 'package:eve_ntt/core/sde/sde_models.dart';
+import 'package:eve_ntt/features/market_browser/data/market_order_repository.dart';
 
 class _MockEsiClient extends Mock implements EsiClient {}
+class _FakeSdeDatabase implements SdeDatabase {
+  @override
+  Map<int, InvType> getTypesByIds(List<int> ids) => {};
+  @override
+  List<InvType> searchTypes(String query, {int limit = 50}) => [];
+  @override
+  List<InvMarketGroup> getMarketGroups() => [];
+  @override
+  List<InvType> getTypesForGroup(int groupId) => [];
+  @override
+  List<MapRegion> getRegions() => [];
+  @override
+  List<int> getAllPublishedTypeIds() => [];
+  @override
+  List<int> getTypeIdsForGroupTree(int marketGroupId) => [];
+  @override
+  List<InvMarketGroup> getTopLevelMarketGroups() => [];
+  @override
+  Map<int, ScrapmetalInfo> getScrapmetalInfo() => {};
+  @override
+  String? getLocationName(int locationId) => null;
+  @override
+  Map<int, String> getLocationNames(List<int> locationIds) => {};
+  @override
+  void close() {}
+}
 
 void main() {
   late _MockEsiClient esi;
@@ -13,7 +41,7 @@ void main() {
 
   setUp(() {
     esi = _MockEsiClient();
-    repo = MarketOrderRepository(esi: esi);
+    repo = MarketOrderRepository(esi: esi, sde: _FakeSdeDatabase());
     registerFallbackValue(<String, dynamic>{});
   });
 

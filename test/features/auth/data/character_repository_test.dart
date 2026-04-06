@@ -6,9 +6,9 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-import 'package:eventt/core/database/app_database.dart';
-import 'package:eventt/core/esi/esi_client.dart';
-import 'package:eventt/features/auth/data/character_repository.dart';
+import 'package:eve_ntt/core/database/app_database.dart';
+import 'package:eve_ntt/core/esi/esi_client.dart';
+import 'package:eve_ntt/features/auth/data/character_repository.dart';
 
 class _MockEsiClient extends Mock implements EsiClient {}
 

@@ -5,8 +5,8 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-import 'package:eventt/core/database/app_database.dart';
-import 'package:eventt/core/sde/sde_updater.dart';
+import 'package:eve_ntt/core/database/app_database.dart';
+import 'package:eve_ntt/core/sde/sde_updater.dart';
 
 class _MockDio extends Mock implements Dio {}
 

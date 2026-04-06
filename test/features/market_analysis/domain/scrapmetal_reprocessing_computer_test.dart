@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:eventt/core/sde/sde_models.dart';
-import 'package:eventt/features/market_browser/data/market_order_repository.dart';
-import 'package:eventt/features/market_analysis/domain/scrapmetal_reprocessing_computer.dart';
-import 'package:eventt/features/market_analysis/domain/import_params.dart';
+import 'package:eve_ntt/core/sde/sde_models.dart';
+import 'package:eve_ntt/features/market_browser/data/market_order_repository.dart';
+import 'package:eve_ntt/features/market_analysis/domain/scrapmetal_reprocessing_computer.dart';
+import 'package:eve_ntt/features/market_analysis/domain/import_params.dart';
 
 // 150mm AutoCannon I → 20 Tritanium + 10 Pyerite per 1 unit
 const _cannonInfo = ScrapmetalInfo(

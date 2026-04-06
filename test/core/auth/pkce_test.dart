@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:eventt/core/auth/pkce.dart';
+import 'package:eve_ntt/core/auth/pkce.dart';
 
 void main() {
   group('Pkce', () {
