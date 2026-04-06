@@ -1231,8 +1231,9 @@ class _CandlestickChartWidgetState extends ConsumerState<_CandlestickChartWidget
       macdMin -= macdPadding;
     }
 
-    // Build candle + volume groups
-    final candleGroups = <BarChartGroupData>[];
+    // Build candle groups — separate wicks and bodies for proper centering
+    final wickGroups = <BarChartGroupData>[];
+    final bodyGroups = <BarChartGroupData>[];
     final volumeGroups = <BarChartGroupData>[];
     final smaSpots = <FlSpot>[];
 
@@ -1243,22 +1244,29 @@ class _CandlestickChartWidgetState extends ConsumerState<_CandlestickChartWidget
       final x = i.toDouble();
 
       // Candle: body from open to close, wick from low to high
-      // For daily data, we use average as both open/close approximation
       final bodyTop = entry.average >= prevAvg ? entry.average : prevAvg;
       final bodyBottom = entry.average >= prevAvg ? prevAvg : entry.average;
 
-      candleGroups.add(
+      // Wick group (thin bar)
+      wickGroups.add(
         BarChartGroupData(
           x: i,
           barRods: [
-            // Wick (thin line from low to high)
             BarChartRodData(
               toY: entry.highest,
               fromY: entry.lowest,
               color: isBullish ? Colors.green : Colors.red,
               width: 2,
             ),
-            // Body (wider rectangle)
+          ],
+        ),
+      );
+
+      // Body group (wider bar)
+      bodyGroups.add(
+        BarChartGroupData(
+          x: i,
+          barRods: [
             BarChartRodData(
               toY: bodyTop,
               fromY: bodyBottom,
@@ -1337,9 +1345,10 @@ class _CandlestickChartWidgetState extends ConsumerState<_CandlestickChartWidget
             boundaryMargin: const EdgeInsets.all(20),
             child: Stack(
             children: [
+              // Wick chart (background layer - thin bars)
               BarChart(
                 BarChartData(
-                  barGroups: candleGroups,
+                  barGroups: wickGroups,
                   borderData: FlBorderData(
                     show: true,
                     border: Border.all(
@@ -1437,6 +1446,19 @@ class _CandlestickChartWidgetState extends ConsumerState<_CandlestickChartWidget
                       },
                     ),
                   ),
+                  minY: minPrice,
+                  maxY: maxPrice,
+                  alignment: BarChartAlignment.spaceAround,
+                ),
+              ),
+              // Body chart (foreground layer - wider bars, centered on wicks)
+              BarChart(
+                BarChartData(
+                  barGroups: bodyGroups,
+                  borderData: FlBorderData(show: false),
+                  gridData: const FlGridData(show: false),
+                  titlesData: const FlTitlesData(show: false),
+                  barTouchData: BarTouchData(enabled: false),
                   minY: minPrice,
                   maxY: maxPrice,
                   alignment: BarChartAlignment.spaceAround,
