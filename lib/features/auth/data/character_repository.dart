@@ -11,6 +11,8 @@ import 'corporation_repository.dart';
 /// Dio is configured with ResponseType.json so response.data is usually a Map.
 Map<String, dynamic> _extractData(Response<dynamic> response) {
   final data = response.data;
+  print('[CharacterRepo] response.data type: ${data.runtimeType}');
+  print('[CharacterRepo] response.data: $data');
   if (data is Map<String, dynamic>) return data;
   if (data is Map) return Map<String, dynamic>.from(data);
   if (data is String) return jsonDecode(data) as Map<String, dynamic>;

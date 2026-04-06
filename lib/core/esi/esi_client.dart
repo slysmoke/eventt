@@ -21,6 +21,16 @@ class EsiClient {
               // Accept 200-304; cache interceptor handles 304
               validateStatus: (s) => s != null && s < 500,
             )) {
+    // Log all requests and responses for debugging
+    _dio.interceptors.add(LogInterceptor(
+      request: true,
+      requestHeader: true,
+      requestBody: true,
+      responseHeader: true,
+      responseBody: true,
+      error: true,
+      logPrint: (obj) => print('[ESI] $obj'),
+    ));
     _dio.interceptors.add(cacheInterceptor);
   }
 
