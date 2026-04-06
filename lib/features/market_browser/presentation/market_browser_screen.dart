@@ -661,6 +661,88 @@ class _GroupTreePanelState extends ConsumerState<_GroupTreePanel> {
 }
 
 // ---------------------------------------------------------------------------
+// Set price alert dialog
+// ---------------------------------------------------------------------------
+
+class _SetPriceAlertDialog extends ConsumerStatefulWidget {
+  final MarketOrder order;
+  const _SetPriceAlertDialog({required this.order});
+
+  @override
+  ConsumerState<_SetPriceAlertDialog> createState() => _SetPriceAlertDialogState();
+}
+
+class _SetPriceAlertDialogState extends ConsumerState<_SetPriceAlertDialog> {
+  final _controller = TextEditingController();
+  String _condition = 'below';
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _controller.text = widget.order.price.toStringAsFixed(2);
+
+    return AlertDialog(
+      title: const Text('Set Price Alert'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _controller,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'Target Price (ISK)',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Text('Alert when price is:'),
+              const SizedBox(width: 8),
+              ChoiceChip(
+                label: const Text('Below'),
+                selected: _condition == 'below',
+                onSelected: (v) => setState(() => _condition = 'below'),
+              ),
+              const SizedBox(width: 4),
+              ChoiceChip(
+                label: const Text('Above'),
+                selected: _condition == 'above',
+                onSelected: (v) => setState(() => _condition = 'above'),
+              ),
+            ],
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final price = double.tryParse(_controller.text);
+            if (price != null && price > 0) {
+              // TODO: Save alert via provider
+              Navigator.of(context).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Alert set: $_condition $price ISK')),
+              );
+            }
+          },
+          child: const Text('Set Alert'),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Order book
 // ---------------------------------------------------------------------------
 
@@ -842,7 +924,9 @@ class _OrderRow extends StatelessWidget {
         ? Colors.green
         : Colors.redAccent;
 
-    return Container(
+    return GestureDetector(
+      onLongPress: () => _showAlertDialog(context, order),
+      child: Container(
       color: isBest
           ? (order.isBuyOrder
               ? Colors.green.withValues(alpha: 0.08)
@@ -892,6 +976,14 @@ class _OrderRow extends StatelessWidget {
           ),
         ],
       ),
+    ),
+    );
+  }
+
+  void _showAlertDialog(BuildContext context, MarketOrder order) {
+    showDialog(
+      context: context,
+      builder: (ctx) => _SetPriceAlertDialog(order: order),
     );
   }
 
@@ -1237,7 +1329,13 @@ class _CandlestickChartWidgetState extends ConsumerState<_CandlestickChartWidget
         // Main chart area
         Expanded(
           flex: _showMacd ? 3 : (_showVolume ? 4 : 5),
-          child: Stack(
+          child: InteractiveViewer(
+            panEnabled: true,
+            scaleEnabled: true,
+            minScale: 0.5,
+            maxScale: 10,
+            boundaryMargin: const EdgeInsets.all(20),
+            child: Stack(
             children: [
               BarChart(
                 BarChartData(
@@ -1371,6 +1469,7 @@ class _CandlestickChartWidgetState extends ConsumerState<_CandlestickChartWidget
                   ),
                 ),
             ],
+          ),
           ),
         ),
         // Volume chart
@@ -1756,7 +1855,13 @@ class _MacdChartWidget extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: Stack(
+          child: InteractiveViewer(
+            panEnabled: true,
+            scaleEnabled: true,
+            minScale: 0.5,
+            maxScale: 10,
+            boundaryMargin: const EdgeInsets.all(20),
+            child: Stack(
             children: [
               BarChart(
                 BarChartData(
@@ -1871,6 +1976,7 @@ class _MacdChartWidget extends StatelessWidget {
                   ),
                 ),
             ],
+          ),
           ),
         ),
       ],

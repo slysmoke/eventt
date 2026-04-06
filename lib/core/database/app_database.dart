@@ -8,10 +8,11 @@ import 'package:path_provider/path_provider.dart';
 import 'tables/app_settings.dart';
 import 'tables/characters.dart';
 import 'tables/esi_cache.dart';
+import 'tables/price_alerts.dart';
 
 part 'app_database.g.dart';
 
-@DriftDatabase(tables: [Characters, EsiCache, AppSettings])
+@DriftDatabase(tables: [Characters, EsiCache, AppSettings, PriceAlerts])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
   // ignore: use_super_parameters — optional positional arg can't be super param
@@ -20,14 +21,15 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(QueryExecutor executor) : super(executor);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) => m.createAll(),
         onUpgrade: (m, from, to) async {
-          // Add migration steps here as schemaVersion increases:
-          // if (from < 2) await m.addColumn(table, table.newColumn);
+          if (from < 2) {
+            await m.createTable(priceAlerts);
+          }
         },
       );
 

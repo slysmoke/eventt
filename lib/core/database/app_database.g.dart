@@ -987,12 +987,475 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
   }
 }
 
+class $PriceAlertsTable extends PriceAlerts
+    with TableInfo<$PriceAlertsTable, PriceAlert> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PriceAlertsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _typeIdMeta = const VerificationMeta('typeId');
+  @override
+  late final GeneratedColumn<int> typeId = GeneratedColumn<int>(
+    'type_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _regionIdMeta = const VerificationMeta(
+    'regionId',
+  );
+  @override
+  late final GeneratedColumn<int> regionId = GeneratedColumn<int>(
+    'region_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _targetPriceMeta = const VerificationMeta(
+    'targetPrice',
+  );
+  @override
+  late final GeneratedColumn<double> targetPrice = GeneratedColumn<double>(
+    'target_price',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _conditionMeta = const VerificationMeta(
+    'condition',
+  );
+  @override
+  late final GeneratedColumn<String> condition = GeneratedColumn<String>(
+    'condition',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _triggeredMeta = const VerificationMeta(
+    'triggered',
+  );
+  @override
+  late final GeneratedColumn<bool> triggered = GeneratedColumn<bool>(
+    'triggered',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("triggered" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    typeId,
+    regionId,
+    targetPrice,
+    condition,
+    triggered,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'price_alerts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PriceAlert> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('type_id')) {
+      context.handle(
+        _typeIdMeta,
+        typeId.isAcceptableOrUnknown(data['type_id']!, _typeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_typeIdMeta);
+    }
+    if (data.containsKey('region_id')) {
+      context.handle(
+        _regionIdMeta,
+        regionId.isAcceptableOrUnknown(data['region_id']!, _regionIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_regionIdMeta);
+    }
+    if (data.containsKey('target_price')) {
+      context.handle(
+        _targetPriceMeta,
+        targetPrice.isAcceptableOrUnknown(
+          data['target_price']!,
+          _targetPriceMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_targetPriceMeta);
+    }
+    if (data.containsKey('condition')) {
+      context.handle(
+        _conditionMeta,
+        condition.isAcceptableOrUnknown(data['condition']!, _conditionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_conditionMeta);
+    }
+    if (data.containsKey('triggered')) {
+      context.handle(
+        _triggeredMeta,
+        triggered.isAcceptableOrUnknown(data['triggered']!, _triggeredMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PriceAlert map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PriceAlert(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      typeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}type_id'],
+      )!,
+      regionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}region_id'],
+      )!,
+      targetPrice: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}target_price'],
+      )!,
+      condition: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}condition'],
+      )!,
+      triggered: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}triggered'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PriceAlertsTable createAlias(String alias) {
+    return $PriceAlertsTable(attachedDatabase, alias);
+  }
+}
+
+class PriceAlert extends DataClass implements Insertable<PriceAlert> {
+  final int id;
+  final int typeId;
+  final int regionId;
+  final double targetPrice;
+
+  /// 'above' or 'below'
+  final String condition;
+
+  /// Whether the alert has been triggered
+  final bool triggered;
+  final DateTime createdAt;
+  const PriceAlert({
+    required this.id,
+    required this.typeId,
+    required this.regionId,
+    required this.targetPrice,
+    required this.condition,
+    required this.triggered,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['type_id'] = Variable<int>(typeId);
+    map['region_id'] = Variable<int>(regionId);
+    map['target_price'] = Variable<double>(targetPrice);
+    map['condition'] = Variable<String>(condition);
+    map['triggered'] = Variable<bool>(triggered);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  PriceAlertsCompanion toCompanion(bool nullToAbsent) {
+    return PriceAlertsCompanion(
+      id: Value(id),
+      typeId: Value(typeId),
+      regionId: Value(regionId),
+      targetPrice: Value(targetPrice),
+      condition: Value(condition),
+      triggered: Value(triggered),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory PriceAlert.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PriceAlert(
+      id: serializer.fromJson<int>(json['id']),
+      typeId: serializer.fromJson<int>(json['typeId']),
+      regionId: serializer.fromJson<int>(json['regionId']),
+      targetPrice: serializer.fromJson<double>(json['targetPrice']),
+      condition: serializer.fromJson<String>(json['condition']),
+      triggered: serializer.fromJson<bool>(json['triggered']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'typeId': serializer.toJson<int>(typeId),
+      'regionId': serializer.toJson<int>(regionId),
+      'targetPrice': serializer.toJson<double>(targetPrice),
+      'condition': serializer.toJson<String>(condition),
+      'triggered': serializer.toJson<bool>(triggered),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  PriceAlert copyWith({
+    int? id,
+    int? typeId,
+    int? regionId,
+    double? targetPrice,
+    String? condition,
+    bool? triggered,
+    DateTime? createdAt,
+  }) => PriceAlert(
+    id: id ?? this.id,
+    typeId: typeId ?? this.typeId,
+    regionId: regionId ?? this.regionId,
+    targetPrice: targetPrice ?? this.targetPrice,
+    condition: condition ?? this.condition,
+    triggered: triggered ?? this.triggered,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  PriceAlert copyWithCompanion(PriceAlertsCompanion data) {
+    return PriceAlert(
+      id: data.id.present ? data.id.value : this.id,
+      typeId: data.typeId.present ? data.typeId.value : this.typeId,
+      regionId: data.regionId.present ? data.regionId.value : this.regionId,
+      targetPrice: data.targetPrice.present
+          ? data.targetPrice.value
+          : this.targetPrice,
+      condition: data.condition.present ? data.condition.value : this.condition,
+      triggered: data.triggered.present ? data.triggered.value : this.triggered,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PriceAlert(')
+          ..write('id: $id, ')
+          ..write('typeId: $typeId, ')
+          ..write('regionId: $regionId, ')
+          ..write('targetPrice: $targetPrice, ')
+          ..write('condition: $condition, ')
+          ..write('triggered: $triggered, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    typeId,
+    regionId,
+    targetPrice,
+    condition,
+    triggered,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PriceAlert &&
+          other.id == this.id &&
+          other.typeId == this.typeId &&
+          other.regionId == this.regionId &&
+          other.targetPrice == this.targetPrice &&
+          other.condition == this.condition &&
+          other.triggered == this.triggered &&
+          other.createdAt == this.createdAt);
+}
+
+class PriceAlertsCompanion extends UpdateCompanion<PriceAlert> {
+  final Value<int> id;
+  final Value<int> typeId;
+  final Value<int> regionId;
+  final Value<double> targetPrice;
+  final Value<String> condition;
+  final Value<bool> triggered;
+  final Value<DateTime> createdAt;
+  const PriceAlertsCompanion({
+    this.id = const Value.absent(),
+    this.typeId = const Value.absent(),
+    this.regionId = const Value.absent(),
+    this.targetPrice = const Value.absent(),
+    this.condition = const Value.absent(),
+    this.triggered = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  PriceAlertsCompanion.insert({
+    this.id = const Value.absent(),
+    required int typeId,
+    required int regionId,
+    required double targetPrice,
+    required String condition,
+    this.triggered = const Value.absent(),
+    required DateTime createdAt,
+  }) : typeId = Value(typeId),
+       regionId = Value(regionId),
+       targetPrice = Value(targetPrice),
+       condition = Value(condition),
+       createdAt = Value(createdAt);
+  static Insertable<PriceAlert> custom({
+    Expression<int>? id,
+    Expression<int>? typeId,
+    Expression<int>? regionId,
+    Expression<double>? targetPrice,
+    Expression<String>? condition,
+    Expression<bool>? triggered,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (typeId != null) 'type_id': typeId,
+      if (regionId != null) 'region_id': regionId,
+      if (targetPrice != null) 'target_price': targetPrice,
+      if (condition != null) 'condition': condition,
+      if (triggered != null) 'triggered': triggered,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  PriceAlertsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? typeId,
+    Value<int>? regionId,
+    Value<double>? targetPrice,
+    Value<String>? condition,
+    Value<bool>? triggered,
+    Value<DateTime>? createdAt,
+  }) {
+    return PriceAlertsCompanion(
+      id: id ?? this.id,
+      typeId: typeId ?? this.typeId,
+      regionId: regionId ?? this.regionId,
+      targetPrice: targetPrice ?? this.targetPrice,
+      condition: condition ?? this.condition,
+      triggered: triggered ?? this.triggered,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (typeId.present) {
+      map['type_id'] = Variable<int>(typeId.value);
+    }
+    if (regionId.present) {
+      map['region_id'] = Variable<int>(regionId.value);
+    }
+    if (targetPrice.present) {
+      map['target_price'] = Variable<double>(targetPrice.value);
+    }
+    if (condition.present) {
+      map['condition'] = Variable<String>(condition.value);
+    }
+    if (triggered.present) {
+      map['triggered'] = Variable<bool>(triggered.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PriceAlertsCompanion(')
+          ..write('id: $id, ')
+          ..write('typeId: $typeId, ')
+          ..write('regionId: $regionId, ')
+          ..write('targetPrice: $targetPrice, ')
+          ..write('condition: $condition, ')
+          ..write('triggered: $triggered, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $CharactersTable characters = $CharactersTable(this);
   late final $EsiCacheTable esiCache = $EsiCacheTable(this);
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
+  late final $PriceAlertsTable priceAlerts = $PriceAlertsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -1001,6 +1464,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     characters,
     esiCache,
     appSettings,
+    priceAlerts,
   ];
 }
 
@@ -1559,6 +2023,240 @@ typedef $$AppSettingsTableProcessedTableManager =
       AppSetting,
       PrefetchHooks Function()
     >;
+typedef $$PriceAlertsTableCreateCompanionBuilder =
+    PriceAlertsCompanion Function({
+      Value<int> id,
+      required int typeId,
+      required int regionId,
+      required double targetPrice,
+      required String condition,
+      Value<bool> triggered,
+      required DateTime createdAt,
+    });
+typedef $$PriceAlertsTableUpdateCompanionBuilder =
+    PriceAlertsCompanion Function({
+      Value<int> id,
+      Value<int> typeId,
+      Value<int> regionId,
+      Value<double> targetPrice,
+      Value<String> condition,
+      Value<bool> triggered,
+      Value<DateTime> createdAt,
+    });
+
+class $$PriceAlertsTableFilterComposer
+    extends Composer<_$AppDatabase, $PriceAlertsTable> {
+  $$PriceAlertsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get typeId => $composableBuilder(
+    column: $table.typeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get regionId => $composableBuilder(
+    column: $table.regionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get targetPrice => $composableBuilder(
+    column: $table.targetPrice,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get condition => $composableBuilder(
+    column: $table.condition,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get triggered => $composableBuilder(
+    column: $table.triggered,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PriceAlertsTableOrderingComposer
+    extends Composer<_$AppDatabase, $PriceAlertsTable> {
+  $$PriceAlertsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get typeId => $composableBuilder(
+    column: $table.typeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get regionId => $composableBuilder(
+    column: $table.regionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get targetPrice => $composableBuilder(
+    column: $table.targetPrice,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get condition => $composableBuilder(
+    column: $table.condition,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get triggered => $composableBuilder(
+    column: $table.triggered,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PriceAlertsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PriceAlertsTable> {
+  $$PriceAlertsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get typeId =>
+      $composableBuilder(column: $table.typeId, builder: (column) => column);
+
+  GeneratedColumn<int> get regionId =>
+      $composableBuilder(column: $table.regionId, builder: (column) => column);
+
+  GeneratedColumn<double> get targetPrice => $composableBuilder(
+    column: $table.targetPrice,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get condition =>
+      $composableBuilder(column: $table.condition, builder: (column) => column);
+
+  GeneratedColumn<bool> get triggered =>
+      $composableBuilder(column: $table.triggered, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$PriceAlertsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PriceAlertsTable,
+          PriceAlert,
+          $$PriceAlertsTableFilterComposer,
+          $$PriceAlertsTableOrderingComposer,
+          $$PriceAlertsTableAnnotationComposer,
+          $$PriceAlertsTableCreateCompanionBuilder,
+          $$PriceAlertsTableUpdateCompanionBuilder,
+          (
+            PriceAlert,
+            BaseReferences<_$AppDatabase, $PriceAlertsTable, PriceAlert>,
+          ),
+          PriceAlert,
+          PrefetchHooks Function()
+        > {
+  $$PriceAlertsTableTableManager(_$AppDatabase db, $PriceAlertsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PriceAlertsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PriceAlertsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PriceAlertsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> typeId = const Value.absent(),
+                Value<int> regionId = const Value.absent(),
+                Value<double> targetPrice = const Value.absent(),
+                Value<String> condition = const Value.absent(),
+                Value<bool> triggered = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => PriceAlertsCompanion(
+                id: id,
+                typeId: typeId,
+                regionId: regionId,
+                targetPrice: targetPrice,
+                condition: condition,
+                triggered: triggered,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int typeId,
+                required int regionId,
+                required double targetPrice,
+                required String condition,
+                Value<bool> triggered = const Value.absent(),
+                required DateTime createdAt,
+              }) => PriceAlertsCompanion.insert(
+                id: id,
+                typeId: typeId,
+                regionId: regionId,
+                targetPrice: targetPrice,
+                condition: condition,
+                triggered: triggered,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PriceAlertsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PriceAlertsTable,
+      PriceAlert,
+      $$PriceAlertsTableFilterComposer,
+      $$PriceAlertsTableOrderingComposer,
+      $$PriceAlertsTableAnnotationComposer,
+      $$PriceAlertsTableCreateCompanionBuilder,
+      $$PriceAlertsTableUpdateCompanionBuilder,
+      (
+        PriceAlert,
+        BaseReferences<_$AppDatabase, $PriceAlertsTable, PriceAlert>,
+      ),
+      PriceAlert,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -1569,4 +2267,6 @@ class $AppDatabaseManager {
       $$EsiCacheTableTableManager(_db, _db.esiCache);
   $$AppSettingsTableTableManager get appSettings =>
       $$AppSettingsTableTableManager(_db, _db.appSettings);
+  $$PriceAlertsTableTableManager get priceAlerts =>
+      $$PriceAlertsTableTableManager(_db, _db.priceAlerts);
 }
