@@ -33,13 +33,14 @@ jobs:
             libsqlite3-dev \
             pkg-config \
             appstream \
-            libfuse2
+            libfuse2 \
+            keybinder-3.0-dev
 
       - name: Get dependencies
         run: flutter pub get
 
       - name: Build Linux
-        run: flutter build linux --release
+        run: flutter build linux --release --dart-define=EVE_CLIENT_ID=${{ secrets.EVE_CLIENT_ID }} --dart-define=EVE_CLIENT_SECRET=${{ secrets.EVE_CLIENT_SECRET }}
 
       - name: Create AppDir
         run: |
@@ -129,7 +130,7 @@ jobs:
         run: flutter pub get
 
       - name: Build Windows
-        run: flutter build windows --release
+        run: flutter build windows --release --dart-define=EVE_CLIENT_ID=${{ secrets.EVE_CLIENT_ID }} --dart-define=EVE_CLIENT_SECRET=${{ secrets.EVE_CLIENT_SECRET }}
 
       - name: Create ZIP
         shell: pwsh
@@ -165,12 +166,18 @@ jobs:
         run: flutter pub get
 
       - name: Build macOS
-        run: flutter build macos --release
+        run: flutter build macos --release --dart-define=EVE_CLIENT_ID=${{ secrets.EVE_CLIENT_ID }} --dart-define=EVE_CLIENT_SECRET=${{ secrets.EVE_CLIENT_SECRET }}
 
       - name: Create DMG
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          APP="build/macos/Build/Products/Release/eve_ntt.app"
+          # Find the .app bundle (path varies by architecture)
+          APP=$(find build/macos -name "eve_ntt.app" -type d | head -1)
+          if [ -z "$APP" ]; then
+            echo "Error: eve_ntt.app not found"
+            find build/macos -name "*.app" -type d
+            exit 1
+          fi
           DMG="eve_ntt-${VERSION}-macos-universal.dmg"
 
           # Create DMG with app inside
