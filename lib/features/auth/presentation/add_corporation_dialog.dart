@@ -1,17 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/auth/auth_provider.dart';
 import '../../../core/database/database_provider.dart';
 import '../../../core/esi/esi_provider.dart';
+import '../data/character_repository.dart';
 import '../data/corporation_repository.dart';
 
 enum _Step {
-  fetching,
+  openingBrowser,
+  awaitingCallback,
+  fetchingInfo,
   done;
 
   String get message => switch (this) {
-        _Step.fetching => 'Fetching corporation information…',
-        _Step.done => 'Corporation added successfully',
+        _Step.openingBrowser => 'Opening browser…',
+        _Step.awaitingCallback => 'Waiting for EVE SSO login…\n'
+            'Complete the login in your browser.',
+        _Step.fetchingInfo => 'Fetching corporation information…',
+        _Step.done => 'Done',
       };
 }
 
@@ -33,64 +40,53 @@ class AddCorporationDialog extends ConsumerStatefulWidget {
 }
 
 class _AddCorporationDialogState extends ConsumerState<AddCorporationDialog> {
-  final _controller = TextEditingController();
-  _Step? _step;
+  _Step _step = _Step.openingBrowser;
   String? _error;
-  String? _corpName;
 
   @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    // Start auth immediately when dialog opens
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startAuth());
   }
 
-  Future<void> _addCorporation() async {
-    final input = _controller.text.trim();
-    final corporationId = int.tryParse(input);
-
-    if (corporationId == null || corporationId <= 0) {
-      setState(() {
-        _error = 'Please enter a valid corporation ID (positive integer)';
-      });
-      return;
-    }
-
+  Future<void> _startAuth() async {
     setState(() {
-      _step = _Step.fetching;
+      _step = _Step.openingBrowser;
       _error = null;
-      _corpName = null;
     });
 
     try {
+      final authService = ref.read(eveAuthServiceProvider);
       final db = ref.read(databaseProvider);
       final esiClient = ref.read(esiClientProvider);
+      final tokenStorage = ref.read(tokenStorageProvider);
 
-      final repo = CorporationRepository(esi: esiClient, db: db);
-      final corporation = await repo.fetchAndSave(corporationId);
+      setState(() => _step = _Step.awaitingCallback);
+      final characterId = await authService.authenticate();
 
-      if (corporation == null) {
-        setState(() {
-          _error =
-              'Could not find corporation with ID $corporationId.\nPlease check the ID and try again.';
-          _step = null;
-        });
-        return;
+      setState(() => _step = _Step.fetchingInfo);
+      final accessToken = await tokenStorage.getAccessToken(characterId);
+
+      // Fetch character info to get corporation_id
+      final charRepo = CharacterRepository(esi: esiClient, db: db);
+      await charRepo.fetchAndSave(characterId, accessToken!);
+
+      // Get the character to extract corporation_id
+      final characters = await db.select(db.characters).get();
+      final character = characters.where((c) => c.id == characterId).firstOrNull;
+
+      if (character?.corporationId != null) {
+        // Fetch and save corporation info
+        final corpRepo = CorporationRepository(esi: esiClient, db: db);
+        await corpRepo.fetchAndSave(character!.corporationId!);
       }
 
-      setState(() {
-        _step = _Step.done;
-        _corpName = corporation.name;
-      });
-
-      // Auto-dismiss after success
-      await Future.delayed(const Duration(milliseconds: 800));
+      setState(() => _step = _Step.done);
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _error = 'Failed to add corporation: $e';
-          _step = null;
-        });
+        setState(() => _error = _friendlyError(e));
       }
     }
   }
@@ -98,68 +94,25 @@ class _AddCorporationDialogState extends ConsumerState<AddCorporationDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isLoading = _step != null;
     final hasError = _error != null;
-    final isSuccess = _step == _Step.done;
 
     return AlertDialog(
       title: const Text('Add Corporation'),
       content: SizedBox(
-        width: 400,
+        width: 360,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (!isLoading && !hasError && !isSuccess) ...[
-                Text(
-                  'Enter the corporation ID to add it to your database.',
-                  style: theme.textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _controller,
-                  keyboardType: const TextInputType.numberWithOptions(),
-                  decoration: const InputDecoration(
-                    labelText: 'Corporation ID',
-                    hintText: 'e.g., 109299958',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _addCorporation(),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'You can find corporation IDs on zKillboard or EVE Who.',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ] else if (isLoading) ...[
+              if (!hasError) ...[
                 const CircularProgressIndicator(),
                 const SizedBox(height: 24),
                 Text(
-                  _step!.message,
+                  _step.message,
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium,
                 ),
-              ] else if (isSuccess) ...[
-                Icon(Icons.check_circle,
-                    size: 48, color: theme.colorScheme.primary),
-                const SizedBox(height: 16),
-                Text(
-                  'Corporation added!',
-                  style: theme.textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
-                if (_corpName != null)
-                  Text(
-                    _corpName!,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-              ] else if (hasError) ...[
+              ] else ...[
                 Icon(Icons.error_outline,
                     size: 48, color: theme.colorScheme.error),
                 const SizedBox(height: 16),
@@ -179,17 +132,27 @@ class _AddCorporationDialogState extends ConsumerState<AddCorporationDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        if (!isLoading && !isSuccess)
-          FilledButton(
-            onPressed: _addCorporation,
-            child: const Text('Add'),
-          ),
         if (hasError)
           FilledButton(
-            onPressed: _addCorporation,
+            onPressed: _startAuth,
             child: const Text('Retry'),
           ),
       ],
     );
+  }
+
+  String _friendlyError(Object e) {
+    final msg = e.toString();
+    if (msg.contains('SocketException') || msg.contains('Connection refused')) {
+      return 'Could not start local callback server on port 8000.\n'
+          'Make sure no other application is using that port.';
+    }
+    if (msg.contains('timed out')) {
+      return 'Authentication timed out.\nDid you complete the login in the browser?';
+    }
+    if (msg.contains('state mismatch')) {
+      return 'Security error: OAuth state mismatch.\nPlease try again.';
+    }
+    return msg;
   }
 }
