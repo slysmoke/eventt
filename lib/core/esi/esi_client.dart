@@ -17,6 +17,7 @@ class EsiClient {
             Dio(BaseOptions(
               baseUrl: baseUrl,
               queryParameters: {'datasource': _datasource},
+              responseType: ResponseType.json,
               // Accept 200-304; cache interceptor handles 304
               validateStatus: (s) => s != null && s < 500,
             )) {

@@ -6,22 +6,14 @@ import 'package:drift/drift.dart' show Value;
 import '../../../core/database/app_database.dart';
 import '../../../core/esi/esi_client.dart';
 
-/// Safely extract JSON from ESI response, handling both Map and String.
+/// Safely extract JSON from ESI response.
+/// Dio is configured with ResponseType.json so response.data is usually a Map.
 Map<String, dynamic> _extractData(Response<dynamic> response) {
-  // Dio may have already parsed it as a Map
-  if (response.data is Map<String, dynamic>) {
-    return response.data as Map<String, dynamic>;
-  }
-  // If it's a raw Map (not typed), convert
-  if (response.data is Map) {
-    return Map<String, dynamic>.from(response.data as Map);
-  }
-  // If it's a String, try parsing JSON
-  if (response.data is String) {
-    final str = response.data as String;
-    return jsonDecode(str) as Map<String, dynamic>;
-  }
-  throw FormatException('Unexpected response type: ${response.data.runtimeType}');
+  final data = response.data;
+  if (data is Map<String, dynamic>) return data;
+  if (data is Map) return Map<String, dynamic>.from(data);
+  if (data is String) return jsonDecode(data) as Map<String, dynamic>;
+  throw FormatException('Unexpected response type: ${data.runtimeType}');
 }
 
 /// Fetches corporation info from ESI and persists it to the local database.
