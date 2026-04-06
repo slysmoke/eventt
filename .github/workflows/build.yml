@@ -63,7 +63,8 @@ jobs:
           Categories=Game;
           EOF
 
-          # Generate a simple icon
+          # Generate a simple icon in standard location
+          mkdir -p appimage/usr/share/icons/hicolor/128x128/apps
           python3 -c "
           import struct, zlib
           def png(w,h,r,g,b):
@@ -76,7 +77,7 @@ jobs:
             idat=chunk(b'IDAT',zlib.compress(raw))
             iend=chunk(b'IEND',b'')
             return sig+ihdr+idat+iend
-          open('appimage/eve_ntt.png','wb').write(png(128,128,0,180,191))
+          open('appimage/usr/share/icons/hicolor/128x128/apps/eve_ntt.png','wb').write(png(128,128,0,180,191))
           "
 
           # Build AppImage
