@@ -50,6 +50,7 @@ jobs:
 
           # Create AppDir from Flutter build
           mkdir -p appimage/usr/bin
+          mkdir -p appimage/usr/share/applications
           cp -r build/linux/x64/release/bundle/* appimage/usr/bin/
 
           # Create desktop entry
