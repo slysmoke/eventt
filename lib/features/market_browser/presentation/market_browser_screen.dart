@@ -5,10 +5,13 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/database/app_database.dart';
+import '../../../core/database/database_provider.dart';
 import '../../../core/esi/esi_provider.dart';
-import '../../../core/sde/sde_database.dart';
 import '../../../core/sde/sde_models.dart';
 import '../../../core/sde/sde_provider.dart';
+import '../../../core/sde/sde_database.dart';
+import 'price_alerts_panel.dart';
 import '../../market_analysis/data/market_history_entry.dart';
 import '../../market_analysis/data/market_history_repository.dart';
 import '../../market_analysis/domain/market_indicators.dart';
@@ -250,6 +253,7 @@ class _BrowserLayout extends ConsumerStatefulWidget {
 class _BrowserLayoutState extends ConsumerState<_BrowserLayout>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
+  bool _showAlertsPanel = false;
 
   @override
   void initState() {
@@ -288,6 +292,16 @@ class _BrowserLayoutState extends ConsumerState<_BrowserLayout>
                             icon: Icon(Icons.candlestick_chart, size: 18),
                             text: 'Price History'),
                       ],
+                      labelPadding: EdgeInsets.zero,
+                    ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: IconButton(
+                        icon: const Icon(Icons.notifications_active, size: 18),
+                        tooltip: 'Price Alerts',
+                        onPressed: () =>
+                            setState(() => _showAlertsPanel = !_showAlertsPanel),
+                      ),
                     ),
                     Expanded(
                       child: TabBarView(
@@ -301,6 +315,30 @@ class _BrowserLayoutState extends ConsumerState<_BrowserLayout>
                   ],
                 ),
               ),
+              // Alerts panel toggle
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: _showAlertsPanel ? 280 : 0,
+                child: _showAlertsPanel
+                    ? Column(
+                        children: [
+                          Row(
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.close, size: 18),
+                                tooltip: 'Close alerts panel',
+                                onPressed: () =>
+                                    setState(() => _showAlertsPanel = false),
+                              ),
+                              const Expanded(child: SizedBox.shrink()),
+                            ],
+                          ),
+                          const Expanded(child: PriceAlertsPanel()),
+                        ],
+                      )
+                    : null,
+              ),
+              if (_showAlertsPanel) const VerticalDivider(width: 1),
             ],
           ),
         ),
@@ -728,10 +766,24 @@ class _SetPriceAlertDialogState extends ConsumerState<_SetPriceAlertDialog> {
           onPressed: () {
             final price = double.tryParse(_controller.text);
             if (price != null && price > 0) {
-              // TODO: Save alert via provider
+              final db = ref.read(databaseProvider);
+              final regionId = ref.read(_selectedRegionProvider);
+              db.into(db.priceAlerts).insert(
+                    PriceAlertsCompanion.insert(
+                      typeId: widget.order.typeId,
+                      regionId: regionId,
+                      targetPrice: price,
+                      condition: _condition,
+                      createdAt: DateTime.now(),
+                    ),
+                  );
               Navigator.of(context).pop();
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Alert set: $_condition $price ISK')),
+                SnackBar(
+                  content: Text(
+                    'Alert set: Type #${widget.order.typeId} $_condition $price ISK',
+                  ),
+                ),
               );
             }
           },
