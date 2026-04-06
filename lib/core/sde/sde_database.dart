@@ -112,16 +112,71 @@ class SdeDatabase {
   }
 
   /// Named regions sorted alphabetically, for the region selector.
+  /// Only returns regions with IDs starting with 10 (standard EVE regions).
   List<MapRegion> getRegions() {
     return _db
         .select(
           'SELECT regionID, regionName '
           'FROM mapRegions '
           'WHERE regionName IS NOT NULL '
+          '  AND regionID >= 10000000 AND regionID < 11000000 '
           'ORDER BY regionName',
         )
         .map(MapRegion.fromRow)
         .toList();
+  }
+
+  /// Resolves a location ID to a station or solar system name.
+  /// Returns null if not found (e.g. player structure).
+  String? getLocationName(int locationId) {
+    // Try stations first (staStations)
+    var row = _db.select(
+      'SELECT stationName FROM staStations WHERE stationID = ?',
+      [locationId],
+    ).firstOrNull;
+    if (row != null) return row['stationName'] as String?;
+
+    // Try solar systems (mapSolarSystems)
+    row = _db.select(
+      'SELECT solarSystemName FROM mapSolarSystems WHERE solarSystemID = ?',
+      [locationId],
+    ).firstOrNull;
+    if (row != null) return row['solarSystemName'] as String?;
+
+    return null;
+  }
+
+  /// Batch resolves location IDs to station/system names.
+  /// Returns a map of locationId -> name.
+  Map<int, String> getLocationNames(List<int> locationIds) {
+    if (locationIds.isEmpty) return {};
+
+    final result = <int, String>{};
+    final placeholders = locationIds.map((_) => '?').join(',');
+
+    // Stations
+    final stationRows = _db.select(
+      'SELECT stationID, stationName FROM staStations WHERE stationID IN ($placeholders)',
+      locationIds,
+    );
+    for (final row in stationRows) {
+      result[row['stationID'] as int] = row['stationName'] as String;
+    }
+
+    // Solar systems (only for IDs not found as stations)
+    final unresolvedIds = locationIds.where((id) => !result.containsKey(id)).toList();
+    if (unresolvedIds.isNotEmpty) {
+      final sysPlaceholders = unresolvedIds.map((_) => '?').join(',');
+      final sysRows = _db.select(
+        'SELECT solarSystemID, solarSystemName FROM mapSolarSystems WHERE solarSystemID IN ($sysPlaceholders)',
+        unresolvedIds,
+      );
+      for (final row in sysRows) {
+        result[row['solarSystemID'] as int] = row['solarSystemName'] as String;
+      }
+    }
+
+    return result;
   }
 
   /// Returns scrapmetal items (non-ore published items with market groups)

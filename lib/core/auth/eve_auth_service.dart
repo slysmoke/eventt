@@ -203,7 +203,7 @@ class EveAuthService {
         ..headers.contentType = ContentType.html
         ..write('<html><body>'
             '<h2>Authentication successful</h2>'
-            '<p>You can close this tab and return to eventt.</p>'
+            '<p>You can close this tab and return to EVE NTT.</p>'
             '</body></html>');
       await request.response.close();
       await server.close();

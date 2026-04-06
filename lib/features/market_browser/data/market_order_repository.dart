@@ -1,4 +1,5 @@
 import '../../../core/esi/esi_client.dart';
+import '../../../core/sde/sde_database.dart';
 
 class MarketOrder {
   final int orderId;
@@ -8,6 +9,7 @@ class MarketOrder {
   final int volumeTotal;
   final int locationId;
   final int typeId;
+  final String? locationName;
 
   const MarketOrder({
     required this.orderId,
@@ -17,6 +19,7 @@ class MarketOrder {
     required this.volumeTotal,
     required this.locationId,
     required this.typeId,
+    this.locationName,
   });
 
   factory MarketOrder.fromJson(Map<String, dynamic> json) => MarketOrder(
@@ -27,6 +30,17 @@ class MarketOrder {
         volumeTotal: json['volume_total'] as int,
         locationId: json['location_id'] as int,
         typeId: json['type_id'] as int,
+      );
+
+  MarketOrder copyWith({String? locationName}) => MarketOrder(
+        orderId: orderId,
+        isBuyOrder: isBuyOrder,
+        price: price,
+        volumeRemain: volumeRemain,
+        volumeTotal: volumeTotal,
+        locationId: locationId,
+        typeId: typeId,
+        locationName: locationName ?? this.locationName,
       );
 }
 
@@ -39,8 +53,11 @@ const Map<int, int> fixedMarketRegions = {
 /// Fetches and sorts market orders from ESI for a given region + type.
 class MarketOrderRepository {
   final EsiClient _esi;
+  final SdeDatabase _sde;
 
-  const MarketOrderRepository({required EsiClient esi}) : _esi = esi;
+  const MarketOrderRepository({required EsiClient esi, required SdeDatabase sde})
+      : _esi = esi,
+        _sde = sde;
 
   /// Returns all orders for [typeId] in [regionId].
   /// For items with a fixed market region (e.g. PLEX), [regionId] is ignored.
@@ -69,6 +86,17 @@ class MarketOrderRepository {
           : a.price.compareTo(b.price); // sell: asc
     });
 
-    return orders;
+    // Resolve location IDs to names (batch)
+    return _resolveLocations(orders);
+  }
+
+  /// Resolves location IDs to station/solar system names using SDE database.
+  List<MarketOrder> _resolveLocations(List<MarketOrder> orders) {
+    final locationIds = orders.map((o) => o.locationId).toSet().toList();
+    final nameMap = _sde.getLocationNames(locationIds);
+
+    return orders
+        .map((o) => o.copyWith(locationName: nameMap[o.locationId]))
+        .toList();
   }
 }

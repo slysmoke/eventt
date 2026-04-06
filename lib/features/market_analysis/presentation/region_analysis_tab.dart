@@ -13,8 +13,16 @@ import '../domain/region_analysis_row.dart';
 // Providers
 // ---------------------------------------------------------------------------
 
-final _regionOrdersRepoProvider = Provider<MarketOrderRepository>((ref) =>
-    MarketOrderRepository(esi: ref.watch(esiClientProvider)));
+final _regionOrdersRepoProvider = Provider<MarketOrderRepository>((ref) {
+  final db = ref.watch(sdeDatabaseProvider);
+  if (db == null) {
+    throw StateError('SDE database not yet available');
+  }
+  return MarketOrderRepository(
+    esi: ref.watch(esiClientProvider),
+    sde: db,
+  );
+});
 
 // ---------------------------------------------------------------------------
 // Analysis state

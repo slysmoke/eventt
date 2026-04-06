@@ -1,4 +1,4 @@
-# eventt
+# EVE Night Trade Tools (EVE NTT)
 
 A new Flutter project.
 

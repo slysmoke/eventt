@@ -17,7 +17,7 @@ class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'eventt',
+      title: 'EVE Night Trade Tools',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
       home: const ShellScreen(),

@@ -1,5 +1,5 @@
-name: eventt
-description: "EVE Online trading assistant"
+name: eve_ntt
+description: "EVE Night Trade Tools"
 publish_to: 'none'
 version: 0.1.0+1
 

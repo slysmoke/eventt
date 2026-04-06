@@ -50,7 +50,7 @@ class AppDatabase extends _$AppDatabase {
   static QueryExecutor _openConnection() {
     return LazyDatabase(() async {
       final dir = await getApplicationSupportDirectory();
-      final file = File(p.join(dir.path, 'eventt.db'));
+      final file = File(p.join(dir.path, 'eve_ntt.db'));
       return NativeDatabase.createInBackground(file);
     });
   }

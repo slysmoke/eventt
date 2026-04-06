@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**eventt** — кроссплатформенный Flutter-клиент для торговли в EVE Online под **Linux / Windows / macOS**. Аналог Evernus, написанный с нуля на Flutter. Код Evernus (`Evernus/`) присутствует только как референс — не используется, не собирается, не интегрируется.
+**EVE Night Trade Tools (EVE NTT)** — кроссплатформенный Flutter-клиент для торговли в EVE Online под **Linux / Windows / macOS**. Аналог Evernus, написанный с нуля на Flutter. Код Evernus (`Evernus/`) присутствует только как референс — не используется, не собирается, не интегрируется.
 
 ## Development Workflow
 

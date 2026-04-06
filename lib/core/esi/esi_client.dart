@@ -45,7 +45,9 @@ class EsiClient {
       path,
       data: data,
       queryParameters: queryParameters,
-      options: _options(accessToken),
+      options: _options(accessToken).copyWith(
+        contentType: 'application/json',
+      ),
     );
   }
 
