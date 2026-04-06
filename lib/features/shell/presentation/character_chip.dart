@@ -5,6 +5,7 @@ import '../../../core/auth/auth_provider.dart';
 import '../../../core/database/database_provider.dart';
 import '../../../core/database/app_database.dart';
 import '../../auth/presentation/add_character_dialog.dart';
+import '../../auth/presentation/add_corporation_dialog.dart';
 
 /// Shows the active character with a switcher, or an "Add Character" button.
 class CharacterChip extends ConsumerWidget {
@@ -21,7 +22,10 @@ class CharacterChip extends ConsumerWidget {
         final characters = snapshot.data ?? [];
 
         if (characters.isEmpty) {
-          return _AddButton(onTap: () => AddCharacterDialog.show(context));
+          return _AddButtons(
+            onAddCharacter: () => AddCharacterDialog.show(context),
+            onAddCorporation: () => AddCorporationDialog.show(context),
+          );
         }
 
         final active = activeId != null
@@ -32,27 +36,47 @@ class CharacterChip extends ConsumerWidget {
           character: active ?? characters.first,
           hasMultiple: characters.length > 1,
           allCharacters: characters,
-          onAddTap: () => AddCharacterDialog.show(context),
+          onAddCharacter: () => AddCharacterDialog.show(context),
+          onAddCorporation: () => AddCorporationDialog.show(context),
         );
       },
     );
   }
 }
 
-class _AddButton extends StatelessWidget {
-  final VoidCallback onTap;
-  const _AddButton({required this.onTap});
+class _AddButtons extends StatelessWidget {
+  final VoidCallback onAddCharacter;
+  final VoidCallback onAddCorporation;
+
+  const _AddButtons({
+    required this.onAddCharacter,
+    required this.onAddCorporation,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      icon: const Icon(Icons.add, size: 16),
-      label: const Text('Add Character'),
-      style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        textStyle: Theme.of(context).textTheme.bodySmall,
-      ),
-      onPressed: onTap,
+    return Wrap(
+      spacing: 8,
+      children: [
+        OutlinedButton.icon(
+          icon: const Icon(Icons.person_add, size: 16),
+          label: const Text('Add Character'),
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            textStyle: Theme.of(context).textTheme.bodySmall,
+          ),
+          onPressed: onAddCharacter,
+        ),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.business, size: 16),
+          label: const Text('Add Corporation'),
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            textStyle: Theme.of(context).textTheme.bodySmall,
+          ),
+          onPressed: onAddCorporation,
+        ),
+      ],
     );
   }
 }
@@ -61,13 +85,15 @@ class _CharacterTile extends ConsumerWidget {
   final Character character;
   final bool hasMultiple;
   final List<Character> allCharacters;
-  final VoidCallback onAddTap;
+  final VoidCallback onAddCharacter;
+  final VoidCallback onAddCorporation;
 
   const _CharacterTile({
     required this.character,
     required this.hasMultiple,
     required this.allCharacters,
-    required this.onAddTap,
+    required this.onAddCharacter,
+    required this.onAddCorporation,
   });
 
   @override
@@ -93,12 +119,21 @@ class _CharacterTile extends ConsumerWidget {
                         ?.copyWith(fontWeight: FontWeight.w600),
                     overflow: TextOverflow.ellipsis,
                   ),
-                  Text(
-                    'Active character',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                  if (character.corporationName != null)
+                    Text(
+                      character.corporationName!,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    )
+                  else
+                    Text(
+                      'Active character',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -118,7 +153,8 @@ class _CharacterTile extends ConsumerWidget {
         activeId: character.id,
         onSelect: (id) =>
             ref.read(activeCharacterIdProvider.notifier).select(id),
-        onAdd: onAddTap,
+        onAddCharacter: onAddCharacter,
+        onAddCorporation: onAddCorporation,
       ),
     );
   }
@@ -148,13 +184,15 @@ class _CharacterSwitcherDialog extends StatelessWidget {
   final List<Character> characters;
   final int activeId;
   final void Function(int) onSelect;
-  final VoidCallback onAdd;
+  final VoidCallback onAddCharacter;
+  final VoidCallback onAddCorporation;
 
   const _CharacterSwitcherDialog({
     required this.characters,
     required this.activeId,
     required this.onSelect,
-    required this.onAdd,
+    required this.onAddCharacter,
+    required this.onAddCorporation,
   });
 
   @override
@@ -163,7 +201,7 @@ class _CharacterSwitcherDialog extends StatelessWidget {
       title: const Text('Switch Character'),
       contentPadding: const EdgeInsets.symmetric(vertical: 8),
       content: SizedBox(
-        width: 300,
+        width: 340,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -171,6 +209,18 @@ class _CharacterSwitcherDialog extends StatelessWidget {
               ListTile(
                 leading: _Portrait(characterId: char.id, url: char.portraitUrl),
                 title: Text(char.name),
+                subtitle: char.corporationName != null
+                    ? Text(
+                        char.corporationName!,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      )
+                    : null,
                 trailing: char.id == activeId
                     ? const Icon(Icons.check, size: 18)
                     : null,
@@ -181,11 +231,19 @@ class _CharacterSwitcherDialog extends StatelessWidget {
               ),
             const Divider(height: 1),
             ListTile(
-              leading: const Icon(Icons.add),
+              leading: const Icon(Icons.person_add, size: 20),
               title: const Text('Add another character'),
               onTap: () {
                 Navigator.of(context).pop();
-                onAdd();
+                onAddCharacter();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.business, size: 20),
+              title: const Text('Add corporation'),
+              onTap: () {
+                Navigator.of(context).pop();
+                onAddCorporation();
               },
             ),
           ],

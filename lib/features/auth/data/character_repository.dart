@@ -4,6 +4,7 @@ import 'package:drift/drift.dart' show Value;
 
 import '../../../core/database/app_database.dart';
 import '../../../core/esi/esi_client.dart';
+import 'corporation_repository.dart';
 
 /// Fetches EVE character info from ESI and persists it to the local database.
 class CharacterRepository {
@@ -41,5 +42,12 @@ class CharacterRepository {
             addedAt: DateTime.now(),
           ),
         );
+
+    // Fetch corporation info and populate corporationName
+    if (corporationId != null) {
+      final corpRepo = CorporationRepository(esi: _esi, db: _db);
+      await corpRepo.fetchAndSave(corporationId);
+      await corpRepo.updateCharacterCorporationName(characterId, corporationId);
+    }
   }
 }

@@ -1449,6 +1449,510 @@ class PriceAlertsCompanion extends UpdateCompanion<PriceAlert> {
   }
 }
 
+class $CorporationsTable extends Corporations
+    with TableInfo<$CorporationsTable, Corporation> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CorporationsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _tickerMeta = const VerificationMeta('ticker');
+  @override
+  late final GeneratedColumn<String> ticker = GeneratedColumn<String>(
+    'ticker',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _ceoIdMeta = const VerificationMeta('ceoId');
+  @override
+  late final GeneratedColumn<int> ceoId = GeneratedColumn<int>(
+    'ceo_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _ceoNameMeta = const VerificationMeta(
+    'ceoName',
+  );
+  @override
+  late final GeneratedColumn<String> ceoName = GeneratedColumn<String>(
+    'ceo_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _allianceIdMeta = const VerificationMeta(
+    'allianceId',
+  );
+  @override
+  late final GeneratedColumn<int> allianceId = GeneratedColumn<int>(
+    'alliance_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _allianceNameMeta = const VerificationMeta(
+    'allianceName',
+  );
+  @override
+  late final GeneratedColumn<String> allianceName = GeneratedColumn<String>(
+    'alliance_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _addedAtMeta = const VerificationMeta(
+    'addedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> addedAt = GeneratedColumn<DateTime>(
+    'added_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    ticker,
+    ceoId,
+    ceoName,
+    allianceId,
+    allianceName,
+    addedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'corporations';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Corporation> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('ticker')) {
+      context.handle(
+        _tickerMeta,
+        ticker.isAcceptableOrUnknown(data['ticker']!, _tickerMeta),
+      );
+    }
+    if (data.containsKey('ceo_id')) {
+      context.handle(
+        _ceoIdMeta,
+        ceoId.isAcceptableOrUnknown(data['ceo_id']!, _ceoIdMeta),
+      );
+    }
+    if (data.containsKey('ceo_name')) {
+      context.handle(
+        _ceoNameMeta,
+        ceoName.isAcceptableOrUnknown(data['ceo_name']!, _ceoNameMeta),
+      );
+    }
+    if (data.containsKey('alliance_id')) {
+      context.handle(
+        _allianceIdMeta,
+        allianceId.isAcceptableOrUnknown(data['alliance_id']!, _allianceIdMeta),
+      );
+    }
+    if (data.containsKey('alliance_name')) {
+      context.handle(
+        _allianceNameMeta,
+        allianceName.isAcceptableOrUnknown(
+          data['alliance_name']!,
+          _allianceNameMeta,
+        ),
+      );
+    }
+    if (data.containsKey('added_at')) {
+      context.handle(
+        _addedAtMeta,
+        addedAt.isAcceptableOrUnknown(data['added_at']!, _addedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_addedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Corporation map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Corporation(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      ticker: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ticker'],
+      ),
+      ceoId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}ceo_id'],
+      ),
+      ceoName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ceo_name'],
+      ),
+      allianceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}alliance_id'],
+      ),
+      allianceName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}alliance_name'],
+      ),
+      addedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}added_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CorporationsTable createAlias(String alias) {
+    return $CorporationsTable(attachedDatabase, alias);
+  }
+}
+
+class Corporation extends DataClass implements Insertable<Corporation> {
+  final int id;
+  final String name;
+  final String? ticker;
+  final int? ceoId;
+  final String? ceoName;
+  final int? allianceId;
+  final String? allianceName;
+  final DateTime addedAt;
+  const Corporation({
+    required this.id,
+    required this.name,
+    this.ticker,
+    this.ceoId,
+    this.ceoName,
+    this.allianceId,
+    this.allianceName,
+    required this.addedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || ticker != null) {
+      map['ticker'] = Variable<String>(ticker);
+    }
+    if (!nullToAbsent || ceoId != null) {
+      map['ceo_id'] = Variable<int>(ceoId);
+    }
+    if (!nullToAbsent || ceoName != null) {
+      map['ceo_name'] = Variable<String>(ceoName);
+    }
+    if (!nullToAbsent || allianceId != null) {
+      map['alliance_id'] = Variable<int>(allianceId);
+    }
+    if (!nullToAbsent || allianceName != null) {
+      map['alliance_name'] = Variable<String>(allianceName);
+    }
+    map['added_at'] = Variable<DateTime>(addedAt);
+    return map;
+  }
+
+  CorporationsCompanion toCompanion(bool nullToAbsent) {
+    return CorporationsCompanion(
+      id: Value(id),
+      name: Value(name),
+      ticker: ticker == null && nullToAbsent
+          ? const Value.absent()
+          : Value(ticker),
+      ceoId: ceoId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(ceoId),
+      ceoName: ceoName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(ceoName),
+      allianceId: allianceId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(allianceId),
+      allianceName: allianceName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(allianceName),
+      addedAt: Value(addedAt),
+    );
+  }
+
+  factory Corporation.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Corporation(
+      id: serializer.fromJson<int>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      ticker: serializer.fromJson<String?>(json['ticker']),
+      ceoId: serializer.fromJson<int?>(json['ceoId']),
+      ceoName: serializer.fromJson<String?>(json['ceoName']),
+      allianceId: serializer.fromJson<int?>(json['allianceId']),
+      allianceName: serializer.fromJson<String?>(json['allianceName']),
+      addedAt: serializer.fromJson<DateTime>(json['addedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'name': serializer.toJson<String>(name),
+      'ticker': serializer.toJson<String?>(ticker),
+      'ceoId': serializer.toJson<int?>(ceoId),
+      'ceoName': serializer.toJson<String?>(ceoName),
+      'allianceId': serializer.toJson<int?>(allianceId),
+      'allianceName': serializer.toJson<String?>(allianceName),
+      'addedAt': serializer.toJson<DateTime>(addedAt),
+    };
+  }
+
+  Corporation copyWith({
+    int? id,
+    String? name,
+    Value<String?> ticker = const Value.absent(),
+    Value<int?> ceoId = const Value.absent(),
+    Value<String?> ceoName = const Value.absent(),
+    Value<int?> allianceId = const Value.absent(),
+    Value<String?> allianceName = const Value.absent(),
+    DateTime? addedAt,
+  }) => Corporation(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    ticker: ticker.present ? ticker.value : this.ticker,
+    ceoId: ceoId.present ? ceoId.value : this.ceoId,
+    ceoName: ceoName.present ? ceoName.value : this.ceoName,
+    allianceId: allianceId.present ? allianceId.value : this.allianceId,
+    allianceName: allianceName.present ? allianceName.value : this.allianceName,
+    addedAt: addedAt ?? this.addedAt,
+  );
+  Corporation copyWithCompanion(CorporationsCompanion data) {
+    return Corporation(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      ticker: data.ticker.present ? data.ticker.value : this.ticker,
+      ceoId: data.ceoId.present ? data.ceoId.value : this.ceoId,
+      ceoName: data.ceoName.present ? data.ceoName.value : this.ceoName,
+      allianceId: data.allianceId.present
+          ? data.allianceId.value
+          : this.allianceId,
+      allianceName: data.allianceName.present
+          ? data.allianceName.value
+          : this.allianceName,
+      addedAt: data.addedAt.present ? data.addedAt.value : this.addedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Corporation(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('ticker: $ticker, ')
+          ..write('ceoId: $ceoId, ')
+          ..write('ceoName: $ceoName, ')
+          ..write('allianceId: $allianceId, ')
+          ..write('allianceName: $allianceName, ')
+          ..write('addedAt: $addedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    ticker,
+    ceoId,
+    ceoName,
+    allianceId,
+    allianceName,
+    addedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Corporation &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.ticker == this.ticker &&
+          other.ceoId == this.ceoId &&
+          other.ceoName == this.ceoName &&
+          other.allianceId == this.allianceId &&
+          other.allianceName == this.allianceName &&
+          other.addedAt == this.addedAt);
+}
+
+class CorporationsCompanion extends UpdateCompanion<Corporation> {
+  final Value<int> id;
+  final Value<String> name;
+  final Value<String?> ticker;
+  final Value<int?> ceoId;
+  final Value<String?> ceoName;
+  final Value<int?> allianceId;
+  final Value<String?> allianceName;
+  final Value<DateTime> addedAt;
+  const CorporationsCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.ticker = const Value.absent(),
+    this.ceoId = const Value.absent(),
+    this.ceoName = const Value.absent(),
+    this.allianceId = const Value.absent(),
+    this.allianceName = const Value.absent(),
+    this.addedAt = const Value.absent(),
+  });
+  CorporationsCompanion.insert({
+    this.id = const Value.absent(),
+    required String name,
+    this.ticker = const Value.absent(),
+    this.ceoId = const Value.absent(),
+    this.ceoName = const Value.absent(),
+    this.allianceId = const Value.absent(),
+    this.allianceName = const Value.absent(),
+    required DateTime addedAt,
+  }) : name = Value(name),
+       addedAt = Value(addedAt);
+  static Insertable<Corporation> custom({
+    Expression<int>? id,
+    Expression<String>? name,
+    Expression<String>? ticker,
+    Expression<int>? ceoId,
+    Expression<String>? ceoName,
+    Expression<int>? allianceId,
+    Expression<String>? allianceName,
+    Expression<DateTime>? addedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (ticker != null) 'ticker': ticker,
+      if (ceoId != null) 'ceo_id': ceoId,
+      if (ceoName != null) 'ceo_name': ceoName,
+      if (allianceId != null) 'alliance_id': allianceId,
+      if (allianceName != null) 'alliance_name': allianceName,
+      if (addedAt != null) 'added_at': addedAt,
+    });
+  }
+
+  CorporationsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? name,
+    Value<String?>? ticker,
+    Value<int?>? ceoId,
+    Value<String?>? ceoName,
+    Value<int?>? allianceId,
+    Value<String?>? allianceName,
+    Value<DateTime>? addedAt,
+  }) {
+    return CorporationsCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      ticker: ticker ?? this.ticker,
+      ceoId: ceoId ?? this.ceoId,
+      ceoName: ceoName ?? this.ceoName,
+      allianceId: allianceId ?? this.allianceId,
+      allianceName: allianceName ?? this.allianceName,
+      addedAt: addedAt ?? this.addedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (ticker.present) {
+      map['ticker'] = Variable<String>(ticker.value);
+    }
+    if (ceoId.present) {
+      map['ceo_id'] = Variable<int>(ceoId.value);
+    }
+    if (ceoName.present) {
+      map['ceo_name'] = Variable<String>(ceoName.value);
+    }
+    if (allianceId.present) {
+      map['alliance_id'] = Variable<int>(allianceId.value);
+    }
+    if (allianceName.present) {
+      map['alliance_name'] = Variable<String>(allianceName.value);
+    }
+    if (addedAt.present) {
+      map['added_at'] = Variable<DateTime>(addedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CorporationsCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('ticker: $ticker, ')
+          ..write('ceoId: $ceoId, ')
+          ..write('ceoName: $ceoName, ')
+          ..write('allianceId: $allianceId, ')
+          ..write('allianceName: $allianceName, ')
+          ..write('addedAt: $addedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -1456,6 +1960,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $EsiCacheTable esiCache = $EsiCacheTable(this);
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
   late final $PriceAlertsTable priceAlerts = $PriceAlertsTable(this);
+  late final $CorporationsTable corporations = $CorporationsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -1465,6 +1970,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     esiCache,
     appSettings,
     priceAlerts,
+    corporations,
   ];
 }
 
@@ -2257,6 +2763,261 @@ typedef $$PriceAlertsTableProcessedTableManager =
       PriceAlert,
       PrefetchHooks Function()
     >;
+typedef $$CorporationsTableCreateCompanionBuilder =
+    CorporationsCompanion Function({
+      Value<int> id,
+      required String name,
+      Value<String?> ticker,
+      Value<int?> ceoId,
+      Value<String?> ceoName,
+      Value<int?> allianceId,
+      Value<String?> allianceName,
+      required DateTime addedAt,
+    });
+typedef $$CorporationsTableUpdateCompanionBuilder =
+    CorporationsCompanion Function({
+      Value<int> id,
+      Value<String> name,
+      Value<String?> ticker,
+      Value<int?> ceoId,
+      Value<String?> ceoName,
+      Value<int?> allianceId,
+      Value<String?> allianceName,
+      Value<DateTime> addedAt,
+    });
+
+class $$CorporationsTableFilterComposer
+    extends Composer<_$AppDatabase, $CorporationsTable> {
+  $$CorporationsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get ticker => $composableBuilder(
+    column: $table.ticker,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get ceoId => $composableBuilder(
+    column: $table.ceoId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get ceoName => $composableBuilder(
+    column: $table.ceoName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get allianceId => $composableBuilder(
+    column: $table.allianceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get allianceName => $composableBuilder(
+    column: $table.allianceName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get addedAt => $composableBuilder(
+    column: $table.addedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CorporationsTableOrderingComposer
+    extends Composer<_$AppDatabase, $CorporationsTable> {
+  $$CorporationsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get ticker => $composableBuilder(
+    column: $table.ticker,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get ceoId => $composableBuilder(
+    column: $table.ceoId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get ceoName => $composableBuilder(
+    column: $table.ceoName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get allianceId => $composableBuilder(
+    column: $table.allianceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get allianceName => $composableBuilder(
+    column: $table.allianceName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get addedAt => $composableBuilder(
+    column: $table.addedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CorporationsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CorporationsTable> {
+  $$CorporationsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get ticker =>
+      $composableBuilder(column: $table.ticker, builder: (column) => column);
+
+  GeneratedColumn<int> get ceoId =>
+      $composableBuilder(column: $table.ceoId, builder: (column) => column);
+
+  GeneratedColumn<String> get ceoName =>
+      $composableBuilder(column: $table.ceoName, builder: (column) => column);
+
+  GeneratedColumn<int> get allianceId => $composableBuilder(
+    column: $table.allianceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get allianceName => $composableBuilder(
+    column: $table.allianceName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get addedAt =>
+      $composableBuilder(column: $table.addedAt, builder: (column) => column);
+}
+
+class $$CorporationsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CorporationsTable,
+          Corporation,
+          $$CorporationsTableFilterComposer,
+          $$CorporationsTableOrderingComposer,
+          $$CorporationsTableAnnotationComposer,
+          $$CorporationsTableCreateCompanionBuilder,
+          $$CorporationsTableUpdateCompanionBuilder,
+          (
+            Corporation,
+            BaseReferences<_$AppDatabase, $CorporationsTable, Corporation>,
+          ),
+          Corporation,
+          PrefetchHooks Function()
+        > {
+  $$CorporationsTableTableManager(_$AppDatabase db, $CorporationsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CorporationsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CorporationsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CorporationsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String?> ticker = const Value.absent(),
+                Value<int?> ceoId = const Value.absent(),
+                Value<String?> ceoName = const Value.absent(),
+                Value<int?> allianceId = const Value.absent(),
+                Value<String?> allianceName = const Value.absent(),
+                Value<DateTime> addedAt = const Value.absent(),
+              }) => CorporationsCompanion(
+                id: id,
+                name: name,
+                ticker: ticker,
+                ceoId: ceoId,
+                ceoName: ceoName,
+                allianceId: allianceId,
+                allianceName: allianceName,
+                addedAt: addedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String name,
+                Value<String?> ticker = const Value.absent(),
+                Value<int?> ceoId = const Value.absent(),
+                Value<String?> ceoName = const Value.absent(),
+                Value<int?> allianceId = const Value.absent(),
+                Value<String?> allianceName = const Value.absent(),
+                required DateTime addedAt,
+              }) => CorporationsCompanion.insert(
+                id: id,
+                name: name,
+                ticker: ticker,
+                ceoId: ceoId,
+                ceoName: ceoName,
+                allianceId: allianceId,
+                allianceName: allianceName,
+                addedAt: addedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CorporationsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CorporationsTable,
+      Corporation,
+      $$CorporationsTableFilterComposer,
+      $$CorporationsTableOrderingComposer,
+      $$CorporationsTableAnnotationComposer,
+      $$CorporationsTableCreateCompanionBuilder,
+      $$CorporationsTableUpdateCompanionBuilder,
+      (
+        Corporation,
+        BaseReferences<_$AppDatabase, $CorporationsTable, Corporation>,
+      ),
+      Corporation,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -2269,4 +3030,6 @@ class $AppDatabaseManager {
       $$AppSettingsTableTableManager(_db, _db.appSettings);
   $$PriceAlertsTableTableManager get priceAlerts =>
       $$PriceAlertsTableTableManager(_db, _db.priceAlerts);
+  $$CorporationsTableTableManager get corporations =>
+      $$CorporationsTableTableManager(_db, _db.corporations);
 }
