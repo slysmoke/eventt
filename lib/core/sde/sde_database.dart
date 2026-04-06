@@ -217,5 +217,155 @@ class SdeDatabase {
     };
   }
 
+  /// Resolves a location ID to its full hierarchy: region → system → station.
+  /// Returns null for player structures (citadels) not in SDE.
+  LocationHierarchy? getLocationHierarchy(int locationId) {
+    // Try CCP stations first (staStations has solarSystemID)
+    final stationRow = _db.select(
+      'SELECT stationID, stationName, solarSystemID FROM staStations WHERE stationID = ?',
+      [locationId],
+    ).firstOrNull;
+
+    if (stationRow != null) {
+      final systemId = stationRow['solarSystemID'] as int;
+      final systemRow = _db.select(
+        'SELECT solarSystemID, solarSystemName, constellationID FROM mapSolarSystems WHERE solarSystemID = ?',
+        [systemId],
+      ).firstOrNull;
+
+      if (systemRow != null) {
+        final constellationId = systemRow['constellationID'] as int;
+        final constRow = _db.select(
+          'SELECT constellationID, regionID FROM mapConstellations WHERE constellationID = ?',
+          [constellationId],
+        ).firstOrNull;
+
+        if (constRow != null) {
+          final regionId = constRow['regionID'] as int;
+          final regionRow = _db.select(
+            'SELECT regionID, regionName FROM mapRegions WHERE regionID = ?',
+            [regionId],
+          ).firstOrNull;
+
+          return LocationHierarchy(
+            regionId: regionId,
+            regionName: regionRow != null ? regionRow['regionName'] as String : 'Region #$regionId',
+            systemId: systemId,
+            systemName: systemRow['solarSystemName'] as String,
+            stationName: stationRow['stationName'] as String,
+          );
+        }
+      }
+    }
+
+    // Try solar systems (assets can be located directly in a system)
+    final systemRow = _db.select(
+      'SELECT solarSystemID, solarSystemName, constellationID FROM mapSolarSystems WHERE solarSystemID = ?',
+      [locationId],
+    ).firstOrNull;
+
+    if (systemRow != null) {
+      final systemId = systemRow['solarSystemID'] as int;
+      final constellationId = systemRow['constellationID'] as int;
+      final constRow = _db.select(
+        'SELECT constellationID, regionID FROM mapConstellations WHERE constellationID = ?',
+        [constellationId],
+      ).firstOrNull;
+
+      if (constRow != null) {
+        final regionId = constRow['regionID'] as int;
+        final regionRow = _db.select(
+          'SELECT regionID, regionName FROM mapRegions WHERE regionID = ?',
+          [regionId],
+        ).firstOrNull;
+
+        return LocationHierarchy(
+          regionId: regionId,
+          regionName: regionRow != null ? regionRow['regionName'] as String : 'Region #$regionId',
+          systemId: systemId,
+          systemName: systemRow['solarSystemName'] as String,
+          stationName: null, // system-level asset
+        );
+      }
+    }
+
+    return null; // player structure or unknown
+  }
+
+  /// Batch resolves location IDs to hierarchies.
+  Map<int, LocationHierarchy> getLocationHierarchies(List<int> locationIds) {
+    if (locationIds.isEmpty) return {};
+
+    final result = <int, LocationHierarchy>{};
+    final placeholders = locationIds.map((_) => '?').join(',');
+
+    // Stations with their system info
+    final stationRows = _db.select('''
+      SELECT st.stationID, st.stationName, st.solarSystemID,
+             ss.solarSystemName, ss.constellationID,
+             c.regionID, r.regionName
+      FROM staStations st
+      JOIN mapSolarSystems ss ON ss.solarSystemID = st.solarSystemID
+      JOIN mapConstellations c ON c.constellationID = ss.constellationID
+      JOIN mapRegions r ON r.regionID = c.regionID
+      WHERE st.stationID IN ($placeholders)
+    ''', locationIds);
+
+    for (final row in stationRows) {
+      final id = row['stationID'] as int;
+      result[id] = LocationHierarchy(
+        regionId: row['regionID'] as int,
+        regionName: row['regionName'] as String,
+        systemId: row['solarSystemID'] as int,
+        systemName: row['solarSystemName'] as String,
+        stationName: row['stationName'] as String,
+      );
+    }
+
+    // Systems (not found as stations)
+    final unresolvedIds = locationIds.where((id) => !result.containsKey(id)).toList();
+    if (unresolvedIds.isNotEmpty) {
+      final sysPlaceholders = unresolvedIds.map((_) => '?').join(',');
+      final sysRows = _db.select('''
+        SELECT ss.solarSystemID, ss.solarSystemName, ss.constellationID,
+               c.regionID, r.regionName
+        FROM mapSolarSystems ss
+        JOIN mapConstellations c ON c.constellationID = ss.constellationID
+        JOIN mapRegions r ON r.regionID = c.regionID
+        WHERE ss.solarSystemID IN ($sysPlaceholders)
+      ''', unresolvedIds);
+
+      for (final row in sysRows) {
+        final id = row['solarSystemID'] as int;
+        result[id] = LocationHierarchy(
+          regionId: row['regionID'] as int,
+          regionName: row['regionName'] as String,
+          systemId: id,
+          systemName: row['solarSystemName'] as String,
+          stationName: null,
+        );
+      }
+    }
+
+    return result;
+  }
+
   void close() => _db.dispose();
+}
+
+/// Full location hierarchy from SDE.
+class LocationHierarchy {
+  final int regionId;
+  final String regionName;
+  final int systemId;
+  final String systemName;
+  final String? stationName;
+
+  const LocationHierarchy({
+    required this.regionId,
+    required this.regionName,
+    required this.systemId,
+    required this.systemName,
+    this.stationName,
+  });
 }

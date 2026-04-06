@@ -216,3 +216,6 @@ SDE таблицы (из Evernus): `invTypes`, `invGroups`, `invMarketGroups`, `
 - `Evernus/TypeAggregatedDetailsFilterWidget.cpp` — параметры аналитики (SMA, MACD)
 - `Evernus/ImportingDataModel.cpp` — расчёт отклонений и аналитика импорта
 - `Evernus/EveDatabaseUpdater.cpp` — логика обновления SDE
+
+## Qwen Added Memories
+- Имена регионов, предметов (types), солнечных систем и станций уже есть в SDE базе данных (eve.db). Не нужно делать ESI запросы для их разрешения. Таблицы SDE: invTypes (type_id → typeName), mapRegions (region_id → regionName), mapConstellations (constellation_id → constellationName), mapSolarSystems (system_id → solarSystemName), staStations (station_id → stationName). Для location_id ассетов: CCP станции имеют ID 60000001-61000000 или 66000000-66014933 (offset -6000001 для staStations). Player structures (citadels) нет в SDE — для них нужен ESI /universe/structures/.
