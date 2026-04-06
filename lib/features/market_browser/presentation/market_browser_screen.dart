@@ -12,6 +12,7 @@ import '../../../core/sde/sde_models.dart';
 import '../../../core/sde/sde_provider.dart';
 import '../../../core/sde/sde_database.dart';
 import 'price_alerts_panel.dart';
+import '../../../core/alerts/price_alert_service.dart';
 import '../../market_analysis/data/market_history_entry.dart';
 import '../../market_analysis/data/market_history_repository.dart';
 import '../../market_analysis/domain/market_indicators.dart';
@@ -57,6 +58,22 @@ final _marketOrdersProvider =
   if (type == null) return [];
   final regionId = ref.watch(_selectedRegionProvider);
   return ref.watch(_marketOrderRepoProvider).fetchOrders(regionId, type.typeId);
+});
+
+// Auto-check alerts when orders are fetched
+final _alertCheckOnOrdersProvider = FutureProvider.autoDispose<void>((ref) async {
+  final orders = ref.watch(_marketOrdersProvider);
+  orders.whenData((ordersList) {
+    if (ordersList.isEmpty) return;
+    final db = ref.watch(databaseProvider);
+    final esi = ref.watch(esiClientProvider);
+    final service = PriceAlertService(db: db, esi: esi);
+    service.checkAlerts().then((triggered) {
+      for (final msg in triggered) {
+        service.showNotification(msg);
+      }
+    });
+  });
 });
 
 final _marketHistoryRepoProvider = Provider<MarketHistoryRepository>((ref) {
@@ -254,17 +271,42 @@ class _BrowserLayoutState extends ConsumerState<_BrowserLayout>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   bool _showAlertsPanel = false;
+  Timer? _alertCheckTimer;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    // Periodic alert check every 5 minutes
+    _alertCheckTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      _checkAllAlerts();
+    });
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _alertCheckTimer?.cancel();
     super.dispose();
+  }
+
+  void _checkAllAlerts() {
+    final db = ref.read(databaseProvider);
+    final esi = ref.read(esiClientProvider);
+    final service = PriceAlertService(db: db, esi: esi);
+    service.checkAlerts().then((triggered) {
+      for (final msg in triggered) {
+        service.showNotification(msg);
+      }
+      if (mounted && triggered.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${triggered.length} price alert(s) triggered!'),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    });
   }
 
   @override
@@ -806,6 +848,8 @@ class _OrderBookPanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final type = ref.watch(_selectedTypeProvider);
     final ordersAsync = ref.watch(_marketOrdersProvider);
+    // Auto-check alerts when orders are fetched
+    ref.watch(_alertCheckOnOrdersProvider);
     final theme = Theme.of(context);
 
     if (type == null) {
