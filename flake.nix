@@ -28,6 +28,7 @@
           libsecret
           gtk3
           sysprof
+          libsysprof-capture
           glib
           sqlite
           keybinder3
@@ -40,7 +41,7 @@
           buildInputs = buildInputs;
 
           shellHook = ''
-            export PKG_CONFIG_PATH="${pkgs.sysprof.dev}/lib/pkgconfig:${pkgs.glib.dev}/lib/pkgconfig:${pkgs.keybinder3}/lib/pkgconfig:$PKG_CONFIG_PATH"
+            export PKG_CONFIG_PATH="${pkgs.sysprof.dev}/lib/pkgconfig:${pkgs.libsysprof-capture}/lib/pkgconfig:${pkgs.glib.dev}/lib/pkgconfig:${pkgs.keybinder3}/lib/pkgconfig:$PKG_CONFIG_PATH"
             export LD_LIBRARY_PATH="${pkgs.sqlite.out}/lib:$LD_LIBRARY_PATH"
             echo "--- EVE NTT Environment Ready ---"
           '';
@@ -64,6 +65,7 @@
             libsecret
             gtk3
             sysprof
+            libsysprof-capture
             glib
             sqlite
             keybinder3

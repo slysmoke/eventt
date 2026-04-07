@@ -45,9 +45,12 @@ jobs:
   # macOS x86_64 — DMG
   # ──────────────────────────────────────────────────────────────────────────────
   macos-x86_64:
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Rosetta 2
+        run: softwareupdate --install-rosetta --agree-to-license
 
       - uses: subosito/flutter-action@v2
         with:
