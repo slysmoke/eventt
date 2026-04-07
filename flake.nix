@@ -46,7 +46,7 @@
           '';
         };
 
-        # Linux package - builds AppImage
+        # Linux package - builds Flutter bundle
         packages.linux = pkgs.stdenv.mkDerivation {
           pname = "eve-ntt";
           inherit version;
@@ -57,7 +57,6 @@
             flutter
             ninja
             pkg-config
-            appimagekit
             python3
           ];
 
@@ -91,35 +90,8 @@
           installPhase = ''
             runHook preInstall
 
-            # Create AppDir structure
-            APPDIR=$out/AppDir
-            mkdir -p $APPDIR/usr/bin
-            mkdir -p $APPDIR/usr/lib
-            mkdir -p $APPDIR/usr/share/applications
-            mkdir -p $APPDIR/usr/share/icons/hicolor/128x128/apps
-
-            cp -r build/linux/x64/release/bundle/* $APPDIR/usr/bin/
-
-            # Bundle libsqlite3
-            cp ${pkgs.sqlite.out}/lib/libsqlite3.so.0 $APPDIR/usr/lib/
-            ln -sf libsqlite3.so.0 $APPDIR/usr/lib/libsqlite3.so
-
-            # Create desktop entry
-            cat > $APPDIR/usr/share/applications/eve_ntt.desktop << 'EOF'
-            [Desktop Entry]
-            Name=EVE Night Trade Tools
-            Exec=eve_ntt
-            Icon=eve_ntt
-            Type=Application
-            Categories=Game;
-            EOF
-
-            # Generate icon using external script
-            python3 ${./scripts/generate_icon.py} $APPDIR/usr/share/icons/hicolor/128x128/apps/eve_ntt.png
-
-            # Build AppImage
-            export ARCH=x86_64
-            appimagetool $APPDIR $out/eve-ntt-${version}-x86_64.AppImage
+            # Copy the Flutter bundle to output
+            cp -r build/linux/x64/release/bundle/* $out/
 
             runHook postInstall
           '';

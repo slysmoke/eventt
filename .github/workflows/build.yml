@@ -23,7 +23,7 @@ jobs:
       - name: Enable Nix Magic Cache
         uses: DeterminateSystems/magic-nix-cache-action@v9
 
-      - name: Build Linux AppImage with Nix
+      - name: Build Linux bundle with Nix
         run: |
           nix build .#linux \
             --option accept-flake-config true \
@@ -32,11 +32,41 @@ jobs:
           EVE_CLIENT_ID: ${{ secrets.EVE_CLIENT_ID }}
           EVE_CLIENT_SECRET: ${{ secrets.EVE_CLIENT_SECRET }}
 
+      - name: Generate AppImage
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          # Download linuxdeploy
+          wget --no-verbose https://github.com/linuxdeploy/linuxdeploy/releases/latest/download/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage
+
+          # Create AppDir from Nix build output
+          mkdir -p appimage/usr
+          cp -r result/* appimage/usr/
+
+          # Create desktop entry
+          mkdir -p appimage/usr/share/applications
+          cat > appimage/usr/share/applications/eve_ntt.desktop << 'EOF'
+          [Desktop Entry]
+          Name=EVE Night Trade Tools
+          Exec=eve_ntt
+          Icon=eve_ntt
+          Type=Application
+          Categories=Game;
+          EOF
+
+          # Generate icon
+          mkdir -p appimage/usr/share/icons/hicolor/128x128/apps
+          python3 scripts/generate_icon.py appimage/usr/share/icons/hicolor/128x128/apps/eve_ntt.png
+
+          # Build AppImage
+          ./linuxdeploy-x86_64.AppImage --appdir appimage --output appimage
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: eve_ntt-linux
-          path: result/eve-ntt-*.AppImage
+          path: EVE_Night_Trade_Tools-*.AppImage
 
   # ──────────────────────────────────────────────
   # Windows — ZIP (Flutter native build)
