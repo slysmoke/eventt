@@ -24,13 +24,21 @@ mkdir -p AppDir/usr/bin \
 # Main executable
 cp "$BUNDLE/eve_ntt" AppDir/usr/bin/
 
-# Flutter bundle .so files (libflutter_linux_gtk.so, libapp.so, plugin libs)
+# Flutter lib/ and data/ must sit next to the executable so the Flutter engine
+# can find libapp.so (AOT snapshot) and icudtl.dat at runtime:
+#   <exe_dir>/lib/libapp.so
+#   <exe_dir>/data/flutter_assets/…
+mkdir -p AppDir/usr/bin/lib
 if [ -d "$BUNDLE/lib" ]; then
-  find "$BUNDLE/lib" -name '*.so*' -exec cp {} AppDir/usr/lib/ \;
+  find "$BUNDLE/lib" -name '*.so*' -exec cp {} AppDir/usr/bin/lib/ \;
 fi
+cp -r "$BUNDLE/data" AppDir/usr/bin/data
 
-# Flutter data directory (assets, icudtl.dat, fonts, etc.)
-cp -r "$BUNDLE/data" AppDir/usr/
+# Mirror Flutter .so to AppDir/usr/lib so linuxdeploy can find and bundle
+# their transitive system dependencies (e.g. libgtk, libsecret, etc.)
+if [ -d "$BUNDLE/lib" ]; then
+  find "$BUNDLE/lib" -name '*.so*' -exec cp -n {} AppDir/usr/lib/ \;
+fi
 
 # ── 3. Desktop entry ──────────────────────────────────────────────────────────
 cat > AppDir/usr/share/applications/eve_ntt.desktop <<'DESKTOP'
@@ -50,9 +58,9 @@ python3 scripts/generate_icon.py \
 # APPIMAGE_EXTRACT_AND_RUN avoids FUSE requirement in CI sandbox.
 export APPIMAGE_EXTRACT_AND_RUN=1
 
-# Flutter plugin .so files are not installed system-wide; expose them to ldd
-# so linuxdeploy can resolve dependencies of the eve_ntt binary.
-export LD_LIBRARY_PATH="$(pwd)/AppDir/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+# Flutter plugin .so files are not installed system-wide; expose both lib dirs
+# to ldd so linuxdeploy can resolve all dependencies.
+export LD_LIBRARY_PATH="$(pwd)/AppDir/usr/bin/lib:$(pwd)/AppDir/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 ./linuxdeploy-x86_64.AppImage \
   --appdir AppDir \
