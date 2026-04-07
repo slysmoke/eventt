@@ -618,7 +618,7 @@ class _SettingsPanelState extends ConsumerState<_SettingsPanel> {
   }
 
   Future<void> _pickDir() async {
-    final result = await FilePicker.platform.getDirectoryPath(
+    final result = await FilePicker.getDirectoryPath(
       dialogTitle: 'Select EVE Market Logs directory',
     );
     if (result != null) {
