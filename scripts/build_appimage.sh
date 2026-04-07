@@ -40,6 +40,35 @@ if [ -d "$BUNDLE/lib" ]; then
   find "$BUNDLE/lib" -name '*.so*' -exec cp -n {} AppDir/usr/lib/ \;
 fi
 
+# Explicitly bundle libsqlite3.so into the AppImage.
+# The sqlite3 package on Linux loads via DynamicLibrary.open('libsqlite3.so'),
+# which searches LD_LIBRARY_PATH and standard paths. We put it in both lib dirs.
+SQLITE3_SYSTEM="$(pkg-config --libs-only-L sqlite3 2>/dev/null | sed 's/^-L//' | head -1)"
+if [ -n "$SQLITE3_SYSTEM" ] && [ -d "$SQLITE3_SYSTEM" ]; then
+  SQLITE3_LIB="$(find "$SQLITE3_SYSTEM" -name 'libsqlite3.so*' | head -1)"
+  if [ -n "$SQLITE3_LIB" ]; then
+    echo "Bundling libsqlite3.so from: $SQLITE3_LIB"
+    cp "$SQLITE3_LIB" AppDir/usr/bin/lib/
+    cp "$SQLITE3_LIB" AppDir/usr/lib/
+  fi
+fi
+
+# Fallback: try common system paths if pkg-config didn't find it
+if [ ! -f AppDir/usr/bin/lib/libsqlite3.so* ]; then
+  for candidate in \
+    /usr/lib/x86_64-linux-gnu/libsqlite3.so.0 \
+    /usr/lib/x86_64-linux-gnu/libsqlite3.so \
+    /usr/lib64/libsqlite3.so.0 \
+    /usr/lib64/libsqlite3.so; do
+    if [ -f "$candidate" ]; then
+      echo "Bundling libsqlite3.so from: $candidate"
+      cp "$candidate" AppDir/usr/bin/lib/
+      cp "$candidate" AppDir/usr/lib/
+      break
+    fi
+  done
+fi
+
 # ── 3. Desktop entry ──────────────────────────────────────────────────────────
 cat > AppDir/usr/share/applications/eve_ntt.desktop <<'DESKTOP'
 [Desktop Entry]
