@@ -57,3 +57,7 @@ dart_defines.json
 .qwen/
 2026-*-this-session-*.txt
 Evernus/
+
+# Nix build artifacts
+result
+result-*
