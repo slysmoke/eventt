@@ -9,9 +9,9 @@ permissions:
   contents: write
 
 jobs:
-  # ──────────────────────────────────────────────
-  # Linux — AppImage (via Nix)
-  # ──────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────────────────────
+  # Linux — AppImage (Nix devshell for reproducible library bundling)
+  # ──────────────────────────────────────────────────────────────────────────────
   linux:
     runs-on: ubuntu-22.04
     steps:
@@ -23,145 +23,176 @@ jobs:
       - name: Enable Nix Magic Cache
         uses: DeterminateSystems/magic-nix-cache-action@v9
 
-      - name: Build Linux bundle with Nix
+      - name: Download linuxdeploy
         run: |
-          nix build .#linux \
-            --option accept-flake-config true \
-            --print-build-logs
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage
+
+      - name: Build AppImage
+        # Script runs inside nix develop so ldd sees Nix-store libs (keybinder, libsecret, etc.)
+        run: nix develop --command bash scripts/build_appimage.sh
         env:
           EVE_CLIENT_ID: ${{ secrets.EVE_CLIENT_ID }}
           EVE_CLIENT_SECRET: ${{ secrets.EVE_CLIENT_SECRET }}
-
-      - name: Generate AppImage
-        env:
           VERSION: ${{ github.ref_name }}
-        run: |
-          # Download linuxdeploy
-          wget --no-verbose https://github.com/linuxdeploy/linuxdeploy/releases/latest/download/linuxdeploy-x86_64.AppImage
-          chmod +x linuxdeploy-x86_64.AppImage
 
-          # Create AppDir from Nix build output
-          mkdir -p appimage/usr
-          cp -r result/* appimage/usr/
-
-          # Create desktop entry
-          mkdir -p appimage/usr/share/applications
-          cat > appimage/usr/share/applications/eve_ntt.desktop << 'EOF'
-          [Desktop Entry]
-          Name=EVE Night Trade Tools
-          Exec=eve_ntt
-          Icon=eve_ntt
-          Type=Application
-          Categories=Game;
-          EOF
-
-          # Generate icon
-          mkdir -p appimage/usr/share/icons/hicolor/128x128/apps
-          python3 scripts/generate_icon.py appimage/usr/share/icons/hicolor/128x128/apps/eve_ntt.png
-
-          # Build AppImage
-          ./linuxdeploy-x86_64.AppImage --appdir appimage --output appimage
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: eve_ntt-linux
-          path: EVE_Night_Trade_Tools-*.AppImage
+          path: eve_ntt-*-linux-x86_64.AppImage
 
-  # ──────────────────────────────────────────────
-  # Windows — ZIP (Flutter native build)
-  # ──────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────────────────────
+  # macOS x86_64 — DMG
+  # ──────────────────────────────────────────────────────────────────────────────
+  macos-x86_64:
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          architecture: x64
+
+      - name: Build macOS x86_64
+        run: |
+          flutter config --enable-macos-desktop
+          flutter pub get
+          flutter build macos --release \
+            --dart-define=EVE_CLIENT_ID=${{ secrets.EVE_CLIENT_ID }} \
+            --dart-define=EVE_CLIENT_SECRET=${{ secrets.EVE_CLIENT_SECRET }}
+
+      - name: Create DMG
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          APP=$(find build/macos/Build/Products/Release -name "*.app" -maxdepth 1 -type d | head -1)
+          if [ -z "$APP" ]; then
+            echo "ERROR: .app bundle not found" >&2
+            find build/macos -name "*.app" -type d
+            exit 1
+          fi
+          echo "Packaging: $APP"
+          hdiutil create -volname "EVE NTT" -srcfolder "$APP" -ov -format UDZO \
+            "eve_ntt-${VERSION}-macos-x86_64.dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eve_ntt-macos-x86_64
+          path: eve_ntt-*-macos-x86_64.dmg
+
+  # ──────────────────────────────────────────────────────────────────────────────
+  # macOS arm64 — DMG
+  # ──────────────────────────────────────────────────────────────────────────────
+  macos-arm64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          architecture: arm64
+
+      - name: Build macOS arm64
+        run: |
+          flutter config --enable-macos-desktop
+          flutter pub get
+          flutter build macos --release \
+            --dart-define=EVE_CLIENT_ID=${{ secrets.EVE_CLIENT_ID }} \
+            --dart-define=EVE_CLIENT_SECRET=${{ secrets.EVE_CLIENT_SECRET }}
+
+      - name: Create DMG
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          APP=$(find build/macos/Build/Products/Release -name "*.app" -maxdepth 1 -type d | head -1)
+          if [ -z "$APP" ]; then
+            echo "ERROR: .app bundle not found" >&2
+            find build/macos -name "*.app" -type d
+            exit 1
+          fi
+          echo "Packaging: $APP"
+          hdiutil create -volname "EVE NTT" -srcfolder "$APP" -ov -format UDZO \
+            "eve_ntt-${VERSION}-macos-arm64.dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eve_ntt-macos-arm64
+          path: eve_ntt-*-macos-arm64.dmg
+
+  # ──────────────────────────────────────────────────────────────────────────────
+  # Windows — Inno Setup installer (.exe)
+  # ──────────────────────────────────────────────────────────────────────────────
   windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v16
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          architecture: x64
 
-      - name: Enable Nix Magic Cache
-        uses: DeterminateSystems/magic-nix-cache-action@v9
-
-      - name: Build Windows with Nix dev environment
+      - name: Build Windows
         run: |
-          nix develop --command bash -c "
-            flutter config --enable-windows-desktop &&
-            flutter pub get &&
-            flutter build windows --release --dart-define=EVE_CLIENT_ID=$EVE_CLIENT_ID --dart-define=EVE_CLIENT_SECRET=$EVE_CLIENT_SECRET
-          "
-        env:
-          EVE_CLIENT_ID: ${{ secrets.EVE_CLIENT_ID }}
-          EVE_CLIENT_SECRET: ${{ secrets.EVE_CLIENT_SECRET }}
+          flutter config --enable-windows-desktop
+          flutter pub get
+          flutter build windows --release `
+            --dart-define=EVE_CLIENT_ID=${{ secrets.EVE_CLIENT_ID }} `
+            --dart-define=EVE_CLIENT_SECRET=${{ secrets.EVE_CLIENT_SECRET }}
         shell: pwsh
 
-      - name: Create ZIP from build output
+      - name: Create Inno Setup installer
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}" -replace '^v', ''
-          Compress-Archive -Path "build\windows\x64\runner\Release\*" `
-            -DestinationPath "eve_ntt-${version}-windows-x64.zip"
+          $iss = @"
+[Setup]
+AppName=EVE Night Trade Tools
+AppVersion=$version
+AppPublisher=EVE NTT
+AppId={{A7B3C9D2-1E4F-5A6B-8C7D-0E1F2A3B4C5D}
+DefaultDirName={autopf}\EVE NTT
+DefaultGroupName=EVE NTT
+OutputBaseFilename=eve_ntt-$version-windows-x64
+OutputDir=.
+Compression=lzma2/ultra64
+SolidCompression=yes
+ArchitecturesInstallIn64BitMode=x64compatible
+WizardStyle=modern
+UninstallDisplayName=EVE Night Trade Tools
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+[Files]
+Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Icons]
+Name: "{group}\EVE Night Trade Tools"; Filename: "{app}\eve_ntt.exe"
+Name: "{commondesktop}\EVE Night Trade Tools"; Filename: "{app}\eve_ntt.exe"; Tasks: desktopicon
+
+[Tasks]
+Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"
+
+[Run]
+Filename: "{app}\eve_ntt.exe"; Description: "Launch EVE Night Trade Tools"; Flags: nowait postinstall skipifsilent
+"@
+          $iss | Set-Content "installer.iss" -Encoding UTF8
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer.iss"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@v4
         with:
           name: eve_ntt-windows
-          path: eve_ntt-*.zip
+          path: eve_ntt-*-windows-x64.exe
 
-  # ──────────────────────────────────────────────
-  # macOS — DMG (Flutter native build)
-  # ──────────────────────────────────────────────
-  macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v16
-
-      - name: Enable Nix Magic Cache
-        uses: DeterminateSystems/magic-nix-cache-action@v9
-
-      - name: Build macOS with Nix dev environment
-        run: |
-          nix develop --command bash -c "
-            flutter config --enable-macos-desktop &&
-            flutter pub get &&
-            flutter build macos --release --dart-define=EVE_CLIENT_ID=$EVE_CLIENT_ID --dart-define=EVE_CLIENT_SECRET=$EVE_CLIENT_SECRET
-          "
-        env:
-          EVE_CLIENT_ID: ${{ secrets.EVE_CLIENT_ID }}
-          EVE_CLIENT_SECRET: ${{ secrets.EVE_CLIENT_SECRET }}
-
-      - name: Create DMG from build output
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          APP=$(find build/macos -name "*.app" -type d | head -1)
-          if [ -z "$APP" ]; then
-            echo "Error: .app bundle not found"
-            find build/macos -name "*.app" -type d
-            exit 1
-          fi
-
-          DMG="eve_ntt-${VERSION}-macos-universal.dmg"
-          hdiutil create -volname "EVE NTT" -srcfolder "$APP" -ov -format UDZO "$DMG"
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: eve_ntt-macos
-          path: eve_ntt-*.dmg
-
-  # ──────────────────────────────────────────────
-  # Create GitHub Release with all artifacts
-  # ──────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────────────────────
+  # GitHub Release — attach all artifacts
+  # ──────────────────────────────────────────────────────────────────────────────
   release:
-    needs: [linux, windows, macos]
+    needs: [linux, macos-x86_64, macos-arm64, windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           path: artifacts
 
@@ -169,10 +200,10 @@ jobs:
         run: |
           mkdir -p release
           find artifacts -type f -exec cp {} release/ \;
-          ls -la release/
+          echo "==> Release assets:"
+          ls -lh release/
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
           files: release/*
           generate_release_notes: true

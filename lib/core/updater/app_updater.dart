@@ -1,3 +1,4 @@
+import 'dart:ffi';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -151,20 +152,34 @@ class AppUpdater {
   }
 
   /// Finds the best asset for the current platform.
+  /// For macOS, prefers the architecture-specific DMG (arm64 vs x86_64).
   Map<String, dynamic>? _findPlatformAsset(List<dynamic> assets) {
-    for (final asset in assets) {
-      final name = asset['name'] as String;
-      final lower = name.toLowerCase();
-
-      if (Platform.isLinux) {
-        if (lower.endsWith('.appimage')) return asset;
-        if (lower.endsWith('.tar.gz') && lower.contains('linux')) return asset;
-      } else if (Platform.isWindows) {
-        if (lower.endsWith('.exe') || lower.endsWith('.msi')) return asset;
-        if (lower.endsWith('.zip') && lower.contains('windows')) return asset;
-      } else if (Platform.isMacOS) {
-        if (lower.endsWith('.dmg')) return asset;
-        if (lower.endsWith('.zip') && lower.contains('macos')) return asset;
+    if (Platform.isLinux) {
+      for (final asset in assets) {
+        final lower = (asset['name'] as String).toLowerCase();
+        if (lower.contains('linux') && lower.endsWith('.appimage')) return asset;
+      }
+      for (final asset in assets) {
+        if ((asset['name'] as String).toLowerCase().endsWith('.appimage')) return asset;
+      }
+    } else if (Platform.isWindows) {
+      for (final asset in assets) {
+        final lower = (asset['name'] as String).toLowerCase();
+        if (lower.contains('windows') && lower.endsWith('.exe')) return asset;
+      }
+      for (final asset in assets) {
+        if ((asset['name'] as String).toLowerCase().endsWith('.exe')) return asset;
+      }
+    } else if (Platform.isMacOS) {
+      // Abi.current() reflects the actual ABI being used — correct even under Rosetta.
+      final archTag = Abi.current() == Abi.macosArm64 ? 'arm64' : 'x86_64';
+      for (final asset in assets) {
+        final lower = (asset['name'] as String).toLowerCase();
+        if (lower.endsWith('.dmg') && lower.contains(archTag)) return asset;
+      }
+      // Fallback: any DMG if arch-specific not found.
+      for (final asset in assets) {
+        if ((asset['name'] as String).toLowerCase().endsWith('.dmg')) return asset;
       }
     }
     return null;
