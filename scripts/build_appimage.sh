@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# build_appimage.sh — run inside `nix develop` to produce a Linux AppImage.
-# Called from CI: nix develop --command bash scripts/build_appimage.sh
+# build_appimage.sh — builds a Linux AppImage.
+# Called from CI: bash scripts/build_appimage.sh
 set -euo pipefail
 
 VERSION="${VERSION:-dev}"
@@ -49,6 +49,10 @@ python3 scripts/generate_icon.py \
 # ── 6. AppImage ───────────────────────────────────────────────────────────────
 # APPIMAGE_EXTRACT_AND_RUN avoids FUSE requirement in CI sandbox.
 export APPIMAGE_EXTRACT_AND_RUN=1
+
+# Flutter plugin .so files are not installed system-wide; expose them to ldd
+# so linuxdeploy can resolve dependencies of the eve_ntt binary.
+export LD_LIBRARY_PATH="$(pwd)/AppDir/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 ./linuxdeploy-x86_64.AppImage \
   --appdir AppDir \

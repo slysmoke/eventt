@@ -15,7 +15,7 @@ dependencies:
   riverpod_annotation: ^4.0.2
 
   # Database
-  drift: ^2.18.0
+  drift: ^2.31.0
   sqlite3: ^2.9.4
   sqlite3_flutter_libs: ^0.6.0+eol
   path_provider: ^2.1.0
@@ -30,16 +30,16 @@ dependencies:
   crypto: ^3.0.0
 
   # Charts
-  fl_chart: ^0.69.0
+  fl_chart: ^1.2.0
 
   # Window management (always-on-top floating Margin Tool window)
-  window_manager: ^0.4.3
+  window_manager: ^0.5.1
 
   # Global hotkeys (work when app is backgrounded)
   hotkey_manager: ^0.2.3
 
   # File picker (for selecting market log directory in settings)
-  file_picker: ^8.1.7
+  file_picker: ^11.0.2
 
   # Utils
   package_info_plus: ^9.0.1
@@ -51,7 +51,7 @@ dev_dependencies:
 
   # Codegen
   build_runner: ^2.4.0
-  drift_dev: ^2.18.0
+  drift_dev: ^2.31.0
   riverpod_generator: ^4.0.3
 
   # Testing
