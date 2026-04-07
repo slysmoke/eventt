@@ -1,0 +1,27 @@
+[Setup]
+AppName=EVE Night Trade Tools
+AppVersion=__VERSION__
+AppPublisher=EVE NTT
+AppId={{A7B3C9D2-1E4F-5A6B-8C7D-0E1F2A3B4C5D}
+DefaultDirName={autopf}\EVE NTT
+DefaultGroupName=EVE NTT
+OutputBaseFilename=eve_ntt-__VERSION__-windows-x64
+OutputDir=.
+Compression=lzma2/ultra64
+SolidCompression=yes
+ArchitecturesInstallIn64BitMode=x64compatible
+WizardStyle=modern
+UninstallDisplayName=EVE Night Trade Tools
+
+[Files]
+Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Icons]
+Name: "{group}\EVE Night Trade Tools"; Filename: "{app}\eve_ntt.exe"
+Name: "{commondesktop}\EVE Night Trade Tools"; Filename: "{app}\eve_ntt.exe"; Tasks: desktopicon
+
+[Tasks]
+Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"
+
+[Run]
+Filename: "{app}\eve_ntt.exe"; Description: "Launch EVE Night Trade Tools"; Flags: nowait postinstall skipifsilent
