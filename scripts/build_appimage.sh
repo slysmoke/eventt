@@ -32,18 +32,7 @@ fi
 # Flutter data directory (assets, icudtl.dat, fonts, etc.)
 cp -r "$BUNDLE/data" AppDir/usr/
 
-# ── 3. Bundle Nix-store shared libraries ─────────────────────────────────────
-# ldd shows '/nix/store/…' paths for libs that must be bundled; system GTK etc. is excluded.
-echo "==> Collecting Nix-store dependencies..."
-find AppDir/usr/bin AppDir/usr/lib -maxdepth 1 \( -type f -o -type l \) | while read -r binary; do
-  ldd "$binary" 2>/dev/null \
-    | awk '/\/nix\/store/{print $3}' \
-    | while read -r lib; do
-        [ -f "$lib" ] && cp -n "$lib" AppDir/usr/lib/ && echo "  bundled: $(basename "$lib")"
-      done
-done
-
-# ── 4. Desktop entry ──────────────────────────────────────────────────────────
+# ── 3. Desktop entry ──────────────────────────────────────────────────────────
 cat > AppDir/usr/share/applications/eve_ntt.desktop <<'DESKTOP'
 [Desktop Entry]
 Name=EVE Night Trade Tools

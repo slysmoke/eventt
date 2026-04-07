@@ -17,11 +17,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v16
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
 
-      - name: Enable Nix Magic Cache
-        uses: DeterminateSystems/magic-nix-cache-action@v9
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y \
+            clang cmake ninja-build pkg-config \
+            libgtk-3-dev libsecret-1-dev \
+            libkeybinder-3.0-dev libsqlite3-dev
 
       - name: Download linuxdeploy
         run: |
@@ -29,8 +35,7 @@ jobs:
           chmod +x linuxdeploy-x86_64.AppImage
 
       - name: Build AppImage
-        # Script runs inside nix develop so ldd sees Nix-store libs (keybinder, libsecret, etc.)
-        run: nix develop --command bash scripts/build_appimage.sh
+        run: bash scripts/build_appimage.sh
         env:
           EVE_CLIENT_ID: ${{ secrets.EVE_CLIENT_ID }}
           EVE_CLIENT_SECRET: ${{ secrets.EVE_CLIENT_SECRET }}
