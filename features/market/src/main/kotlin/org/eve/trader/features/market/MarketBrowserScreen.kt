@@ -30,6 +30,7 @@ import org.eve.trader.core.database.MarketDao
 import org.eve.trader.core.database.StaticDataDao
 import org.eve.trader.core.esi.EsiClient
 import org.eve.trader.core.image.EveImageServer
+import org.eve.trader.core.staticdata.StaticDataImporter
 import org.eve.trader.core.model.MarketHistoryModel
 import org.eve.trader.core.model.StaticMarketGroupModel
 import org.eve.trader.core.model.StaticTypeModel
@@ -66,11 +67,27 @@ fun MarketBrowserScreen() {
     var currentMarketGroup by remember { mutableStateOf<StaticMarketGroupModel?>(null) }
     var groupTypes by remember { mutableStateOf<List<StaticTypeModel>>(emptyList()) }
     var childGroups by remember { mutableStateOf<List<StaticMarketGroupModel>>(emptyList()) }
+    var isSdeImporting by remember { mutableStateOf(false) }
+    var sdeImportProgress by remember { mutableStateOf("") }
 
     // Load top-level market groups on start
     LaunchedEffect(Unit) {
         loadTopMarketGroups(expanded = expandedGroups) { groups ->
             childGroups = groups
+        }
+        // After initial load, check if SDE needs importing
+        if (childGroups.isEmpty()) {
+            val typeCount = StaticDataDao.countTypes()
+            if (typeCount == 0) {
+                // SDE not imported — trigger import
+                isSdeImporting = true
+                StaticDataImporter.importAll()
+                isSdeImporting = false
+                // Reload after import
+                loadTopMarketGroups(expanded = expandedGroups) { reloadedGroups ->
+                    childGroups = reloadedGroups
+                }
+            }
         }
     }
 
@@ -117,7 +134,7 @@ fun MarketBrowserScreen() {
                         searchQuery = query
                         if (query.length >= 2) {
                             scope.launch(Dispatchers.IO) {
-                                searchResults = StaticDataDao.searchTypes(query, limit = 30)
+                                searchResults = StaticDataDao.searchMarketTypes(query, limit = 30)
                             }
                         } else {
                             searchResults = emptyList()
@@ -251,6 +268,43 @@ fun MarketBrowserScreen() {
     }
 
     LoadingOverlay(isLoading = isLoading, message = "Loading market data...")
+
+    // SDE Import overlay
+    if (isSdeImporting) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Surface(
+                modifier = Modifier.padding(32.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                shape = MaterialTheme.shapes.medium,
+                shadowElevation = 12.dp,
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(
+                        Icons.Default.Downloading,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Importing SDE Data", style = MaterialTheme.typography.titleLarge)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Downloading EVE Static Data Export…\nThis may take a minute.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    CircularProgressIndicator()
+                }
+            }
+        }
+    }
 }
 
 // ─── Market Group Tree ────────────────────────────────────────────────────
