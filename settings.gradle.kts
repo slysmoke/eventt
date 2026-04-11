@@ -14,3 +14,33 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "eve-trader"
+
+// Core modules
+include(":core:model")
+include(":core:database")
+include(":core:http")
+include(":core:cache")
+include(":core:auth")
+include(":core:esi")
+include(":core:queue")
+include(":core:staticdata")
+include(":core:image")
+
+// UI modules
+include(":ui:theme")
+include(":ui:common")
+
+// Feature modules
+include(":features:characters")
+include(":features:market")
+include(":features:assets")
+include(":features:wallet")
+include(":features:orders")
+include(":features:dashboard")
+include(":features:alerts")
+include(":features:industry")
+include(":features:contracts")
+include(":features:watchlist")
+
+// Main app
+include(":app")

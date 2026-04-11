@@ -1,0 +1,64 @@
+# Gradle
+.gradle/
+build/
+!**/src/**/build/
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.project
+.classpath
+.settings/
+
+# Compiled
+*.class
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# Kotlin
+*.kotlin_module
+.kotlin/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Tokens & Secrets
+*.env
+tokens.*
+*.properties.local
+client_secret.*
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local config
+local.properties
+
+# Crashlytics
+fabric.properties
+
+# APH
+*.aph
+
+# Profiler
+.ideaProfiler/
+
+# JBR
+.jbr/
+
+# Compose
+compose_resources/

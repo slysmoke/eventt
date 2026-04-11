@@ -1,27 +1,16 @@
-import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+// Root build.gradle.kts — common configuration for all subprojects
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    kotlin("jvm") version "1.9.22"
-    id("org.jetbrains.compose") version "1.6.0"
+    id("org.jetbrains.kotlin.jvm") version "1.9.22" apply false
+    id("org.jetbrains.compose") version "1.6.0" apply false
 }
 
-group = "org.eve.trader"
-version = "1.0.0"
-
-dependencies {
-    implementation(compose.desktop.currentOs)
-    implementation(compose.material3)
-    implementation(compose.materialIconsExtended)
-}
-
-compose.desktop {
-    application {
-        mainClass = "org.eve.trader.MainKt"
-
-        nativeDistributions {
-            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "eve-trader"
-            packageVersion = "1.0.0"
+subprojects {
+    tasks.withType<KotlinCompile> {
+        kotlinOptions {
+            jvmTarget = "21"
+            freeCompilerArgs = listOf("-Xjsr305=strict")
         }
     }
 }
