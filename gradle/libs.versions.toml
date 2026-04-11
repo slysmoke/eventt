@@ -1,0 +1,5 @@
+[versions]
+gradle-toolchains = "0.8.0"
+
+[plugins]
+foojay-resolver = { id = "org.gradle.toolchains.foojay-resolver-convention", version.ref = "gradle-toolchains" }
