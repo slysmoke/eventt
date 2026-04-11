@@ -37,7 +37,6 @@ fun WatchlistScreen() {
     var isLoading by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        try { withContext(Dispatchers.IO) { DatabaseManager.initialize() } } catch (e: Exception) {}
         loadWatchlists { watchlists = it; if (it.isNotEmpty()) selectedWatchlist = it.keys.first() }
     }
 

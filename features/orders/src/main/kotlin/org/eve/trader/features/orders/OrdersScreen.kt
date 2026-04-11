@@ -33,7 +33,6 @@ fun OrdersScreen() {
     var activeTab by remember { mutableStateOf(0) } // 0 = tracked, 1 = active ESI orders
 
     LaunchedEffect(Unit) {
-        try { withContext(Dispatchers.IO) { DatabaseManager.initialize() } } catch (e: Exception) {}
         loadOrders { list -> orders = list }
     }
 

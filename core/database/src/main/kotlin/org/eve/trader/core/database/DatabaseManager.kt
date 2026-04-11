@@ -16,6 +16,9 @@ object DatabaseManager {
 
     private val initLock = Any()
 
+    // Single-thread dispatcher for serialized DB access
+    private val dbDispatcher = kotlinx.coroutines.Dispatchers.IO.limitedParallelism(1)
+
     fun initialize(dbPath: String? = null) {
         if (isInitialized) return
 
@@ -30,17 +33,23 @@ object DatabaseManager {
             val dbFile = java.io.File(dbFilePath)
             if (dbFile.exists() && dbFile.length() == 0L) {
                 dbFile.delete()
-                java.io.File("$dbFilePath-journal").delete()
-                java.io.File("$dbFilePath-wal").delete()
-                java.io.File("$dbFilePath-shm").delete()
             }
+            java.io.File("$dbFilePath-journal").delete()
+            java.io.File("$dbFilePath-wal").delete()
+            java.io.File("$dbFilePath-shm").delete()
 
             connection = DriverManager.getConnection("jdbc:sqlite:$dbFilePath").apply {
                 autoCommit = true
                 prepareStatement("PRAGMA journal_mode=WAL").execute()
                 prepareStatement("PRAGMA foreign_keys=ON").execute()
                 prepareStatement("PRAGMA cache_size=-10000").execute()
-                prepareStatement("PRAGMA busy_timeout=5000").execute()
+                // Increase busy timeout to 30 seconds
+                prepareStatement("PRAGMA busy_timeout=30000").execute()
+                // Better WAL settings for concurrency
+                prepareStatement("PRAGMA synchronous=NORMAL").execute()
+                prepareStatement("PRAGMA journal_size_limit=67108864").execute()
+                prepareStatement("PRAGMA wal_autocheckpoint=1000").execute()
+                prepareStatement("PRAGMA cache_size=-20000").execute()
             }
 
             createTables()

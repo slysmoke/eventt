@@ -39,11 +39,6 @@ fun AssetViewerScreen() {
     var showRefreshDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        try {
-            withContext(Dispatchers.IO) {
-                DatabaseManager.initialize()
-            }
-        } catch (e: Exception) { /* already initialized */ }
         loadAssets(selectedCharacterId, selectedCorporationId) { list -> assets = list }
     }
 

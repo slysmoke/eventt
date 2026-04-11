@@ -33,7 +33,6 @@ fun IndustryCalculatorScreen() {
     var showBom by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        try { withContext(Dispatchers.IO) { DatabaseManager.initialize() } } catch (e: Exception) {}
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {

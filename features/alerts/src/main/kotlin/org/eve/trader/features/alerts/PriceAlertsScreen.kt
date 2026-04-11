@@ -30,7 +30,6 @@ fun PriceAlertsScreen() {
     var showOnlyEnabled by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        try { withContext(Dispatchers.IO) { DatabaseManager.initialize() } } catch (e: Exception) {}
         loadAlerts(showOnlyEnabled) { alerts = it }
     }
 

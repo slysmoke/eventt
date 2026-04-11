@@ -34,7 +34,6 @@ fun WalletScreen() {
     var activeTab by remember { mutableStateOf(0) }
 
     LaunchedEffect(Unit) {
-        try { withContext(Dispatchers.IO) { DatabaseManager.initialize() } } catch (e: Exception) {}
         val chars = withContext(Dispatchers.IO) { CharacterDao.getAll() }
         if (chars.isNotEmpty()) {
             selectedCharacter = chars[0]

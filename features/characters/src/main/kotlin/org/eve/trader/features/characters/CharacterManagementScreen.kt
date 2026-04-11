@@ -35,13 +35,6 @@ fun CharacterManagementScreen() {
 
     // Initialize database
     LaunchedEffect(Unit) {
-        try {
-            withContext(Dispatchers.IO) {
-                DatabaseManager.initialize()
-            }
-        } catch (e: Exception) {
-            println("Database already initialized or error: ${e.message}")
-        }
         loadCharacters(characters = { characters = it }, corps = { corporations = it })
     }
 

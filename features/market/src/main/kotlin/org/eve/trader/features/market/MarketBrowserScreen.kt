@@ -55,7 +55,6 @@ fun MarketBrowserScreen() {
     var showOrderBook by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        try { withContext(Dispatchers.IO) { DatabaseManager.initialize() } } catch (e: Exception) {}
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {

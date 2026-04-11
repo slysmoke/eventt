@@ -25,7 +25,6 @@ fun DashboardScreen() {
     var isLoading by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        try { withContext(Dispatchers.IO) { DatabaseManager.initialize() } } catch (e: Exception) {}
         isLoading = true
         withContext(Dispatchers.IO) {
             summary = loadDashboardSummary()

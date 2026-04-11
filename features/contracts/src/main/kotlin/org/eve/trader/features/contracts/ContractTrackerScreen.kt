@@ -31,7 +31,6 @@ fun ContractTrackerScreen() {
     var statusFilter by remember { mutableStateOf("all") }
 
     LaunchedEffect(Unit) {
-        try { withContext(Dispatchers.IO) { DatabaseManager.initialize() } } catch (e: Exception) {}
         loadContracts { contracts = it }
     }
 
