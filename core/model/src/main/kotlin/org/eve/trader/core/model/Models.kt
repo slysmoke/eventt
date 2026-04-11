@@ -170,6 +170,7 @@ data class StaticTypeModel(
     val description: String = "",
     val iconId: Int? = null,
     val published: Boolean = false,
+    val marketGroupId: Int? = null,
 )
 
 @Serializable

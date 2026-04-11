@@ -16,7 +16,7 @@ class RateLimitInterceptor(
 ) : Interceptor {
 
     private val requestCount = AtomicInteger(0)
-    private val lastResetTime = System.currentTimeMillis()
+    private var lastResetTime = System.currentTimeMillis()
 
     override fun intercept(chain: Interceptor.Chain): Response {
         synchronized(this) {
@@ -26,6 +26,7 @@ class RateLimitInterceptor(
             if (elapsed >= 1000) {
                 // Reset counter after 1 second
                 requestCount.set(0)
+                lastResetTime = now
             } else if (requestCount.get() >= maxRequestsPerSecond) {
                 // We've hit the limit, wait until next second window
                 val waitTime = 1000 - elapsed

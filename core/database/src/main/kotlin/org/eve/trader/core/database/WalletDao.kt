@@ -49,7 +49,7 @@ object WalletDao {
         return DatabaseManager.transaction {
             val where = buildWhereClause(characterId, corporationId)
             prepareStatement(
-                "SELECT * FROM transactions $where ORDER BY date DESC LIMIT ? OFFSET ?"
+                "SELECT * FROM transactions ${where.sql} ORDER BY date DESC LIMIT ? OFFSET ?"
             ).use { stmt ->
                 var i = 1
                 where.params.forEach { stmt.setObject(i++, it) }
@@ -128,7 +128,7 @@ object WalletDao {
         return DatabaseManager.transaction {
             val where = buildWhereClause(characterId, corporationId)
             prepareStatement(
-                "SELECT * FROM journal $where ORDER BY date DESC LIMIT ? OFFSET ?"
+                "SELECT * FROM journal ${where.sql} ORDER BY date DESC LIMIT ? OFFSET ?"
             ).use { stmt ->
                 var i = 1
                 where.params.forEach { stmt.setObject(i++, it) }
@@ -171,7 +171,7 @@ object WalletDao {
 
             // Get latest balance from journal
             val balanceQuery = """
-                SELECT COALESCE(balance, 0) FROM journal $where ORDER BY date DESC, entry_id DESC LIMIT 1
+                SELECT COALESCE(balance, 0) FROM journal ${where.sql} ORDER BY date DESC, entry_id DESC LIMIT 1
             """.trimIndent()
 
             // Get daily breakdown
@@ -181,7 +181,7 @@ object WalletDao {
                     SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income,
                     SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as expenses,
                     SUM(amount) as net
-                FROM journal $where
+                FROM journal ${where.sql}
                 GROUP BY substr(date, 1, 10)
                 ORDER BY day DESC
                 LIMIT 90

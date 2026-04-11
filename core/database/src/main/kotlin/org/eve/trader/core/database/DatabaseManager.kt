@@ -8,7 +8,7 @@ import java.time.Instant
 object DatabaseManager {
 
     private const val DEFAULT_DB_NAME = "eve_trader.db"
-    private var connection: Connection? = null
+    @Volatile private var connection: Connection? = null
 
     @Volatile
     var isInitialized: Boolean = false
@@ -33,10 +33,11 @@ object DatabaseManager {
             val dbFile = java.io.File(dbFilePath)
             if (dbFile.exists() && dbFile.length() == 0L) {
                 dbFile.delete()
+                // Only safe to delete WAL/SHM when the DB itself is gone
+                java.io.File("$dbFilePath-journal").delete()
+                java.io.File("$dbFilePath-wal").delete()
+                java.io.File("$dbFilePath-shm").delete()
             }
-            java.io.File("$dbFilePath-journal").delete()
-            java.io.File("$dbFilePath-wal").delete()
-            java.io.File("$dbFilePath-shm").delete()
 
             // Get connection with default settings
             val conn = DriverManager.getConnection("jdbc:sqlite:$dbFilePath")
@@ -60,6 +61,7 @@ object DatabaseManager {
             conn.autoCommit = true
 
             createTables(conn)
+            migrateSchema(conn)
             createIndexes(conn)
             isInitialized = true
         }
@@ -71,9 +73,24 @@ object DatabaseManager {
     }
 
     fun close() {
-        connection?.close()
-        connection = null
-        isInitialized = false
+        synchronized(initLock) {
+            connection?.close()
+            connection = null
+            isInitialized = false
+        }
+    }
+
+    // ─── Schema Migration ────────────────────────────────────────────────
+
+    private fun migrateSchema(conn: Connection) {
+        val migrations = listOf(
+            "ALTER TABLE static_types ADD COLUMN market_group_id INTEGER",
+        )
+        conn.createStatement().use { stmt ->
+            migrations.forEach { sql ->
+                try { stmt.execute(sql) } catch (e: SQLException) { /* column already exists */ }
+            }
+        }
     }
 
     // ─── Table Creation ─────────────────────────────────────────────────
@@ -462,6 +479,7 @@ object DatabaseManager {
             "CREATE INDEX IF NOT EXISTS idx_static_types_name ON static_types(name)",
             "CREATE INDEX IF NOT EXISTS idx_static_types_group ON static_types(group_id)",
             "CREATE INDEX IF NOT EXISTS idx_static_stations_region ON static_stations(region_id)",
+            "CREATE INDEX IF NOT EXISTS idx_static_types_market ON static_types(market_group_id) WHERE market_group_id IS NOT NULL",
         )
 
         // using conn parameter
@@ -480,6 +498,16 @@ object DatabaseManager {
 
     fun <T> transaction(block: Connection.() -> T): T {
         val conn = getConnection()
-        return conn.block()
+        conn.autoCommit = false
+        return try {
+            val result = conn.block()
+            conn.commit()
+            result
+        } catch (e: Exception) {
+            conn.rollback()
+            throw e
+        } finally {
+            conn.autoCommit = true
+        }
     }
 }

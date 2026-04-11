@@ -1,5 +1,6 @@
 package org.eve.trader.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShowChart
@@ -10,7 +11,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.eve.trader.core.staticdata.StaticDataImporter
 import org.eve.trader.ui.theme.*
 import org.eve.trader.ui.common.RequestProgressDialog
 import org.eve.trader.features.characters.CharacterManagementScreen
@@ -44,6 +50,20 @@ fun EveTraderApp() {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
     val eveColors = if (darkTheme) DarkEveColors else LightEveColors
 
+    // Trigger SDE import on first run; check for updates on subsequent runs
+    val importState by StaticDataImporter.state.collectAsState()
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            when {
+                StaticDataImporter.isImportNeeded() -> StaticDataImporter.importAll()
+                StaticDataImporter.checkVersionChanged() -> {
+                    // New EVE patch — re-import to pick up renamed items, new types, etc.
+                    StaticDataImporter.importAll()
+                }
+            }
+        }
+    }
+
     MaterialTheme(
         colorScheme = colorScheme,
         typography = EveTypography
@@ -51,6 +71,7 @@ fun EveTraderApp() {
         var selectedScreen by remember { mutableStateOf(AppScreen.DASHBOARD) }
         var showProgressDialog by remember { mutableStateOf(false) }
 
+        val coroutineScope = rememberCoroutineScope()
         Scaffold(
             topBar = {
                 TopBar(
@@ -60,6 +81,11 @@ fun EveTraderApp() {
                     eveColors = eveColors,
                     onShowProgress = { showProgressDialog = true },
                     onNavDrawerToggle = { /* navigation handled by sidebar */ },
+                    onUpdateSde = {
+                        coroutineScope.launch(Dispatchers.IO) {
+                            StaticDataImporter.importAll()
+                        }
+                    },
                 )
             },
             content = { padding ->
@@ -76,6 +102,11 @@ fun EveTraderApp() {
                     if (showProgressDialog) {
                         RequestProgressDialog(onDismiss = { showProgressDialog = false })
                     }
+
+                    // SDE import overlay — shown on first run and after EVE patches
+                    if (importState.isRunning) {
+                        SdeImportOverlay(importState)
+                    }
                 }
             },
         )
@@ -91,6 +122,7 @@ private fun TopBar(
     eveColors: EveColors,
     onShowProgress: () -> Unit,
     onNavDrawerToggle: () -> Unit,
+    onUpdateSde: () -> Unit,
 ) {
     TopAppBar(
         title = {
@@ -109,6 +141,13 @@ private fun TopBar(
             }
         },
         actions = {
+            IconButton(onClick = onUpdateSde) {
+                Icon(
+                    imageVector = Icons.Default.Download,
+                    contentDescription = "Update static data (SDE)",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
+            }
             IconButton(onClick = onShowProgress) {
                 Icon(
                     imageVector = Icons.Default.Sync,
@@ -188,6 +227,55 @@ private fun Sidebar(
                             style = MaterialTheme.typography.labelMedium,
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SdeImportOverlay(state: StaticDataImporter.ImportState) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.75f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Card(modifier = Modifier.width(480.dp)) {
+            Column(
+                modifier = Modifier.padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Download,
+                    contentDescription = null,
+                    modifier = Modifier.size(40.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Text("Loading Game Data", style = MaterialTheme.typography.headlineSmall)
+                Text(
+                    "Downloading static data from EVE Online ESI.\nThis takes a few minutes on first run.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                LinearProgressIndicator(
+                    progress = state.progress,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    state.status,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                state.error?.let { error ->
+                    Text(
+                        "Error: $error",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
             }
         }

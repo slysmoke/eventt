@@ -299,8 +299,8 @@ object SsoAuthManager {
 
     private fun sendResponse(exchange: com.sun.net.httpserver.HttpExchange, code: Int, body: String, headers: Map<String, String>) {
         val bytes = body.toByteArray()
-        exchange.sendResponseHeaders(code, bytes.size.toLong())
         headers.forEach { (key, value) -> exchange.responseHeaders.add(key, value) }
+        exchange.sendResponseHeaders(code, bytes.size.toLong())
         exchange.responseBody.write(bytes)
         exchange.close()
     }

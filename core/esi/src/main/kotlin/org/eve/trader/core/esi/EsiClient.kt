@@ -1,6 +1,8 @@
 package org.eve.trader.core.esi
 
-import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.*
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.eve.trader.core.auth.SsoAuthManager
 import org.eve.trader.core.cache.EsiCacheManager
 import org.eve.trader.core.cache.CacheState
@@ -27,6 +29,50 @@ object EsiClient {
         ignoreUnknownKeys = true
         isLenient = true
         allowSpecialFloatingPointValues = true
+    }
+
+    private fun JsonElement.toKotlinValue(): Any? = when (this) {
+        is JsonNull -> null
+        is JsonPrimitive -> longOrNull ?: doubleOrNull ?: booleanOrNull ?: content
+        is JsonArray -> map { it.toKotlinValue() }
+        is JsonObject -> mapValues { (_, v) -> v.toKotlinValue() }
+    }
+
+    private fun String.parseToMap(): Map<String, Any?> =
+        json.parseToJsonElement(this).jsonObject.mapValues { (_, v) -> v.toKotlinValue() }
+
+    private fun String.parseToListOfMaps(): List<Map<String, Any?>> =
+        json.parseToJsonElement(this).jsonArray.map { it.jsonObject.mapValues { (_, v) -> v.toKotlinValue() } }
+
+    private fun getMap(
+        endpoint: String,
+        params: Map<String, String> = emptyMap(),
+        accessToken: String? = null,
+    ): Map<String, Any?> {
+        val (body, _) = getRaw(endpoint, params, accessToken)
+        return body.parseToMap()
+    }
+
+    private fun getAllMaps(
+        characterId: Int? = null,
+        endpoint: String,
+        params: Map<String, String> = emptyMap(),
+    ): List<Map<String, Any?>> {
+        val allResults = mutableListOf<Map<String, Any?>>()
+        var page = 1
+        while (true) {
+            val (body, metadata) = if (characterId != null) {
+                val token = SsoAuthManager.ensureTokenFresh(characterId) ?: break
+                getRaw(endpoint, params, token, page)
+            } else {
+                getRaw(endpoint, params, null, page)
+            }
+            val list = body.parseToListOfMaps()
+            allResults.addAll(list)
+            if (metadata.totalPages <= page || list.isEmpty()) break
+            page++
+        }
+        return allResults
     }
 
     /**
@@ -93,6 +139,7 @@ object EsiClient {
             val cacheControl = response.header("Cache-Control")
             val etag = response.header("ETag")
             val lastModified = response.header("Last-Modified")
+            val xPages = response.header("X-Pages")?.toIntOrNull() ?: 1
 
             val expiresAt = when {
                 expiresHeader != null -> EsiCacheManager.parseExpiresHeader(expiresHeader)
@@ -111,15 +158,8 @@ object EsiClient {
                 cacheControl = cacheControl ?: "",
                 etag = etag,
                 lastModified = lastModified,
+                totalPages = xPages,
             )
-
-            // If cache was stale, we still return it but background refresh would happen
-            if (cacheResult.state == CacheState.STALE) {
-                val staleData = cacheResult.data
-                if (staleData != null) {
-                    return staleData to metadata
-                }
-            }
 
             return body to metadata
 
@@ -197,25 +237,50 @@ object EsiClient {
 
     // --- Public Endpoints ---
 
-    fun getUniverseType(typeId: Int): Map<String, Any?> {
-        return get<Map<String, Any?>>("/universe/types/$typeId/")
+    // ─── Bulk / POST ──────────────────────────────────────────────────────
+
+    /** POST to an ESI endpoint and return the raw response body. */
+    fun postRaw(endpoint: String, jsonBody: String): String {
+        val url = "$ESI_BASE_URL$endpoint?datasource=$ESI_DATASOURCE"
+        val requestBody = jsonBody.toRequestBody("application/json; charset=utf-8".toMediaType())
+        val request = okhttp3.Request.Builder().url(url).post(requestBody).build()
+        val response = EveHttpClient.getClient().newCall(request).execute()
+        if (!response.isSuccessful) throw java.io.IOException("ESI POST $endpoint: HTTP ${response.code}")
+        return response.body?.string() ?: "[]"
     }
 
-    fun getUniverseGroup(groupId: Int): Map<String, Any?> {
-        return get<Map<String, Any?>>("/universe/groups/$groupId/")
+    /**
+     * Resolve up to 50 000 IDs → names via POST /universe/names/ (batches of 1000).
+     * Returns map of id → name; IDs not found in ESI are omitted.
+     */
+    fun resolveNames(ids: List<Int>): Map<Int, String> {
+        if (ids.isEmpty()) return emptyMap()
+        val result = mutableMapOf<Int, String>()
+        ids.chunked(1000).forEach { chunk ->
+            try {
+                val body = "[${chunk.joinToString(",")}]"
+                val response = postRaw("/universe/names/", body)
+                json.parseToJsonElement(response).jsonArray.forEach { elem ->
+                    val obj = elem.jsonObject
+                    val id = obj["id"]?.jsonPrimitive?.intOrNull ?: return@forEach
+                    val name = obj["name"]?.jsonPrimitive?.content ?: return@forEach
+                    result[id] = name
+                }
+            } catch (e: Exception) {
+                println("resolveNames batch failed: ${e.message}")
+            }
+        }
+        return result
     }
 
-    fun getUniverseStation(stationId: Long): Map<String, Any?> {
-        return get<Map<String, Any?>>("/universe/stations/$stationId/")
-    }
+    // ─── Universe ─────────────────────────────────────────────────────────
 
-    fun getUniverseRegion(regionId: Int): Map<String, Any?> {
-        return get<Map<String, Any?>>("/universe/regions/$regionId/")
-    }
-
-    fun getUniverseSystem(systemId: Int): Map<String, Any?> {
-        return get<Map<String, Any?>>("/universe/systems/$systemId/")
-    }
+    fun getUniverseType(typeId: Int): Map<String, Any?> = getMap("/universe/types/$typeId/")
+    fun getUniverseGroup(groupId: Int): Map<String, Any?> = getMap("/universe/groups/$groupId/")
+    fun getUniverseStation(stationId: Long): Map<String, Any?> = getMap("/universe/stations/$stationId/")
+    fun getUniverseRegion(regionId: Int): Map<String, Any?> = getMap("/universe/regions/$regionId/")
+    fun getUniverseSystem(systemId: Int): Map<String, Any?> = getMap("/universe/systems/$systemId/")
+    fun getUniverseConstellation(constId: Int): Map<String, Any?> = getMap("/universe/constellations/$constId/")
 
     fun search(query: String, categories: List<String>, strict: Boolean = false): Map<String, List<Int>> {
         return get<Map<String, List<Int>>>("/search/", mapOf(
@@ -225,139 +290,90 @@ object EsiClient {
         ))
     }
 
+    // --- Market Group Endpoints ---
+
+    fun getMarketGroupIds(): List<Int> = get("/markets/groups/")
+
+    fun getMarketGroupTypeIds(groupId: Int): List<Int> {
+        return try {
+            val data = getMap("/markets/groups/$groupId/")
+            (data["types"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() } ?: emptyList()
+        } catch (e: Exception) { emptyList() }
+    }
+
     // --- Market Endpoints ---
 
-    fun getMarketStructureOrders(structureId: Long): List<Map<String, Any?>> {
-        return getAllPages(
-            endpoint = "/markets/structures/$structureId/orders/",
-            params = mapOf("order_type" to "all"),
-        )
-    }
+    fun getMarketStructureOrders(structureId: Long): List<Map<String, Any?>> =
+        getAllMaps(endpoint = "/markets/structures/$structureId/orders/", params = mapOf("order_type" to "all"))
 
     fun getMarketRegionOrders(regionId: Int, orderType: String = "all", typeId: Int? = null): List<Map<String, Any?>> {
         val params = mutableMapOf("order_type" to orderType)
         typeId?.let { params["type_id"] = it.toString() }
-        return getAllPages(
-            endpoint = "/markets/$regionId/orders/",
-            params = params,
-        )
+        return getAllMaps(endpoint = "/markets/$regionId/orders/", params = params)
     }
 
     fun getMarketRegionHistory(regionId: Int, typeId: Int): List<Map<String, Any?>> {
-        return get(
-            "/markets/$regionId/history/",
-            mapOf("type_id" to typeId.toString()),
-        )
+        val (body, _) = getRaw("/markets/$regionId/history/", mapOf("type_id" to typeId.toString()))
+        return body.parseToListOfMaps()
     }
 
     // --- Character Endpoints ---
 
-    fun getCharacterAssets(characterId: Int, accessToken: String): List<Map<String, Any?>> {
-        return getAllPages<Map<String, Any?>>(
-            characterId = characterId,
-            endpoint = "/characters/$characterId/assets/",
-        )
-    }
+    fun getCharacterAssets(characterId: Int, accessToken: String): List<Map<String, Any?>> =
+        getAllMaps(characterId = characterId, endpoint = "/characters/$characterId/assets/")
 
-    fun getCharacterOrders(characterId: Int): List<Map<String, Any?>> {
-        return getAllPages<Map<String, Any?>>(
-            characterId = characterId,
-            endpoint = "/characters/$characterId/orders/",
-        )
+    fun getCharacterOrders(characterId: Int): List<Map<String, Any?>> =
+        getAllMaps(characterId = characterId, endpoint = "/characters/$characterId/orders/")
 
-    }
+    fun getCharacterOrdersHistory(characterId: Int): List<Map<String, Any?>> =
+        getAllMaps(characterId = characterId, endpoint = "/characters/$characterId/orders/history/")
 
-    fun getCharacterOrdersHistory(characterId: Int): List<Map<String, Any?>> {
-        return getAllPages<Map<String, Any?>>(
-            characterId = characterId,
-            endpoint = "/characters/$characterId/orders/history/",
-        )
-    }
+    fun getCharacterJournal(characterId: Int): List<Map<String, Any?>> =
+        getAllMaps(characterId = characterId, endpoint = "/characters/$characterId/wallet/journal/")
 
-    fun getCharacterJournal(characterId: Int): List<Map<String, Any?>> {
-        return getAllPages<Map<String, Any?>>(
-            characterId = characterId,
-            endpoint = "/characters/$characterId/wallet/journal/",
-        )
-    }
-
-    fun getCharacterTransactions(characterId: Int): List<Map<String, Any?>> {
-        return getAllPages<Map<String, Any?>>(
-            characterId = characterId,
-            endpoint = "/characters/$characterId/wallet/transactions/",
-        )
-    }
+    fun getCharacterTransactions(characterId: Int): List<Map<String, Any?>> =
+        getAllMaps(characterId = characterId, endpoint = "/characters/$characterId/wallet/transactions/")
 
     fun getCharacterWallet(characterId: Int): Double {
-        val result = get<Map<String, Any?>>(
-            "/characters/$characterId/wallet/",
-        )
-        return (result["total"] as? Number)?.toDouble() ?: 0.0
+        val token = SsoAuthManager.ensureTokenFresh(characterId) ?: return 0.0
+        val (body, _) = getRaw("/characters/$characterId/wallet/", accessToken = token)
+        return body.trim().toDoubleOrNull() ?: 0.0
     }
 
     // --- Corporation Endpoints ---
 
-    fun getCorporationAssets(corporationId: Int): List<Map<String, Any?>> {
-        return getAllPages<Map<String, Any?>>(
-            endpoint = "/corporations/$corporationId/assets/",
-        )
-    }
+    fun getCorporationAssets(corporationId: Int): List<Map<String, Any?>> =
+        getAllMaps(endpoint = "/corporations/$corporationId/assets/")
 
-    fun getCorporationOrders(corporationId: Int): List<Map<String, Any?>> {
-        return getAllPages<Map<String, Any?>>(
-            endpoint = "/corporations/$corporationId/orders/",
-        )
-    }
+    fun getCorporationOrders(corporationId: Int): List<Map<String, Any?>> =
+        getAllMaps(endpoint = "/corporations/$corporationId/orders/")
 
     fun getCorporationWallet(corporationId: Int, division: Int = 1): Double {
-        val result = get<Map<String, Any?>>(
-            "/corporations/$corporationId/wallets/$division/",
-        )
-        return (result["total"] as? Number)?.toDouble() ?: 0.0
+        val (body, _) = getRaw("/corporations/$corporationId/wallets/$division/balance/")
+        return body.trim().toDoubleOrNull() ?: 0.0
     }
 
     fun getCorporationJournal(corporationId: Int, division: Int? = null): List<Map<String, Any?>> {
         val params = division?.let { mapOf("division" to it.toString()) } ?: emptyMap()
-        return getAllPages<Map<String, Any?>>(
-            endpoint = "/corporations/$corporationId/wallets/1/journal/",
-            params = params,
-        )
+        return getAllMaps(endpoint = "/corporations/$corporationId/wallets/1/journal/", params = params)
     }
 
     fun getCorporationTransactions(corporationId: Int, division: Int? = null): List<Map<String, Any?>> {
         val params = division?.let { mapOf("division" to it.toString()) } ?: emptyMap()
-        return getAllPages<Map<String, Any?>>(
-            endpoint = "/corporations/$corporationId/wallets/1/transactions/",
-            params = params,
-        )
+        return getAllMaps(endpoint = "/corporations/$corporationId/wallets/1/transactions/", params = params)
     }
 
-    fun getCorporationInfo(corporationId: Int): Map<String, Any?> {
-        return get("/corporations/$corporationId/")
-    }
-
-    fun getCharacterInfo(characterId: Int): Map<String, Any?> {
-        return get("/characters/$characterId/")
-    }
+    fun getCorporationInfo(corporationId: Int): Map<String, Any?> = getMap("/corporations/$corporationId/")
+    fun getCharacterInfo(characterId: Int): Map<String, Any?> = getMap("/characters/$characterId/")
 
     // --- Contract Endpoints ---
 
-    fun getCharacterContracts(characterId: Int): List<Map<String, Any?>> {
-        return getAllPages<Map<String, Any?>>(
-            characterId = characterId,
-            endpoint = "/characters/$characterId/contracts/",
-        )
-    }
+    fun getCharacterContracts(characterId: Int): List<Map<String, Any?>> =
+        getAllMaps(characterId = characterId, endpoint = "/characters/$characterId/contracts/")
 
-    fun getCorporationContracts(corporationId: Int): List<Map<String, Any?>> {
-        return getAllPages<Map<String, Any?>>(
-            endpoint = "/corporations/$corporationId/contracts/",
-        )
-    }
+    fun getCorporationContracts(corporationId: Int): List<Map<String, Any?>> =
+        getAllMaps(endpoint = "/corporations/$corporationId/contracts/")
 
-    fun getContractItems(contractId: Int): List<Map<String, Any?>> {
-        return getAllPages<Map<String, Any?>>(
-            endpoint = "/contracts/$contractId/items/",
-        )
-    }
+    fun getContractItems(contractId: Int): List<Map<String, Any?>> =
+        getAllMaps(endpoint = "/contracts/$contractId/items/")
 }
