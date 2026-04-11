@@ -87,6 +87,11 @@ fun MarketBrowserScreen() {
                 loadTopMarketGroups(expanded = expandedGroups) { reloadedGroups ->
                     childGroups = reloadedGroups
                 }
+                // If still empty after import, show message
+                if (childGroups.isEmpty()) {
+                    val typeCount2 = StaticDataDao.countTypes()
+                    println("[Market] After import: types=$typeCount2, marketGroups=${StaticDataDao.getTopMarketGroups().size}")
+                }
             }
         }
     }

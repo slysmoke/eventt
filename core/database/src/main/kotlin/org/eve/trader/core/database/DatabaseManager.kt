@@ -510,16 +510,17 @@ object DatabaseManager {
 
     fun <T> transaction(block: Connection.() -> T): T {
         val conn = getConnection()
+        val wasAutoCommit = conn.autoCommit
         conn.autoCommit = false
         return try {
             val result = conn.block()
             conn.commit()
             result
         } catch (e: Exception) {
-            conn.rollback()
+            try { conn.rollback() } catch (_: Exception) {}
             throw e
         } finally {
-            conn.autoCommit = true
+            conn.autoCommit = wasAutoCommit
         }
     }
 }
