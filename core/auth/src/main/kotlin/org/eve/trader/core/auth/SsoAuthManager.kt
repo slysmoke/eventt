@@ -91,6 +91,8 @@ object SsoAuthManager {
                 val json = Json { ignoreUnknownKeys = true }
                 json.decodeFromString<TokenResponse>(response.body?.string() ?: "")
             } else {
+                val errorBody = response.body?.string() ?: ""
+                println("[Auth] Token refresh failed: ${response.code} — $errorBody")
                 null
             }
         }
@@ -112,6 +114,7 @@ object SsoAuthManager {
                     json.decodeFromString<CharacterInfo>(body)
                 }.getOrNull()
             } else {
+                println("[Auth] Token verification failed: ${response.code}")
                 null
             }
         }
@@ -164,10 +167,10 @@ object SsoAuthManager {
             val responseHeaders = mapOf("Content-Type" to "text/html; charset=utf-8")
 
             if (error != null) {
-                val html = "<html><body><h1>Authentication failed</h1><p>$error</p></body></html>"
+                val html = "<html><body><h1>Authentication failed</h1><p>$error</p><p>You can close this window.</p></body></html>"
                 sendResponse(exchange, 200, html, responseHeaders)
                 synchronized(lock) {
-                    authResult = AuthResult(success = false, error = error)
+                    authResult = AuthResult(success = false, error = "SSO error: $error")
                 }
                 return@createContext
             }
@@ -182,14 +185,14 @@ object SsoAuthManager {
                         authResult = AuthResult(success = true, character = character)
                     }
                 } else {
-                    val html = "<html><body><h1>Authentication failed</h1><p>Could not exchange token.</p></body></html>"
+                    val html = "<html><body><h1>Authentication failed</h1><p>Could not exchange token. The code may have been used already.</p><p>You can close this window.</p></body></html>"
                     sendResponse(exchange, 200, html, responseHeaders)
                     synchronized(lock) {
-                        authResult = AuthResult(success = false, error = "Token exchange failed")
+                        authResult = AuthResult(success = false, error = "Token exchange failed — code may be invalid or expired")
                     }
                 }
             } else {
-                val html = "<html><body><h1>Authentication failed</h1><p>No authorization code received.</p></body></html>"
+                val html = "<html><body><h1>Authentication failed</h1><p>No authorization code received.</p><p>You can close this window.</p></body></html>"
                 sendResponse(exchange, 200, html, responseHeaders)
                 synchronized(lock) {
                     authResult = AuthResult(success = false, error = "No authorization code")
@@ -235,9 +238,13 @@ object SsoAuthManager {
                         accessToken = tokenResponse.access_token,
                         tokenExpiry = expiresAt,
                     )
-                } else null
+                } else {
+                    println("[Auth] Could not verify token — character info unavailable")
+                    null
+                }
             } else {
-                println("Token exchange failed: ${response.code} ${response.body?.string()}")
+                val errorBody = response.body?.string() ?: ""
+                println("[Auth] Token exchange failed: ${response.code}")
                 null
             }
         }

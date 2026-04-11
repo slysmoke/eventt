@@ -20,24 +20,25 @@ object DatabaseManager {
         val dir = java.io.File(dbFilePath).parentFile
         dir?.mkdirs()
 
-        try {
-            connection = DriverManager.getConnection("jdbc:sqlite:$dbFilePath").apply {
-                autoCommit = true
-                // Enable WAL mode for better concurrent read performance
-                prepareStatement("PRAGMA journal_mode=WAL").execute()
-                // Enable foreign keys
-                prepareStatement("PRAGMA foreign_keys=ON").execute()
-                // Increase cache size (10MB)
-                prepareStatement("PRAGMA cache_size=-10000").execute()
-                // Set busy timeout
-                prepareStatement("PRAGMA busy_timeout=5000").execute()
-            }
-            isInitialized = true
-            createTables()
-            createIndexes()
-        } catch (e: SQLException) {
-            throw RuntimeException("Failed to initialize database: $dbFilePath", e)
+        // Remove corrupt/empty database files
+        val dbFile = java.io.File(dbFilePath)
+        if (dbFile.exists() && dbFile.length() == 0L) {
+            dbFile.delete()
+            java.io.File("$dbFilePath-journal").delete()
+            java.io.File("$dbFilePath-wal").delete()
+            java.io.File("$dbFilePath-shm").delete()
         }
+
+        connection = DriverManager.getConnection("jdbc:sqlite:$dbFilePath").apply {
+            autoCommit = true
+            prepareStatement("PRAGMA journal_mode=WAL").execute()
+            prepareStatement("PRAGMA foreign_keys=ON").execute()
+            prepareStatement("PRAGMA cache_size=-10000").execute()
+            prepareStatement("PRAGMA busy_timeout=5000").execute()
+        }
+        isInitialized = true
+        createTables()
+        createIndexes()
     }
 
     fun getConnection(): Connection {
