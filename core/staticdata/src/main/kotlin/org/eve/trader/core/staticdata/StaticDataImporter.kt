@@ -106,6 +106,7 @@ object StaticDataImporter {
                         "types.jsonl"         -> parseTypes(zip)
                         "groups.jsonl"        -> parseGroups(zip)
                         "categories.jsonl"    -> parseCategories(zip)
+                        "marketGroups.jsonl"  -> parseMarketGroups(zip)
                         "mapRegions.jsonl"    -> parseRegions(zip)
                         "mapSolarSystems.jsonl" -> parseSystems(zip)
                         "npcStations.jsonl"   -> parseNpcStations(zip)
@@ -195,6 +196,32 @@ object StaticDataImporter {
         }
         setState(0.52f, "Saving ${categories.size} categories…")
         StaticDataDao.bulkInsertCategories(categories)
+    }
+
+    private fun parseMarketGroups(zip: ZipInputStream) {
+        setState(0.53f, "Parsing market groups…")
+        val groups = mutableListOf<org.eve.trader.core.model.StaticMarketGroupModel>()
+        val reader = BufferedReader(InputStreamReader(zip, Charsets.UTF_8))
+        reader.forEachLine { line ->
+            if (line.isBlank()) return@forEachLine
+            try {
+                val obj = Json.parseToJsonElement(line).jsonObject
+                val mgId = obj["_key"]?.jsonPrimitive?.intOrNull ?: return@forEachLine
+                val name = obj["name"]?.jsonObject?.get("en")?.jsonPrimitive?.content ?: return@forEachLine
+                val parentId = obj["parentGroupID"]?.jsonPrimitive?.intOrNull
+                groups.add(
+                    org.eve.trader.core.model.StaticMarketGroupModel(
+                        marketGroupId = mgId,
+                        name = name,
+                        parentGroupId = parentId,
+                    )
+                )
+            } catch (_: Exception) {}
+        }
+        setState(0.54f, "Saving ${groups.size} market groups…")
+        groups.chunked(2000).forEach { chunk ->
+            org.eve.trader.core.database.StaticDataDao.bulkInsertMarketGroups(chunk)
+        }
     }
 
     private fun parseRegions(zip: ZipInputStream) {

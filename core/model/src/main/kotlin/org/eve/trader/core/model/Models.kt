@@ -159,6 +159,13 @@ data class TrackedOrderModel(
 // ─── Static Data ────────────────────────────────────────────────────────────
 
 @Serializable
+data class StaticMarketGroupModel(
+    val marketGroupId: Int,
+    val name: String,
+    val parentGroupId: Int? = null,
+)
+
+@Serializable
 data class StaticTypeModel(
     val typeId: Int,
     val name: String,

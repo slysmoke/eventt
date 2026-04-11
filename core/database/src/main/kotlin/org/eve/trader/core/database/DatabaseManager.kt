@@ -85,10 +85,11 @@ object DatabaseManager {
     private fun migrateSchema(conn: Connection) {
         val migrations = listOf(
             "ALTER TABLE static_types ADD COLUMN market_group_id INTEGER",
+            "CREATE TABLE IF NOT EXISTS market_groups (market_group_id INTEGER PRIMARY KEY, name TEXT NOT NULL, parent_group_id INTEGER)",
         )
         conn.createStatement().use { stmt ->
             migrations.forEach { sql ->
-                try { stmt.execute(sql) } catch (e: SQLException) { /* column already exists */ }
+                try { stmt.execute(sql) } catch (e: SQLException) { /* column/table already exists */ }
             }
         }
     }
@@ -391,6 +392,15 @@ object DatabaseManager {
             )
             """.trimIndent(),
 
+            // Market Groups (for market tree navigation)
+            """
+            CREATE TABLE IF NOT EXISTS market_groups (
+                market_group_id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                parent_group_id INTEGER
+            )
+            """.trimIndent(),
+
             // Static Categories
             """
             CREATE TABLE IF NOT EXISTS static_categories (
@@ -480,6 +490,8 @@ object DatabaseManager {
             "CREATE INDEX IF NOT EXISTS idx_static_types_group ON static_types(group_id)",
             "CREATE INDEX IF NOT EXISTS idx_static_stations_region ON static_stations(region_id)",
             "CREATE INDEX IF NOT EXISTS idx_static_types_market ON static_types(market_group_id) WHERE market_group_id IS NOT NULL",
+            "CREATE INDEX IF NOT EXISTS idx_market_groups_parent ON market_groups(parent_group_id)",
+            "CREATE INDEX IF NOT EXISTS idx_market_groups_name ON market_groups(name)",
         )
 
         // using conn parameter

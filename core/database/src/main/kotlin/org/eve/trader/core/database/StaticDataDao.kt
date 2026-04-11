@@ -2,6 +2,7 @@ package org.eve.trader.core.database
 
 import org.eve.trader.core.model.StaticCategoryModel
 import org.eve.trader.core.model.StaticGroupModel
+import org.eve.trader.core.model.StaticMarketGroupModel
 import org.eve.trader.core.model.StaticRegionModel
 import org.eve.trader.core.model.StaticStationModel
 import org.eve.trader.core.model.StaticSystemModel
@@ -181,6 +182,105 @@ object StaticDataDao {
                 }
             }
         }
+    }
+
+    // ─── Market Groups ──────────────────────────────────────────────────
+
+    fun insertMarketGroup(group: StaticMarketGroupModel) {
+        DatabaseManager.transaction {
+            prepareStatement(
+                "INSERT OR REPLACE INTO market_groups (market_group_id, name, parent_group_id) VALUES (?, ?, ?)"
+            ).use { stmt ->
+                stmt.setInt(1, group.marketGroupId)
+                stmt.setString(2, group.name)
+                group.parentGroupId?.let { stmt.setInt(3, it) } ?: stmt.setNull(3, java.sql.Types.INTEGER)
+                stmt.executeUpdate()
+            }
+        }
+    }
+
+    fun bulkInsertMarketGroups(groups: List<StaticMarketGroupModel>) {
+        if (groups.isEmpty()) return
+        DatabaseManager.transaction {
+            prepareStatement(
+                "INSERT OR REPLACE INTO market_groups (market_group_id, name, parent_group_id) VALUES (?, ?, ?)"
+            ).use { stmt ->
+                groups.forEach { g ->
+                    stmt.setInt(1, g.marketGroupId)
+                    stmt.setString(2, g.name)
+                    g.parentGroupId?.let { stmt.setInt(3, it) } ?: stmt.setNull(3, java.sql.Types.INTEGER)
+                    stmt.addBatch()
+                }
+                stmt.executeBatch()
+            }
+        }
+    }
+
+    /** Get top-level market groups (no parent). */
+    fun getTopMarketGroups(): List<StaticMarketGroupModel> {
+        return DatabaseManager.transaction {
+            prepareStatement(
+                "SELECT * FROM market_groups WHERE parent_group_id IS NULL ORDER BY name"
+            ).use { stmt ->
+                stmt.executeQuery().mapResultSetToMarketGroups()
+            }
+        }
+    }
+
+    /** Get child market groups of a given parent. */
+    fun getChildMarketGroups(parentGroupId: Int): List<StaticMarketGroupModel> {
+        return DatabaseManager.transaction {
+            prepareStatement(
+                "SELECT * FROM market_groups WHERE parent_group_id = ? ORDER BY name"
+            ).use { stmt ->
+                stmt.setInt(1, parentGroupId)
+                stmt.executeQuery().mapResultSetToMarketGroups()
+            }
+        }
+    }
+
+    /** Get types that belong to a specific market group. */
+    fun getTypesByMarketGroup(marketGroupId: Int, limit: Int = 200): List<StaticTypeModel> {
+        return DatabaseManager.transaction {
+            prepareStatement(
+                "SELECT * FROM static_types WHERE market_group_id = ? AND published = 1 ORDER BY name LIMIT ?"
+            ).use { stmt ->
+                stmt.setInt(1, marketGroupId)
+                stmt.setInt(2, limit)
+                stmt.executeQuery().mapResultSetToTypes()
+            }
+        }
+    }
+
+    fun getMarketGroupById(marketGroupId: Int): StaticMarketGroupModel? {
+        return DatabaseManager.transaction {
+            prepareStatement("SELECT * FROM market_groups WHERE market_group_id = ?").use { stmt ->
+                stmt.setInt(1, marketGroupId)
+                stmt.executeQuery().use { rs ->
+                    if (rs.next()) {
+                        StaticMarketGroupModel(
+                            marketGroupId = rs.getInt("market_group_id"),
+                            name = rs.getString("name"),
+                            parentGroupId = rs.getInt("parent_group_id").takeIf { !rs.wasNull() },
+                        )
+                    } else null
+                }
+            }
+        }
+    }
+
+    private fun java.sql.ResultSet.mapResultSetToMarketGroups(): List<StaticMarketGroupModel> {
+        val list = mutableListOf<StaticMarketGroupModel>()
+        while (next()) {
+            list.add(
+                StaticMarketGroupModel(
+                    marketGroupId = getInt("market_group_id"),
+                    name = getString("name"),
+                    parentGroupId = getInt("parent_group_id").takeIf { !wasNull() },
+                )
+            )
+        }
+        return list
     }
 
     // ─── Categories ───────────────────────────────────────────────────────
