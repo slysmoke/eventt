@@ -8,6 +8,8 @@ version = "1.0.0"
 
 dependencies {
     implementation(project(":core:model"))
+    implementation(project(":core:database"))
+    implementation(project(":core:auth"))
     implementation(project(":core:esi"))
     implementation(project(":ui:theme"))
     implementation(project(":ui:common"))

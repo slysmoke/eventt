@@ -8,11 +8,9 @@ version = "1.0.0"
 
 dependencies {
     implementation(project(":core:model"))
+    implementation(project(":core:database"))
+    implementation(project(":core:auth"))
     implementation(project(":core:esi"))
-    implementation(project(":features:market"))
-    implementation(project(":features:wallet"))
-    implementation(project(":features:orders"))
-    implementation(project(":features:watchlist"))
     implementation(project(":ui:theme"))
     implementation(project(":ui:common"))
     implementation(compose.desktop.currentOs)
