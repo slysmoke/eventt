@@ -22,18 +22,24 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eve.trader.core.database.MarketDao
+import org.eve.trader.core.database.AlertDao
 import org.eve.trader.core.database.StaticDataDao
+import org.eve.trader.core.database.WatchlistDao
 import org.eve.trader.core.esi.EsiClient
 import org.eve.trader.core.image.EveImageServer
 import org.eve.trader.core.staticdata.StaticDataImporter
 import org.eve.trader.core.model.MarketHistoryModel
+import org.eve.trader.core.model.PriceAlertModel
 import org.eve.trader.core.model.StaticMarketGroupModel
 import org.eve.trader.core.model.StaticTypeModel
+import org.eve.trader.core.model.WatchlistEntryModel
 import org.eve.trader.ui.common.*
 
 // Trade hub regions
@@ -69,6 +75,8 @@ fun MarketBrowserScreen() {
     var childGroups by remember { mutableStateOf<List<StaticMarketGroupModel>>(emptyList()) }
     var isSdeImporting by remember { mutableStateOf(false) }
     var sdeImportProgress by remember { mutableStateOf("") }
+    var showAddToWatchlist by remember { mutableStateOf(false) }
+    var showAddToAlert by remember { mutableStateOf(false) }
 
     // Load top-level market groups on start
     LaunchedEffect(Unit) {
@@ -231,6 +239,8 @@ fun MarketBrowserScreen() {
                                 orderBook = orderBook,
                                 showOrderBook = showOrderBook,
                                 onToggleView = { showOrderBook = !showOrderBook },
+                                onAddToWatchlist = { showAddToWatchlist = true },
+                                onAddToAlert = { showAddToAlert = true },
                             )
 
                             Spacer(modifier = Modifier.height(8.dp))
@@ -309,6 +319,25 @@ fun MarketBrowserScreen() {
                 }
             }
         }
+    }
+
+    // Add to Watchlist dialog
+    if (showAddToWatchlist && selectedType != null) {
+        AddToWatchlistDialog(
+            type = selectedType!!,
+            onDismiss = { showAddToWatchlist = false },
+            onAdded = { showAddToWatchlist = false },
+        )
+    }
+
+    // Add to Alert dialog
+    if (showAddToAlert && selectedType != null) {
+        AddToAlertDialog(
+            type = selectedType!!,
+            orderBook = orderBook,
+            onDismiss = { showAddToAlert = false },
+            onAdded = { showAddToAlert = false },
+        )
     }
 }
 
@@ -431,6 +460,8 @@ private fun TypeMarketHeader(
     orderBook: Pair<List<MarketOrder>, List<MarketOrder>>,
     showOrderBook: Boolean,
     onToggleView: () -> Unit,
+    onAddToWatchlist: () -> Unit,
+    onAddToAlert: () -> Unit,
 ) {
     val (sellOrders, buyOrders) = orderBook
     val bestSell = sellOrders.minOfOrNull { it.price }
@@ -468,6 +499,17 @@ private fun TypeMarketHeader(
             FilterChip(selected = showOrderBook, onClick = onToggleView, label = { Text("Orders") })
             Spacer(modifier = Modifier.width(4.dp))
             FilterChip(selected = !showOrderBook, onClick = onToggleView, label = { Text("History") })
+            Spacer(modifier = Modifier.width(8.dp))
+            OutlinedButton(onClick = onAddToWatchlist, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
+                Icon(Icons.Default.Visibility, null, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Watchlist", style = MaterialTheme.typography.labelSmall)
+            }
+            OutlinedButton(onClick = onAddToAlert, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
+                Icon(Icons.Default.Notifications, null, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Alert", style = MaterialTheme.typography.labelSmall)
+            }
         }
     }
 
@@ -509,46 +551,41 @@ private fun SpreadItem(label: String, value: String, color: Color) {
 private fun OrderBookView(orders: Pair<List<MarketOrder>, List<MarketOrder>>) {
     val (sellOrders, buyOrders) = orders
 
-    Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        // Sell orders
-        Column(modifier = Modifier) {
-            Text("Sell Orders", style = MaterialTheme.typography.titleMedium, color = Color(0xFFFF6B6B))
-            Spacer(modifier = Modifier.height(4.dp))
-            OrderTableHeader()
-            Column(modifier = Modifier.verticalScroll(rememberScrollState()).fillMaxHeight()) {
-                sellOrders.forEach { order ->
-                    OrderRow(order, isSell = true)
-                }
-                if (sellOrders.isEmpty()) {
-                    Text("No sell orders", style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.padding(8.dp))
-                }
+    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        // ─── Sell Orders (top, red) ────────────────────────────────
+        Text("Sell Orders", style = MaterialTheme.typography.titleMedium, color = Color(0xFFFF6B6B))
+        Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
+            Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                Text("Price", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.5f))
+                Text("Volume", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text("Total", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            }
+        }
+        Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            if (sellOrders.isEmpty()) {
+                Text("No sell orders", style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.padding(8.dp))
+            } else {
+                sellOrders.forEach { order -> OrderRow(order, isSell = true) }
             }
         }
 
-        // Buy orders
-        Column(modifier = Modifier) {
-            Text("Buy Orders", style = MaterialTheme.typography.titleMedium, color = Color(0xFF69DB7C))
-            Spacer(modifier = Modifier.height(4.dp))
-            OrderTableHeader()
-            Column(modifier = Modifier.verticalScroll(rememberScrollState()).fillMaxHeight()) {
-                buyOrders.forEach { order ->
-                    OrderRow(order, isSell = false)
-                }
-                if (buyOrders.isEmpty()) {
-                    Text("No buy orders", style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.padding(8.dp))
-                }
+        HorizontalDivider(thickness = 2.dp)
+
+        // ─── Buy Orders (bottom, green) ────────────────────────────
+        Text("Buy Orders", style = MaterialTheme.typography.titleMedium, color = Color(0xFF69DB7C))
+        Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
+            Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                Text("Price", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.5f))
+                Text("Volume", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text("Total", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             }
         }
-    }
-}
-
-@Composable
-private fun OrderTableHeader() {
-    Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
-        Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-            Text("Price", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.5f))
-            Text("Volume", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier)
-            Text("Total", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier)
+        Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            if (buyOrders.isEmpty()) {
+                Text("No buy orders", style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.padding(8.dp))
+            } else {
+                buyOrders.forEach { order -> OrderRow(order, isSell = false) }
+            }
         }
     }
 }
@@ -876,4 +913,120 @@ private fun formatVolume(vol: Long): String {
 private fun <T> List<T>.averageOf(selector: (T) -> Double): Double {
     if (isEmpty()) return 0.0
     return sumOf(selector) / size
+}
+
+// ─── Add to Watchlist Dialog ────────────────────────────────────────────
+
+@Composable
+private fun AddToWatchlistDialog(
+    type: StaticTypeModel,
+    onDismiss: () -> Unit,
+    onAdded: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var watchlistName by remember { mutableStateOf("Default") }
+    val watchlists = remember {
+        try { WatchlistDao.getAllWatchlists().keys.toList() }
+        catch (e: Exception) { listOf("Default") }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add to Watchlist") },
+        text = {
+            Column {
+                Text(type.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Select watchlist:", style = MaterialTheme.typography.labelMedium)
+                Spacer(modifier = Modifier.height(4.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    items(watchlists) { name ->
+                        FilterChip(
+                            selected = watchlistName == name,
+                            onClick = { watchlistName = name },
+                            label = { Text(name) },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                scope.launch(Dispatchers.IO) {
+                    WatchlistDao.insert(WatchlistEntryModel(
+                        typeId = type.typeId, typeName = type.name, watchlistName = watchlistName,
+                    ))
+                    withContext(Dispatchers.Main) { onAdded() }
+                }
+            }) { Text("Add") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+// ─── Add to Alert Dialog ────────────────────────────────────────────────
+
+@Composable
+private fun AddToAlertDialog(
+    type: StaticTypeModel,
+    orderBook: Pair<List<MarketOrder>, List<MarketOrder>>,
+    onDismiss: () -> Unit,
+    onAdded: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var targetPrice by remember { mutableStateOf("") }
+    var condition by remember { mutableStateOf("below") }
+
+    val (sellOrders, buyOrders) = orderBook
+    val bestSell = sellOrders.minOfOrNull { it.price }
+    val bestBuy = buyOrders.maxOfOrNull { it.price }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Create Price Alert") },
+        text = {
+            Column {
+                Text(type.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (bestSell != null || bestBuy != null) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (bestSell != null) Text("Best Sell: ${formatPrice(bestSell)}", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF6B6B))
+                        if (bestBuy != null) Text("Best Buy: ${formatPrice(bestBuy)}", style = MaterialTheme.typography.labelSmall, color = Color(0xFF69DB7C))
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    FilterChip(selected = condition == "below", onClick = { condition = "below" }, label = { Text("Below") })
+                    FilterChip(selected = condition == "above", onClick = { condition = "above" }, label = { Text("Above") })
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = targetPrice,
+                    onValueChange = { targetPrice = it },
+                    label = { Text("Target Price (ISK)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val price = targetPrice.toDoubleOrNull() ?: return@Button
+                    scope.launch(Dispatchers.IO) {
+                        AlertDao.insert(PriceAlertModel(
+                            typeId = type.typeId, typeName = type.name,
+                            targetPrice = price, condition = condition,
+                        ))
+                        withContext(Dispatchers.Main) { onAdded() }
+                    }
+                },
+                enabled = targetPrice.toDoubleOrNull() != null,
+            ) { Text("Create Alert") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }

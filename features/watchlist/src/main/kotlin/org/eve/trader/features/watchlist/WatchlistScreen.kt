@@ -20,12 +20,15 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.eve.trader.core.database.DatabaseManager
 import org.eve.trader.core.database.StaticDataDao
 import org.eve.trader.core.database.WatchlistDao
 import org.eve.trader.core.esi.EsiClient
 import org.eve.trader.core.model.WatchlistEntryModel
+import org.eve.trader.core.model.WatchlistPriceSnapshot
 import org.eve.trader.ui.common.*
+
+// The Forge (Jita) is the default trade hub for price lookups
+private const val DEFAULT_REGION_ID = 10000002
 
 @Composable
 fun WatchlistScreen() {
@@ -35,13 +38,34 @@ fun WatchlistScreen() {
     var searchQuery by remember { mutableStateOf("") }
     var searchResults by remember { mutableStateOf<List<org.eve.trader.core.model.StaticTypeModel>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
+    var entryToDelete by remember { mutableStateOf<WatchlistEntryModel?>(null) }
 
     LaunchedEffect(Unit) {
         loadWatchlists { watchlists = it; if (it.isNotEmpty()) selectedWatchlist = it.keys.first() }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Watchlist", style = MaterialTheme.typography.headlineMedium)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Watchlist", style = MaterialTheme.typography.headlineMedium)
+            Button(
+                onClick = {
+                    isLoading = true
+                    scope.launch(Dispatchers.IO) {
+                        refreshAllPrices(watchlists)
+                        withContext(Dispatchers.Main) { isLoading = false }
+                    }
+                },
+                enabled = !isLoading,
+            ) {
+                Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Refresh Prices")
+            }
+        }
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -57,10 +81,21 @@ fun WatchlistScreen() {
                 }
                 item {
                     OutlinedButton(onClick = {
-                        // Add new watchlist
                         val newName = "Watchlist ${watchlists.size + 1}"
-                        watchlists = watchlists + (newName to emptyList())
-                        selectedWatchlist = newName
+                        // Insert a dummy entry to create the list, then reload
+                        WatchlistDao.insert(
+                            org.eve.trader.core.model.WatchlistEntryModel(
+                                typeId = 0, typeName = "", watchlistName = newName,
+                            )
+                        )
+                        loadWatchlists { loaded ->
+                            // Remove the dummy
+                            loaded[newName]?.find { it.typeId == 0 }?.let { dummy ->
+                                WatchlistDao.delete(dummy.id)
+                            }
+                            watchlists = loaded
+                            selectedWatchlist = newName
+                        }
                     }) {
                         Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
                     }
@@ -76,7 +111,7 @@ fun WatchlistScreen() {
                 searchQuery = query
                 if (query.length >= 2) {
                     scope.launch(Dispatchers.IO) {
-                        searchResults = StaticDataDao.searchTypes(query, limit = 15)
+                        searchResults = StaticDataDao.searchMarketTypes(query, limit = 15)
                     }
                 } else {
                     searchResults = emptyList()
@@ -129,15 +164,55 @@ fun WatchlistScreen() {
                 modifier = Modifier.fillMaxWidth().weight(1f),
             )
         } else {
-            WatchlistTable(entries)
+            WatchlistTable(
+                entries = entries,
+                onDelete = { entryToDelete = it },
+                onRefresh = { entry ->
+                    scope.launch(Dispatchers.IO) {
+                        refreshEntryPrice(entry)
+                        withContext(Dispatchers.Main) {
+                            loadWatchlists { watchlists = it }
+                        }
+                    }
+                },
+            )
         }
     }
 
-    LoadingOverlay(isLoading = isLoading, message = "Loading watchlist data...")
+    // Delete confirmation
+    entryToDelete?.let { entry ->
+        AlertDialog(
+            onDismissRequest = { entryToDelete = null },
+            title = { Text("Remove from Watchlist") },
+            text = { Text("Remove '${entry.typeName}' from $selectedWatchlist?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        scope.launch(Dispatchers.IO) {
+                            WatchlistDao.delete(entry.id)
+                            withContext(Dispatchers.Main) {
+                                loadWatchlists { watchlists = it }
+                                entryToDelete = null
+                            }
+                        }
+                    },
+                ) { Text("Remove") }
+            },
+            dismissButton = {
+                TextButton(onClick = { entryToDelete = null }) { Text("Cancel") }
+            },
+        )
+    }
+
+    LoadingOverlay(isLoading = isLoading, message = "Refreshing prices from ESI...")
 }
 
 @Composable
-private fun WatchlistTable(entries: List<WatchlistEntryModel>) {
+private fun WatchlistTable(
+    entries: List<WatchlistEntryModel>,
+    onDelete: (WatchlistEntryModel) -> Unit,
+    onRefresh: (WatchlistEntryModel) -> Unit,
+) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         // Header
         item {
@@ -146,29 +221,36 @@ private fun WatchlistTable(entries: List<WatchlistEntryModel>) {
                     Text("Item", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(2f))
                     Text("Buy", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                     Text("Sell", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                    Text("24h", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                    Text("7d", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text("Spread", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                     Text("Trend", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text("", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(0.5f))
                 }
             }
         }
 
         items(entries) { entry ->
-            WatchlistRow(entry)
+            WatchlistRow(entry, onDelete = { onDelete(entry) }, onRefresh = { onRefresh(entry) })
         }
     }
 }
 
 @Composable
-private fun WatchlistRow(entry: WatchlistEntryModel) {
-    val price = remember(entry.typeId) {
-        try {
-            WatchlistDao.getLatestPrice(entry.typeId, entry.stationId)
-        } catch (e: Exception) { null }
+private fun WatchlistRow(
+    entry: WatchlistEntryModel,
+    onDelete: () -> Unit,
+    onRefresh: () -> Unit,
+) {
+    // Fetch price on first composition
+    val priceState = remember(entry.id) { mutableStateOf<WatchlistPriceSnapshot?>(null) }
+
+    LaunchedEffect(entry.typeId) {
+        withContext(Dispatchers.IO) {
+            priceState.value = WatchlistDao.getLatestPrice(entry.typeId, DEFAULT_REGION_ID.toLong())
+        }
     }
 
-    val change24h = price?.changePercent24h ?: 0.0
-    val change7d = price?.changePercent7d ?: 0.0
+    val price = priceState.value
+    val spread = price?.spreadPercent ?: 0.0
 
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
@@ -191,13 +273,15 @@ private fun WatchlistRow(entry: WatchlistEntryModel) {
             modifier = Modifier.weight(1f),
         )
 
-        // 24h change
-        ChangeBadge(change24h, modifier = Modifier.weight(1f))
+        // Spread
+        Text(
+            if (price != null) "${String.format("%.1f", spread)}%" else "—",
+            style = MaterialTheme.typography.bodySmall,
+            color = if (spread > 5) Color(0xFFFF8C00) else Color.Gray,
+            modifier = Modifier.weight(1f),
+        )
 
-        // 7d change
-        ChangeBadge(change7d, modifier = Modifier.weight(1f))
-
-        // Sparkline
+        // Sparkline (from history data if available)
         if (price != null && price.sparklineData.isNotEmpty()) {
             MiniSparkline(
                 data = price.sparklineData.map { it.second },
@@ -206,22 +290,15 @@ private fun WatchlistRow(entry: WatchlistEntryModel) {
         } else {
             Text("—", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
         }
-    }
-}
 
-@Composable
-private fun ChangeBadge(value: Double, modifier: Modifier = Modifier) {
-    val color = when {
-        value > 0 -> Color(0xFF69DB7C)
-        value < 0 -> Color(0xFFFF6B6B)
-        else -> Color.Gray
+        // Actions
+        IconButton(onClick = onRefresh, modifier = Modifier.size(24.dp).weight(0.25f)) {
+            Icon(Icons.Default.Refresh, null, modifier = Modifier.size(14.dp), tint = Color.Gray)
+        }
+        IconButton(onClick = onDelete, modifier = Modifier.size(24.dp).weight(0.25f)) {
+            Icon(Icons.Default.Close, null, modifier = Modifier.size(14.dp), tint = Color.Red)
+        }
     }
-    Text(
-        text = "${if (value > 0) "+" else ""}${String.format("%.1f", value)}%",
-        style = MaterialTheme.typography.bodySmall,
-        color = color,
-        modifier = modifier,
-    )
 }
 
 @Composable
@@ -254,12 +331,73 @@ private fun MiniSparkline(data: List<Double>, modifier: Modifier = Modifier) {
     }
 }
 
+// ─── Data Operations ────────────────────────────────────────────────────
+
 private fun loadWatchlists(callback: (Map<String, List<WatchlistEntryModel>>) -> Unit) {
     try {
         callback(WatchlistDao.getAllWatchlists())
     } catch (e: Exception) {
-        println("Error loading watchlists: ${e.message}")
+        println("[Watchlist] Error loading: ${e.message}")
     }
+}
+
+/** Refresh prices for all entries in all watchlists. */
+private suspend fun refreshAllPrices(watchlists: Map<String, List<WatchlistEntryModel>>) {
+    val allEntries = watchlists.values.flatten().filter { it.typeId > 0 }
+    allEntries.forEach { entry ->
+        try {
+            refreshEntryPrice(entry)
+        } catch (e: Exception) {
+            println("[Watchlist] Error refreshing ${entry.typeName}: ${e.message}")
+        }
+    }
+}
+
+/** Fetch market data for a single watchlist entry and save price snapshot. */
+private suspend fun refreshEntryPrice(entry: WatchlistEntryModel) {
+    if (entry.typeId <= 0) return
+
+    // Fetch orders from Jita region
+    val rawOrders = EsiClient.getMarketRegionOrders(DEFAULT_REGION_ID, typeId = entry.typeId)
+    val sellOrders = rawOrders.filter { (it["is_buy_order"] as? Boolean) == false }
+    val buyOrders = rawOrders.filter { (it["is_buy_order"] as? Boolean) == true }
+
+    val bestSell = sellOrders.minOfOrNull { (it["price"] as? Number)?.toDouble() ?: 0.0 } ?: 0.0
+    val bestBuy = buyOrders.maxOfOrNull { (it["price"] as? Number)?.toDouble() ?: 0.0 } ?: 0.0
+    val spread = if (bestSell > 0) bestSell - bestBuy else 0.0
+    val spreadPercent = if (bestSell > 0) (spread / bestSell) * 100 else 0.0
+    val totalVolume = rawOrders.sumOf { (it["volume_remain"] as? Number)?.toLong() ?: 0 }
+
+    // Fetch history for sparkline
+    val rawHistory = EsiClient.getMarketRegionHistory(DEFAULT_REGION_ID, entry.typeId)
+    val sparklineData = rawHistory.takeLast(30).map { hist ->
+        (hist["date"] as? String ?: "") to ((hist["average"] as? Number)?.toDouble() ?: 0.0)
+    }
+
+    // Calculate changes
+    val currentAvg = sparklineData.lastOrNull()?.second ?: 0.0
+    val dayAgo = sparklineData.getOrNull(sparklineData.size - 2)?.second ?: 0.0
+    val weekAgo = sparklineData.getOrNull(sparklineData.size - 8)?.second ?: 0.0
+
+    val change24h = if (dayAgo > 0) ((currentAvg - dayAgo) / dayAgo) * 100 else 0.0
+    val change7d = if (weekAgo > 0) ((currentAvg - weekAgo) / weekAgo) * 100 else 0.0
+    val change30d = 0.0 // Would need 30 days of history
+
+    val snapshot = WatchlistPriceSnapshot(
+        typeId = entry.typeId,
+        stationId = 0,
+        bestBuyPrice = bestBuy,
+        bestSellPrice = bestSell,
+        spread = spread,
+        spreadPercent = spreadPercent,
+        volume24h = totalVolume,
+        changePercent24h = change24h,
+        changePercent7d = change7d,
+        changePercent30d = change30d,
+        sparklineData = sparklineData,
+    )
+
+    WatchlistDao.insertPriceSnapshot(snapshot)
 }
 
 private fun formatPrice(price: Double): String {
