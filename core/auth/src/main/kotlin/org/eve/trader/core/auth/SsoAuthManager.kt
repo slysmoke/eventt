@@ -46,20 +46,30 @@ object SsoAuthManager {
         val state = java.util.UUID.randomUUID().toString()
         authResult = null
 
-        val encodedScopes = SCOPES.replace(" ", "+")
+        // Properly encode for OAuth2: scope uses space-separated, redirect uses percent-encoding
+        val encodedScopes = java.net.URLEncoder.encode(SCOPES, "UTF-8")
         val encodedRedirect = java.net.URLEncoder.encode(CALLBACK_URL, "UTF-8")
         val authUrl = "$ESI_SSO_URL/authorize?response_type=code&redirect_uri=$encodedRedirect&client_id=$CLIENT_ID&scope=$encodedScopes&state=$state"
+
+        println("[Auth] SSO URL: $ESI_SSO_URL/authorize")
+        println("[Auth] Client ID: $CLIENT_ID")
+        println("[Auth] Redirect URI: $CALLBACK_URL")
+        println("[Auth] State: $state")
+        println("[Auth] Scopes: ${SCOPES.split(" ").size} scopes")
 
         startCallbackServer()
 
         try {
             if (Desktop.isDesktopSupported()) {
+                println("[Auth] Opening browser...")
                 Desktop.getDesktop().browse(URI(authUrl))
             } else {
-                println("Open this URL in your browser: $authUrl")
+                println("[Auth] Desktop not supported. Open this URL in your browser:")
+                println("[Auth] $authUrl")
             }
         } catch (e: Exception) {
-            println("Could not open browser. Open this URL manually: $authUrl")
+            println("[Auth] Could not open browser: ${e.message}")
+            println("[Auth] Open this URL manually: $authUrl")
         }
 
         // Wait for callback (max 5 minutes)
@@ -67,10 +77,19 @@ object SsoAuthManager {
         while (authResult == null && waited < 300_000) {
             Thread.sleep(500)
             waited += 500
+            if (waited % 10000L == 0L) {
+                println("[Auth] Waiting for browser callback... (${waited / 1000}s)")
+            }
         }
 
         stopServer()
-        return authResult ?: AuthResult(success = false, error = "Auth timed out")
+
+        return if (authResult != null) {
+            authResult!!
+        } else {
+            println("[Auth] Auth timed out after 5 minutes")
+            AuthResult(success = false, error = "Authentication timed out — browser may not have opened or callback blocked")
+        }
     }
 
     fun refreshToken(refreshToken: String): TokenResponse? {
@@ -154,15 +173,23 @@ object SsoAuthManager {
     )
 
     private fun startCallbackServer() {
+        // Stop any existing server first
+        stopServer()
+
         val srv = HttpServer.create(InetSocketAddress("127.0.0.1", 8000), 0)
         server = srv
+
+        println("[Auth] Callback server started on http://127.0.0.1:8000")
 
         srv.createContext("/callback") { exchange ->
             val query = exchange.requestURI.query ?: ""
             val params = parseQueryString(query)
 
+            println("[Auth] Callback received: $query")
+
             val error = params["error"]
             val code = params["code"]
+            val state = params["state"]
 
             val responseHeaders = mapOf("Content-Type" to "text/html; charset=utf-8")
 
@@ -172,31 +199,36 @@ object SsoAuthManager {
                 synchronized(lock) {
                     authResult = AuthResult(success = false, error = "SSO error: $error")
                 }
+                println("[Auth] SSO error: $error")
                 return@createContext
             }
 
             if (code != null) {
+                println("[Auth] Received authorization code: ${code.take(10)}...")
                 val character = exchangeCodeForToken(code)
                 if (character != null) {
                     CharacterDao.insert(character)
-                    val html = "<html><body><h1>Authentication successful!</h1><p>You can close this window and return to EVE Trader.</p></body></html>"
+                    val html = "<html><body><h1>Authentication successful!</h1><p>Welcome, ${character.name}! You can close this window.</p></body></html>"
                     sendResponse(exchange, 200, html, responseHeaders)
                     synchronized(lock) {
                         authResult = AuthResult(success = true, character = character)
                     }
+                    println("[Auth] Auth successful: ${character.name} (ID: ${character.id})")
                 } else {
-                    val html = "<html><body><h1>Authentication failed</h1><p>Could not exchange token. The code may have been used already.</p><p>You can close this window.</p></body></html>"
+                    val html = "<html><body><h1>Authentication failed</h1><p>Could not exchange token. The code may have been used already or is invalid.</p><p>You can close this window.</p></body></html>"
                     sendResponse(exchange, 200, html, responseHeaders)
                     synchronized(lock) {
-                        authResult = AuthResult(success = false, error = "Token exchange failed — code may be invalid or expired")
+                        authResult = AuthResult(success = false, error = "Token exchange failed — code invalid or expired")
                     }
+                    println("[Auth] Token exchange failed for code: ${code.take(10)}...")
                 }
             } else {
                 val html = "<html><body><h1>Authentication failed</h1><p>No authorization code received.</p><p>You can close this window.</p></body></html>"
                 sendResponse(exchange, 200, html, responseHeaders)
                 synchronized(lock) {
-                    authResult = AuthResult(success = false, error = "No authorization code")
+                    authResult = AuthResult(success = false, error = "No authorization code in callback")
                 }
+                println("[Auth] No authorization code in callback")
             }
         }
 
@@ -214,23 +246,29 @@ object SsoAuthManager {
 
         val encodedRedirect = java.net.URLEncoder.encode(CALLBACK_URL, "UTF-8")
         val body = "grant_type=authorization_code&code=$code&redirect_uri=$encodedRedirect"
-        val requestBody = body.toRequestBody("application/x-www-form-urlencoded".toMediaType())
+
+        println("[Auth] Exchanging code for token...")
+        println("[Auth] Redirect URI (encoded): $encodedRedirect")
 
         val request = Request.Builder()
             .url("$ESI_SSO_URL/token")
-            .post(requestBody)
+            .post(body.toRequestBody("application/x-www-form-urlencoded".toMediaType()))
             .header("Authorization", "Basic " + java.util.Base64.getEncoder().encodeToString("$CLIENT_ID:$CLIENT_SECRET".toByteArray()))
             .header("Host", "login.eveonline.com")
+            .header("Content-Type", "application/x-www-form-urlencoded")
             .build()
 
         return client.newCall(request).execute().use { response ->
+            val responseBody = response.body?.string() ?: ""
             if (response.isSuccessful) {
+                println("[Auth] Token exchange successful")
                 val json = Json { ignoreUnknownKeys = true }
-                val tokenResponse = json.decodeFromString<TokenResponse>(response.body?.string() ?: "")
+                val tokenResponse = json.decodeFromString<TokenResponse>(responseBody)
 
                 val charInfo = verifyToken(tokenResponse.access_token)
                 if (charInfo != null) {
                     val expiresAt = System.currentTimeMillis() + (tokenResponse.expires_in * 1000L)
+                    println("[Auth] Character: ${charInfo.CharacterName} (ID: ${charInfo.CharacterID})")
                     CharacterModel(
                         id = charInfo.CharacterID,
                         name = charInfo.CharacterName,
@@ -239,12 +277,12 @@ object SsoAuthManager {
                         tokenExpiry = expiresAt,
                     )
                 } else {
-                    println("[Auth] Could not verify token — character info unavailable")
+                    println("[Auth] Token verify failed after successful exchange")
                     null
                 }
             } else {
-                val errorBody = response.body?.string() ?: ""
-                println("[Auth] Token exchange failed: ${response.code}")
+                println("[Auth] Token exchange FAILED: HTTP ${response.code}")
+                println("[Auth] Response: $responseBody")
                 null
             }
         }
