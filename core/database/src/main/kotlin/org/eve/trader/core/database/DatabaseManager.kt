@@ -38,22 +38,29 @@ object DatabaseManager {
             java.io.File("$dbFilePath-wal").delete()
             java.io.File("$dbFilePath-shm").delete()
 
-            connection = DriverManager.getConnection("jdbc:sqlite:$dbFilePath").apply {
-                autoCommit = true
-                prepareStatement("PRAGMA journal_mode=WAL").execute()
-                prepareStatement("PRAGMA foreign_keys=ON").execute()
-                prepareStatement("PRAGMA cache_size=-10000").execute()
-                // Increase busy timeout to 30 seconds
-                prepareStatement("PRAGMA busy_timeout=30000").execute()
-                // Better WAL settings for concurrency
-                prepareStatement("PRAGMA synchronous=NORMAL").execute()
-                prepareStatement("PRAGMA journal_size_limit=67108864").execute()
-                prepareStatement("PRAGMA wal_autocheckpoint=1000").execute()
-                prepareStatement("PRAGMA cache_size=-20000").execute()
+            // Get connection with default settings
+            val conn = DriverManager.getConnection("jdbc:sqlite:$dbFilePath")
+            connection = conn
+
+            // IMPORTANT: Don't set autoCommit = true before PRAGMAs.
+            // The SQLite JDBC driver creates an internal transaction when autoCommit is set,
+            // which then conflicts with PRAGMA journal_mode=WAL (causes SQLITE_BUSY).
+            // Set autoCommit AFTER all PRAGMAs.
+            conn.createStatement().use { stmt ->
+                stmt.execute("PRAGMA journal_mode=WAL")
+                stmt.execute("PRAGMA foreign_keys=ON")
+                stmt.execute("PRAGMA synchronous=NORMAL")
+                stmt.execute("PRAGMA busy_timeout=30000")
+                stmt.execute("PRAGMA cache_size=-20000")
+                stmt.execute("PRAGMA journal_size_limit=67108864")
+                stmt.execute("PRAGMA wal_autocheckpoint=1000")
             }
 
-            createTables()
-            createIndexes()
+            // NOW set autoCommit to true
+            conn.autoCommit = true
+
+            createTables(conn)
+            createIndexes(conn)
             isInitialized = true
         }
     }
@@ -71,7 +78,7 @@ object DatabaseManager {
 
     // ─── Table Creation ─────────────────────────────────────────────────
 
-    private fun createTables() {
+    private fun createTables(conn: Connection) {
         val statements = listOf(
             // Characters
             """
@@ -414,7 +421,7 @@ object DatabaseManager {
             """.trimIndent(),
         )
 
-        val conn = getConnection()
+        // using conn parameter
         conn.createStatement().use { stmt ->
             statements.forEach { sql ->
                 try {
@@ -426,7 +433,7 @@ object DatabaseManager {
         }
     }
 
-    private fun createIndexes() {
+    private fun createIndexes(conn: Connection) {
         val indexes = listOf(
             "CREATE INDEX IF NOT EXISTS idx_esi_cache_lookup ON esi_cache(endpoint, params_hash)",
             "CREATE INDEX IF NOT EXISTS idx_tracked_orders_character ON tracked_orders(character_id)",
@@ -457,7 +464,7 @@ object DatabaseManager {
             "CREATE INDEX IF NOT EXISTS idx_static_stations_region ON static_stations(region_id)",
         )
 
-        val conn = getConnection()
+        // using conn parameter
         conn.createStatement().use { stmt ->
             indexes.forEach { sql ->
                 try {
@@ -471,7 +478,7 @@ object DatabaseManager {
 
     // ─── Helpers ──────────────────────────────────────────────────────────
 
-    inline fun <T> transaction(block: Connection.() -> T): T {
+    fun <T> transaction(block: Connection.() -> T): T {
         val conn = getConnection()
         return conn.block()
     }
