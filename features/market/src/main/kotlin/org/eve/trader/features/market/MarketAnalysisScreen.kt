@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,28 +24,20 @@ import kotlinx.coroutines.launch
 import org.eve.trader.core.database.MarketDao
 import org.eve.trader.core.database.StaticDataDao
 import org.eve.trader.core.esi.EsiClient
-
-// ─── Regions ──────────────────────────────────────────────────────────────
-
-private val ANALYSIS_REGIONS = listOf(
-    10000002 to "The Forge (Jita)",
-    10000043 to "Domain (Amarr)",
-    10000032 to "Sinq Laison (Dodixie)",
-    10000030 to "Metropolis (Hek)",
-    10000042 to "Heimatar (Rens)",
-)
+import org.eve.trader.core.model.StaticMarketGroupModel
+import org.eve.trader.core.model.StaticRegionModel
 
 // ─── Data models ──────────────────────────────────────────────────────────
 
 data class StationOpportunity(
     val typeId: Int,
     val typeName: String,
-    val bestSell: Double,           // cheapest sell order = what you pay to buy immediately
-    val bestBuy: Double,            // highest buy order = what you receive selling immediately
-    val grossProfit: Double,        // bestSell - bestBuy (raw spread)
+    val bestSell: Double,           // cheapest sell order = what you pay
+    val bestBuy: Double,            // highest buy order = what you receive
+    val grossProfit: Double,
     val netProfit: Double,          // after broker fee + sales tax
-    val marginPct: Double,          // grossProfit / bestSell * 100
-    val dailyVolume: Long,          // avg 30-day volume from cached history (0 = unknown)
+    val marginPct: Double,
+    val dailyVolume: Long,
     val sellOrderCount: Int,
     val buyOrderCount: Int,
     val estimatedDailyProfit: Double,
@@ -60,7 +53,7 @@ data class RegionOpportunity(
     val grossProfit: Double,
     val netProfit: Double,          // after fees + shipping
     val marginPct: Double,
-    val itemVolumeM3: Double,       // m³ per unit (packaged)
+    val itemVolumeM3: Double,
     val shippingCostPerUnit: Double,
     val dailyVolume: Long,
 )
@@ -72,13 +65,13 @@ private enum class RegionSortCol  { NAME, BUY_PRICE, SELL_PRICE, MARGIN, ITEM_VO
 
 private fun sortStation(list: List<StationOpportunity>, col: StationSortCol, asc: Boolean): List<StationOpportunity> {
     val cmp: Comparator<StationOpportunity> = when (col) {
-        StationSortCol.NAME        -> compareBy { it.typeName }
-        StationSortCol.BUY_PRICE   -> compareBy { it.bestSell }
-        StationSortCol.SELL_PRICE  -> compareBy { it.bestBuy }
-        StationSortCol.MARGIN      -> compareBy { it.marginPct }
-        StationSortCol.NET_PROFIT  -> compareBy { it.netProfit }
-        StationSortCol.VOLUME      -> compareBy { it.dailyVolume }
-        StationSortCol.DAILY_PROFIT-> compareBy { it.estimatedDailyProfit }
+        StationSortCol.NAME         -> compareBy { it.typeName }
+        StationSortCol.BUY_PRICE    -> compareBy { it.bestSell }
+        StationSortCol.SELL_PRICE   -> compareBy { it.bestBuy }
+        StationSortCol.MARGIN       -> compareBy { it.marginPct }
+        StationSortCol.NET_PROFIT   -> compareBy { it.netProfit }
+        StationSortCol.VOLUME       -> compareBy { it.dailyVolume }
+        StationSortCol.DAILY_PROFIT -> compareBy { it.estimatedDailyProfit }
     }
     return if (asc) list.sortedWith(cmp) else list.sortedWith(cmp.reversed())
 }
@@ -102,6 +95,14 @@ private fun sortRegion(list: List<RegionOpportunity>, col: RegionSortCol, asc: B
 @Composable
 fun MarketAnalysisScreen() {
     var selectedTab by remember { mutableStateOf(0) }
+
+    val allRegions by produceState(initialValue = emptyList<StaticRegionModel>()) {
+        value = withContext(Dispatchers.IO) { StaticDataDao.getAllRegions() }
+    }
+    val topGroups by produceState(initialValue = emptyList<StaticMarketGroupModel>()) {
+        value = withContext(Dispatchers.IO) { StaticDataDao.getTopMarketGroups() }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         TabRow(selectedTabIndex = selectedTab) {
             Tab(
@@ -112,12 +113,12 @@ fun MarketAnalysisScreen() {
             Tab(
                 selected = selectedTab == 1, onClick = { selectedTab = 1 },
                 text = { Text("Inter-Region") },
-                icon = { Icon(Icons.Default.CompareArrows, null, Modifier.size(16.dp)) },
+                icon = { Icon(Icons.AutoMirrored.Filled.CompareArrows, null, Modifier.size(16.dp)) },
             )
         }
         when (selectedTab) {
-            0 -> StationTradingTab()
-            1 -> InterRegionTab()
+            0 -> StationTradingTab(allRegions, topGroups)
+            1 -> InterRegionTab(allRegions, topGroups)
         }
     }
 }
@@ -125,22 +126,34 @@ fun MarketAnalysisScreen() {
 // ─── Station Trading ──────────────────────────────────────────────────────
 
 @Composable
-private fun StationTradingTab() {
+private fun StationTradingTab(
+    allRegions: List<StaticRegionModel>,
+    topGroups: List<StaticMarketGroupModel>,
+) {
     val scope = rememberCoroutineScope()
 
-    var regionId      by remember { mutableStateOf(10000002) }
-    var minMargin     by remember { mutableStateOf(5f) }
-    var minDailyVol   by remember { mutableStateOf("10") }
-    var maxBuyPrice   by remember { mutableStateOf("500000000") }
-    var minNetProfit  by remember { mutableStateOf("100000") }
-    var brokerFee     by remember { mutableStateOf(3f) }
-    var salesTax      by remember { mutableStateOf(8f) }
+    var regionId         by remember { mutableStateOf(10000002) }
+    var selectedTopGroup by remember { mutableStateOf<StaticMarketGroupModel?>(null) }
+    var selectedSubGroup by remember { mutableStateOf<StaticMarketGroupModel?>(null) }
+    var subGroups        by remember { mutableStateOf<List<StaticMarketGroupModel>>(emptyList()) }
+    var minMargin        by remember { mutableStateOf(5f) }
+    var minDailyVol      by remember { mutableStateOf("10") }
+    var maxBuyPrice      by remember { mutableStateOf("500000000") }
+    var minNetProfit     by remember { mutableStateOf("100000") }
+    var brokerFee        by remember { mutableStateOf(3f) }
+    var salesTax         by remember { mutableStateOf(8f) }
+    var isAnalyzing      by remember { mutableStateOf(false) }
+    var statusMsg        by remember { mutableStateOf("") }
+    var results          by remember { mutableStateOf<List<StationOpportunity>>(emptyList()) }
+    var sortCol          by remember { mutableStateOf(StationSortCol.NET_PROFIT) }
+    var sortAsc          by remember { mutableStateOf(false) }
 
-    var isAnalyzing   by remember { mutableStateOf(false) }
-    var statusMsg     by remember { mutableStateOf("") }
-    var results       by remember { mutableStateOf<List<StationOpportunity>>(emptyList()) }
-    var sortCol       by remember { mutableStateOf(StationSortCol.NET_PROFIT) }
-    var sortAsc       by remember { mutableStateOf(false) }
+    LaunchedEffect(selectedTopGroup) {
+        subGroups = if (selectedTopGroup != null)
+            withContext(Dispatchers.IO) { StaticDataDao.getChildMarketGroups(selectedTopGroup!!.marketGroupId) }
+        else emptyList()
+        selectedSubGroup = null
+    }
 
     Row(modifier = Modifier.fillMaxSize()) {
         // ── Filters sidebar ────────────────────────────────────────
@@ -153,9 +166,15 @@ private fun StationTradingTab() {
                 Spacer(Modifier.height(10.dp))
 
                 SectionLabel("Region")
-                ANALYSIS_REGIONS.forEach { (id, name) ->
-                    RegionRadioRow(id, name, regionId) { regionId = it }
-                }
+                RegionPicker(allRegions = allRegions, selectedRegionId = regionId) { regionId = it }
+
+                Spacer(Modifier.height(10.dp))
+                SectionLabel("Category (optional)")
+                CategoryFilter(
+                    topGroups = topGroups, subGroups = subGroups,
+                    selectedTopGroup = selectedTopGroup, onTopGroupSelected = { selectedTopGroup = it },
+                    selectedSubGroup = selectedSubGroup, onSubGroupSelected = { selectedSubGroup = it },
+                )
 
                 Spacer(Modifier.height(10.dp))
                 HorizontalDivider()
@@ -166,11 +185,11 @@ private fun StationTradingTab() {
                 SliderFilter("Sales Tax",  salesTax,  0f..12f, "${String.format("%.1f", salesTax)}%")  { salesTax  = it }
 
                 Spacer(Modifier.height(8.dp))
-                FilterField("Min Daily Volume",  minDailyVol)  { minDailyVol  = it }
+                FilterField("Min Daily Volume",    minDailyVol)  { minDailyVol  = it }
                 Spacer(Modifier.height(6.dp))
-                FilterField("Max Buy Price (ISK)", maxBuyPrice) { maxBuyPrice  = it }
+                FilterField("Max Buy Price (ISK)", maxBuyPrice)  { maxBuyPrice  = it }
                 Spacer(Modifier.height(6.dp))
-                FilterField("Min Net Profit/unit", minNetProfit){ minNetProfit = it }
+                FilterField("Min Net Profit/unit", minNetProfit) { minNetProfit = it }
 
                 Spacer(Modifier.height(14.dp))
                 Button(
@@ -178,22 +197,27 @@ private fun StationTradingTab() {
                         scope.launch {
                             isAnalyzing = true
                             results = emptyList()
-                            val regionName = ANALYSIS_REGIONS.find { it.first == regionId }?.second ?: "region"
+                            val regionName = allRegions.find { it.regionId == regionId }?.name ?: "region"
                             try {
                                 statusMsg = "Fetching orders from $regionName…"
                                 val allOrders = withContext(Dispatchers.IO) {
                                     EsiClient.getMarketRegionOrders(regionId)
                                 }
+                                val filterGroupId = selectedSubGroup?.marketGroupId ?: selectedTopGroup?.marketGroupId
+                                val filterGroupIds = if (filterGroupId != null)
+                                    withContext(Dispatchers.IO) { buildGroupSubtree(filterGroupId) }
+                                else null
                                 statusMsg = "Analyzing ${allOrders.size} orders…"
                                 results = withContext(Dispatchers.IO) {
                                     computeStation(
                                         allOrders, regionId,
-                                        minMarginPct   = minMargin.toDouble(),
-                                        minDailyVol    = minDailyVol.toLongOrNull() ?: 0L,
-                                        maxBuyPrice    = maxBuyPrice.toDoubleOrNull() ?: Double.MAX_VALUE,
-                                        minNetProfit   = minNetProfit.toDoubleOrNull() ?: 0.0,
-                                        brokerFeePct   = brokerFee.toDouble(),
-                                        salesTaxPct    = salesTax.toDouble(),
+                                        filterMarketGroupIds = filterGroupIds,
+                                        minMarginPct  = minMargin.toDouble(),
+                                        minDailyVol   = minDailyVol.toLongOrNull() ?: 0L,
+                                        maxBuyPrice   = maxBuyPrice.toDoubleOrNull() ?: Double.MAX_VALUE,
+                                        minNetProfit  = minNetProfit.toDoubleOrNull() ?: 0.0,
+                                        brokerFeePct  = brokerFee.toDouble(),
+                                        salesTaxPct   = salesTax.toDouble(),
                                     )
                                 }
                                 statusMsg = "${results.size} opportunities found"
@@ -240,7 +264,6 @@ private fun StationTradingTab() {
                 )
             } else {
                 val sorted = remember(results, sortCol, sortAsc) { sortStation(results, sortCol, sortAsc) }
-
                 StationHeader(sortCol, sortAsc) { col ->
                     if (sortCol == col) sortAsc = !sortAsc else { sortCol = col; sortAsc = false }
                 }
@@ -257,23 +280,35 @@ private fun StationTradingTab() {
 // ─── Inter-Region ─────────────────────────────────────────────────────────
 
 @Composable
-private fun InterRegionTab() {
+private fun InterRegionTab(
+    allRegions: List<StaticRegionModel>,
+    topGroups: List<StaticMarketGroupModel>,
+) {
     val scope = rememberCoroutineScope()
 
-    var buyRegionId   by remember { mutableStateOf(10000002) }
-    var sellRegionId  by remember { mutableStateOf(10000043) }
-    var iskPerM3      by remember { mutableStateOf("1000") }
-    var maxCargoM3    by remember { mutableStateOf("10000") }
-    var minMargin     by remember { mutableStateOf(5f) }
-    var minNetProfit  by remember { mutableStateOf("5000000") }
-    var brokerFee     by remember { mutableStateOf(3f) }
-    var salesTax      by remember { mutableStateOf(8f) }
+    var buyRegionId      by remember { mutableStateOf(10000002) }
+    var sellRegionId     by remember { mutableStateOf(10000043) }
+    var selectedTopGroup by remember { mutableStateOf<StaticMarketGroupModel?>(null) }
+    var selectedSubGroup by remember { mutableStateOf<StaticMarketGroupModel?>(null) }
+    var subGroups        by remember { mutableStateOf<List<StaticMarketGroupModel>>(emptyList()) }
+    var iskPerM3         by remember { mutableStateOf("1000") }
+    var maxCargoM3       by remember { mutableStateOf("10000") }
+    var minMargin        by remember { mutableStateOf(5f) }
+    var minNetProfit     by remember { mutableStateOf("5000000") }
+    var brokerFee        by remember { mutableStateOf(3f) }
+    var salesTax         by remember { mutableStateOf(8f) }
+    var isAnalyzing      by remember { mutableStateOf(false) }
+    var statusMsg        by remember { mutableStateOf("") }
+    var results          by remember { mutableStateOf<List<RegionOpportunity>>(emptyList()) }
+    var sortCol          by remember { mutableStateOf(RegionSortCol.NET_PROFIT) }
+    var sortAsc          by remember { mutableStateOf(false) }
 
-    var isAnalyzing   by remember { mutableStateOf(false) }
-    var statusMsg     by remember { mutableStateOf("") }
-    var results       by remember { mutableStateOf<List<RegionOpportunity>>(emptyList()) }
-    var sortCol       by remember { mutableStateOf(RegionSortCol.NET_PROFIT) }
-    var sortAsc       by remember { mutableStateOf(false) }
+    LaunchedEffect(selectedTopGroup) {
+        subGroups = if (selectedTopGroup != null)
+            withContext(Dispatchers.IO) { StaticDataDao.getChildMarketGroups(selectedTopGroup!!.marketGroupId) }
+        else emptyList()
+        selectedSubGroup = null
+    }
 
     Row(modifier = Modifier.fillMaxSize()) {
         // ── Filters sidebar ────────────────────────────────────────
@@ -285,17 +320,20 @@ private fun InterRegionTab() {
                 Text("Filters", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(10.dp))
 
-                SectionLabel("Buy Region (where you buy cheaply)")
-                ANALYSIS_REGIONS.forEach { (id, name) ->
-                    RegionRadioRow(id, name, buyRegionId) { buyRegionId = it }
-                }
+                SectionLabel("Buy Region (buy cheap here)")
+                RegionPicker(allRegions = allRegions, selectedRegionId = buyRegionId) { buyRegionId = it }
+
+                Spacer(Modifier.height(8.dp))
+                SectionLabel("Sell Region (sell here)")
+                RegionPicker(allRegions = allRegions, selectedRegionId = sellRegionId) { sellRegionId = it }
 
                 Spacer(Modifier.height(10.dp))
-
-                SectionLabel("Sell Region (where you sell)")
-                ANALYSIS_REGIONS.forEach { (id, name) ->
-                    RegionRadioRow(id, name, sellRegionId) { sellRegionId = it }
-                }
+                SectionLabel("Category (optional)")
+                CategoryFilter(
+                    topGroups = topGroups, subGroups = subGroups,
+                    selectedTopGroup = selectedTopGroup, onTopGroupSelected = { selectedTopGroup = it },
+                    selectedSubGroup = selectedSubGroup, onSubGroupSelected = { selectedSubGroup = it },
+                )
 
                 Spacer(Modifier.height(10.dp))
                 HorizontalDivider()
@@ -306,11 +344,11 @@ private fun InterRegionTab() {
                 SliderFilter("Sales Tax",  salesTax,  0f..12f, "${String.format("%.1f", salesTax)}%")  { salesTax  = it }
 
                 Spacer(Modifier.height(8.dp))
-                FilterField("Shipping (ISK/m³)", iskPerM3)    { iskPerM3    = it }
+                FilterField("Shipping (ISK/m³)",   iskPerM3)    { iskPerM3    = it }
                 Spacer(Modifier.height(6.dp))
-                FilterField("Max Cargo (m³)",    maxCargoM3)  { maxCargoM3  = it }
+                FilterField("Max Cargo (m³)",       maxCargoM3)  { maxCargoM3  = it }
                 Spacer(Modifier.height(6.dp))
-                FilterField("Min Net Profit/unit", minNetProfit) { minNetProfit = it }
+                FilterField("Min Net Profit/unit",  minNetProfit){ minNetProfit = it }
 
                 Spacer(Modifier.height(14.dp))
                 Button(
@@ -322,8 +360,12 @@ private fun InterRegionTab() {
                         scope.launch {
                             isAnalyzing = true
                             results = emptyList()
-                            val buyName  = ANALYSIS_REGIONS.find { it.first == buyRegionId  }?.second ?: "buy region"
-                            val sellName = ANALYSIS_REGIONS.find { it.first == sellRegionId }?.second ?: "sell region"
+                            val buyName  = allRegions.find { it.regionId == buyRegionId  }?.name ?: "buy region"
+                            val sellName = allRegions.find { it.regionId == sellRegionId }?.name ?: "sell region"
+                            val filterGroupId = selectedSubGroup?.marketGroupId ?: selectedTopGroup?.marketGroupId
+                            val filterGroupIds = if (filterGroupId != null)
+                                withContext(Dispatchers.IO) { buildGroupSubtree(filterGroupId) }
+                            else null
                             try {
                                 statusMsg = "Fetching orders from $buyName…"
                                 val buyOrders = withContext(Dispatchers.IO) {
@@ -339,12 +381,13 @@ private fun InterRegionTab() {
                                         buyOrders, sellOrders,
                                         buyRegionId, sellRegionId,
                                         buyName, sellName,
-                                        iskPerM3       = iskPerM3.toDoubleOrNull() ?: 1000.0,
-                                        maxCargoM3     = maxCargoM3.toDoubleOrNull() ?: 10000.0,
-                                        minMarginPct   = minMargin.toDouble(),
-                                        minNetProfit   = minNetProfit.toDoubleOrNull() ?: 0.0,
-                                        brokerFeePct   = brokerFee.toDouble(),
-                                        salesTaxPct    = salesTax.toDouble(),
+                                        filterMarketGroupIds = filterGroupIds,
+                                        iskPerM3      = iskPerM3.toDoubleOrNull() ?: 1000.0,
+                                        maxCargoM3    = maxCargoM3.toDoubleOrNull() ?: 10000.0,
+                                        minMarginPct  = minMargin.toDouble(),
+                                        minNetProfit  = minNetProfit.toDoubleOrNull() ?: 0.0,
+                                        brokerFeePct  = brokerFee.toDouble(),
+                                        salesTaxPct   = salesTax.toDouble(),
                                     )
                                 }
                                 statusMsg = "${results.size} opportunities found"
@@ -358,7 +401,7 @@ private fun InterRegionTab() {
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     if (isAnalyzing) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
-                    else Icon(Icons.Default.CompareArrows, null, Modifier.size(14.dp))
+                    else Icon(Icons.AutoMirrored.Filled.CompareArrows, null, Modifier.size(14.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(if (isAnalyzing) "Analyzing…" else "Analyze")
                 }
@@ -389,13 +432,12 @@ private fun InterRegionTab() {
 
             if (results.isEmpty() && !isAnalyzing) {
                 AnalysisEmptyState(
-                    icon = { Icon(Icons.Default.CompareArrows, null, Modifier.size(52.dp), tint = Color.Gray) },
+                    icon = { Icon(Icons.AutoMirrored.Filled.CompareArrows, null, Modifier.size(52.dp), tint = Color.Gray) },
                     primary = "Select regions and click Analyze",
                     secondary = "Finds items priced low in the buy region that sell for more in the sell region",
                 )
             } else {
                 val sorted = remember(results, sortCol, sortAsc) { sortRegion(results, sortCol, sortAsc) }
-
                 RegionHeader(sortCol, sortAsc) { col ->
                     if (sortCol == col) sortAsc = !sortAsc else { sortCol = col; sortAsc = false }
                 }
@@ -404,6 +446,156 @@ private fun InterRegionTab() {
                         RegionRow(opp, idx)
                     }
                 }
+            }
+        }
+    }
+}
+
+// ─── Region picker ────────────────────────────────────────────────────────
+
+@Composable
+private fun RegionPicker(
+    allRegions: List<StaticRegionModel>,
+    selectedRegionId: Int,
+    onSelect: (Int) -> Unit,
+) {
+    var searchText by remember { mutableStateOf("") }
+    var expanded   by remember { mutableStateOf(false) }
+
+    // Sync display text when regions load or selection changes
+    LaunchedEffect(selectedRegionId, allRegions.size) {
+        val name = allRegions.find { it.regionId == selectedRegionId }?.name
+        if (!name.isNullOrEmpty()) searchText = name
+    }
+
+    val filtered = remember(searchText, allRegions) {
+        when {
+            allRegions.isEmpty() -> emptyList()
+            searchText.isEmpty() -> allRegions.take(12)
+            else -> allRegions.filter { it.name.contains(searchText, ignoreCase = true) }.take(12)
+        }
+    }
+
+    Box {
+        OutlinedTextField(
+            value = searchText,
+            onValueChange = { searchText = it; expanded = true },
+            modifier = Modifier.fillMaxWidth(),
+            textStyle = MaterialTheme.typography.bodySmall,
+            singleLine = true,
+            placeholder = { Text("Search region…", style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
+            trailingIcon = {
+                Icon(
+                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp).clickable { expanded = !expanded },
+                )
+            },
+        )
+        DropdownMenu(
+            expanded = expanded && filtered.isNotEmpty(),
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.width(226.dp),
+        ) {
+            filtered.forEach { region ->
+                DropdownMenuItem(
+                    text = { Text(region.name, style = MaterialTheme.typography.bodySmall) },
+                    onClick = {
+                        searchText = region.name
+                        onSelect(region.regionId)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+// ─── Category / subcategory filter ────────────────────────────────────────
+
+@Composable
+private fun CategoryFilter(
+    topGroups: List<StaticMarketGroupModel>,
+    subGroups: List<StaticMarketGroupModel>,
+    selectedTopGroup: StaticMarketGroupModel?,
+    onTopGroupSelected: (StaticMarketGroupModel?) -> Unit,
+    selectedSubGroup: StaticMarketGroupModel?,
+    onSubGroupSelected: (StaticMarketGroupModel?) -> Unit,
+) {
+    GroupDropdown(
+        label = "Category",
+        groups = topGroups,
+        selected = selectedTopGroup,
+        placeholder = "All categories",
+        onSelect = onTopGroupSelected,
+    )
+    if (subGroups.isNotEmpty()) {
+        Spacer(Modifier.height(4.dp))
+        GroupDropdown(
+            label = "Subcategory",
+            groups = subGroups,
+            selected = selectedSubGroup,
+            placeholder = "All subcategories",
+            onSelect = onSubGroupSelected,
+        )
+    }
+}
+
+@Composable
+private fun GroupDropdown(
+    label: String,
+    groups: List<StaticMarketGroupModel>,
+    selected: StaticMarketGroupModel?,
+    placeholder: String,
+    onSelect: (StaticMarketGroupModel?) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box {
+        OutlinedTextField(
+            value = selected?.name ?: "",
+            onValueChange = { },
+            readOnly = true,
+            modifier = Modifier.fillMaxWidth(),
+            textStyle = MaterialTheme.typography.bodySmall,
+            label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+            placeholder = { Text(placeholder, style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
+            trailingIcon = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (selected != null) {
+                        Icon(
+                            Icons.Default.Clear, contentDescription = null,
+                            modifier = Modifier.size(14.dp).clickable { onSelect(null) },
+                            tint = Color.Gray,
+                        )
+                        Spacer(Modifier.width(4.dp))
+                    }
+                    Icon(
+                        if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp).clickable { expanded = !expanded },
+                    )
+                }
+            },
+        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.width(226.dp).heightIn(max = 280.dp),
+        ) {
+            DropdownMenuItem(
+                text = { Text(placeholder, style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
+                onClick = { onSelect(null); expanded = false },
+            )
+            HorizontalDivider()
+            groups.forEach { group ->
+                DropdownMenuItem(
+                    text = { Text(group.name, style = MaterialTheme.typography.bodySmall) },
+                    onClick = { onSelect(group); expanded = false },
+                    leadingIcon = if (group == selected) {
+                        { Icon(Icons.Default.Check, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary) }
+                    } else null,
+                )
             }
         }
     }
@@ -431,14 +623,14 @@ private fun StationHeader(sort: StationSortCol, asc: Boolean, onSort: (StationSo
 private fun RegionHeader(sort: RegionSortCol, asc: Boolean, onSort: (RegionSortCol) -> Unit) {
     Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-            ACol("Item",     RegionSortCol.NAME,       sort, asc, onSort, Modifier.weight(1f))
-            ACol("Buy",      RegionSortCol.BUY_PRICE,  sort, asc, onSort, Modifier.width(95.dp))
-            ACol("Sell",     RegionSortCol.SELL_PRICE, sort, asc, onSort, Modifier.width(95.dp))
-            ACol("Margin",   RegionSortCol.MARGIN,     sort, asc, onSort, Modifier.width(65.dp))
-            ACol("m³/unit",  RegionSortCol.ITEM_VOL,   sort, asc, onSort, Modifier.width(70.dp))
-            ACol("Ship/unit",RegionSortCol.SHIPPING,   sort, asc, onSort, Modifier.width(90.dp))
-            ACol("Net/unit", RegionSortCol.NET_PROFIT, sort, asc, onSort, Modifier.width(95.dp))
-            ACol("Vol/day",  RegionSortCol.VOLUME,     sort, asc, onSort, Modifier.width(70.dp))
+            ACol("Item",      RegionSortCol.NAME,       sort, asc, onSort, Modifier.weight(1f))
+            ACol("Buy",       RegionSortCol.BUY_PRICE,  sort, asc, onSort, Modifier.width(95.dp))
+            ACol("Sell",      RegionSortCol.SELL_PRICE, sort, asc, onSort, Modifier.width(95.dp))
+            ACol("Margin",    RegionSortCol.MARGIN,     sort, asc, onSort, Modifier.width(65.dp))
+            ACol("m³/unit",   RegionSortCol.ITEM_VOL,   sort, asc, onSort, Modifier.width(70.dp))
+            ACol("Ship/unit", RegionSortCol.SHIPPING,   sort, asc, onSort, Modifier.width(90.dp))
+            ACol("Net/unit",  RegionSortCol.NET_PROFIT, sort, asc, onSort, Modifier.width(95.dp))
+            ACol("Vol/day",   RegionSortCol.VOLUME,     sort, asc, onSort, Modifier.width(70.dp))
         }
     }
 }
@@ -529,18 +721,6 @@ private fun SectionLabel(text: String) {
 }
 
 @Composable
-private fun RegionRadioRow(id: Int, name: String, selected: Int, onSelect: (Int) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().clickable { onSelect(id) }.padding(vertical = 1.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RadioButton(selected = selected == id, onClick = { onSelect(id) }, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(6.dp))
-        Text(name, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
-}
-
-@Composable
 private fun SliderFilter(label: String, value: Float, range: ClosedFloatingPointRange<Float>, display: String, onValue: (Float) -> Unit) {
     Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
@@ -598,11 +778,26 @@ private fun AnalysisEmptyState(icon: @Composable () -> Unit, primary: String, se
     }
 }
 
+// ─── Analysis helpers (run on Dispatchers.IO) ─────────────────────────────
+
+private fun buildGroupSubtree(rootGroupId: Int): Set<Int> {
+    val result = mutableSetOf<Int>()
+    val queue  = ArrayDeque<Int>()
+    queue.add(rootGroupId)
+    while (queue.isNotEmpty()) {
+        val id = queue.removeFirst()
+        result.add(id)
+        StaticDataDao.getChildMarketGroups(id).forEach { queue.add(it.marketGroupId) }
+    }
+    return result
+}
+
 // ─── Analysis functions (run on Dispatchers.IO) ───────────────────────────
 
 private fun computeStation(
     allOrders: List<Map<String, Any?>>,
     regionId: Int,
+    filterMarketGroupIds: Set<Int>?,
     minMarginPct: Double,
     minDailyVol: Long,
     maxBuyPrice: Double,
@@ -610,7 +805,7 @@ private fun computeStation(
     brokerFeePct: Double,
     salesTaxPct: Double,
 ): List<StationOpportunity> {
-    val byType = allOrders.groupBy { (it["type_id"] as? Number)?.toInt() ?: 0 }
+    val byType  = allOrders.groupBy { (it["type_id"] as? Number)?.toInt() ?: 0 }
     val results = mutableListOf<StationOpportunity>()
 
     byType.forEach { (typeId, orders) ->
@@ -630,20 +825,20 @@ private fun computeStation(
         val marginPct = grossProfit / bestSell * 100.0
         if (marginPct < minMarginPct) return@forEach
 
-        // broker fee charged on both orders + sales tax on sell
-        val fees = (bestSell + bestBuy) * brokerFeePct / 100.0 + bestSell * salesTaxPct / 100.0
+        val fees      = (bestSell + bestBuy) * brokerFeePct / 100.0 + bestSell * salesTaxPct / 100.0
         val netProfit = grossProfit - fees
         if (netProfit < minNetProfit) return@forEach
 
-        val history    = MarketDao.getHistory(typeId, regionId, 30)
+        val type = StaticDataDao.getTypeById(typeId) ?: return@forEach
+        if (filterMarketGroupIds != null && type.marketGroupId !in filterMarketGroupIds) return@forEach
+
+        val history     = MarketDao.getHistory(typeId, regionId, 30)
         val avgDailyVol = if (history.isNotEmpty()) history.map { it.volume }.average().toLong() else 0L
         if (avgDailyVol < minDailyVol && minDailyVol > 0) return@forEach
 
-        val typeName = StaticDataDao.getTypeById(typeId)?.name ?: return@forEach
-
         results += StationOpportunity(
             typeId               = typeId,
-            typeName             = typeName,
+            typeName             = type.name,
             bestSell             = bestSell,
             bestBuy              = bestBuy,
             grossProfit          = grossProfit,
@@ -662,10 +857,11 @@ private fun computeStation(
 private fun computeRegion(
     buyOrders: List<Map<String, Any?>>,
     sellOrders: List<Map<String, Any?>>,
-    buyRegionId: Int,
+    @Suppress("UNUSED_PARAMETER") buyRegionId: Int,
     sellRegionId: Int,
     buyRegionName: String,
     sellRegionName: String,
+    filterMarketGroupIds: Set<Int>?,
     iskPerM3: Double,
     maxCargoM3: Double,
     minMarginPct: Double,
@@ -673,19 +869,17 @@ private fun computeRegion(
     brokerFeePct: Double,
     salesTaxPct: Double,
 ): List<RegionOpportunity> {
-    // What you pay: cheapest sell order in buy region
     val cheapestSell = buyOrders
         .filter { (it["is_buy_order"] as? Boolean) == false }
         .groupBy { (it["type_id"] as? Number)?.toInt() ?: 0 }
         .mapValues { (_, o) -> o.minOf { (it["price"] as? Number)?.toDouble() ?: Double.MAX_VALUE } }
 
-    // What you get: highest buy order in sell region
     val highestBuy = sellOrders
         .filter { (it["is_buy_order"] as? Boolean) == true }
         .groupBy { (it["type_id"] as? Number)?.toInt() ?: 0 }
         .mapValues { (_, o) -> o.maxOf { (it["price"] as? Number)?.toDouble() ?: 0.0 } }
 
-    val common = cheapestSell.keys.intersect(highestBuy.keys)
+    val common  = cheapestSell.keys.intersect(highestBuy.keys)
     val results = mutableListOf<RegionOpportunity>()
 
     common.forEach { typeId ->
@@ -694,8 +888,10 @@ private fun computeRegion(
         val sellPrice = highestBuy[typeId]   ?: return@forEach
         if (sellPrice <= buyPrice) return@forEach
 
-        val type     = StaticDataDao.getTypeById(typeId) ?: return@forEach
-        val itemVol  = type.packagedVolume.takeIf { it > 0 } ?: type.volume.takeIf { it > 0 } ?: 1.0
+        val type = StaticDataDao.getTypeById(typeId) ?: return@forEach
+        if (filterMarketGroupIds != null && type.marketGroupId !in filterMarketGroupIds) return@forEach
+
+        val itemVol = type.packagedVolume.takeIf { it > 0 } ?: type.volume.takeIf { it > 0 } ?: 1.0
         if (itemVol > maxCargoM3) return@forEach
 
         val shipping    = itemVol * iskPerM3
@@ -711,18 +907,18 @@ private fun computeRegion(
         val avgVol  = if (history.isNotEmpty()) history.map { it.volume }.average().toLong() else 0L
 
         results += RegionOpportunity(
-            typeId               = typeId,
-            typeName             = type.name,
-            buyRegionName        = buyRegionName,
-            sellRegionName       = sellRegionName,
-            buyPrice             = buyPrice,
-            sellPrice            = sellPrice,
-            grossProfit          = grossProfit,
-            netProfit            = netProfit,
-            marginPct            = marginPct,
-            itemVolumeM3         = itemVol,
-            shippingCostPerUnit  = shipping,
-            dailyVolume          = avgVol,
+            typeId              = typeId,
+            typeName            = type.name,
+            buyRegionName       = buyRegionName,
+            sellRegionName      = sellRegionName,
+            buyPrice            = buyPrice,
+            sellPrice           = sellPrice,
+            grossProfit         = grossProfit,
+            netProfit           = netProfit,
+            marginPct           = marginPct,
+            itemVolumeM3        = itemVol,
+            shippingCostPerUnit = shipping,
+            dailyVolume         = avgVol,
         )
     }
 
