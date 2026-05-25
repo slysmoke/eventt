@@ -5,6 +5,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -165,7 +167,7 @@ private fun TransactionList(transactions: List<Map<String, Any?>>) {
 @Composable
 private fun JournalList(journal: List<Map<String, Any?>>) {
     if (journal.isEmpty()) {
-        EmptyState(icon = Icons.Default.List, title = "No Journal Entries", description = "Fetch journal from ESI to see entries.")
+        EmptyState(icon = Icons.AutoMirrored.Filled.List, title = "No Journal Entries", description = "Fetch journal from ESI to see entries.")
         return
     }
 
@@ -196,7 +198,7 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
 @Composable
 private fun PnlChart(dailyBreakdown: List<org.eve.trader.core.model.DailyWalletEntry>) {
     if (dailyBreakdown.isEmpty()) {
-        EmptyState(icon = Icons.Default.ShowChart, title = "No P&L Data", description = "Need journal entries to calculate P&L.")
+        EmptyState(icon = Icons.AutoMirrored.Filled.ShowChart, title = "No P&L Data", description = "Need journal entries to calculate P&L.")
         return
     }
 

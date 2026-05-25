@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -61,7 +62,7 @@ fun OrdersScreen() {
         Spacer(modifier = Modifier.height(8.dp))
 
         when (activeTab) {
-            0 -> TrackedOrdersView(orders, onRefresh = { loadOrders { list -> orders = list } })
+            0 -> TrackedOrdersView(orders)
             1 -> ActiveOrdersView()
         }
     }
@@ -85,10 +86,10 @@ fun OrdersScreen() {
 }
 
 @Composable
-private fun TrackedOrdersView(orders: List<TrackedOrderModel>, onRefresh: () -> Unit) {
+private fun TrackedOrdersView(orders: List<TrackedOrderModel>) {
     if (orders.isEmpty()) {
         EmptyState(
-            icon = Icons.Default.TrendingUp,
+            icon = Icons.AutoMirrored.Filled.TrendingUp,
             title = "No Tracked Orders",
             description = "Add a tracked order to track your buy prices and margins.",
         )
