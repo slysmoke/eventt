@@ -31,8 +31,10 @@ data class EsiCacheEntry(
     val paramsHash: String,
     val data: String,
     val expiresAt: Long,
-    val source: String = "server", // "cache" or "server"
+    val source: String = "server",
     val lastFetched: Long = System.currentTimeMillis(),
+    val etag: String? = null,
+    val lastModified: String? = null,
 )
 
 // ─── Market ─────────────────────────────────────────────────────────────────

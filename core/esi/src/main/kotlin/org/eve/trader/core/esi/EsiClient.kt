@@ -106,7 +106,8 @@ object EsiClient {
     }
 
     /**
-     * Make a GET request to ESI with automatic cache handling.
+     * Make a GET request to ESI with automatic cache handling (in-memory L1 → SQLite L2 → network).
+     * Sends conditional If-None-Match / If-Modified-Since when stale cached data has an ETag.
      * Returns the raw JSON string.
      */
     fun getRaw(
@@ -120,21 +121,15 @@ object EsiClient {
             page?.let { put("page", it.toString()) }
         }
 
-        // Check cache first
         val cacheResult = EsiCacheManager.get(endpoint, fullParams)
 
-        if (cacheResult.state == CacheState.FRESH) {
-            val cachedData = cacheResult.data
-            if (cachedData != null) {
-                return cachedData to EsiResponseMetadata()
-            }
+        if (cacheResult.state == CacheState.FRESH && cacheResult.data != null) {
+            return cacheResult.data!! to EsiResponseMetadata()
         }
 
-        // Build URL
         val queryString = fullParams.entries.joinToString("&") { "${it.key}=${it.value}" }
         val url = "$ESI_BASE_URL$endpoint${if (queryString.isNotEmpty()) "?$queryString" else ""}"
 
-        // Queue the request
         val queuedRequest = QueuedRequest(
             endpoint = url,
             description = endpoint,
@@ -148,8 +143,32 @@ object EsiClient {
             val requestBuilder = Request.Builder().url(url)
             accessToken?.let { requestBuilder.header("Authorization", "Bearer $it") }
 
+            // Conditional request: if we have stale data with an ETag/Last-Modified, ask ESI
+            // whether it changed. A 304 response means we can reuse the cached body.
+            if (cacheResult.state == CacheState.STALE && cacheResult.data != null) {
+                cacheResult.etag?.let { requestBuilder.header("If-None-Match", it) }
+                cacheResult.lastModified?.let { requestBuilder.header("If-Modified-Since", it) }
+            }
+
             val client = EveHttpClient.getClient()
             val response = client.newCall(requestBuilder.build()).execute()
+
+            // 304 Not Modified — ESI confirmed our cached copy is still current.
+            if (response.code == 304) {
+                val cachedBody = cacheResult.data
+                    ?: throw IOException("Got 304 but no cached body for $endpoint")
+                val newExpiry = parseExpiry(response)
+                val newEtag = response.header("ETag") ?: cacheResult.etag
+                val newLastModified = response.header("Last-Modified") ?: cacheResult.lastModified
+                EsiCacheManager.refreshExpiry(endpoint, fullParams, newExpiry, newEtag, newLastModified)
+                RequestQueueManager.completeRequest(queuedRequest.id)
+                return cachedBody to EsiResponseMetadata(
+                    expires = newExpiry,
+                    etag = newEtag,
+                    lastModified = newLastModified,
+                    totalPages = response.header("X-Pages")?.toIntOrNull() ?: 1,
+                )
+            }
 
             if (!response.isSuccessful) {
                 RequestQueueManager.completeRequest(queuedRequest.id, error = "HTTP ${response.code}")
@@ -161,29 +180,20 @@ object EsiClient {
 
             if (body.isEmpty()) {
                 RequestQueueManager.completeRequest(queuedRequest.id, error = "Empty response body")
-                throw IOException("ESI returned empty response body")
+                throw IOException("ESI returned empty response body for $endpoint")
             }
 
-            // Parse cache headers
-            val expiresHeader = response.header("Expires")
-            val cacheControl = response.header("Cache-Control")
             val etag = response.header("ETag")
             val lastModified = response.header("Last-Modified")
+            val cacheControl = response.header("Cache-Control")
             val xPages = response.header("X-Pages")?.toIntOrNull() ?: 1
+            val expiresAt = parseExpiry(response)
 
-            val expiresAt = when {
-                expiresHeader != null -> EsiCacheManager.parseExpiresHeader(expiresHeader)
-                cacheControl != null -> EsiCacheManager.parseCacheControl(cacheControl)
-                    ?: (System.currentTimeMillis() + 5 * 60 * 1000L)
-                else -> System.currentTimeMillis() + 5 * 60 * 1000L
-            }
-
-            // Save to cache
-            EsiCacheManager.save(endpoint, fullParams, body, expiresAt)
+            EsiCacheManager.save(endpoint, fullParams, body, expiresAt, etag, lastModified)
 
             RequestQueueManager.completeRequest(queuedRequest.id)
 
-            val metadata = EsiResponseMetadata(
+            return body to EsiResponseMetadata(
                 expires = expiresAt,
                 cacheControl = cacheControl ?: "",
                 etag = etag,
@@ -191,18 +201,23 @@ object EsiClient {
                 totalPages = xPages,
             )
 
-            return body to metadata
-
         } catch (e: IOException) {
             RequestQueueManager.completeRequest(queuedRequest.id, error = e.message)
-            // If we have stale cache, return it as fallback
-            if (cacheResult.state == CacheState.STALE) {
-                val staleData = cacheResult.data
-                if (staleData != null) {
-                    return staleData to EsiResponseMetadata()
-                }
+            if (cacheResult.state == CacheState.STALE && cacheResult.data != null) {
+                return cacheResult.data!! to EsiResponseMetadata()
             }
             throw e
+        }
+    }
+
+    private fun parseExpiry(response: okhttp3.Response): Long {
+        val expiresHeader = response.header("Expires")
+        val cacheControl = response.header("Cache-Control")
+        return when {
+            expiresHeader != null -> EsiCacheManager.parseExpiresHeader(expiresHeader)
+            cacheControl != null -> EsiCacheManager.parseCacheControl(cacheControl)
+                ?: (System.currentTimeMillis() + 5 * 60 * 1000L)
+            else -> System.currentTimeMillis() + 5 * 60 * 1000L
         }
     }
 

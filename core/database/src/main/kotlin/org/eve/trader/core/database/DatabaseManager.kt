@@ -86,6 +86,8 @@ object DatabaseManager {
         val migrations = listOf(
             "ALTER TABLE static_types ADD COLUMN market_group_id INTEGER",
             "CREATE TABLE IF NOT EXISTS market_groups (market_group_id INTEGER PRIMARY KEY, name TEXT NOT NULL, parent_group_id INTEGER)",
+            "ALTER TABLE esi_cache ADD COLUMN etag TEXT",
+            "ALTER TABLE esi_cache ADD COLUMN last_modified TEXT",
         )
         conn.createStatement().use { stmt ->
             migrations.forEach { sql ->

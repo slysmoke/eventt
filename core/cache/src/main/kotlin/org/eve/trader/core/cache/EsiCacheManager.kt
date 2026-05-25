@@ -3,74 +3,102 @@ package org.eve.trader.core.cache
 import org.eve.trader.core.database.EsiCacheDao
 import org.eve.trader.core.model.EsiCacheEntry
 import org.eve.trader.core.model.RequestSource
-import kotlin.math.max
+import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 
 enum class CacheState {
-    FRESH,      // Cache is valid, serve from cache
-    STALE,      // Cache expired, serve from cache but refresh in background
-    MISS,       // No cache entry, must fetch from server
+    FRESH,
+    STALE,
+    MISS,
 }
 
 data class CacheResult(
     val state: CacheState,
     val data: String? = null,
     val source: RequestSource = RequestSource.SERVER,
+    val etag: String? = null,
+    val lastModified: String? = null,
+)
+
+private data class MemEntry(
+    val data: String,
+    val expiresAt: Long,
+    val etag: String?,
+    val lastModified: String?,
 )
 
 object EsiCacheManager {
 
-    // Default TTL in milliseconds if no Expires header (fallback)
-    private const val DEFAULT_TTL_MS = 5 * 60 * 1000L // 5 minutes
+    private const val DEFAULT_TTL_MS = 5 * 60 * 1000L
 
-    /**
-     * Check cache state for a given endpoint.
-     */
-    fun checkState(endpoint: String, params: Map<String, String>? = null): CacheState {
-        val entry = EsiCacheDao.get(endpoint, params) ?: return CacheState.MISS
+    // L1 in-memory cache — survives within a single app session. Keys are "$endpoint|$hash".
+    private val mem = ConcurrentHashMap<String, MemEntry>()
 
-        val now = System.currentTimeMillis()
-        return when {
-            now < entry.expiresAt -> CacheState.FRESH
-            else -> CacheState.STALE
+    fun get(endpoint: String, params: Map<String, String>? = null): CacheResult {
+        val hash = computeHash(params)
+        val key = "$endpoint|$hash"
+
+        // L1: memory
+        mem[key]?.let { e ->
+            val state = if (System.currentTimeMillis() < e.expiresAt) CacheState.FRESH else CacheState.STALE
+            return CacheResult(state = state, data = e.data, source = RequestSource.CACHE, etag = e.etag, lastModified = e.lastModified)
+        }
+
+        // L2: SQLite
+        val entry = EsiCacheDao.get(endpoint, params) ?: return CacheResult(CacheState.MISS)
+        val state = if (System.currentTimeMillis() < entry.expiresAt) CacheState.FRESH else CacheState.STALE
+        mem[key] = MemEntry(entry.data, entry.expiresAt, entry.etag, entry.lastModified)
+        return CacheResult(state = state, data = entry.data, source = RequestSource.CACHE, etag = entry.etag, lastModified = entry.lastModified)
+    }
+
+    fun save(
+        endpoint: String,
+        params: Map<String, String>?,
+        data: String,
+        expiresAtMs: Long,
+        etag: String? = null,
+        lastModified: String? = null,
+    ) {
+        val effectiveExpiry = if (expiresAtMs > 0) expiresAtMs else System.currentTimeMillis() + DEFAULT_TTL_MS
+        val hash = computeHash(params)
+
+        EsiCacheDao.save(EsiCacheEntry(
+            endpoint = endpoint,
+            paramsHash = hash,
+            data = data,
+            expiresAt = effectiveExpiry,
+            etag = etag,
+            lastModified = lastModified,
+        ))
+
+        mem["$endpoint|$hash"] = MemEntry(data, effectiveExpiry, etag, lastModified)
+    }
+
+    // Called on HTTP 304: bump expiry without re-downloading the body.
+    fun refreshExpiry(
+        endpoint: String,
+        params: Map<String, String>?,
+        newExpiresAt: Long,
+        etag: String? = null,
+        lastModified: String? = null,
+    ) {
+        val hash = computeHash(params)
+        EsiCacheDao.refreshExpiry(endpoint, hash, newExpiresAt, etag, lastModified)
+
+        val key = "$endpoint|$hash"
+        val existing = mem[key]
+        if (existing != null) {
+            mem[key] = existing.copy(
+                expiresAt = newExpiresAt,
+                etag = etag ?: existing.etag,
+                lastModified = lastModified ?: existing.lastModified,
+            )
         }
     }
 
-    /**
-     * Get data from cache.
-     */
-    fun get(endpoint: String, params: Map<String, String>? = null): CacheResult {
-        val entry = EsiCacheDao.get(endpoint, params) ?: return CacheResult(CacheState.MISS)
+    fun checkState(endpoint: String, params: Map<String, String>? = null): CacheState =
+        get(endpoint, params).state
 
-        val now = System.currentTimeMillis()
-        val state = if (now < entry.expiresAt) CacheState.FRESH else CacheState.STALE
-
-        return CacheResult(
-            state = state,
-            data = entry.data,
-            source = RequestSource.CACHE,
-        )
-    }
-
-    /**
-     * Save response to cache with TTL from Expires header.
-     */
-    fun save(endpoint: String, params: Map<String, String>?, data: String, expiresAtMs: Long) {
-        val effectiveExpiresAt = if (expiresAtMs > 0) expiresAtMs else System.currentTimeMillis() + DEFAULT_TTL_MS
-        val entry = EsiCacheEntry(
-            endpoint = endpoint,
-            paramsHash = computeHash(params),
-            data = data,
-            expiresAt = effectiveExpiresAt,
-            source = "server",
-            lastFetched = System.currentTimeMillis(),
-        )
-        EsiCacheDao.save(entry)
-    }
-
-    /**
-     * Calculate expiration timestamp from Expires header value.
-     * ESI returns HTTP-date format: "Wed, 21 Oct 2026 07:28:00 GMT"
-     */
     fun parseExpiresHeader(expiresHeader: String): Long {
         return try {
             val formats = listOf(
@@ -85,39 +113,33 @@ object EsiCacheManager {
             } else {
                 System.currentTimeMillis() + DEFAULT_TTL_MS
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             System.currentTimeMillis() + DEFAULT_TTL_MS
         }
     }
 
-    /**
-     * Calculate expiration from Cache-Control max-age directive.
-     */
     fun parseCacheControl(cacheControl: String): Long? {
-        val maxAgeRegex = "max-age=(\\d+)".toRegex()
-        val match = maxAgeRegex.find(cacheControl)
+        val match = "max-age=(\\d+)".toRegex().find(cacheControl)
         return match?.groupValues?.get(1)?.toLongOrNull()?.let { maxAge ->
             System.currentTimeMillis() + (maxAge * 1000)
         }
     }
 
-    /**
-     * Clean up expired cache entries.
-     */
-    fun cleanupExpired() {
-        EsiCacheDao.deleteExpired()
-    }
-
-    /**
-     * Clear all cache.
-     */
-    fun clearAll() {
-        EsiCacheDao.clearAll()
-    }
-
     private fun computeHash(params: Map<String, String>?): String {
         val input = params?.entries?.sortedBy { it.key }?.joinToString { "${it.key}=${it.value}" } ?: ""
-        val md = java.security.MessageDigest.getInstance("SHA-256")
+        val md = MessageDigest.getInstance("SHA-256")
         return md.digest(input.toByteArray()).joinToString("") { "%02x".format(it) }
+    }
+
+    fun cleanupExpired() {
+        EsiCacheDao.deleteExpired()
+        // Prune memory entries that have been stale for > 1 hour so it doesn't grow unbounded.
+        val cutoff = System.currentTimeMillis() - 60 * 60 * 1000L
+        mem.entries.removeIf { it.value.expiresAt < cutoff }
+    }
+
+    fun clearAll() {
+        EsiCacheDao.clearAll()
+        mem.clear()
     }
 }
