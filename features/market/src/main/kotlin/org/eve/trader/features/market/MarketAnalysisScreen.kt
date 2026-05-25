@@ -2,6 +2,8 @@ package org.eve.trader.features.market
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -62,6 +64,13 @@ data class RegionOpportunity(
 
 private enum class StationSortCol { NAME, BUY_PRICE, SELL_PRICE, MARGIN, NET_PROFIT, VOLUME, DAILY_PROFIT }
 private enum class RegionSortCol  { NAME, BUY_PRICE, SELL_PRICE, MARGIN, ITEM_VOL, SHIPPING, NET_PROFIT, VOLUME }
+
+private enum class InterRegionTradeType(val label: String, val detail: String) {
+    SELL_TO_BUY ("Sell → Buy",   "Hit sell order in source, fill buy order in dest (instant both)"),
+    SELL_TO_SELL("Sell → Sell",  "Hit sell order in source, post sell order in dest"),
+    BUY_TO_BUY  ("Buy → Buy",    "Post buy order in source, fill buy order in dest"),
+    BUY_TO_SELL ("Buy → Sell",   "Post buy order in source, post sell order in dest (slowest, best margin)"),
+}
 
 private fun sortStation(list: List<StationOpportunity>, col: StationSortCol, asc: Boolean): List<StationOpportunity> {
     val cmp: Comparator<StationOpportunity> = when (col) {
@@ -288,6 +297,7 @@ private fun InterRegionTab(
 
     var buyRegionId      by remember { mutableStateOf(10000002) }
     var sellRegionId     by remember { mutableStateOf(10000043) }
+    var tradeType        by remember { mutableStateOf(InterRegionTradeType.SELL_TO_BUY) }
     var selectedTopGroup by remember { mutableStateOf<StaticMarketGroupModel?>(null) }
     var selectedSubGroup by remember { mutableStateOf<StaticMarketGroupModel?>(null) }
     var subGroups        by remember { mutableStateOf<List<StaticMarketGroupModel>>(emptyList()) }
@@ -326,6 +336,22 @@ private fun InterRegionTab(
                 Spacer(Modifier.height(8.dp))
                 SectionLabel("Sell Region (sell here)")
                 RegionPicker(allRegions = allRegions, selectedRegionId = sellRegionId) { sellRegionId = it }
+
+                Spacer(Modifier.height(10.dp))
+                SectionLabel("Trade Type")
+                InterRegionTradeType.entries.forEach { type ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { tradeType = type }.padding(vertical = 1.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = type == tradeType, onClick = { tradeType = type }, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Column {
+                            Text(type.label, style = MaterialTheme.typography.bodySmall)
+                            Text(type.detail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f), maxLines = 2)
+                        }
+                    }
+                }
 
                 Spacer(Modifier.height(10.dp))
                 SectionLabel("Category (optional)")
@@ -381,6 +407,7 @@ private fun InterRegionTab(
                                         buyOrders, sellOrders,
                                         buyRegionId, sellRegionId,
                                         buyName, sellName,
+                                        tradeType     = tradeType,
                                         filterMarketGroupIds = filterGroupIds,
                                         iskPerM3      = iskPerM3.toDoubleOrNull() ?: 1000.0,
                                         maxCargoM3    = maxCargoM3.toDoubleOrNull() ?: 10000.0,
@@ -459,53 +486,79 @@ private fun RegionPicker(
     selectedRegionId: Int,
     onSelect: (Int) -> Unit,
 ) {
-    var searchText by remember { mutableStateOf("") }
-    var expanded   by remember { mutableStateOf(false) }
+    var searchQuery  by remember { mutableStateOf("") }
+    var isSearchMode by remember { mutableStateOf(false) }
+    var expanded     by remember { mutableStateOf(false) }
 
-    // Sync display text when regions load or selection changes
-    LaunchedEffect(selectedRegionId, allRegions.size) {
-        val name = allRegions.find { it.regionId == selectedRegionId }?.name
-        if (!name.isNullOrEmpty()) searchText = name
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+
+    // When the field gains focus, switch to search mode so the display text is replaced
+    // with an empty search box. We only act on focus-gained (isFocused=true).
+    LaunchedEffect(isFocused) {
+        if (isFocused && !isSearchMode) {
+            searchQuery  = ""
+            isSearchMode = true
+            expanded     = true
+        }
     }
 
-    val filtered = remember(searchText, allRegions) {
-        when {
-            allRegions.isEmpty() -> emptyList()
-            searchText.isEmpty() -> allRegions.take(12)
-            else -> allRegions.filter { it.name.contains(searchText, ignoreCase = true) }.take(12)
-        }
+    val selectedName = remember(selectedRegionId, allRegions) {
+        allRegions.find { it.regionId == selectedRegionId }?.name ?: ""
+    }
+
+    val filtered = remember(searchQuery, allRegions) {
+        if (allRegions.isEmpty()) emptyList()
+        else if (searchQuery.isEmpty()) allRegions.take(12)
+        else allRegions.filter { it.name.contains(searchQuery, ignoreCase = true) }.take(12)
     }
 
     Box {
         OutlinedTextField(
-            value = searchText,
-            onValueChange = { searchText = it; expanded = true },
-            modifier = Modifier.fillMaxWidth(),
-            textStyle = MaterialTheme.typography.bodySmall,
-            singleLine = true,
-            placeholder = { Text("Search region…", style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
+            value           = if (isSearchMode) searchQuery else selectedName,
+            onValueChange   = { text -> searchQuery = text; isSearchMode = true; expanded = true },
+            modifier        = Modifier.fillMaxWidth(),
+            textStyle       = MaterialTheme.typography.bodySmall,
+            singleLine      = true,
+            interactionSource = interactionSource,
+            placeholder     = {
+                if (isSearchMode) Text("Type to filter…", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            },
             trailingIcon = {
                 Icon(
                     if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                     contentDescription = null,
-                    modifier = Modifier.size(18.dp).clickable { expanded = !expanded },
+                    modifier = Modifier.size(18.dp).clickable {
+                        if (expanded) {
+                            expanded = false; isSearchMode = false; searchQuery = ""
+                        } else {
+                            searchQuery = ""; isSearchMode = true; expanded = true
+                        }
+                    },
                 )
             },
         )
         DropdownMenu(
-            expanded = expanded && filtered.isNotEmpty(),
-            onDismissRequest = { expanded = false },
-            modifier = Modifier.width(226.dp),
+            expanded        = expanded,
+            onDismissRequest = { expanded = false; isSearchMode = false; searchQuery = "" },
+            modifier        = Modifier.width(226.dp),
         ) {
-            filtered.forEach { region ->
+            if (filtered.isEmpty()) {
                 DropdownMenuItem(
-                    text = { Text(region.name, style = MaterialTheme.typography.bodySmall) },
-                    onClick = {
-                        searchText = region.name
-                        onSelect(region.regionId)
-                        expanded = false
-                    },
+                    text    = { Text("No match for \"$searchQuery\"", style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
+                    onClick = { },
+                    enabled = false,
                 )
+            } else {
+                filtered.forEach { region ->
+                    DropdownMenuItem(
+                        text    = { Text(region.name, style = MaterialTheme.typography.bodySmall) },
+                        onClick = {
+                            onSelect(region.regionId)
+                            expanded = false; isSearchMode = false; searchQuery = ""
+                        },
+                    )
+                }
             }
         }
     }
@@ -861,6 +914,7 @@ private fun computeRegion(
     sellRegionId: Int,
     buyRegionName: String,
     sellRegionName: String,
+    tradeType: InterRegionTradeType,
     filterMarketGroupIds: Set<Int>?,
     iskPerM3: Double,
     maxCargoM3: Double,
@@ -869,23 +923,37 @@ private fun computeRegion(
     brokerFeePct: Double,
     salesTaxPct: Double,
 ): List<RegionOpportunity> {
-    val cheapestSell = buyOrders
-        .filter { (it["is_buy_order"] as? Boolean) == false }
-        .groupBy { (it["type_id"] as? Number)?.toInt() ?: 0 }
-        .mapValues { (_, o) -> o.minOf { (it["price"] as? Number)?.toDouble() ?: Double.MAX_VALUE } }
+    fun List<Map<String, Any?>>.typeId(m: Map<String, Any?>) = (m["type_id"] as? Number)?.toInt() ?: 0
+    fun Map<String, Any?>.price() = (get("price") as? Number)?.toDouble() ?: 0.0
+    fun Map<String, Any?>.isBuyOrder() = get("is_buy_order") as? Boolean == true
 
-    val highestBuy = sellOrders
-        .filter { (it["is_buy_order"] as? Boolean) == true }
-        .groupBy { (it["type_id"] as? Number)?.toInt() ?: 0 }
-        .mapValues { (_, o) -> o.maxOf { (it["price"] as? Number)?.toDouble() ?: 0.0 } }
+    // All four price maps — computed up front so trade type selection is a simple map lookup
+    val srcSell = buyOrders .filter { !it.isBuyOrder() }.groupBy { (it["type_id"] as? Number)?.toInt() ?: 0 }
+        .mapValues { (_, o) -> o.minOf { it.price() } }   // cheapest sell in source (hit to buy instantly)
+    val srcBuy  = buyOrders .filter {  it.isBuyOrder() }.groupBy { (it["type_id"] as? Number)?.toInt() ?: 0 }
+        .mapValues { (_, o) -> o.maxOf { it.price() } }   // best buy order in source (match to buy via order)
+    val dstBuy  = sellOrders.filter {  it.isBuyOrder() }.groupBy { (it["type_id"] as? Number)?.toInt() ?: 0 }
+        .mapValues { (_, o) -> o.maxOf { it.price() } }   // best buy order in dest (fill to sell instantly)
+    val dstSell = sellOrders.filter { !it.isBuyOrder() }.groupBy { (it["type_id"] as? Number)?.toInt() ?: 0 }
+        .mapValues { (_, o) -> o.minOf { it.price() } }   // cheapest sell in dest (undercut to sell via order)
 
-    val common  = cheapestSell.keys.intersect(highestBuy.keys)
+    // Pick source and destination price maps based on trade type
+    val sourcePrices = when (tradeType) {
+        InterRegionTradeType.SELL_TO_BUY,  InterRegionTradeType.SELL_TO_SELL -> srcSell
+        InterRegionTradeType.BUY_TO_BUY,   InterRegionTradeType.BUY_TO_SELL  -> srcBuy
+    }
+    val destPrices = when (tradeType) {
+        InterRegionTradeType.SELL_TO_BUY,  InterRegionTradeType.BUY_TO_BUY   -> dstBuy
+        InterRegionTradeType.SELL_TO_SELL, InterRegionTradeType.BUY_TO_SELL  -> dstSell
+    }
+
+    val common  = sourcePrices.keys.intersect(destPrices.keys)
     val results = mutableListOf<RegionOpportunity>()
 
     common.forEach { typeId ->
         if (typeId == 0) return@forEach
-        val buyPrice  = cheapestSell[typeId] ?: return@forEach
-        val sellPrice = highestBuy[typeId]   ?: return@forEach
+        val buyPrice  = sourcePrices[typeId] ?: return@forEach
+        val sellPrice = destPrices[typeId]   ?: return@forEach
         if (sellPrice <= buyPrice) return@forEach
 
         val type = StaticDataDao.getTypeById(typeId) ?: return@forEach
