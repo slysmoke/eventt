@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.*
@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -34,10 +35,10 @@ import org.eve.trader.core.model.StaticRegionModel
 data class StationOpportunity(
     val typeId: Int,
     val typeName: String,
-    val bestSell: Double,           // cheapest sell order = what you pay
-    val bestBuy: Double,            // highest buy order = what you receive
+    val bestSell: Double,
+    val bestBuy: Double,
     val grossProfit: Double,
-    val netProfit: Double,          // after broker fee + sales tax
+    val netProfit: Double,
     val marginPct: Double,
     val dailyVolume: Long,
     val sellOrderCount: Int,
@@ -50,26 +51,26 @@ data class RegionOpportunity(
     val typeName: String,
     val buyRegionName: String,
     val sellRegionName: String,
-    val buyPrice: Double,           // cheapest sell order in buy region
-    val sellPrice: Double,          // highest buy order in sell region
+    val buyPrice: Double,
+    val sellPrice: Double,
     val grossProfit: Double,
-    val netProfit: Double,          // after fees + shipping
+    val netProfit: Double,
     val marginPct: Double,
     val itemVolumeM3: Double,
     val shippingCostPerUnit: Double,
     val dailyVolume: Long,
 )
 
-// ─── Sort enums ───────────────────────────────────────────────────────────
+// ─── Sort / trade-type enums ───────────────────────────────────────────────
 
 private enum class StationSortCol { NAME, BUY_PRICE, SELL_PRICE, MARGIN, NET_PROFIT, VOLUME, DAILY_PROFIT }
 private enum class RegionSortCol  { NAME, BUY_PRICE, SELL_PRICE, MARGIN, ITEM_VOL, SHIPPING, NET_PROFIT, VOLUME }
 
-private enum class InterRegionTradeType(val label: String, val detail: String) {
-    SELL_TO_BUY ("Sell → Buy",   "Hit sell order in source, fill buy order in dest (instant both)"),
-    SELL_TO_SELL("Sell → Sell",  "Hit sell order in source, post sell order in dest"),
-    BUY_TO_BUY  ("Buy → Buy",    "Post buy order in source, fill buy order in dest"),
-    BUY_TO_SELL ("Buy → Sell",   "Post buy order in source, post sell order in dest (slowest, best margin)"),
+private enum class InterRegionTradeType(val label: String) {
+    SELL_TO_BUY ("Sell → Buy (instant)"),
+    SELL_TO_SELL("Sell → Sell Order"),
+    BUY_TO_BUY  ("Buy Order → Buy"),
+    BUY_TO_SELL ("Buy → Sell (orders)"),
 }
 
 private fun sortStation(list: List<StationOpportunity>, col: StationSortCol, asc: Boolean): List<StationOpportunity> {
@@ -99,6 +100,36 @@ private fun sortRegion(list: List<RegionOpportunity>, col: RegionSortCol, asc: B
     return if (asc) list.sortedWith(cmp) else list.sortedWith(cmp.reversed())
 }
 
+// ─── Settings helpers ─────────────────────────────────────────────────────
+
+private object S {
+    // Station keys
+    const val ST_REGION      = "analysis.s.region"
+    const val ST_CAT_TOP     = "analysis.s.catTop"
+    const val ST_CAT_SUB     = "analysis.s.catSub"
+    const val ST_MARGIN      = "analysis.s.margin"
+    const val ST_BROKER      = "analysis.s.broker"
+    const val ST_TAX         = "analysis.s.tax"
+    const val ST_MIN_VOL     = "analysis.s.minVol"
+    const val ST_MAX_PRICE   = "analysis.s.maxPrice"
+    const val ST_MIN_PROFIT  = "analysis.s.minProfit"
+    // Inter-region keys
+    const val IR_BUY_REGION  = "analysis.r.buyRegion"
+    const val IR_SELL_REGION = "analysis.r.sellRegion"
+    const val IR_TRADE_TYPE  = "analysis.r.tradeType"
+    const val IR_CAT_TOP     = "analysis.r.catTop"
+    const val IR_CAT_SUB     = "analysis.r.catSub"
+    const val IR_MARGIN      = "analysis.r.margin"
+    const val IR_BROKER      = "analysis.r.broker"
+    const val IR_TAX         = "analysis.r.tax"
+    const val IR_ISK_PER_M3  = "analysis.r.iskPerM3"
+    const val IR_MAX_CARGO   = "analysis.r.maxCargo"
+    const val IR_MIN_PROFIT  = "analysis.r.minProfit"
+
+    fun get(key: String): String? = StaticDataDao.getSetting(key)
+    fun set(key: String, value: String) = StaticDataDao.setSetting(key, value)
+}
+
 // ─── Main screen ──────────────────────────────────────────────────────────
 
 @Composable
@@ -114,16 +145,12 @@ fun MarketAnalysisScreen() {
 
     Column(modifier = Modifier.fillMaxSize()) {
         TabRow(selectedTabIndex = selectedTab) {
-            Tab(
-                selected = selectedTab == 0, onClick = { selectedTab = 0 },
+            Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 },
                 text = { Text("Station Trading") },
-                icon = { Icon(Icons.Default.Store, null, Modifier.size(16.dp)) },
-            )
-            Tab(
-                selected = selectedTab == 1, onClick = { selectedTab = 1 },
+                icon = { Icon(Icons.Default.Store, null, Modifier.size(16.dp)) })
+            Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 },
                 text = { Text("Inter-Region") },
-                icon = { Icon(Icons.AutoMirrored.Filled.CompareArrows, null, Modifier.size(16.dp)) },
-            )
+                icon = { Icon(Icons.AutoMirrored.Filled.CompareArrows, null, Modifier.size(16.dp)) })
         }
         when (selectedTab) {
             0 -> StationTradingTab(allRegions, topGroups)
@@ -145,142 +172,151 @@ private fun StationTradingTab(
     var selectedTopGroup by remember { mutableStateOf<StaticMarketGroupModel?>(null) }
     var selectedSubGroup by remember { mutableStateOf<StaticMarketGroupModel?>(null) }
     var subGroups        by remember { mutableStateOf<List<StaticMarketGroupModel>>(emptyList()) }
-    var minMargin        by remember { mutableStateOf(5f) }
+    var minMargin        by remember { mutableStateOf("5") }
+    var brokerFee        by remember { mutableStateOf("3") }
+    var salesTax         by remember { mutableStateOf("8") }
     var minDailyVol      by remember { mutableStateOf("10") }
     var maxBuyPrice      by remember { mutableStateOf("500000000") }
     var minNetProfit     by remember { mutableStateOf("100000") }
-    var brokerFee        by remember { mutableStateOf(3f) }
-    var salesTax         by remember { mutableStateOf(8f) }
     var isAnalyzing      by remember { mutableStateOf(false) }
     var statusMsg        by remember { mutableStateOf("") }
     var results          by remember { mutableStateOf<List<StationOpportunity>>(emptyList()) }
     var sortCol          by remember { mutableStateOf(StationSortCol.NET_PROFIT) }
     var sortAsc          by remember { mutableStateOf(false) }
 
-    LaunchedEffect(selectedTopGroup) {
-        subGroups = if (selectedTopGroup != null)
-            withContext(Dispatchers.IO) { StaticDataDao.getChildMarketGroups(selectedTopGroup!!.marketGroupId) }
-        else emptyList()
-        selectedSubGroup = null
+    // Load persisted settings
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            S.get(S.ST_REGION)?.toIntOrNull()?.let     { regionId    = it }
+            S.get(S.ST_MARGIN)?.let                    { minMargin   = it }
+            S.get(S.ST_BROKER)?.let                    { brokerFee   = it }
+            S.get(S.ST_TAX)?.let                       { salesTax    = it }
+            S.get(S.ST_MIN_VOL)?.let                   { minDailyVol = it }
+            S.get(S.ST_MAX_PRICE)?.let                 { maxBuyPrice = it }
+            S.get(S.ST_MIN_PROFIT)?.let                { minNetProfit= it }
+        }
     }
 
-    Row(modifier = Modifier.fillMaxSize()) {
-        // ── Filters sidebar ────────────────────────────────────────
-        Surface(
-            modifier = Modifier.width(250.dp).fillMaxHeight(),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
-        ) {
-            Column(modifier = Modifier.padding(12.dp).verticalScroll(rememberScrollState())) {
-                Text("Filters", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(10.dp))
+    // Restore category selection after groups load
+    LaunchedEffect(topGroups) {
+        if (topGroups.isEmpty()) return@LaunchedEffect
+        withContext(Dispatchers.IO) {
+            val topId = S.get(S.ST_CAT_TOP)?.toIntOrNull() ?: return@withContext
+            val top = topGroups.find { it.marketGroupId == topId } ?: return@withContext
+            selectedTopGroup = top
+            val subs = StaticDataDao.getChildMarketGroups(topId)
+            subGroups = subs
+            val subId = S.get(S.ST_CAT_SUB)?.toIntOrNull()
+            selectedSubGroup = subs.find { it.marketGroupId == subId }
+        }
+    }
 
-                SectionLabel("Region")
-                RegionPicker(allRegions = allRegions, selectedRegionId = regionId) { regionId = it }
+    // Load subgroups when top group changes (user interaction)
+    LaunchedEffect(selectedTopGroup) {
+        val top = selectedTopGroup ?: run { subGroups = emptyList(); selectedSubGroup = null; return@LaunchedEffect }
+        val subs = withContext(Dispatchers.IO) { StaticDataDao.getChildMarketGroups(top.marketGroupId) }
+        subGroups = subs
+        if (selectedSubGroup?.marketGroupId !in subs.map { it.marketGroupId }) selectedSubGroup = null
+    }
 
-                Spacer(Modifier.height(10.dp))
-                SectionLabel("Category (optional)")
-                CategoryFilter(
-                    topGroups = topGroups, subGroups = subGroups,
-                    selectedTopGroup = selectedTopGroup, onTopGroupSelected = { selectedTopGroup = it },
-                    selectedSubGroup = selectedSubGroup, onSubGroupSelected = { selectedSubGroup = it },
-                )
-
-                Spacer(Modifier.height(10.dp))
-                HorizontalDivider()
-                Spacer(Modifier.height(10.dp))
-
-                SliderFilter("Min Margin", minMargin, 0f..50f, "${minMargin.toInt()}%") { minMargin = it }
-                SliderFilter("Broker Fee", brokerFee, 0f..10f, "${String.format("%.1f", brokerFee)}%") { brokerFee = it }
-                SliderFilter("Sales Tax",  salesTax,  0f..12f, "${String.format("%.1f", salesTax)}%")  { salesTax  = it }
-
-                Spacer(Modifier.height(8.dp))
-                FilterField("Min Daily Volume",    minDailyVol)  { minDailyVol  = it }
-                Spacer(Modifier.height(6.dp))
-                FilterField("Max Buy Price (ISK)", maxBuyPrice)  { maxBuyPrice  = it }
-                Spacer(Modifier.height(6.dp))
-                FilterField("Min Net Profit/unit", minNetProfit) { minNetProfit = it }
-
-                Spacer(Modifier.height(14.dp))
+    Column(modifier = Modifier.fillMaxSize()) {
+        // ── Filter bar ─────────────────────────────────────────────
+        FilterBar {
+            // Row 1: pickers
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()).padding(bottom = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RegionPicker(allRegions, regionId, width = 180.dp) {
+                    regionId = it
+                    scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_REGION, it.toString()) } }
+                }
+                CompactGroupDropdown("Category", topGroups, selectedTopGroup, "All", 150.dp) { g ->
+                    selectedTopGroup = g; selectedSubGroup = null
+                    scope.launch { withContext(Dispatchers.IO) {
+                        S.set(S.ST_CAT_TOP, g?.marketGroupId?.toString() ?: "")
+                        S.set(S.ST_CAT_SUB, "")
+                    }}
+                }
+                if (subGroups.isNotEmpty()) {
+                    CompactGroupDropdown("Subcategory", subGroups, selectedSubGroup, "All", 150.dp) { g ->
+                        selectedSubGroup = g
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_CAT_SUB, g?.marketGroupId?.toString() ?: "") } }
+                    }
+                }
+            }
+            // Row 2: numeric filters + button
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SmallField("Margin %",  minMargin,    70.dp)  { minMargin   = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MARGIN,     it) } } }
+                SmallField("Broker %",  brokerFee,    70.dp)  { brokerFee   = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_BROKER,     it) } } }
+                SmallField("Tax %",     salesTax,     60.dp)  { salesTax    = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_TAX,        it) } } }
+                SmallField("Min Vol",   minDailyVol,  80.dp)  { minDailyVol = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MIN_VOL,    it) } } }
+                SmallField("Max Buy",   maxBuyPrice,  110.dp) { maxBuyPrice  = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MAX_PRICE,  it) } } }
+                SmallField("Min Net",   minNetProfit, 100.dp) { minNetProfit = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MIN_PROFIT, it) } } }
+                Spacer(Modifier.width(4.dp))
                 Button(
                     onClick = {
                         scope.launch {
-                            isAnalyzing = true
-                            results = emptyList()
+                            isAnalyzing = true; results = emptyList()
                             val regionName = allRegions.find { it.regionId == regionId }?.name ?: "region"
                             try {
                                 statusMsg = "Fetching orders from $regionName…"
-                                val allOrders = withContext(Dispatchers.IO) {
-                                    EsiClient.getMarketRegionOrders(regionId)
-                                }
+                                val allOrders = withContext(Dispatchers.IO) { EsiClient.getMarketRegionOrders(regionId) }
                                 val filterGroupId = selectedSubGroup?.marketGroupId ?: selectedTopGroup?.marketGroupId
-                                val filterGroupIds = if (filterGroupId != null)
-                                    withContext(Dispatchers.IO) { buildGroupSubtree(filterGroupId) }
-                                else null
+                                val filterGroupIds = filterGroupId?.let { withContext(Dispatchers.IO) { buildGroupSubtree(it) } }
                                 statusMsg = "Analyzing ${allOrders.size} orders…"
                                 results = withContext(Dispatchers.IO) {
                                     computeStation(
                                         allOrders, regionId,
                                         filterMarketGroupIds = filterGroupIds,
-                                        minMarginPct  = minMargin.toDouble(),
+                                        minMarginPct  = minMargin.toDoubleOrNull() ?: 5.0,
                                         minDailyVol   = minDailyVol.toLongOrNull() ?: 0L,
                                         maxBuyPrice   = maxBuyPrice.toDoubleOrNull() ?: Double.MAX_VALUE,
                                         minNetProfit  = minNetProfit.toDoubleOrNull() ?: 0.0,
-                                        brokerFeePct  = brokerFee.toDouble(),
-                                        salesTaxPct   = salesTax.toDouble(),
+                                        brokerFeePct  = brokerFee.toDoubleOrNull() ?: 3.0,
+                                        salesTaxPct   = salesTax.toDoubleOrNull() ?: 8.0,
                                     )
                                 }
                                 statusMsg = "${results.size} opportunities found"
-                            } catch (e: Exception) {
-                                statusMsg = "Error: ${e.message}"
-                            }
+                            } catch (e: Exception) { statusMsg = "Error: ${e.message}" }
                             isAnalyzing = false
                         }
                     },
                     enabled = !isAnalyzing,
-                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     if (isAnalyzing) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
                     else Icon(Icons.Default.Search, null, Modifier.size(14.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(if (isAnalyzing) "Analyzing…" else "Analyze")
                 }
-
                 if (statusMsg.isNotEmpty()) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(statusMsg, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                    Text(statusMsg, style = MaterialTheme.typography.labelSmall,
+                        color = if ("Error" in statusMsg) Color(0xFFFF6B6B) else Color.Gray)
                 }
-
-                Spacer(Modifier.height(10.dp))
-                HorizontalDivider()
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Margin = (sell − buy) / sell\nNet profit accounts for broker fee on both orders and sales tax on sell.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                )
             }
         }
 
-        // ── Results ────────────────────────────────────────────────
-        Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-            if (isAnalyzing) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        if (isAnalyzing) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
 
-            if (results.isEmpty() && !isAnalyzing) {
-                AnalysisEmptyState(
-                    icon = { Icon(Icons.Default.Store, null, Modifier.size(52.dp), tint = Color.Gray) },
-                    primary = "Configure filters and click Analyze",
-                    secondary = "Finds items with profitable spread between buy and sell orders at the same station",
-                )
-            } else {
-                val sorted = remember(results, sortCol, sortAsc) { sortStation(results, sortCol, sortAsc) }
-                StationHeader(sortCol, sortAsc) { col ->
-                    if (sortCol == col) sortAsc = !sortAsc else { sortCol = col; sortAsc = false }
-                }
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    itemsIndexed(sorted, key = { _, it -> it.typeId }) { idx, opp ->
-                        StationRow(opp, idx)
-                    }
-                }
+        // ── Results ────────────────────────────────────────────────
+        if (results.isEmpty() && !isAnalyzing) {
+            AnalysisEmptyState(
+                icon = { Icon(Icons.Default.Store, null, Modifier.size(52.dp), tint = Color.Gray) },
+                primary = "Configure filters and click Analyze",
+                secondary = "Finds items with profitable spread between buy and sell orders at the same station",
+            )
+        } else {
+            val sorted = remember(results, sortCol, sortAsc) { sortStation(results, sortCol, sortAsc) }
+            StationHeader(sortCol, sortAsc) { col ->
+                if (sortCol == col) sortAsc = !sortAsc else { sortCol = col; sortAsc = false }
+            }
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                itemsIndexed(sorted, key = { _, it -> it.typeId }) { idx, opp -> StationRow(opp, idx) }
             }
         }
     }
@@ -301,106 +337,117 @@ private fun InterRegionTab(
     var selectedTopGroup by remember { mutableStateOf<StaticMarketGroupModel?>(null) }
     var selectedSubGroup by remember { mutableStateOf<StaticMarketGroupModel?>(null) }
     var subGroups        by remember { mutableStateOf<List<StaticMarketGroupModel>>(emptyList()) }
+    var minMargin        by remember { mutableStateOf("5") }
+    var brokerFee        by remember { mutableStateOf("3") }
+    var salesTax         by remember { mutableStateOf("8") }
     var iskPerM3         by remember { mutableStateOf("1000") }
     var maxCargoM3       by remember { mutableStateOf("10000") }
-    var minMargin        by remember { mutableStateOf(5f) }
     var minNetProfit     by remember { mutableStateOf("5000000") }
-    var brokerFee        by remember { mutableStateOf(3f) }
-    var salesTax         by remember { mutableStateOf(8f) }
     var isAnalyzing      by remember { mutableStateOf(false) }
     var statusMsg        by remember { mutableStateOf("") }
     var results          by remember { mutableStateOf<List<RegionOpportunity>>(emptyList()) }
     var sortCol          by remember { mutableStateOf(RegionSortCol.NET_PROFIT) }
     var sortAsc          by remember { mutableStateOf(false) }
 
-    LaunchedEffect(selectedTopGroup) {
-        subGroups = if (selectedTopGroup != null)
-            withContext(Dispatchers.IO) { StaticDataDao.getChildMarketGroups(selectedTopGroup!!.marketGroupId) }
-        else emptyList()
-        selectedSubGroup = null
+    // Load persisted settings
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            S.get(S.IR_BUY_REGION)?.toIntOrNull()?.let  { buyRegionId  = it }
+            S.get(S.IR_SELL_REGION)?.toIntOrNull()?.let { sellRegionId = it }
+            S.get(S.IR_TRADE_TYPE)?.let { name ->
+                InterRegionTradeType.entries.find { it.name == name }?.let { tradeType = it }
+            }
+            S.get(S.IR_MARGIN)?.let     { minMargin    = it }
+            S.get(S.IR_BROKER)?.let     { brokerFee    = it }
+            S.get(S.IR_TAX)?.let        { salesTax     = it }
+            S.get(S.IR_ISK_PER_M3)?.let { iskPerM3     = it }
+            S.get(S.IR_MAX_CARGO)?.let  { maxCargoM3   = it }
+            S.get(S.IR_MIN_PROFIT)?.let { minNetProfit = it }
+        }
     }
 
-    Row(modifier = Modifier.fillMaxSize()) {
-        // ── Filters sidebar ────────────────────────────────────────
-        Surface(
-            modifier = Modifier.width(250.dp).fillMaxHeight(),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
-        ) {
-            Column(modifier = Modifier.padding(12.dp).verticalScroll(rememberScrollState())) {
-                Text("Filters", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(10.dp))
+    LaunchedEffect(topGroups) {
+        if (topGroups.isEmpty()) return@LaunchedEffect
+        withContext(Dispatchers.IO) {
+            val topId = S.get(S.IR_CAT_TOP)?.toIntOrNull() ?: return@withContext
+            val top = topGroups.find { it.marketGroupId == topId } ?: return@withContext
+            selectedTopGroup = top
+            val subs = StaticDataDao.getChildMarketGroups(topId)
+            subGroups = subs
+            val subId = S.get(S.IR_CAT_SUB)?.toIntOrNull()
+            selectedSubGroup = subs.find { it.marketGroupId == subId }
+        }
+    }
 
-                SectionLabel("Buy Region (buy cheap here)")
-                RegionPicker(allRegions = allRegions, selectedRegionId = buyRegionId) { buyRegionId = it }
+    LaunchedEffect(selectedTopGroup) {
+        val top = selectedTopGroup ?: run { subGroups = emptyList(); selectedSubGroup = null; return@LaunchedEffect }
+        val subs = withContext(Dispatchers.IO) { StaticDataDao.getChildMarketGroups(top.marketGroupId) }
+        subGroups = subs
+        if (selectedSubGroup?.marketGroupId !in subs.map { it.marketGroupId }) selectedSubGroup = null
+    }
 
-                Spacer(Modifier.height(8.dp))
-                SectionLabel("Sell Region (sell here)")
-                RegionPicker(allRegions = allRegions, selectedRegionId = sellRegionId) { sellRegionId = it }
-
-                Spacer(Modifier.height(10.dp))
-                SectionLabel("Trade Type")
-                InterRegionTradeType.entries.forEach { type ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth().clickable { tradeType = type }.padding(vertical = 1.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(selected = type == tradeType, onClick = { tradeType = type }, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Column {
-                            Text(type.label, style = MaterialTheme.typography.bodySmall)
-                            Text(type.detail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f), maxLines = 2)
-                        }
+    Column(modifier = Modifier.fillMaxSize()) {
+        // ── Filter bar ─────────────────────────────────────────────
+        FilterBar {
+            // Row 1: regions + trade type + category
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()).padding(bottom = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RegionPicker(allRegions, buyRegionId, width = 170.dp, label = "Buy Region") {
+                    buyRegionId = it
+                    scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_BUY_REGION, it.toString()) } }
+                }
+                RegionPicker(allRegions, sellRegionId, width = 170.dp, label = "Sell Region") {
+                    sellRegionId = it
+                    scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SELL_REGION, it.toString()) } }
+                }
+                TradeTypeDropdown(tradeType) {
+                    tradeType = it
+                    scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_TRADE_TYPE, it.name) } }
+                }
+                CompactGroupDropdown("Category", topGroups, selectedTopGroup, "All", 140.dp) { g ->
+                    selectedTopGroup = g; selectedSubGroup = null
+                    scope.launch { withContext(Dispatchers.IO) {
+                        S.set(S.IR_CAT_TOP, g?.marketGroupId?.toString() ?: "")
+                        S.set(S.IR_CAT_SUB, "")
+                    }}
+                }
+                if (subGroups.isNotEmpty()) {
+                    CompactGroupDropdown("Subcategory", subGroups, selectedSubGroup, "All", 140.dp) { g ->
+                        selectedSubGroup = g
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_CAT_SUB, g?.marketGroupId?.toString() ?: "") } }
                     }
                 }
-
-                Spacer(Modifier.height(10.dp))
-                SectionLabel("Category (optional)")
-                CategoryFilter(
-                    topGroups = topGroups, subGroups = subGroups,
-                    selectedTopGroup = selectedTopGroup, onTopGroupSelected = { selectedTopGroup = it },
-                    selectedSubGroup = selectedSubGroup, onSubGroupSelected = { selectedSubGroup = it },
-                )
-
-                Spacer(Modifier.height(10.dp))
-                HorizontalDivider()
-                Spacer(Modifier.height(10.dp))
-
-                SliderFilter("Min Margin", minMargin, 0f..50f, "${minMargin.toInt()}%") { minMargin = it }
-                SliderFilter("Broker Fee", brokerFee, 0f..10f, "${String.format("%.1f", brokerFee)}%") { brokerFee = it }
-                SliderFilter("Sales Tax",  salesTax,  0f..12f, "${String.format("%.1f", salesTax)}%")  { salesTax  = it }
-
-                Spacer(Modifier.height(8.dp))
-                FilterField("Shipping (ISK/m³)",   iskPerM3)    { iskPerM3    = it }
-                Spacer(Modifier.height(6.dp))
-                FilterField("Max Cargo (m³)",       maxCargoM3)  { maxCargoM3  = it }
-                Spacer(Modifier.height(6.dp))
-                FilterField("Min Net Profit/unit",  minNetProfit){ minNetProfit = it }
-
-                Spacer(Modifier.height(14.dp))
+            }
+            // Row 2: numeric filters + button
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SmallField("Margin %",    minMargin,    70.dp)  { minMargin    = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MARGIN,     it) } } }
+                SmallField("Broker %",    brokerFee,    70.dp)  { brokerFee    = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_BROKER,     it) } } }
+                SmallField("Tax %",       salesTax,     60.dp)  { salesTax     = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_TAX,        it) } } }
+                SmallField("ISK/m³",      iskPerM3,     90.dp)  { iskPerM3     = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_ISK_PER_M3, it) } } }
+                SmallField("Max m³",      maxCargoM3,   90.dp)  { maxCargoM3   = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MAX_CARGO,  it) } } }
+                SmallField("Min Net",     minNetProfit, 110.dp) { minNetProfit = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MIN_PROFIT, it) } } }
+                Spacer(Modifier.width(4.dp))
                 Button(
                     onClick = {
-                        if (buyRegionId == sellRegionId) {
-                            statusMsg = "Buy and sell regions must differ"
-                            return@Button
-                        }
+                        if (buyRegionId == sellRegionId) { statusMsg = "Regions must differ"; return@Button }
                         scope.launch {
-                            isAnalyzing = true
-                            results = emptyList()
-                            val buyName  = allRegions.find { it.regionId == buyRegionId  }?.name ?: "buy region"
-                            val sellName = allRegions.find { it.regionId == sellRegionId }?.name ?: "sell region"
+                            isAnalyzing = true; results = emptyList()
+                            val buyName  = allRegions.find { it.regionId == buyRegionId  }?.name ?: "buy"
+                            val sellName = allRegions.find { it.regionId == sellRegionId }?.name ?: "sell"
                             val filterGroupId = selectedSubGroup?.marketGroupId ?: selectedTopGroup?.marketGroupId
-                            val filterGroupIds = if (filterGroupId != null)
-                                withContext(Dispatchers.IO) { buildGroupSubtree(filterGroupId) }
-                            else null
+                            val filterGroupIds = filterGroupId?.let { withContext(Dispatchers.IO) { buildGroupSubtree(it) } }
                             try {
-                                statusMsg = "Fetching orders from $buyName…"
-                                val buyOrders = withContext(Dispatchers.IO) {
-                                    EsiClient.getMarketRegionOrders(buyRegionId)
-                                }
-                                statusMsg = "Fetching orders from $sellName…"
-                                val sellOrders = withContext(Dispatchers.IO) {
-                                    EsiClient.getMarketRegionOrders(sellRegionId)
-                                }
+                                statusMsg = "Fetching $buyName…"
+                                val buyOrders  = withContext(Dispatchers.IO) { EsiClient.getMarketRegionOrders(buyRegionId)  }
+                                statusMsg = "Fetching $sellName…"
+                                val sellOrders = withContext(Dispatchers.IO) { EsiClient.getMarketRegionOrders(sellRegionId) }
                                 statusMsg = "Analyzing ${buyOrders.size + sellOrders.size} orders…"
                                 results = withContext(Dispatchers.IO) {
                                     computeRegion(
@@ -411,70 +458,65 @@ private fun InterRegionTab(
                                         filterMarketGroupIds = filterGroupIds,
                                         iskPerM3      = iskPerM3.toDoubleOrNull() ?: 1000.0,
                                         maxCargoM3    = maxCargoM3.toDoubleOrNull() ?: 10000.0,
-                                        minMarginPct  = minMargin.toDouble(),
+                                        minMarginPct  = minMargin.toDoubleOrNull() ?: 5.0,
                                         minNetProfit  = minNetProfit.toDoubleOrNull() ?: 0.0,
-                                        brokerFeePct  = brokerFee.toDouble(),
-                                        salesTaxPct   = salesTax.toDouble(),
+                                        brokerFeePct  = brokerFee.toDoubleOrNull() ?: 3.0,
+                                        salesTaxPct   = salesTax.toDoubleOrNull() ?: 8.0,
                                     )
                                 }
                                 statusMsg = "${results.size} opportunities found"
-                            } catch (e: Exception) {
-                                statusMsg = "Error: ${e.message}"
-                            }
+                            } catch (e: Exception) { statusMsg = "Error: ${e.message}" }
                             isAnalyzing = false
                         }
                     },
                     enabled = !isAnalyzing,
-                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     if (isAnalyzing) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
                     else Icon(Icons.AutoMirrored.Filled.CompareArrows, null, Modifier.size(14.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(if (isAnalyzing) "Analyzing…" else "Analyze")
                 }
-
                 if (statusMsg.isNotEmpty()) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        statusMsg,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if ("Error" in statusMsg || "differ" in statusMsg) Color(0xFFFF6B6B) else Color.Gray,
-                    )
+                    Text(statusMsg, style = MaterialTheme.typography.labelSmall,
+                        color = if ("Error" in statusMsg || "differ" in statusMsg) Color(0xFFFF6B6B) else Color.Gray)
                 }
-
-                Spacer(Modifier.height(10.dp))
-                HorizontalDivider()
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Net profit = sell_price − buy_price − shipping − fees.\nShipping = item m³ × ISK/m³.\nSell price is the highest active buy order in sell region.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                )
             }
         }
+
+        if (isAnalyzing) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
 
         // ── Results ────────────────────────────────────────────────
-        Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-            if (isAnalyzing) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-
-            if (results.isEmpty() && !isAnalyzing) {
-                AnalysisEmptyState(
-                    icon = { Icon(Icons.AutoMirrored.Filled.CompareArrows, null, Modifier.size(52.dp), tint = Color.Gray) },
-                    primary = "Select regions and click Analyze",
-                    secondary = "Finds items priced low in the buy region that sell for more in the sell region",
-                )
-            } else {
-                val sorted = remember(results, sortCol, sortAsc) { sortRegion(results, sortCol, sortAsc) }
-                RegionHeader(sortCol, sortAsc) { col ->
-                    if (sortCol == col) sortAsc = !sortAsc else { sortCol = col; sortAsc = false }
-                }
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    itemsIndexed(sorted, key = { _, it -> it.typeId }) { idx, opp ->
-                        RegionRow(opp, idx)
-                    }
-                }
+        if (results.isEmpty() && !isAnalyzing) {
+            AnalysisEmptyState(
+                icon = { Icon(Icons.AutoMirrored.Filled.CompareArrows, null, Modifier.size(52.dp), tint = Color.Gray) },
+                primary = "Select regions and click Analyze",
+                secondary = "Finds items priced low in the buy region that sell for more in the sell region",
+            )
+        } else {
+            val sorted = remember(results, sortCol, sortAsc) { sortRegion(results, sortCol, sortAsc) }
+            RegionHeader(sortCol, sortAsc) { col ->
+                if (sortCol == col) sortAsc = !sortAsc else { sortCol = col; sortAsc = false }
+            }
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                itemsIndexed(sorted, key = { _, it -> it.typeId }) { idx, opp -> RegionRow(opp, idx) }
             }
         }
+    }
+}
+
+// ─── Filter bar container ─────────────────────────────────────────────────
+
+@Composable
+private fun FilterBar(content: @Composable ColumnScope.() -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        tonalElevation = 1.dp,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
+            content = content,
+        )
     }
 }
 
@@ -484,6 +526,8 @@ private fun InterRegionTab(
 private fun RegionPicker(
     allRegions: List<StaticRegionModel>,
     selectedRegionId: Int,
+    width: Dp = 160.dp,
+    label: String = "Region",
     onSelect: (Int) -> Unit,
 ) {
     var searchQuery  by remember { mutableStateOf("") }
@@ -493,13 +537,9 @@ private fun RegionPicker(
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
 
-    // When the field gains focus, switch to search mode so the display text is replaced
-    // with an empty search box. We only act on focus-gained (isFocused=true).
     LaunchedEffect(isFocused) {
         if (isFocused && !isSearchMode) {
-            searchQuery  = ""
-            isSearchMode = true
-            expanded     = true
+            searchQuery = ""; isSearchMode = true; expanded = true
         }
     }
 
@@ -515,48 +555,39 @@ private fun RegionPicker(
 
     Box {
         OutlinedTextField(
-            value           = if (isSearchMode) searchQuery else selectedName,
-            onValueChange   = { text -> searchQuery = text; isSearchMode = true; expanded = true },
-            modifier        = Modifier.fillMaxWidth(),
-            textStyle       = MaterialTheme.typography.bodySmall,
-            singleLine      = true,
+            value             = if (isSearchMode) searchQuery else selectedName,
+            onValueChange     = { searchQuery = it; isSearchMode = true; expanded = true },
+            modifier          = Modifier.width(width),
+            label             = { Text(label, style = MaterialTheme.typography.labelSmall) },
+            textStyle         = MaterialTheme.typography.bodySmall,
+            singleLine        = true,
             interactionSource = interactionSource,
-            placeholder     = {
-                if (isSearchMode) Text("Type to filter…", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-            },
+            placeholder       = { if (isSearchMode) Text("Filter…", style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
             trailingIcon = {
                 Icon(
-                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp).clickable {
-                        if (expanded) {
-                            expanded = false; isSearchMode = false; searchQuery = ""
-                        } else {
-                            searchQuery = ""; isSearchMode = true; expanded = true
-                        }
+                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null,
+                    Modifier.size(16.dp).clickable {
+                        if (expanded) { expanded = false; isSearchMode = false; searchQuery = "" }
+                        else { searchQuery = ""; isSearchMode = true; expanded = true }
                     },
                 )
             },
         )
         DropdownMenu(
-            expanded        = expanded,
+            expanded         = expanded,
             onDismissRequest = { expanded = false; isSearchMode = false; searchQuery = "" },
-            modifier        = Modifier.width(226.dp),
+            modifier         = Modifier.width(width),
         ) {
             if (filtered.isEmpty()) {
                 DropdownMenuItem(
-                    text    = { Text("No match for \"$searchQuery\"", style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
-                    onClick = { },
-                    enabled = false,
+                    text = { Text("No match for \"$searchQuery\"", style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
+                    onClick = { }, enabled = false,
                 )
             } else {
                 filtered.forEach { region ->
                     DropdownMenuItem(
                         text    = { Text(region.name, style = MaterialTheme.typography.bodySmall) },
-                        onClick = {
-                            onSelect(region.regionId)
-                            expanded = false; isSearchMode = false; searchQuery = ""
-                        },
+                        onClick = { onSelect(region.regionId); expanded = false; isSearchMode = false; searchQuery = "" },
                     )
                 }
             }
@@ -564,94 +595,104 @@ private fun RegionPicker(
     }
 }
 
-// ─── Category / subcategory filter ────────────────────────────────────────
+// ─── Compact group dropdown (category / subcategory) ─────────────────────
 
 @Composable
-private fun CategoryFilter(
-    topGroups: List<StaticMarketGroupModel>,
-    subGroups: List<StaticMarketGroupModel>,
-    selectedTopGroup: StaticMarketGroupModel?,
-    onTopGroupSelected: (StaticMarketGroupModel?) -> Unit,
-    selectedSubGroup: StaticMarketGroupModel?,
-    onSubGroupSelected: (StaticMarketGroupModel?) -> Unit,
-) {
-    GroupDropdown(
-        label = "Category",
-        groups = topGroups,
-        selected = selectedTopGroup,
-        placeholder = "All categories",
-        onSelect = onTopGroupSelected,
-    )
-    if (subGroups.isNotEmpty()) {
-        Spacer(Modifier.height(4.dp))
-        GroupDropdown(
-            label = "Subcategory",
-            groups = subGroups,
-            selected = selectedSubGroup,
-            placeholder = "All subcategories",
-            onSelect = onSubGroupSelected,
-        )
-    }
-}
-
-@Composable
-private fun GroupDropdown(
+private fun CompactGroupDropdown(
     label: String,
     groups: List<StaticMarketGroupModel>,
     selected: StaticMarketGroupModel?,
     placeholder: String,
+    width: Dp,
     onSelect: (StaticMarketGroupModel?) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-
     Box {
         OutlinedTextField(
-            value = selected?.name ?: "",
+            value         = selected?.name ?: "",
             onValueChange = { },
-            readOnly = true,
-            modifier = Modifier.fillMaxWidth(),
-            textStyle = MaterialTheme.typography.bodySmall,
-            label = { Text(label, style = MaterialTheme.typography.labelSmall) },
-            placeholder = { Text(placeholder, style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
-            trailingIcon = {
+            readOnly      = true,
+            modifier      = Modifier.width(width),
+            label         = { Text(label, style = MaterialTheme.typography.labelSmall) },
+            placeholder   = { Text(placeholder, style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
+            textStyle     = MaterialTheme.typography.bodySmall,
+            singleLine    = true,
+            trailingIcon  = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (selected != null) {
-                        Icon(
-                            Icons.Default.Clear, contentDescription = null,
-                            modifier = Modifier.size(14.dp).clickable { onSelect(null) },
-                            tint = Color.Gray,
-                        )
-                        Spacer(Modifier.width(4.dp))
-                    }
-                    Icon(
-                        if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp).clickable { expanded = !expanded },
-                    )
+                    if (selected != null) Icon(Icons.Default.Clear, null,
+                        Modifier.size(14.dp).clickable { onSelect(null) }, tint = Color.Gray)
+                    Spacer(Modifier.width(2.dp))
+                    Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null,
+                        Modifier.size(16.dp).clickable { expanded = !expanded })
                 }
             },
         )
         DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            modifier = Modifier.width(226.dp).heightIn(max = 280.dp),
+            expanded = expanded, onDismissRequest = { expanded = false },
+            modifier = Modifier.width(width).heightIn(max = 280.dp),
         ) {
             DropdownMenuItem(
                 text = { Text(placeholder, style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
                 onClick = { onSelect(null); expanded = false },
             )
             HorizontalDivider()
-            groups.forEach { group ->
+            groups.forEach { g ->
                 DropdownMenuItem(
-                    text = { Text(group.name, style = MaterialTheme.typography.bodySmall) },
-                    onClick = { onSelect(group); expanded = false },
-                    leadingIcon = if (group == selected) {
+                    text        = { Text(g.name, style = MaterialTheme.typography.bodySmall) },
+                    onClick     = { onSelect(g); expanded = false },
+                    leadingIcon = if (g == selected) {
                         { Icon(Icons.Default.Check, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary) }
                     } else null,
                 )
             }
         }
     }
+}
+
+// ─── Trade type dropdown ─────────────────────────────────────────────────
+
+@Composable
+private fun TradeTypeDropdown(selected: InterRegionTradeType, onSelect: (InterRegionTradeType) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        OutlinedTextField(
+            value         = selected.label,
+            onValueChange = { },
+            readOnly      = true,
+            modifier      = Modifier.width(170.dp),
+            label         = { Text("Trade Type", style = MaterialTheme.typography.labelSmall) },
+            textStyle     = MaterialTheme.typography.bodySmall,
+            singleLine    = true,
+            trailingIcon  = {
+                Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null,
+                    Modifier.size(16.dp).clickable { expanded = !expanded })
+            },
+        )
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.width(200.dp)) {
+            InterRegionTradeType.entries.forEach { t ->
+                DropdownMenuItem(
+                    text        = { Text(t.label, style = MaterialTheme.typography.bodySmall) },
+                    onClick     = { onSelect(t); expanded = false },
+                    leadingIcon = if (t == selected) {
+                        { Icon(Icons.Default.Check, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary) }
+                    } else null,
+                )
+            }
+        }
+    }
+}
+
+// ─── Small compact text field ─────────────────────────────────────────────
+
+@Composable
+private fun SmallField(label: String, value: String, width: Dp, onValue: (String) -> Unit) {
+    OutlinedTextField(
+        value = value, onValueChange = onValue,
+        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+        modifier = Modifier.width(width),
+        textStyle = MaterialTheme.typography.bodySmall,
+        singleLine = true,
+    )
 }
 
 // ─── Table headers ────────────────────────────────────────────────────────
@@ -667,7 +708,8 @@ private fun StationHeader(sort: StationSortCol, asc: Boolean, onSort: (StationSo
             ACol("Net/unit",   StationSortCol.NET_PROFIT,   sort, asc, onSort, Modifier.width(95.dp))
             ACol("Vol/day",    StationSortCol.VOLUME,       sort, asc, onSort, Modifier.width(75.dp))
             ACol("Est. Daily", StationSortCol.DAILY_PROFIT, sort, asc, onSort, Modifier.width(95.dp))
-            Text("Orders", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f), modifier = Modifier.width(65.dp))
+            Text("Orders", style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f), modifier = Modifier.width(65.dp))
         }
     }
 }
@@ -697,23 +739,18 @@ private fun StationRow(opp: StationOpportunity, index: Int) {
         modifier = Modifier.fillMaxWidth().background(bg).padding(horizontal = 10.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(opp.typeName, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text(opp.typeName, style = MaterialTheme.typography.bodySmall, maxLines = 1,
+            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         PriceText(opp.bestSell,  Color(0xFFFF6B6B), Modifier.width(95.dp))
         PriceText(opp.bestBuy,   Color(0xFF69DB7C), Modifier.width(95.dp))
         MarginText(opp.marginPct, Modifier.width(65.dp))
         PriceText(opp.netProfit, Color(0xFF69DB7C),  Modifier.width(95.dp))
-        Text(
-            if (opp.dailyVolume > 0) fVol(opp.dailyVolume) else "—",
-            style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.width(75.dp),
-        )
-        Text(
-            if (opp.estimatedDailyProfit > 0) fPrice(opp.estimatedDailyProfit) else "—",
-            style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(95.dp),
-        )
-        Text(
-            "${opp.sellOrderCount}s / ${opp.buyOrderCount}b",
-            style = MaterialTheme.typography.labelSmall, color = Color.Gray, modifier = Modifier.width(65.dp),
-        )
+        Text(if (opp.dailyVolume > 0) fVol(opp.dailyVolume) else "—",
+            style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.width(75.dp))
+        Text(if (opp.estimatedDailyProfit > 0) fPrice(opp.estimatedDailyProfit) else "—",
+            style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(95.dp))
+        Text("${opp.sellOrderCount}s / ${opp.buyOrderCount}b",
+            style = MaterialTheme.typography.labelSmall, color = Color.Gray, modifier = Modifier.width(65.dp))
     }
     HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
 }
@@ -725,20 +762,17 @@ private fun RegionRow(opp: RegionOpportunity, index: Int) {
         modifier = Modifier.fillMaxWidth().background(bg).padding(horizontal = 10.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(opp.typeName, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text(opp.typeName, style = MaterialTheme.typography.bodySmall, maxLines = 1,
+            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         PriceText(opp.buyPrice,  Color(0xFFFF6B6B), Modifier.width(95.dp))
         PriceText(opp.sellPrice, Color(0xFF69DB7C), Modifier.width(95.dp))
         MarginText(opp.marginPct, Modifier.width(65.dp))
-        Text(
-            "${String.format("%.2f", opp.itemVolumeM3)}m³",
-            style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.width(70.dp),
-        )
+        Text("${String.format("%.2f", opp.itemVolumeM3)}m³",
+            style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.width(70.dp))
         PriceText(opp.shippingCostPerUnit, Color(0xFFFF8C00), Modifier.width(90.dp))
         PriceText(opp.netProfit, Color(0xFF69DB7C), Modifier.width(95.dp), bold = true)
-        Text(
-            if (opp.dailyVolume > 0) fVol(opp.dailyVolume) else "—",
-            style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.width(70.dp),
-        )
+        Text(if (opp.dailyVolume > 0) fVol(opp.dailyVolume) else "—",
+            style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.width(70.dp))
     }
     HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
 }
@@ -753,13 +787,11 @@ private fun <T> ACol(label: String, col: T, current: T, asc: Boolean, onSort: (T
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Text(
-            label,
+        Text(label,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
             color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-            maxLines = 1,
-        )
+            maxLines = 1)
         if (active) Icon(
             if (asc) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
             null, Modifier.size(10.dp), tint = MaterialTheme.colorScheme.primary,
@@ -768,40 +800,9 @@ private fun <T> ACol(label: String, col: T, current: T, asc: Boolean, onSort: (T
 }
 
 @Composable
-private fun SectionLabel(text: String) {
-    Text(text, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
-    Spacer(Modifier.height(4.dp))
-}
-
-@Composable
-private fun SliderFilter(label: String, value: Float, range: ClosedFloatingPointRange<Float>, display: String, onValue: (Float) -> Unit) {
-    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-        Text(display, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-    }
-    Slider(value = value, onValueChange = onValue, valueRange = range, modifier = Modifier.padding(vertical = 0.dp))
-}
-
-@Composable
-private fun FilterField(label: String, value: String, onValue: (String) -> Unit) {
-    OutlinedTextField(
-        value = value, onValueChange = onValue,
-        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
-        modifier = Modifier.fillMaxWidth(),
-        textStyle = MaterialTheme.typography.bodySmall,
-        singleLine = true,
-    )
-}
-
-@Composable
 private fun PriceText(value: Double, color: Color, modifier: Modifier, bold: Boolean = false) {
-    Text(
-        fPrice(value),
-        style = MaterialTheme.typography.bodySmall,
-        color = color,
-        fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal,
-        modifier = modifier,
-    )
+    Text(fPrice(value), style = MaterialTheme.typography.bodySmall, color = color,
+        fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal, modifier = modifier)
 }
 
 @Composable
@@ -811,13 +812,8 @@ private fun MarginText(pct: Double, modifier: Modifier) {
         pct >= 10 -> Color(0xFFFF8C00)
         else      -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
     }
-    Text(
-        "${String.format("%.1f", pct)}%",
-        style = MaterialTheme.typography.bodySmall,
-        color = color,
-        fontWeight = FontWeight.Medium,
-        modifier = modifier,
-    )
+    Text("${String.format("%.1f", pct)}%", style = MaterialTheme.typography.bodySmall,
+        color = color, fontWeight = FontWeight.Medium, modifier = modifier)
 }
 
 @Composable
@@ -863,7 +859,6 @@ private fun computeStation(
 
     byType.forEach { (typeId, orders) ->
         if (typeId == 0) return@forEach
-
         val sells = orders.filter { (it["is_buy_order"] as? Boolean) == false }
         val buys  = orders.filter { (it["is_buy_order"] as? Boolean) == true  }
         if (sells.isEmpty() || buys.isEmpty()) return@forEach
@@ -874,10 +869,8 @@ private fun computeStation(
         if (bestSell > maxBuyPrice) return@forEach
         val grossProfit = bestSell - bestBuy
         if (grossProfit <= 0) return@forEach
-
         val marginPct = grossProfit / bestSell * 100.0
         if (marginPct < minMarginPct) return@forEach
-
         val fees      = (bestSell + bestBuy) * brokerFeePct / 100.0 + bestSell * salesTaxPct / 100.0
         val netProfit = grossProfit - fees
         if (netProfit < minNetProfit) return@forEach
@@ -885,7 +878,7 @@ private fun computeStation(
         val type = StaticDataDao.getTypeById(typeId) ?: return@forEach
         if (filterMarketGroupIds != null && type.marketGroupId !in filterMarketGroupIds) return@forEach
 
-        val history = fetchHistory(typeId, regionId, filterMarketGroupIds != null)
+        val history     = fetchHistory(typeId, regionId, filterMarketGroupIds != null)
         val avgDailyVol = if (history.isNotEmpty()) history.map { it.volume }.average().toLong() else 0L
         if (avgDailyVol < minDailyVol && minDailyVol > 0) return@forEach
 
@@ -903,7 +896,6 @@ private fun computeStation(
             estimatedDailyProfit = netProfit * avgDailyVol.coerceAtLeast(1),
         )
     }
-
     return results.sortedByDescending { it.netProfit }
 }
 
@@ -923,28 +915,22 @@ private fun computeRegion(
     brokerFeePct: Double,
     salesTaxPct: Double,
 ): List<RegionOpportunity> {
-    fun List<Map<String, Any?>>.typeId(m: Map<String, Any?>) = (m["type_id"] as? Number)?.toInt() ?: 0
-    fun Map<String, Any?>.price() = (get("price") as? Number)?.toDouble() ?: 0.0
-    fun Map<String, Any?>.isBuyOrder() = get("is_buy_order") as? Boolean == true
+    fun Map<String, Any?>.price()     = (get("price") as? Number)?.toDouble() ?: 0.0
+    fun Map<String, Any?>.isBuyOrd()  = get("is_buy_order") as? Boolean == true
+    fun Map<String, Any?>.tid()       = (get("type_id") as? Number)?.toInt() ?: 0
 
-    // All four price maps — computed up front so trade type selection is a simple map lookup
-    val srcSell = buyOrders .filter { !it.isBuyOrder() }.groupBy { (it["type_id"] as? Number)?.toInt() ?: 0 }
-        .mapValues { (_, o) -> o.minOf { it.price() } }   // cheapest sell in source (hit to buy instantly)
-    val srcBuy  = buyOrders .filter {  it.isBuyOrder() }.groupBy { (it["type_id"] as? Number)?.toInt() ?: 0 }
-        .mapValues { (_, o) -> o.maxOf { it.price() } }   // best buy order in source (match to buy via order)
-    val dstBuy  = sellOrders.filter {  it.isBuyOrder() }.groupBy { (it["type_id"] as? Number)?.toInt() ?: 0 }
-        .mapValues { (_, o) -> o.maxOf { it.price() } }   // best buy order in dest (fill to sell instantly)
-    val dstSell = sellOrders.filter { !it.isBuyOrder() }.groupBy { (it["type_id"] as? Number)?.toInt() ?: 0 }
-        .mapValues { (_, o) -> o.minOf { it.price() } }   // cheapest sell in dest (undercut to sell via order)
+    val srcSell = buyOrders .filter { !it.isBuyOrd() }.groupBy { it.tid() }.mapValues { (_, o) -> o.minOf { it.price() } }
+    val srcBuy  = buyOrders .filter {  it.isBuyOrd() }.groupBy { it.tid() }.mapValues { (_, o) -> o.maxOf { it.price() } }
+    val dstBuy  = sellOrders.filter {  it.isBuyOrd() }.groupBy { it.tid() }.mapValues { (_, o) -> o.maxOf { it.price() } }
+    val dstSell = sellOrders.filter { !it.isBuyOrd() }.groupBy { it.tid() }.mapValues { (_, o) -> o.minOf { it.price() } }
 
-    // Pick source and destination price maps based on trade type
     val sourcePrices = when (tradeType) {
-        InterRegionTradeType.SELL_TO_BUY,  InterRegionTradeType.SELL_TO_SELL -> srcSell
-        InterRegionTradeType.BUY_TO_BUY,   InterRegionTradeType.BUY_TO_SELL  -> srcBuy
+        InterRegionTradeType.SELL_TO_BUY, InterRegionTradeType.SELL_TO_SELL -> srcSell
+        InterRegionTradeType.BUY_TO_BUY,  InterRegionTradeType.BUY_TO_SELL  -> srcBuy
     }
     val destPrices = when (tradeType) {
-        InterRegionTradeType.SELL_TO_BUY,  InterRegionTradeType.BUY_TO_BUY   -> dstBuy
-        InterRegionTradeType.SELL_TO_SELL, InterRegionTradeType.BUY_TO_SELL  -> dstSell
+        InterRegionTradeType.SELL_TO_BUY, InterRegionTradeType.BUY_TO_BUY  -> dstBuy
+        InterRegionTradeType.SELL_TO_SELL, InterRegionTradeType.BUY_TO_SELL -> dstSell
     }
 
     val common  = sourcePrices.keys.intersect(destPrices.keys)
@@ -967,7 +953,6 @@ private fun computeRegion(
         val fees        = sellPrice * (salesTaxPct + brokerFeePct) / 100.0
         val netProfit   = grossProfit - fees - shipping
         if (netProfit < minNetProfit) return@forEach
-
         val marginPct = grossProfit / buyPrice * 100.0
         if (marginPct < minMarginPct) return@forEach
 
@@ -989,17 +974,11 @@ private fun computeRegion(
             dailyVolume         = avgVol,
         )
     }
-
     return results.sortedByDescending { it.netProfit }
 }
 
 // ─── History helper ───────────────────────────────────────────────────────
 
-/**
- * Returns 30-day history from DB. When a category filter is active (fetchFromEsi=true)
- * and the DB has no data, fetches from ESI and stores in DB so the result is non-zero.
- * Without a filter the item set is too large to fetch individually, so DB-only is used.
- */
 private fun fetchHistory(typeId: Int, regionId: Int, fetchFromEsi: Boolean): List<org.eve.trader.core.model.MarketHistoryModel> {
     val dbHistory = MarketDao.getHistory(typeId, regionId, 30)
     if (dbHistory.isNotEmpty() || !fetchFromEsi) return dbHistory
@@ -1022,9 +1001,7 @@ private fun fetchHistory(typeId: Int, regionId: Int, fetchFromEsi: Boolean): Lis
             }
         }
         MarketDao.getHistory(typeId, regionId, 30)
-    } catch (_: Exception) {
-        emptyList()
-    }
+    } catch (_: Exception) { emptyList() }
 }
 
 // ─── Format helpers ───────────────────────────────────────────────────────
