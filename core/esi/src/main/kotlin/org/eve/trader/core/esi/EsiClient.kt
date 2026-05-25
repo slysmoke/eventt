@@ -58,8 +58,19 @@ object EsiClient {
         endpoint: String,
         params: Map<String, String> = emptyMap(),
     ): List<Map<String, Any?>> {
-        val allResults = mutableListOf<Map<String, Any?>>()
+        // Check for a previously merged (all-pages) cache entry stored under the base params key.
+        // Per-page caches use params+page; the merged entry uses params without page, so keys differ.
+        val baseParams = params.toMutableMap().apply { put("datasource", ESI_DATASOURCE) }
+        val mergedCache = EsiCacheManager.get(endpoint, baseParams)
+        if (mergedCache.state == CacheState.FRESH && mergedCache.data != null) {
+            return mergedCache.data!!.parseToListOfMaps()
+        }
+
+        val allResults  = mutableListOf<Map<String, Any?>>()
+        val rawBodies   = mutableListOf<String>()
+        var serverExpiry = 0L
         var page = 1
+
         while (true) {
             val (body, metadata) = if (characterId != null) {
                 val token = SsoAuthManager.ensureTokenFresh(characterId) ?: break
@@ -69,9 +80,28 @@ object EsiClient {
             }
             val list = body.parseToListOfMaps()
             allResults.addAll(list)
-            if (metadata.totalPages <= page || list.isEmpty()) break
+            rawBodies.add(body)
+
+            // metadata.expires == 0L means the response was served from cache (EsiResponseMetadata() default).
+            // In that case we can't rely on totalPages, so we keep going until we get an empty page.
+            val fromCache = metadata.expires == 0L
+            if (metadata.expires > serverExpiry) serverExpiry = metadata.expires
+            if (list.isEmpty() || (!fromCache && metadata.totalPages <= page)) break
             page++
         }
+
+        // Merge all page bodies into one JSON array and cache under the base params key.
+        // This ensures subsequent calls (including after restart) serve the full result instantly.
+        if (allResults.isNotEmpty()) {
+            val merged = buildJsonArray {
+                rawBodies.forEach { body ->
+                    json.parseToJsonElement(body).jsonArray.forEach { add(it) }
+                }
+            }
+            val expiry = if (serverExpiry > 0) serverExpiry else System.currentTimeMillis() + 5 * 60 * 1000L
+            EsiCacheManager.save(endpoint, baseParams, merged.toString(), expiry)
+        }
+
         return allResults
     }
 

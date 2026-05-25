@@ -832,7 +832,7 @@ private fun computeStation(
         val type = StaticDataDao.getTypeById(typeId) ?: return@forEach
         if (filterMarketGroupIds != null && type.marketGroupId !in filterMarketGroupIds) return@forEach
 
-        val history     = MarketDao.getHistory(typeId, regionId, 30)
+        val history = fetchHistory(typeId, regionId, filterMarketGroupIds != null)
         val avgDailyVol = if (history.isNotEmpty()) history.map { it.volume }.average().toLong() else 0L
         if (avgDailyVol < minDailyVol && minDailyVol > 0) return@forEach
 
@@ -903,7 +903,7 @@ private fun computeRegion(
         val marginPct = grossProfit / buyPrice * 100.0
         if (marginPct < minMarginPct) return@forEach
 
-        val history = MarketDao.getHistory(typeId, sellRegionId, 30)
+        val history = fetchHistory(typeId, sellRegionId, filterMarketGroupIds != null)
         val avgVol  = if (history.isNotEmpty()) history.map { it.volume }.average().toLong() else 0L
 
         results += RegionOpportunity(
@@ -923,6 +923,40 @@ private fun computeRegion(
     }
 
     return results.sortedByDescending { it.netProfit }
+}
+
+// ─── History helper ───────────────────────────────────────────────────────
+
+/**
+ * Returns 30-day history from DB. When a category filter is active (fetchFromEsi=true)
+ * and the DB has no data, fetches from ESI and stores in DB so the result is non-zero.
+ * Without a filter the item set is too large to fetch individually, so DB-only is used.
+ */
+private fun fetchHistory(typeId: Int, regionId: Int, fetchFromEsi: Boolean): List<org.eve.trader.core.model.MarketHistoryModel> {
+    val dbHistory = MarketDao.getHistory(typeId, regionId, 30)
+    if (dbHistory.isNotEmpty() || !fetchFromEsi) return dbHistory
+    return try {
+        val entries = EsiClient.getMarketRegionHistory(regionId, typeId)
+        entries.forEach { entry ->
+            runCatching {
+                MarketDao.insertHistory(
+                    org.eve.trader.core.model.MarketHistoryModel(
+                        typeId     = typeId,
+                        regionId   = regionId,
+                        date       = entry["date"] as? String ?: "",
+                        average    = (entry["average"] as? Number)?.toDouble() ?: 0.0,
+                        volume     = (entry["volume"] as? Number)?.toLong() ?: 0L,
+                        orderCount = (entry["order_count"] as? Number)?.toLong() ?: 0L,
+                        highest    = (entry["highest"] as? Number)?.toDouble() ?: 0.0,
+                        lowest     = (entry["lowest"] as? Number)?.toDouble() ?: 0.0,
+                    )
+                )
+            }
+        }
+        MarketDao.getHistory(typeId, regionId, 30)
+    } catch (_: Exception) {
+        emptyList()
+    }
 }
 
 // ─── Format helpers ───────────────────────────────────────────────────────
