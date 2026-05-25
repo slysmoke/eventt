@@ -290,9 +290,10 @@ object SsoAuthManager {
 
     private fun parseQueryString(query: String): Map<String, String> {
         return query.split("&").mapNotNull { pair ->
-            val parts = pair.split("=")
-            if (parts.size == 2) {
-                java.net.URLDecoder.decode(parts[0], "UTF-8") to java.net.URLDecoder.decode(parts[1], "UTF-8")
+            val idx = pair.indexOf('=')
+            if (idx > 0) {
+                java.net.URLDecoder.decode(pair.substring(0, idx), "UTF-8") to
+                    java.net.URLDecoder.decode(pair.substring(idx + 1), "UTF-8")
             } else null
         }.toMap()
     }

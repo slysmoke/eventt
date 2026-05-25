@@ -103,19 +103,21 @@ fun WalletScreen() {
         Spacer(modifier = Modifier.height(8.dp))
 
         // Tabs
-        Row {
-            Tab(selected = activeTab == 0, onClick = { activeTab = 0 }) { Text("Transactions") }
-            Tab(selected = activeTab == 1, onClick = { activeTab = 1 }) { Text("Journal") }
-            Tab(selected = activeTab == 2, onClick = { activeTab = 2 }) { Text("P&L") }
+        TabRow(selectedTabIndex = activeTab) {
+            Tab(selected = activeTab == 0, onClick = { activeTab = 0 }, text = { Text("Transactions") })
+            Tab(selected = activeTab == 1, onClick = { activeTab = 1 }, text = { Text("Journal") })
+            Tab(selected = activeTab == 2, onClick = { activeTab = 2 }, text = { Text("P&L") })
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
         // Tab content
-        when (activeTab) {
-            0 -> TransactionList(transactions)
-            1 -> JournalList(journal)
-            2 -> PnlChart(dailyBreakdown)
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            when (activeTab) {
+                0 -> TransactionList(transactions)
+                1 -> JournalList(journal)
+                2 -> PnlChart(dailyBreakdown)
+            }
         }
     }
 
@@ -129,7 +131,7 @@ private fun TransactionList(transactions: List<Map<String, Any?>>) {
         return
     }
 
-    LazyColumn {
+    LazyColumn(modifier = Modifier.fillMaxWidth()) {
         items(transactions) { tx ->
             val isBuy = tx["is_buy"] as? Boolean ?: false
             Row(
@@ -167,7 +169,7 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
         return
     }
 
-    LazyColumn {
+    LazyColumn(modifier = Modifier.fillMaxWidth()) {
         items(journal) { entry ->
             val amount = (entry["amount"] as? Number)?.toDouble() ?: 0.0
             Row(
