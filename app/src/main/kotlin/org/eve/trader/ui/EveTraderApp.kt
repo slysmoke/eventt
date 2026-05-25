@@ -29,11 +29,13 @@ import org.eve.trader.features.alerts.PriceAlertsScreen
 import org.eve.trader.features.industry.IndustryCalculatorScreen
 import org.eve.trader.features.contracts.ContractTrackerScreen
 import org.eve.trader.features.watchlist.WatchlistScreen
+import org.eve.trader.features.market.MarketAnalysisScreen
 
 enum class AppScreen(val label: String, val icon: ImageVector) {
     DASHBOARD("Dashboard", Icons.Default.Dashboard),
     CHARACTERS("Characters", Icons.Default.Person),
     MARKET("Market", Icons.Default.Store),
+    ANALYSIS("Analysis", Icons.Default.Analytics),
     ASSETS("Assets", Icons.Default.Inventory),
     WALLET("Wallet", Icons.Default.AccountBalance),
     ORDERS("Orders", Icons.Default.ShoppingCart),
@@ -292,6 +294,7 @@ private fun ScreenContent(screen: AppScreen) {
             AppScreen.DASHBOARD -> DashboardScreen()
             AppScreen.CHARACTERS -> CharacterManagementScreen()
             AppScreen.MARKET -> MarketBrowserScreen()
+            AppScreen.ANALYSIS -> MarketAnalysisScreen()
             AppScreen.ASSETS -> AssetViewerScreen()
             AppScreen.WALLET -> WalletScreen()
             AppScreen.ORDERS -> OrdersScreen()
