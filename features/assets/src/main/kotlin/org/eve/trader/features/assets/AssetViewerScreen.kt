@@ -369,6 +369,7 @@ private fun loadAssets(
 private suspend fun fetchCharacterAssets(characterId: Int) {
     val accessToken = org.eve.trader.core.auth.SsoAuthManager.ensureTokenFresh(characterId)
     val rawAssets = EsiClient.getCharacterAssets(characterId, accessToken ?: "")
+    val prices = EsiClient.getMarketPrices()
 
     val models = rawAssets.mapNotNull { data ->
         val typeId = (data["type_id"] as? Number)?.toInt() ?: return@mapNotNull null
@@ -377,9 +378,7 @@ private suspend fun fetchCharacterAssets(characterId: Int) {
         val locationId = (data["location_id"] as? Number)?.toLong() ?: 0L
         val locationFlag = (data["location_flag"] as? String) ?: ""
         val isSingleton = (data["is_singleton"] as? Boolean) ?: true
-        val price = (data["estimated_price"] as? Number)?.toDouble() ?: 0.0
 
-        // Get type name from static data
         val staticType = StaticDataDao.getTypeById(typeId)
         val typeName = staticType?.name ?: ""
 
@@ -391,7 +390,7 @@ private suspend fun fetchCharacterAssets(characterId: Int) {
             locationId = locationId,
             locationFlag = locationFlag,
             isSingleton = isSingleton,
-            estimatedPrice = price,
+            estimatedPrice = prices[typeId] ?: 0.0,
             isCorpAsset = false,
             characterId = characterId,
         )
@@ -402,6 +401,7 @@ private suspend fun fetchCharacterAssets(characterId: Int) {
 
 private suspend fun fetchCorporationAssets(corporationId: Int) {
     val rawAssets = EsiClient.getCorporationAssets(corporationId)
+    val prices = EsiClient.getMarketPrices()
 
     val models = rawAssets.mapNotNull { data ->
         val typeId = (data["type_id"] as? Number)?.toInt() ?: return@mapNotNull null
@@ -410,7 +410,6 @@ private suspend fun fetchCorporationAssets(corporationId: Int) {
         val locationId = (data["location_id"] as? Number)?.toLong() ?: 0L
         val locationFlag = (data["location_flag"] as? String) ?: ""
         val isSingleton = (data["is_singleton"] as? Boolean) ?: true
-        val price = (data["estimated_price"] as? Number)?.toDouble() ?: 0.0
 
         val staticType = StaticDataDao.getTypeById(typeId)
         val typeName = staticType?.name ?: ""
@@ -423,7 +422,7 @@ private suspend fun fetchCorporationAssets(corporationId: Int) {
             locationId = locationId,
             locationFlag = locationFlag,
             isSingleton = isSingleton,
-            estimatedPrice = price,
+            estimatedPrice = prices[typeId] ?: 0.0,
             isCorpAsset = true,
             corporationId = corporationId,
         )

@@ -360,6 +360,24 @@ object EsiClient {
 
     // --- Market Endpoints ---
 
+    /** Returns a map of typeId → adjustedPrice from /markets/prices/ (cached by ESI for ~1 day). */
+    fun getMarketPrices(): Map<Int, Double> {
+        return try {
+            val (body, _) = getRaw("/markets/prices/")
+            json.parseToJsonElement(body).jsonArray.associate { elem ->
+                val obj = elem.jsonObject
+                val typeId = obj["type_id"]?.jsonPrimitive?.intOrNull ?: return@associate -1 to 0.0
+                val price = obj["adjusted_price"]?.jsonPrimitive?.doubleOrNull
+                    ?: obj["average_price"]?.jsonPrimitive?.doubleOrNull
+                    ?: 0.0
+                typeId to price
+            }.filterKeys { it >= 0 }
+        } catch (e: Exception) {
+            println("[EsiClient] getMarketPrices failed: ${e.message}")
+            emptyMap()
+        }
+    }
+
     fun getMarketStructureOrders(structureId: Long): List<Map<String, Any?>> =
         getAllMaps(endpoint = "/markets/structures/$structureId/orders/", params = mapOf("order_type" to "all"))
 
