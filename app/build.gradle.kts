@@ -6,8 +6,45 @@ plugins {
     kotlin("plugin.serialization") version "1.9.22"
 }
 
+val appVersion: String = rootProject.properties["app.version"] as? String ?: "0.0.0"
+val githubRepo: String = rootProject.properties["github.repo"] as? String ?: ""
+
 group = "org.eve.trader"
-version = "1.0.0"
+version = appVersion
+
+// ── Generate AppVersion.kt from gradle.properties ─────────────────────────
+val generateAppVersion = tasks.register("generateAppVersion") {
+    val outputDir = layout.buildDirectory.dir("generated/appversion")
+    outputs.dir(outputDir)
+    inputs.property("appVersion", appVersion)
+    inputs.property("githubRepo", githubRepo)
+    doLast {
+        val dir = outputDir.get().asFile
+        dir.mkdirs()
+        File(dir, "AppVersion.kt").writeText(
+            """
+            package org.eve.trader
+
+            object AppVersion {
+                const val NAME        = "$appVersion"
+                const val GITHUB_REPO = "$githubRepo"
+            }
+            """.trimIndent()
+        )
+    }
+}
+
+kotlin {
+    sourceSets {
+        main {
+            kotlin.srcDir(layout.buildDirectory.dir("generated/appversion"))
+        }
+    }
+}
+
+tasks.named("compileKotlin") { dependsOn(generateAppVersion) }
+
+// ─────────────────────────────────────────────────────────────────────────
 
 dependencies {
     // Core modules
@@ -42,6 +79,10 @@ dependencies {
     implementation(compose.material3)
     implementation(compose.materialIconsExtended)
 
+    // Update checker
+    implementation(libs.okhttp.core)
+    implementation(libs.kotlinx.serialization.json)
+
     // DI
     implementation(libs.koin.core)
 
@@ -56,7 +97,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "eve-trader"
-            packageVersion = "1.0.0"
+            packageVersion = appVersion
         }
     }
 }

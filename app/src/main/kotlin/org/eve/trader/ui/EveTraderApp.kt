@@ -2,6 +2,7 @@ package org.eve.trader.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.*
@@ -11,12 +12,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.eve.trader.AppVersion
 import org.eve.trader.core.staticdata.StaticDataImporter
+import org.eve.trader.update.UpdateChecker
+import org.eve.trader.update.UpdateInfo
+import org.eve.trader.update.UpdateProgress
 import org.eve.trader.ui.theme.*
 import org.eve.trader.ui.common.RequestProgressDialog
 import org.eve.trader.features.characters.CharacterManagementScreen
@@ -52,17 +58,24 @@ fun EveTraderApp() {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
     val eveColors = if (darkTheme) DarkEveColors else LightEveColors
 
-    // Trigger SDE import on first run; check for updates on subsequent runs
     val importState by StaticDataImporter.state.collectAsState()
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             when {
                 StaticDataImporter.isImportNeeded() -> StaticDataImporter.importAll()
-                StaticDataImporter.checkVersionChanged() -> {
-                    // New EVE patch — re-import to pick up renamed items, new types, etc.
-                    StaticDataImporter.importAll()
-                }
+                StaticDataImporter.checkVersionChanged() -> StaticDataImporter.importAll()
             }
+        }
+    }
+
+    // Update check — runs in background, never blocks startup
+    var updateInfo     by remember { mutableStateOf<UpdateInfo?>(null) }
+    var updateProgress by remember { mutableStateOf<UpdateProgress>(UpdateProgress.Idle) }
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            updateInfo = UpdateChecker.checkLatestRelease()
         }
     }
 
@@ -73,7 +86,6 @@ fun EveTraderApp() {
         var selectedScreen by remember { mutableStateOf(AppScreen.DASHBOARD) }
         var showProgressDialog by remember { mutableStateOf(false) }
 
-        val coroutineScope = rememberCoroutineScope()
         Scaffold(
             topBar = {
                 TopBar(
@@ -82,36 +94,146 @@ fun EveTraderApp() {
                     onThemeToggle = { darkTheme = !darkTheme },
                     eveColors = eveColors,
                     onShowProgress = { showProgressDialog = true },
-                    onNavDrawerToggle = { /* navigation handled by sidebar */ },
+                    onNavDrawerToggle = { },
                     onUpdateSde = {
-                        coroutineScope.launch(Dispatchers.IO) {
-                            StaticDataImporter.importAll()
-                        }
+                        coroutineScope.launch(Dispatchers.IO) { StaticDataImporter.importAll() }
                     },
                 )
             },
             content = { padding ->
                 Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-                    Row(modifier = Modifier.fillMaxSize()) {
-                        Sidebar(
-                            eveColors = eveColors,
-                            selectedScreen = selectedScreen,
-                            onScreenSelected = { selectedScreen = it },
-                        )
-                        ScreenContent(selectedScreen)
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        // Update banner — shown only when a newer release is available
+                        updateInfo?.let { info ->
+                            UpdateBanner(
+                                info = info,
+                                progress = updateProgress,
+                                onDismiss = { updateInfo = null },
+                                onInstall = {
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        UpdateChecker.downloadAndInstall(info) { p ->
+                                            updateProgress = p
+                                        }
+                                    }
+                                },
+                            )
+                        }
+
+                        Row(modifier = Modifier.weight(1f)) {
+                            Sidebar(
+                                eveColors = eveColors,
+                                selectedScreen = selectedScreen,
+                                onScreenSelected = { selectedScreen = it },
+                            )
+                            ScreenContent(selectedScreen)
+                        }
                     }
 
                     if (showProgressDialog) {
                         RequestProgressDialog(onDismiss = { showProgressDialog = false })
                     }
 
-                    // SDE import overlay — shown on first run and after EVE patches
                     if (importState.isRunning) {
                         SdeImportOverlay(importState)
                     }
                 }
             },
         )
+    }
+}
+
+// ─── Update banner ────────────────────────────────────────────────────────
+
+@Composable
+private fun UpdateBanner(
+    info: UpdateInfo,
+    progress: UpdateProgress,
+    onDismiss: () -> Unit,
+    onInstall: () -> Unit,
+) {
+    val isWorking = progress is UpdateProgress.Downloading || progress is UpdateProgress.Restarting
+
+    Surface(
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        tonalElevation = 4.dp,
+    ) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Icon(
+                    Icons.Default.SystemUpdate,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Version ${info.version} available  (current: ${AppVersion.NAME})",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    )
+                    if (progress is UpdateProgress.Downloading) {
+                        Text(
+                            progress.message,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f),
+                        )
+                    } else if (progress is UpdateProgress.Restarting) {
+                        Text(
+                            "Restarting…",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f),
+                        )
+                    } else if (progress is UpdateProgress.Error) {
+                        Text(
+                            progress.message,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+
+                if (!isWorking) {
+                    Button(
+                        onClick = onInstall,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.tertiary,
+                        ),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                    ) {
+                        Icon(Icons.Default.Download, null, Modifier.size(15.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Update", style = MaterialTheme.typography.labelMedium)
+                    }
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            Icons.Default.Close, null, Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.6f),
+                        )
+                    }
+                } else {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.5.dp,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    )
+                }
+            }
+
+            // Download progress bar
+            if (progress is UpdateProgress.Downloading) {
+                LinearProgressIndicator(
+                    progress = { progress.fraction },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.tertiary,
+                    trackColor = MaterialTheme.colorScheme.tertiaryContainer,
+                )
+            }
+        }
     }
 }
 

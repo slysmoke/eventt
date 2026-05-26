@@ -1,0 +1,149 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  # ── Build on each platform ────────────────────────────────────────────────
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            exe: app/build/compose/binaries/main/app/eve-trader/bin/eve-trader
+
+          - os: windows-latest
+            platform: windows
+            exe: app/build/compose/binaries/main/app/eve-trader/bin/eve-trader.exe
+
+          - os: macos-latest
+            platform: macos
+            exe: app/build/compose/binaries/main/app/eve-trader.app/Contents/MacOS/eve-trader
+
+    runs-on: ${{ matrix.os }}
+    name: Build (${{ matrix.platform }})
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ matrix.platform }}-${{ hashFiles('**/*.gradle.kts', 'gradle/libs.versions.toml') }}
+          restore-keys: gradle-${{ matrix.platform }}-
+
+      - name: Set version from tag
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          sed -i "s/^app\.version=.*/app.version=$VERSION/" gradle.properties
+          echo "Building version $VERSION"
+
+      - name: Build distributable
+        shell: bash
+        run: ./gradlew createDistributable
+
+      # ── Smoke test ─────────────────────────────────────────────────────────
+      - name: Smoke test (Linux)
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get install -y xvfb > /dev/null
+          Xvfb :99 -screen 0 1280x900x24 &
+          sleep 1
+          DISPLAY=:99 ${{ matrix.exe }} &
+          PID=$!
+          sleep 8
+          if kill -0 $PID 2>/dev/null; then
+            echo "✅ Smoke test passed"
+            kill $PID
+          else
+            echo "❌ App exited unexpectedly"
+            exit 1
+          fi
+
+      - name: Smoke test (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $proc = Start-Process -FilePath "${{ matrix.exe }}" -PassThru
+          Start-Sleep -Seconds 8
+          if (-not $proc.HasExited) {
+            Write-Host "✅ Smoke test passed"
+            Stop-Process -Id $proc.Id -Force
+          } else {
+            Write-Host "❌ App exited with code $($proc.ExitCode)"
+            exit 1
+          }
+
+      - name: Smoke test (macOS)
+        if: matrix.platform == 'macos'
+        run: |
+          ${{ matrix.exe }} &
+          PID=$!
+          sleep 8
+          if kill -0 $PID 2>/dev/null; then
+            echo "✅ Smoke test passed"
+            kill $PID
+          else
+            echo "❌ App exited unexpectedly"
+            exit 1
+          fi
+
+      # ── Package zip for auto-updater ───────────────────────────────────────
+      - name: Package zip (Linux / macOS)
+        if: matrix.platform != 'windows'
+        shell: bash
+        run: |
+          cd app/build/compose/binaries/main/app
+          zip -r "$GITHUB_WORKSPACE/eve-trader-${{ matrix.platform }}.zip" .
+
+      - name: Package zip (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path app/build/compose/binaries/main/app/* `
+            -DestinationPath eve-trader-windows.zip
+
+      - name: Upload zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: eve-trader-${{ matrix.platform }}
+          path: eve-trader-${{ matrix.platform }}.zip
+          retention-days: 1
+
+  # ── Create GitHub Release ─────────────────────────────────────────────────
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all zip artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "EVE Trader $GITHUB_REF_NAME" \
+            --generate-notes \
+            artifacts/eve-trader-linux/eve-trader-linux.zip \
+            artifacts/eve-trader-windows/eve-trader-windows.zip \
+            artifacts/eve-trader-macos/eve-trader-macos.zip

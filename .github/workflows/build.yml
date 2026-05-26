@@ -1,4 +1,4 @@
-name: Build & Smoke Test
+name: CI
 
 on:
   push:
@@ -7,110 +7,23 @@ on:
     branches: [main]
 
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            platform: linux
-            artifact: app/build/compose/binaries/main/app/
-            binary: app/build/compose/binaries/main/app/eve-trader/bin/eve-trader
-
-          - os: windows-latest
-            platform: windows
-            artifact: app/build/compose/binaries/main/app/
-            binary: app/build/compose/binaries/main/app/eve-trader/bin/eve-trader.exe
-
-          - os: macos-latest
-            platform: macos
-            artifact: app/build/compose/binaries/main/app/
-            binary: app/build/compose/binaries/main/app/eve-trader.app/Contents/MacOS/eve-trader
-
-    runs-on: ${{ matrix.os }}
-    name: ${{ matrix.platform }}
-
+  test:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Cache Gradle
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-${{ matrix.platform }}-${{ hashFiles('**/*.gradle.kts', 'gradle/libs.versions.toml') }}
-          restore-keys: gradle-${{ matrix.platform }}-
+          key: gradle-linux-${{ hashFiles('**/*.gradle.kts', 'gradle/libs.versions.toml') }}
+          restore-keys: gradle-linux-
 
-      - name: Build & test
-        shell: bash
+      - name: Compile & test
         run: ./gradlew build
-
-      - name: Create distributable
-        shell: bash
-        run: ./gradlew createDistributable
-
-      # ── Smoke test: Linux (needs virtual display) ──────────────────────────
-      - name: Smoke test (Linux)
-        if: matrix.platform == 'linux'
-        run: |
-          sudo apt-get install -y xvfb > /dev/null
-          Xvfb :99 -screen 0 1280x900x24 &
-          sleep 1
-          DISPLAY=:99 ${{ matrix.binary }} &
-          APP_PID=$!
-          echo "App PID: $APP_PID"
-          sleep 8
-          if kill -0 $APP_PID 2>/dev/null; then
-            echo "✅ App is running after 8 seconds — smoke test passed"
-            kill $APP_PID
-          else
-            echo "❌ App exited unexpectedly"
-            exit 1
-          fi
-
-      # ── Smoke test: Windows ────────────────────────────────────────────────
-      - name: Smoke test (Windows)
-        if: matrix.platform == 'windows'
-        shell: pwsh
-        run: |
-          $proc = Start-Process -FilePath "${{ matrix.binary }}" -PassThru
-          Write-Host "App PID: $($proc.Id)"
-          Start-Sleep -Seconds 8
-          if (-not $proc.HasExited) {
-            Write-Host "✅ App is running after 8 seconds — smoke test passed"
-            Stop-Process -Id $proc.Id -Force
-          } else {
-            Write-Host "❌ App exited with code: $($proc.ExitCode)"
-            exit 1
-          }
-
-      # ── Smoke test: macOS ──────────────────────────────────────────────────
-      - name: Smoke test (macOS)
-        if: matrix.platform == 'macos'
-        run: |
-          ${{ matrix.binary }} &
-          APP_PID=$!
-          echo "App PID: $APP_PID"
-          sleep 8
-          if kill -0 $APP_PID 2>/dev/null; then
-            echo "✅ App is running after 8 seconds — smoke test passed"
-            kill $APP_PID
-          else
-            echo "❌ App exited unexpectedly"
-            exit 1
-          fi
-
-      # ── Upload artifact ────────────────────────────────────────────────────
-      - name: Upload distributable
-        uses: actions/upload-artifact@v4
-        with:
-          name: eve-trader-${{ matrix.platform }}
-          path: ${{ matrix.artifact }}
-          retention-days: 7
