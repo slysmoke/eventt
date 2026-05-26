@@ -33,7 +33,6 @@ fun CharacterManagementScreen() {
     var characterToRemove by remember { mutableStateOf<org.eve.trader.core.model.CharacterModel?>(null) }
     var authError by remember { mutableStateOf<String?>(null) }
 
-    // Initialize database
     LaunchedEffect(Unit) {
         loadCharacters(characters = { characters = it }, corps = { corporations = it })
     }
@@ -287,13 +286,18 @@ private fun CorporationCard(data: Map<String, Any?>) {
     }
 }
 
-private fun loadCharacters(
+private suspend fun loadCharacters(
     characters: (List<org.eve.trader.core.model.CharacterModel>) -> Unit,
     corps: (List<Map<String, Any?>>) -> Unit,
 ) {
     try {
-        characters(CharacterDao.getAll())
-        corps(CorporationDao.getAll())
+        withContext(Dispatchers.IO) {
+            CharacterDao.getAll().forEach { char ->
+                runCatching { SsoAuthManager.ensureTokenFresh(char.id) }
+            }
+        }
+        characters(withContext(Dispatchers.IO) { CharacterDao.getAll() })
+        corps(withContext(Dispatchers.IO) { CorporationDao.getAll() })
     } catch (e: Exception) {
         println("Error loading characters: ${e.message}")
     }

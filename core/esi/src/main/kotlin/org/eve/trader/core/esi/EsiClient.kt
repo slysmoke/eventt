@@ -74,7 +74,7 @@ object EsiClient {
         while (true) {
             val (body, metadata) = if (characterId != null) {
                 val token = SsoAuthManager.ensureTokenFresh(characterId) ?: break
-                getRaw(endpoint, params, token, page)
+                getRaw(endpoint, params, token, page, characterId)
             } else {
                 getRaw(endpoint, params, null, page)
             }
@@ -115,6 +115,7 @@ object EsiClient {
         params: Map<String, String> = emptyMap(),
         accessToken: String? = null,
         page: Int? = null,
+        characterId: Int? = null,
     ): Pair<String, EsiResponseMetadata> {
         val fullParams = params.toMutableMap().apply {
             put("datasource", ESI_DATASOURCE)
@@ -140,18 +141,29 @@ object EsiClient {
         RequestQueueManager.markInProgress(queuedRequest.id)
 
         try {
-            val requestBuilder = Request.Builder().url(url)
-            accessToken?.let { requestBuilder.header("Authorization", "Bearer $it") }
+            val client = EveHttpClient.getClient()
+            var currentToken = accessToken
 
-            // Conditional request: if we have stale data with an ETag/Last-Modified, ask ESI
-            // whether it changed. A 304 response means we can reuse the cached body.
-            if (cacheResult.state == CacheState.STALE && cacheResult.data != null) {
-                cacheResult.etag?.let { requestBuilder.header("If-None-Match", it) }
-                cacheResult.lastModified?.let { requestBuilder.header("If-Modified-Since", it) }
+            fun buildRequest(includeConditional: Boolean): Request {
+                val builder = Request.Builder().url(url)
+                currentToken?.let { builder.header("Authorization", "Bearer $it") }
+                if (includeConditional && cacheResult.state == CacheState.STALE && cacheResult.data != null) {
+                    cacheResult.etag?.let { builder.header("If-None-Match", it) }
+                    cacheResult.lastModified?.let { builder.header("If-Modified-Since", it) }
+                }
+                return builder.build()
             }
 
-            val client = EveHttpClient.getClient()
-            val response = client.newCall(requestBuilder.build()).execute()
+            var response = client.newCall(buildRequest(includeConditional = true)).execute()
+
+            // 401 Unauthorized — refresh token and retry once
+            if (response.code == 401 && characterId != null) {
+                response.close()
+                currentToken = SsoAuthManager.ensureTokenFresh(characterId)
+                if (currentToken != null) {
+                    response = client.newCall(buildRequest(includeConditional = false)).execute()
+                }
+            }
 
             // 304 Not Modified — ESI confirmed our cached copy is still current.
             if (response.code == 304) {
@@ -263,7 +275,7 @@ object EsiClient {
             val (body, metadata) = if (characterId != null) {
                 val token = SsoAuthManager.ensureTokenFresh(characterId)
                     ?: break
-                getRaw(endpoint, params, token, page)
+                getRaw(endpoint, params, token, page, characterId)
             } else {
                 getRaw(endpoint, params, null, page)
             }
@@ -381,7 +393,7 @@ object EsiClient {
 
     fun getCharacterWallet(characterId: Int): Double {
         val token = SsoAuthManager.ensureTokenFresh(characterId) ?: return 0.0
-        val (body, _) = getRaw("/characters/$characterId/wallet/", accessToken = token)
+        val (body, _) = getRaw("/characters/$characterId/wallet/", accessToken = token, characterId = characterId)
         return body.trim().toDoubleOrNull() ?: 0.0
     }
 
