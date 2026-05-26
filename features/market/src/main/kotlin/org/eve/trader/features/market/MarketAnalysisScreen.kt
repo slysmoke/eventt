@@ -1,9 +1,8 @@
 package org.eve.trader.features.market
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -222,17 +221,17 @@ private fun StationTradingTab(
     Column(modifier = Modifier.fillMaxSize()) {
         // ── Filter bar ─────────────────────────────────────────────
         FilterBar {
-            // Row 1: pickers
             Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()).padding(bottom = 4.dp),
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalAlignment = Alignment.Bottom,
             ) {
                 RegionPicker(allRegions, regionId, width = 180.dp) {
                     regionId = it
                     scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_REGION, it.toString()) } }
                 }
-                CompactGroupDropdown("Category", topGroups, selectedTopGroup, "All", 150.dp) { g ->
+                FilterDivider()
+                GroupDropdown("Category", topGroups, selectedTopGroup, "All categories", 150.dp) { g ->
                     selectedTopGroup = g; selectedSubGroup = null
                     scope.launch { withContext(Dispatchers.IO) {
                         S.set(S.ST_CAT_TOP, g?.marketGroupId?.toString() ?: "")
@@ -240,63 +239,70 @@ private fun StationTradingTab(
                     }}
                 }
                 if (subGroups.isNotEmpty()) {
-                    CompactGroupDropdown("Subcategory", subGroups, selectedSubGroup, "All", 150.dp) { g ->
+                    GroupDropdown("Subcategory", subGroups, selectedSubGroup, "All", 140.dp) { g ->
                         selectedSubGroup = g
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_CAT_SUB, g?.marketGroupId?.toString() ?: "") } }
                     }
                 }
-            }
-            // Row 2: numeric filters + button
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                SmallField("Margin %",  minMargin,    70.dp)  { minMargin   = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MARGIN,     it) } } }
-                SmallField("Broker %",  brokerFee,    70.dp)  { brokerFee   = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_BROKER,     it) } } }
-                SmallField("Tax %",     salesTax,     60.dp)  { salesTax    = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_TAX,        it) } } }
-                SmallField("Min Vol",   minDailyVol,  80.dp)  { minDailyVol = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MIN_VOL,    it) } } }
-                SmallField("Max Buy",   maxBuyPrice,  110.dp) { maxBuyPrice  = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MAX_PRICE,  it) } } }
-                SmallField("Min Net",   minNetProfit, 100.dp) { minNetProfit = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MIN_PROFIT, it) } } }
-                Spacer(Modifier.width(4.dp))
-                Button(
-                    onClick = {
-                        scope.launch {
-                            isAnalyzing = true; results = emptyList()
-                            val regionName = allRegions.find { it.regionId == regionId }?.name ?: "region"
-                            try {
-                                statusMsg = "Fetching orders from $regionName…"
-                                val allOrders = withContext(Dispatchers.IO) { EsiClient.getMarketRegionOrders(regionId) }
-                                val filterGroupId = selectedSubGroup?.marketGroupId ?: selectedTopGroup?.marketGroupId
-                                val filterGroupIds = filterGroupId?.let { withContext(Dispatchers.IO) { buildGroupSubtree(it) } }
-                                statusMsg = "Analyzing ${allOrders.size} orders…"
-                                results = withContext(Dispatchers.IO) {
-                                    computeStation(
-                                        allOrders, regionId,
-                                        filterMarketGroupIds = filterGroupIds,
-                                        minMarginPct  = minMargin.toDoubleOrNull() ?: 5.0,
-                                        minDailyVol   = minDailyVol.toLongOrNull() ?: 0L,
-                                        maxBuyPrice   = maxBuyPrice.toDoubleOrNull() ?: Double.MAX_VALUE,
-                                        minNetProfit  = minNetProfit.toDoubleOrNull() ?: 0.0,
-                                        brokerFeePct  = brokerFee.toDoubleOrNull() ?: 3.0,
-                                        salesTaxPct   = salesTax.toDoubleOrNull() ?: 8.0,
-                                    )
-                                }
-                                statusMsg = "${results.size} opportunities found"
-                            } catch (e: Exception) { statusMsg = "Error: ${e.message}" }
-                            isAnalyzing = false
-                        }
-                    },
-                    enabled = !isAnalyzing,
-                ) {
-                    if (isAnalyzing) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
-                    else Icon(Icons.Default.Search, null, Modifier.size(14.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(if (isAnalyzing) "Analyzing…" else "Analyze")
+                FilterDivider()
+                ParamField("Margin %",  minMargin,    68.dp)  { minMargin   = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MARGIN,     it) } } }
+                ParamField("Broker %",  brokerFee,    68.dp)  { brokerFee   = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_BROKER,     it) } } }
+                ParamField("Tax %",     salesTax,     60.dp)  { salesTax    = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_TAX,        it) } } }
+                ParamField("Min Vol",   minDailyVol,  72.dp)  { minDailyVol = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MIN_VOL,    it) } } }
+                ParamField("Max Buy",   maxBuyPrice,  105.dp) { maxBuyPrice  = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MAX_PRICE,  it) } } }
+                ParamField("Min Net",   minNetProfit, 100.dp) { minNetProfit = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MIN_PROFIT, it) } } }
+                FilterDivider()
+                // Align button to bottom of the row (matching field bottom)
+                Column(verticalArrangement = Arrangement.Bottom) {
+                    Spacer(Modifier.height(19.dp)) // matches label height + gap
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                isAnalyzing = true; results = emptyList()
+                                val regionName = allRegions.find { it.regionId == regionId }?.name ?: "region"
+                                try {
+                                    statusMsg = "Fetching orders from $regionName…"
+                                    val allOrders = withContext(Dispatchers.IO) { EsiClient.getMarketRegionOrders(regionId) }
+                                    val filterGroupId = selectedSubGroup?.marketGroupId ?: selectedTopGroup?.marketGroupId
+                                    val filterGroupIds = filterGroupId?.let { withContext(Dispatchers.IO) { buildGroupSubtree(it) } }
+                                    statusMsg = "Analyzing ${allOrders.size} orders…"
+                                    results = withContext(Dispatchers.IO) {
+                                        computeStation(
+                                            allOrders, regionId,
+                                            filterMarketGroupIds = filterGroupIds,
+                                            minMarginPct  = minMargin.toDoubleOrNull() ?: 5.0,
+                                            minDailyVol   = minDailyVol.toLongOrNull() ?: 0L,
+                                            maxBuyPrice   = maxBuyPrice.toDoubleOrNull() ?: Double.MAX_VALUE,
+                                            minNetProfit  = minNetProfit.toDoubleOrNull() ?: 0.0,
+                                            brokerFeePct  = brokerFee.toDoubleOrNull() ?: 3.0,
+                                            salesTaxPct   = salesTax.toDoubleOrNull() ?: 8.0,
+                                        )
+                                    }
+                                    statusMsg = "${results.size} opportunities found"
+                                } catch (e: Exception) { statusMsg = "Error: ${e.message}" }
+                                isAnalyzing = false
+                            }
+                        },
+                        enabled = !isAnalyzing,
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                        modifier = Modifier.height(48.dp),
+                    ) {
+                        if (isAnalyzing) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                        else Icon(Icons.Default.Search, null, Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (isAnalyzing) "Analyzing…" else "Analyze")
+                    }
                 }
                 if (statusMsg.isNotEmpty()) {
-                    Text(statusMsg, style = MaterialTheme.typography.labelSmall,
-                        color = if ("Error" in statusMsg) Color(0xFFFF6B6B) else Color.Gray)
+                    Column(verticalArrangement = Arrangement.Bottom) {
+                        Spacer(Modifier.height(19.dp))
+                        Text(
+                            statusMsg,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if ("Error" in statusMsg) Color(0xFFFF6B6B) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            modifier = Modifier.height(48.dp).wrapContentHeight(Alignment.CenterVertically),
+                        )
+                    }
                 }
             }
         }
@@ -389,25 +395,27 @@ private fun InterRegionTab(
     Column(modifier = Modifier.fillMaxSize()) {
         // ── Filter bar ─────────────────────────────────────────────
         FilterBar {
-            // Row 1: regions + trade type + category
+            // Row 1: regions + trade type + categories
             Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()).padding(bottom = 4.dp),
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalAlignment = Alignment.Bottom,
             ) {
-                RegionPicker(allRegions, buyRegionId, width = 170.dp, label = "Buy Region") {
+                RegionPicker(allRegions, buyRegionId, width = 168.dp, label = "Buy Region") {
                     buyRegionId = it
                     scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_BUY_REGION, it.toString()) } }
                 }
-                RegionPicker(allRegions, sellRegionId, width = 170.dp, label = "Sell Region") {
+                RegionPicker(allRegions, sellRegionId, width = 168.dp, label = "Sell Region") {
                     sellRegionId = it
                     scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SELL_REGION, it.toString()) } }
                 }
-                TradeTypeDropdown(tradeType) {
+                FilterDivider()
+                TradeTypeChip(tradeType) {
                     tradeType = it
                     scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_TRADE_TYPE, it.name) } }
                 }
-                CompactGroupDropdown("Category", topGroups, selectedTopGroup, "All", 140.dp) { g ->
+                FilterDivider()
+                GroupDropdown("Category", topGroups, selectedTopGroup, "All categories", 145.dp) { g ->
                     selectedTopGroup = g; selectedSubGroup = null
                     scope.launch { withContext(Dispatchers.IO) {
                         S.set(S.IR_CAT_TOP, g?.marketGroupId?.toString() ?: "")
@@ -415,70 +423,83 @@ private fun InterRegionTab(
                     }}
                 }
                 if (subGroups.isNotEmpty()) {
-                    CompactGroupDropdown("Subcategory", subGroups, selectedSubGroup, "All", 140.dp) { g ->
+                    GroupDropdown("Subcategory", subGroups, selectedSubGroup, "All", 135.dp) { g ->
                         selectedSubGroup = g
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_CAT_SUB, g?.marketGroupId?.toString() ?: "") } }
                     }
                 }
             }
-            // Row 2: numeric filters + button
+            // Row 2: numeric params + button
             Row(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalAlignment = Alignment.Bottom,
             ) {
-                SmallField("Margin %",    minMargin,    70.dp)  { minMargin    = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MARGIN,     it) } } }
-                SmallField("Broker %",    brokerFee,    70.dp)  { brokerFee    = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_BROKER,     it) } } }
-                SmallField("Tax %",       salesTax,     60.dp)  { salesTax     = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_TAX,        it) } } }
-                SmallField("ISK/m³",      iskPerM3,     90.dp)  { iskPerM3     = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_ISK_PER_M3, it) } } }
-                SmallField("Max m³",      maxCargoM3,   90.dp)  { maxCargoM3   = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MAX_CARGO,  it) } } }
-                SmallField("Min Net",     minNetProfit, 110.dp) { minNetProfit = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MIN_PROFIT, it) } } }
-                Spacer(Modifier.width(4.dp))
-                Button(
-                    onClick = {
-                        if (buyRegionId == sellRegionId) { statusMsg = "Regions must differ"; return@Button }
-                        scope.launch {
-                            isAnalyzing = true; results = emptyList()
-                            val buyName  = allRegions.find { it.regionId == buyRegionId  }?.name ?: "buy"
-                            val sellName = allRegions.find { it.regionId == sellRegionId }?.name ?: "sell"
-                            val filterGroupId = selectedSubGroup?.marketGroupId ?: selectedTopGroup?.marketGroupId
-                            val filterGroupIds = filterGroupId?.let { withContext(Dispatchers.IO) { buildGroupSubtree(it) } }
-                            try {
-                                statusMsg = "Fetching $buyName…"
-                                val buyOrders  = withContext(Dispatchers.IO) { EsiClient.getMarketRegionOrders(buyRegionId)  }
-                                statusMsg = "Fetching $sellName…"
-                                val sellOrders = withContext(Dispatchers.IO) { EsiClient.getMarketRegionOrders(sellRegionId) }
-                                statusMsg = "Analyzing ${buyOrders.size + sellOrders.size} orders…"
-                                results = withContext(Dispatchers.IO) {
-                                    computeRegion(
-                                        buyOrders, sellOrders,
-                                        buyRegionId, sellRegionId,
-                                        buyName, sellName,
-                                        tradeType     = tradeType,
-                                        filterMarketGroupIds = filterGroupIds,
-                                        iskPerM3      = iskPerM3.toDoubleOrNull() ?: 1000.0,
-                                        maxCargoM3    = maxCargoM3.toDoubleOrNull() ?: 10000.0,
-                                        minMarginPct  = minMargin.toDoubleOrNull() ?: 5.0,
-                                        minNetProfit  = minNetProfit.toDoubleOrNull() ?: 0.0,
-                                        brokerFeePct  = brokerFee.toDoubleOrNull() ?: 3.0,
-                                        salesTaxPct   = salesTax.toDoubleOrNull() ?: 8.0,
-                                    )
-                                }
-                                statusMsg = "${results.size} opportunities found"
-                            } catch (e: Exception) { statusMsg = "Error: ${e.message}" }
-                            isAnalyzing = false
-                        }
-                    },
-                    enabled = !isAnalyzing,
-                ) {
-                    if (isAnalyzing) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
-                    else Icon(Icons.AutoMirrored.Filled.CompareArrows, null, Modifier.size(14.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(if (isAnalyzing) "Analyzing…" else "Analyze")
+                ParamField("Margin %",  minMargin,    68.dp)  { minMargin    = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MARGIN,     it) } } }
+                ParamField("Broker %",  brokerFee,    68.dp)  { brokerFee    = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_BROKER,     it) } } }
+                ParamField("Tax %",     salesTax,     60.dp)  { salesTax     = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_TAX,        it) } } }
+                ParamField("ISK/m³",    iskPerM3,     88.dp)  { iskPerM3     = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_ISK_PER_M3, it) } } }
+                ParamField("Max m³",    maxCargoM3,   88.dp)  { maxCargoM3   = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MAX_CARGO,  it) } } }
+                ParamField("Min Net",   minNetProfit, 108.dp) { minNetProfit = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MIN_PROFIT, it) } } }
+                FilterDivider()
+                Column(verticalArrangement = Arrangement.Bottom) {
+                    Spacer(Modifier.height(19.dp))
+                    Button(
+                        onClick = {
+                            if (buyRegionId == sellRegionId) { statusMsg = "Regions must differ"; return@Button }
+                            scope.launch {
+                                isAnalyzing = true; results = emptyList()
+                                val buyName  = allRegions.find { it.regionId == buyRegionId  }?.name ?: "buy"
+                                val sellName = allRegions.find { it.regionId == sellRegionId }?.name ?: "sell"
+                                val filterGroupId = selectedSubGroup?.marketGroupId ?: selectedTopGroup?.marketGroupId
+                                val filterGroupIds = filterGroupId?.let { withContext(Dispatchers.IO) { buildGroupSubtree(it) } }
+                                try {
+                                    statusMsg = "Fetching $buyName…"
+                                    val buyOrders  = withContext(Dispatchers.IO) { EsiClient.getMarketRegionOrders(buyRegionId)  }
+                                    statusMsg = "Fetching $sellName…"
+                                    val sellOrders = withContext(Dispatchers.IO) { EsiClient.getMarketRegionOrders(sellRegionId) }
+                                    statusMsg = "Analyzing ${buyOrders.size + sellOrders.size} orders…"
+                                    results = withContext(Dispatchers.IO) {
+                                        computeRegion(
+                                            buyOrders, sellOrders,
+                                            buyRegionId, sellRegionId,
+                                            buyName, sellName,
+                                            tradeType            = tradeType,
+                                            filterMarketGroupIds = filterGroupIds,
+                                            iskPerM3             = iskPerM3.toDoubleOrNull() ?: 1000.0,
+                                            maxCargoM3           = maxCargoM3.toDoubleOrNull() ?: 10000.0,
+                                            minMarginPct         = minMargin.toDoubleOrNull() ?: 5.0,
+                                            minNetProfit         = minNetProfit.toDoubleOrNull() ?: 0.0,
+                                            brokerFeePct         = brokerFee.toDoubleOrNull() ?: 3.0,
+                                            salesTaxPct          = salesTax.toDoubleOrNull() ?: 8.0,
+                                        )
+                                    }
+                                    statusMsg = "${results.size} opportunities found"
+                                } catch (e: Exception) { statusMsg = "Error: ${e.message}" }
+                                isAnalyzing = false
+                            }
+                        },
+                        enabled = !isAnalyzing,
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                        modifier = Modifier.height(48.dp),
+                    ) {
+                        if (isAnalyzing) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                        else Icon(Icons.AutoMirrored.Filled.CompareArrows, null, Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (isAnalyzing) "Analyzing…" else "Analyze")
+                    }
                 }
                 if (statusMsg.isNotEmpty()) {
-                    Text(statusMsg, style = MaterialTheme.typography.labelSmall,
-                        color = if ("Error" in statusMsg || "differ" in statusMsg) Color(0xFFFF6B6B) else Color.Gray)
+                    Column(verticalArrangement = Arrangement.Bottom) {
+                        Spacer(Modifier.height(19.dp))
+                        Text(
+                            statusMsg,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if ("Error" in statusMsg || "differ" in statusMsg) Color(0xFFFF6B6B)
+                                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            modifier = Modifier.height(48.dp).wrapContentHeight(Alignment.CenterVertically),
+                        )
+                    }
                 }
             }
         }
@@ -508,16 +529,68 @@ private fun InterRegionTab(
 
 @Composable
 private fun FilterBar(content: @Composable ColumnScope.() -> Unit) {
+    Column {
+        Surface(
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 3.dp,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                content = content,
+            )
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+    }
+}
+
+// ─── Shared chip surface (base for all filter dropdowns) ─────────────────
+
+@Composable
+private fun ChipSurface(
+    onClick: () -> Unit,
+    width: Dp,
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit,
+) {
     Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-        tonalElevation = 1.dp,
+        onClick = onClick,
+        shape = MaterialTheme.shapes.extraSmall,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        modifier = modifier.width(width),
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(0.dp),
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
             content = content,
         )
     }
+}
+
+// ─── Label + control column wrapper ──────────────────────────────────────
+
+@Composable
+private fun FilterControl(label: String, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+        )
+        content()
+    }
+}
+
+// ─── Visual separator between filter sections ─────────────────────────────
+
+@Composable
+private fun FilterDivider() {
+    VerticalDivider(
+        modifier = Modifier.height(36.dp).padding(horizontal = 4.dp),
+        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
+    )
 }
 
 // ─── Region picker ────────────────────────────────────────────────────────
@@ -530,75 +603,78 @@ private fun RegionPicker(
     label: String = "Region",
     onSelect: (Int) -> Unit,
 ) {
-    var searchQuery  by remember { mutableStateOf("") }
-    var isSearchMode by remember { mutableStateOf(false) }
-    var expanded     by remember { mutableStateOf(false) }
-
-    val interactionSource = remember { MutableInteractionSource() }
-    val isFocused by interactionSource.collectIsFocusedAsState()
-
-    LaunchedEffect(isFocused) {
-        if (isFocused && !isSearchMode) {
-            searchQuery = ""; isSearchMode = true; expanded = true
-        }
-    }
+    var expanded    by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
 
     val selectedName = remember(selectedRegionId, allRegions) {
-        allRegions.find { it.regionId == selectedRegionId }?.name ?: ""
+        allRegions.find { it.regionId == selectedRegionId }?.name ?: "—"
     }
-
     val filtered = remember(searchQuery, allRegions) {
         if (allRegions.isEmpty()) emptyList()
-        else if (searchQuery.isEmpty()) allRegions.take(12)
-        else allRegions.filter { it.name.contains(searchQuery, ignoreCase = true) }.take(12)
+        else if (searchQuery.isBlank()) allRegions.take(14)
+        else allRegions.filter { it.name.contains(searchQuery, ignoreCase = true) }.take(14)
     }
 
-    Box {
-        OutlinedTextField(
-            value             = if (isSearchMode) searchQuery else selectedName,
-            onValueChange     = { searchQuery = it; isSearchMode = true; expanded = true },
-            modifier          = Modifier.width(width),
-            label             = { Text(label, style = MaterialTheme.typography.labelSmall) },
-            textStyle         = MaterialTheme.typography.bodySmall,
-            singleLine        = true,
-            interactionSource = interactionSource,
-            placeholder       = { if (isSearchMode) Text("Filter…", style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
-            trailingIcon = {
+    FilterControl(label) {
+        Box {
+            ChipSurface(onClick = { expanded = true; searchQuery = "" }, width = width) {
+                Text(
+                    selectedName,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
                 Icon(
-                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null,
-                    Modifier.size(16.dp).clickable {
-                        if (expanded) { expanded = false; isSearchMode = false; searchQuery = "" }
-                        else { searchQuery = ""; isSearchMode = true; expanded = true }
-                    },
+                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    null,
+                    Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
-            },
-        )
-        DropdownMenu(
-            expanded         = expanded,
-            onDismissRequest = { expanded = false; isSearchMode = false; searchQuery = "" },
-            modifier         = Modifier.width(width),
-        ) {
-            if (filtered.isEmpty()) {
-                DropdownMenuItem(
-                    text = { Text("No match for \"$searchQuery\"", style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
-                    onClick = { }, enabled = false,
-                )
-            } else {
-                filtered.forEach { region ->
-                    DropdownMenuItem(
-                        text    = { Text(region.name, style = MaterialTheme.typography.bodySmall) },
-                        onClick = { onSelect(region.regionId); expanded = false; isSearchMode = false; searchQuery = "" },
+            }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false; searchQuery = "" },
+                modifier = Modifier.width(width + 40.dp).heightIn(max = 360.dp),
+            ) {
+                Box(Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = MaterialTheme.typography.bodySmall,
+                        singleLine = true,
+                        placeholder = { Text("Search…", style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
+                        leadingIcon = { Icon(Icons.Default.Search, null, Modifier.size(16.dp)) },
                     )
+                }
+                HorizontalDivider()
+                if (filtered.isEmpty()) {
+                    DropdownMenuItem(
+                        text = { Text("No match for \"$searchQuery\"", style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
+                        onClick = {},
+                        enabled = false,
+                    )
+                } else {
+                    filtered.forEach { region ->
+                        DropdownMenuItem(
+                            text = { Text(region.name, style = MaterialTheme.typography.bodySmall) },
+                            onClick = { onSelect(region.regionId); expanded = false; searchQuery = "" },
+                            leadingIcon = if (region.regionId == selectedRegionId) {
+                                { Icon(Icons.Default.Check, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary) }
+                            } else null,
+                        )
+                    }
                 }
             }
         }
     }
 }
 
-// ─── Compact group dropdown (category / subcategory) ─────────────────────
+// ─── Group dropdown (category / subcategory) ─────────────────────────────
 
 @Composable
-private fun CompactGroupDropdown(
+private fun GroupDropdown(
     label: String,
     groups: List<StaticMarketGroupModel>,
     selected: StaticMarketGroupModel?,
@@ -607,92 +683,112 @@ private fun CompactGroupDropdown(
     onSelect: (StaticMarketGroupModel?) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Box {
-        OutlinedTextField(
-            value         = selected?.name ?: "",
-            onValueChange = { },
-            readOnly      = true,
-            modifier      = Modifier.width(width),
-            label         = { Text(label, style = MaterialTheme.typography.labelSmall) },
-            placeholder   = { Text(placeholder, style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
-            textStyle     = MaterialTheme.typography.bodySmall,
-            singleLine    = true,
-            trailingIcon  = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (selected != null) Icon(Icons.Default.Clear, null,
-                        Modifier.size(14.dp).clickable { onSelect(null) }, tint = Color.Gray)
+
+    FilterControl(label) {
+        Box {
+            ChipSurface(onClick = { expanded = !expanded }, width = width) {
+                Text(
+                    selected?.name ?: placeholder,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (selected == null) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                            else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                if (selected != null) {
+                    Icon(
+                        Icons.Default.Close, null,
+                        Modifier.size(13.dp).clickable { onSelect(null) },
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    )
                     Spacer(Modifier.width(2.dp))
-                    Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null,
-                        Modifier.size(16.dp).clickable { expanded = !expanded })
                 }
-            },
-        )
-        DropdownMenu(
-            expanded = expanded, onDismissRequest = { expanded = false },
-            modifier = Modifier.width(width).heightIn(max = 280.dp),
-        ) {
-            DropdownMenuItem(
-                text = { Text(placeholder, style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
-                onClick = { onSelect(null); expanded = false },
-            )
-            HorizontalDivider()
-            groups.forEach { g ->
-                DropdownMenuItem(
-                    text        = { Text(g.name, style = MaterialTheme.typography.bodySmall) },
-                    onClick     = { onSelect(g); expanded = false },
-                    leadingIcon = if (g == selected) {
-                        { Icon(Icons.Default.Check, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary) }
-                    } else null,
+                Icon(
+                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null,
+                    Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
+            }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.width(width + 20.dp).heightIn(max = 300.dp),
+            ) {
+                DropdownMenuItem(
+                    text = { Text(placeholder, style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
+                    onClick = { onSelect(null); expanded = false },
+                )
+                HorizontalDivider()
+                groups.forEach { g ->
+                    DropdownMenuItem(
+                        text = { Text(g.name, style = MaterialTheme.typography.bodySmall) },
+                        onClick = { onSelect(g); expanded = false },
+                        leadingIcon = if (g == selected) {
+                            { Icon(Icons.Default.Check, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary) }
+                        } else null,
+                    )
+                }
             }
         }
     }
 }
 
-// ─── Trade type dropdown ─────────────────────────────────────────────────
+// ─── Trade type chip ──────────────────────────────────────────────────────
 
 @Composable
-private fun TradeTypeDropdown(selected: InterRegionTradeType, onSelect: (InterRegionTradeType) -> Unit) {
+private fun TradeTypeChip(selected: InterRegionTradeType, onSelect: (InterRegionTradeType) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    Box {
-        OutlinedTextField(
-            value         = selected.label,
-            onValueChange = { },
-            readOnly      = true,
-            modifier      = Modifier.width(170.dp),
-            label         = { Text("Trade Type", style = MaterialTheme.typography.labelSmall) },
-            textStyle     = MaterialTheme.typography.bodySmall,
-            singleLine    = true,
-            trailingIcon  = {
-                Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null,
-                    Modifier.size(16.dp).clickable { expanded = !expanded })
-            },
-        )
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.width(200.dp)) {
-            InterRegionTradeType.entries.forEach { t ->
-                DropdownMenuItem(
-                    text        = { Text(t.label, style = MaterialTheme.typography.bodySmall) },
-                    onClick     = { onSelect(t); expanded = false },
-                    leadingIcon = if (t == selected) {
-                        { Icon(Icons.Default.Check, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary) }
-                    } else null,
+
+    FilterControl("Trade Type") {
+        Box {
+            ChipSurface(onClick = { expanded = !expanded }, width = 175.dp) {
+                Text(
+                    selected.label,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
                 )
+                Icon(
+                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null,
+                    Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+            }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.width(210.dp),
+            ) {
+                InterRegionTradeType.entries.forEach { t ->
+                    DropdownMenuItem(
+                        text = { Text(t.label, style = MaterialTheme.typography.bodySmall) },
+                        onClick = { onSelect(t); expanded = false },
+                        leadingIcon = if (t == selected) {
+                            { Icon(Icons.Default.Check, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary) }
+                        } else null,
+                    )
+                }
             }
         }
     }
 }
 
-// ─── Small compact text field ─────────────────────────────────────────────
+// ─── Compact number field ─────────────────────────────────────────────────
 
 @Composable
-private fun SmallField(label: String, value: String, width: Dp, onValue: (String) -> Unit) {
-    OutlinedTextField(
-        value = value, onValueChange = onValue,
-        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
-        modifier = Modifier.width(width),
-        textStyle = MaterialTheme.typography.bodySmall,
-        singleLine = true,
-    )
+private fun ParamField(label: String, value: String, width: Dp, onValue: (String) -> Unit) {
+    FilterControl(label) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValue,
+            modifier = Modifier.width(width),
+            textStyle = MaterialTheme.typography.bodySmall,
+            singleLine = true,
+            shape = MaterialTheme.shapes.extraSmall,
+        )
+    }
 }
 
 // ─── Table headers ────────────────────────────────────────────────────────
