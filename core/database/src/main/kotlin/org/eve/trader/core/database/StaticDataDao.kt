@@ -252,6 +252,37 @@ object StaticDataDao {
         }
     }
 
+    fun getTypeIdsByMarketGroups(groupIds: Set<Int>): List<Int> {
+        if (groupIds.isEmpty()) return emptyList()
+        val placeholders = groupIds.joinToString(",") { "?" }
+        return DatabaseManager.transaction {
+            prepareStatement(
+                "SELECT type_id FROM static_types WHERE market_group_id IN ($placeholders) AND published = 1"
+            ).use { stmt ->
+                groupIds.forEachIndexed { i, id -> stmt.setInt(i + 1, id) }
+                stmt.executeQuery().use { rs ->
+                    val list = mutableListOf<Int>()
+                    while (rs.next()) list.add(rs.getInt("type_id"))
+                    list
+                }
+            }
+        }
+    }
+
+    fun getAllMarketTypeIds(): List<Int> {
+        return DatabaseManager.transaction {
+            prepareStatement(
+                "SELECT type_id FROM static_types WHERE market_group_id IS NOT NULL AND published = 1"
+            ).use { stmt ->
+                stmt.executeQuery().use { rs ->
+                    val list = mutableListOf<Int>()
+                    while (rs.next()) list.add(rs.getInt("type_id"))
+                    list
+                }
+            }
+        }
+    }
+
     fun getMarketGroupById(marketGroupId: Int): StaticMarketGroupModel? {
         return DatabaseManager.transaction {
             prepareStatement("SELECT * FROM market_groups WHERE market_group_id = ?").use { stmt ->

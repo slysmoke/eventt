@@ -22,8 +22,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import org.eve.trader.core.database.MarketDao
 import org.eve.trader.core.database.StaticDataDao
 import org.eve.trader.core.esi.EsiClient
@@ -264,26 +271,56 @@ private fun StationTradingTab(
                         onClick = {
                             scope.launch {
                                 isAnalyzing = true; results = emptyList()
-                                val regionName = allRegions.find { it.regionId == regionId }?.name ?: "region"
                                 try {
-                                    statusMsg = "Fetching orders from $regionName…"
-                                    val allOrders = withContext(Dispatchers.IO) { EsiClient.getMarketRegionOrders(regionId) }
                                     val filterGroupId = selectedSubGroup?.marketGroupId ?: selectedTopGroup?.marketGroupId
                                     val filterGroupIds = filterGroupId?.let { withContext(Dispatchers.IO) { buildGroupSubtree(it) } }
-                                    statusMsg = "Analyzing ${allOrders.size} orders…"
-                                    results = withContext(Dispatchers.IO) {
-                                        computeStation(
-                                            allOrders, regionId,
-                                            filterMarketGroupIds = filterGroupIds,
-                                            minMarginPct  = minMargin.toDoubleOrNull() ?: 5.0,
-                                            minDailyVol   = minDailyVol.toLongOrNull() ?: 0L,
-                                            maxBuyPrice   = maxBuyPrice.toDoubleOrNull() ?: Double.MAX_VALUE,
-                                            minNetProfit  = minNetProfit.toDoubleOrNull() ?: 0.0,
-                                            brokerFeePct  = brokerFee.toDoubleOrNull() ?: 3.0,
-                                            salesTaxPct   = salesTax.toDoubleOrNull() ?: 8.0,
-                                        )
+
+                                    val typeIds = withContext(Dispatchers.IO) {
+                                        if (filterGroupIds != null) StaticDataDao.getTypeIdsByMarketGroups(filterGroupIds)
+                                        else StaticDataDao.getAllMarketTypeIds()
                                     }
-                                    statusMsg = "${results.size} opportunities found"
+
+                                    statusMsg = "0/${typeIds.size} types checked…"
+
+                                    val minMarginD    = minMargin.toDoubleOrNull()    ?: 5.0
+                                    val minDailyVolL  = minDailyVol.toLongOrNull()    ?: 0L
+                                    val maxBuyPriceD  = maxBuyPrice.toDoubleOrNull()  ?: Double.MAX_VALUE
+                                    val minNetProfitD = minNetProfit.toDoubleOrNull() ?: 0.0
+                                    val brokerFeePctD = brokerFee.toDoubleOrNull()    ?: 3.0
+                                    val salesTaxPctD  = salesTax.toDoubleOrNull()     ?: 8.0
+
+                                    val semaphore = Semaphore(10)
+                                    val mutex     = Mutex()
+                                    val found     = mutableListOf<StationOpportunity>()
+                                    var checked   = 0
+
+                                    coroutineScope {
+                                        typeIds.map { typeId ->
+                                            async(Dispatchers.IO) {
+                                                semaphore.withPermit {
+                                                    runCatching {
+                                                        val effRegion = if (typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else regionId
+                                                        val orders = EsiClient.getMarketRegionOrders(effRegion, typeId = typeId)
+                                                        val opp = computeOpportunityForType(
+                                                            typeId, orders, effRegion,
+                                                            minMarginD, minDailyVolL, maxBuyPriceD,
+                                                            minNetProfitD, brokerFeePctD, salesTaxPctD,
+                                                        )
+                                                        mutex.withLock {
+                                                            checked++
+                                                            if (opp != null) {
+                                                                found.add(opp)
+                                                                results = found.sortedByDescending { it.netProfit }
+                                                            }
+                                                            statusMsg = "$checked/${typeIds.size} checked, ${found.size} found"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }.awaitAll()
+                                    }
+
+                                    statusMsg = "${found.size} opportunities found"
                                 } catch (e: Exception) { statusMsg = "Error: ${e.message}" }
                                 isAnalyzing = false
                             }
@@ -944,60 +981,51 @@ private fun buildGroupSubtree(rootGroupId: Int): Set<Int> {
 
 // ─── Analysis functions (run on Dispatchers.IO) ───────────────────────────
 
-private fun computeStation(
-    allOrders: List<Map<String, Any?>>,
+private fun computeOpportunityForType(
+    typeId: Int,
+    orders: List<Map<String, Any?>>,
     regionId: Int,
-    filterMarketGroupIds: Set<Int>?,
     minMarginPct: Double,
     minDailyVol: Long,
     maxBuyPrice: Double,
     minNetProfit: Double,
     brokerFeePct: Double,
     salesTaxPct: Double,
-): List<StationOpportunity> {
-    val byType  = allOrders.groupBy { (it["type_id"] as? Number)?.toInt() ?: 0 }
-    val results = mutableListOf<StationOpportunity>()
+): StationOpportunity? {
+    val sells = orders.filter { (it["is_buy_order"] as? Boolean) == false }
+    val buys  = orders.filter { (it["is_buy_order"] as? Boolean) == true  }
+    if (sells.isEmpty() || buys.isEmpty()) return null
 
-    byType.forEach { (typeId, orders) ->
-        if (typeId == 0) return@forEach
-        val sells = orders.filter { (it["is_buy_order"] as? Boolean) == false }
-        val buys  = orders.filter { (it["is_buy_order"] as? Boolean) == true  }
-        if (sells.isEmpty() || buys.isEmpty()) return@forEach
+    val bestSell = sells.minOf { (it["price"] as? Number)?.toDouble() ?: Double.MAX_VALUE }
+    val bestBuy  = buys.maxOf  { (it["price"] as? Number)?.toDouble() ?: 0.0 }
 
-        val bestSell = sells.minOf { (it["price"] as? Number)?.toDouble() ?: Double.MAX_VALUE }
-        val bestBuy  = buys.maxOf  { (it["price"] as? Number)?.toDouble() ?: 0.0 }
+    if (bestSell > maxBuyPrice) return null
+    val grossProfit = bestSell - bestBuy
+    if (grossProfit <= 0) return null
+    val marginPct = grossProfit / bestSell * 100.0
+    if (marginPct < minMarginPct) return null
+    val fees      = (bestSell + bestBuy) * brokerFeePct / 100.0 + bestSell * salesTaxPct / 100.0
+    val netProfit = grossProfit - fees
+    if (netProfit < minNetProfit) return null
 
-        if (bestSell > maxBuyPrice) return@forEach
-        val grossProfit = bestSell - bestBuy
-        if (grossProfit <= 0) return@forEach
-        val marginPct = grossProfit / bestSell * 100.0
-        if (marginPct < minMarginPct) return@forEach
-        val fees      = (bestSell + bestBuy) * brokerFeePct / 100.0 + bestSell * salesTaxPct / 100.0
-        val netProfit = grossProfit - fees
-        if (netProfit < minNetProfit) return@forEach
+    val type = StaticDataDao.getTypeById(typeId) ?: return null
+    val history     = fetchHistory(typeId, regionId, true)
+    val avgDailyVol = if (history.isNotEmpty()) history.map { it.volume }.average().toLong() else 0L
+    if (avgDailyVol < minDailyVol && minDailyVol > 0) return null
 
-        val type = StaticDataDao.getTypeById(typeId) ?: return@forEach
-        if (filterMarketGroupIds != null && type.marketGroupId !in filterMarketGroupIds) return@forEach
-
-        val history     = fetchHistory(typeId, regionId, filterMarketGroupIds != null)
-        val avgDailyVol = if (history.isNotEmpty()) history.map { it.volume }.average().toLong() else 0L
-        if (avgDailyVol < minDailyVol && minDailyVol > 0) return@forEach
-
-        results += StationOpportunity(
-            typeId               = typeId,
-            typeName             = type.name,
-            bestSell             = bestSell,
-            bestBuy              = bestBuy,
-            grossProfit          = grossProfit,
-            netProfit            = netProfit,
-            marginPct            = marginPct,
-            dailyVolume          = avgDailyVol,
-            sellOrderCount       = sells.size,
-            buyOrderCount        = buys.size,
-            estimatedDailyProfit = netProfit * avgDailyVol.coerceAtLeast(1),
-        )
-    }
-    return results.sortedByDescending { it.netProfit }
+    return StationOpportunity(
+        typeId               = typeId,
+        typeName             = type.name,
+        bestSell             = bestSell,
+        bestBuy              = bestBuy,
+        grossProfit          = grossProfit,
+        netProfit            = netProfit,
+        marginPct            = marginPct,
+        dailyVolume          = avgDailyVol,
+        sellOrderCount       = sells.size,
+        buyOrderCount        = buys.size,
+        estimatedDailyProfit = netProfit * avgDailyVol.coerceAtLeast(1),
+    )
 }
 
 private fun computeRegion(
