@@ -15,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -151,9 +152,13 @@ fun MarketAnalysisScreen() {
                 text = { Text("Inter-Region") },
                 icon = { Icon(Icons.AutoMirrored.Filled.CompareArrows, null, Modifier.size(16.dp)) })
         }
-        when (selectedTab) {
-            0 -> StationTradingTab(allRegions, topGroups)
-            1 -> InterRegionTab(allRegions, topGroups)
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            Box(modifier = if (selectedTab == 0) Modifier.fillMaxSize() else Modifier.requiredSize(0.dp).clipToBounds()) {
+                StationTradingTab(allRegions, topGroups)
+            }
+            Box(modifier = if (selectedTab == 1) Modifier.fillMaxSize() else Modifier.requiredSize(0.dp).clipToBounds()) {
+                InterRegionTab(allRegions, topGroups)
+            }
         }
     }
 }
