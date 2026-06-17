@@ -95,7 +95,7 @@ fun EveTraderApp() {
                     onThemeToggle = { darkTheme = !darkTheme },
                     eveColors = eveColors,
                     onShowProgress = { showProgressDialog = true },
-                    onNavDrawerToggle = { },
+                
                     onUpdateSde = {
                         coroutineScope.launch(Dispatchers.IO) { StaticDataImporter.importAll() }
                     },
@@ -246,7 +246,6 @@ private fun TopBar(
     onThemeToggle: () -> Unit,
     eveColors: EveColors,
     onShowProgress: () -> Unit,
-    onNavDrawerToggle: () -> Unit,
     onUpdateSde: () -> Unit,
 ) {
     TopAppBar(
@@ -387,7 +386,7 @@ private fun SdeImportOverlay(state: StaticDataImporter.ImportState) {
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 LinearProgressIndicator(
-                    progress = state.progress,
+                    progress = { state.progress },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text(

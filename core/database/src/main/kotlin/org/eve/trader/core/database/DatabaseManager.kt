@@ -17,7 +17,7 @@ object DatabaseManager {
     private val initLock = Any()
 
     // Single-thread dispatcher for serialized DB access
-    private val dbDispatcher = kotlinx.coroutines.Dispatchers.IO.limitedParallelism(1)
+
 
     fun initialize(dbPath: String? = null) {
         if (isInitialized) return
@@ -510,11 +510,11 @@ object DatabaseManager {
 
     // ─── Helpers ──────────────────────────────────────────────────────────
 
-    fun <T> transaction(block: Connection.() -> T): T {
+    fun <T> transaction(block: Connection.() -> T): T = synchronized(this) {
         val conn = getConnection()
         val wasAutoCommit = conn.autoCommit
         conn.autoCommit = false
-        return try {
+        try {
             val result = conn.block()
             conn.commit()
             result
