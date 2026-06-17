@@ -138,6 +138,7 @@ object StaticDataImporter {
             groupId = obj["groupID"]?.jsonPrimitive?.intOrNull ?: 0,
             categoryId = 0,
             volume = obj["volume"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
+            packagedVolume = obj["packagedVolume"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
             portionSize = obj["portionSize"]?.jsonPrimitive?.intOrNull ?: 1,
             published = obj["published"]?.jsonPrimitive?.booleanOrNull ?: false,
             marketGroupId = obj["marketGroupID"]?.jsonPrimitive?.intOrNull,
