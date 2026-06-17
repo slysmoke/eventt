@@ -3,6 +3,7 @@ package org.eve.trader.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.*
@@ -408,22 +409,41 @@ private fun SdeImportOverlay(state: StaticDataImporter.ImportState) {
 
 @Composable
 private fun ScreenContent(screen: AppScreen) {
+    // Track which screens have been visited so we only mount them on first visit,
+    // but keep them in the composition afterwards to preserve their state.
+    var visited by remember { mutableStateOf(setOf(screen)) }
+    LaunchedEffect(screen) { visited = visited + screen }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background,
     ) {
-        when (screen) {
-            AppScreen.DASHBOARD -> DashboardScreen()
-            AppScreen.CHARACTERS -> CharacterManagementScreen()
-            AppScreen.MARKET -> MarketBrowserScreen()
-            AppScreen.ANALYSIS -> MarketAnalysisScreen()
-            AppScreen.ASSETS -> AssetViewerScreen()
-            AppScreen.WALLET -> WalletScreen()
-            AppScreen.ORDERS -> OrdersScreen()
-            AppScreen.WATCHLIST -> WatchlistScreen()
-            AppScreen.ALERTS -> PriceAlertsScreen()
-            AppScreen.CONTRACTS -> ContractTrackerScreen()
-            AppScreen.INDUSTRY -> IndustryCalculatorScreen()
+        Box(modifier = Modifier.fillMaxSize()) {
+            AppScreen.entries.forEach { s ->
+                if (s !in visited) return@forEach
+                key(s) {
+                    val active = s == screen
+                    Box(
+                        modifier = Modifier
+                            .then(if (active) Modifier.fillMaxSize() else Modifier.requiredSize(0.dp))
+                            .clipToBounds()
+                    ) {
+                        when (s) {
+                            AppScreen.DASHBOARD   -> DashboardScreen()
+                            AppScreen.CHARACTERS  -> CharacterManagementScreen()
+                            AppScreen.MARKET      -> MarketBrowserScreen()
+                            AppScreen.ANALYSIS    -> MarketAnalysisScreen()
+                            AppScreen.ASSETS      -> AssetViewerScreen()
+                            AppScreen.WALLET      -> WalletScreen()
+                            AppScreen.ORDERS      -> OrdersScreen()
+                            AppScreen.WATCHLIST   -> WatchlistScreen()
+                            AppScreen.ALERTS      -> PriceAlertsScreen()
+                            AppScreen.CONTRACTS   -> ContractTrackerScreen()
+                            AppScreen.INDUSTRY    -> IndustryCalculatorScreen()
+                        }
+                    }
+                }
+            }
         }
     }
 }
