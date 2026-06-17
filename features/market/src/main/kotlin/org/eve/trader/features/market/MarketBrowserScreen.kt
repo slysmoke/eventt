@@ -56,6 +56,10 @@ import org.eve.trader.core.model.StaticTypeModel
 import org.eve.trader.core.model.WatchlistEntryModel
 import org.eve.trader.ui.common.*
 
+// Virtual region for PLEX — not in SDE, announced by CCP as ID 19000001
+const val PLEX_MARKET_REGION_ID = 19000001
+const val PLEX_TYPE_ID = 44992
+
 // Trade hub regions
 val TRADE_HUBS = listOf(
     10000002 to "The Forge (Jita)",
@@ -1066,15 +1070,16 @@ private suspend fun loadMarketData(
     ordersCallback: (Pair<List<MarketOrder>, List<MarketOrder>>) -> Unit,
     historyCallback: (List<MarketHistoryModel>) -> Unit,
 ) {
+    val effectiveRegionId = if (typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else regionId
     // Load history from cache first
-    val cachedHistory = MarketDao.getHistory(typeId, regionId)
+    val cachedHistory = MarketDao.getHistory(typeId, effectiveRegionId)
     if (cachedHistory.isNotEmpty()) {
         historyCallback(cachedHistory)
     }
 
     // Load orders
     try {
-        val rawOrders = EsiClient.getMarketRegionOrders(regionId, typeId = typeId)
+        val rawOrders = EsiClient.getMarketRegionOrders(effectiveRegionId, typeId = typeId)
 
         val locationIds = rawOrders.mapNotNull { (it["location_id"] as? Number)?.toLong() }.toSet()
         val locationNames = resolveLocationNames(locationIds)
@@ -1110,13 +1115,13 @@ private suspend fun loadMarketData(
 
     // Fetch and save history
     try {
-        val rawHistory = EsiClient.getMarketRegionHistory(regionId, typeId)
+        val rawHistory = EsiClient.getMarketRegionHistory(effectiveRegionId, typeId)
         val models = rawHistory.mapNotNull { raw ->
             val date = raw["date"] as? String ?: return@mapNotNull null
             val avg = (raw["average"] as? Number)?.toDouble() ?: 0.0
             MarketHistoryModel(
                 typeId = typeId,
-                regionId = regionId,
+                regionId = effectiveRegionId,
                 date = date,
                 average = avg,
                 volume = (raw["volume"] as? Number)?.toLong() ?: 0,

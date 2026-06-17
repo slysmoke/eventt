@@ -75,8 +75,8 @@ private enum class InterRegionTradeType(val label: String) {
 private fun sortStation(list: List<StationOpportunity>, col: StationSortCol, asc: Boolean): List<StationOpportunity> {
     val cmp: Comparator<StationOpportunity> = when (col) {
         StationSortCol.NAME         -> compareBy { it.typeName }
-        StationSortCol.BUY_PRICE    -> compareBy { it.bestSell }
-        StationSortCol.SELL_PRICE   -> compareBy { it.bestBuy }
+        StationSortCol.BUY_PRICE    -> compareBy { it.bestBuy }
+        StationSortCol.SELL_PRICE   -> compareBy { it.bestSell }
         StationSortCol.MARGIN       -> compareBy { it.marginPct }
         StationSortCol.NET_PROFIT   -> compareBy { it.netProfit }
         StationSortCol.VOLUME       -> compareBy { it.dailyVolume }
@@ -837,8 +837,8 @@ private fun StationRow(opp: StationOpportunity, index: Int) {
     ) {
         Text(opp.typeName, style = MaterialTheme.typography.bodySmall, maxLines = 1,
             overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        PriceText(opp.bestSell,  Color(0xFFFF6B6B), Modifier.width(95.dp))
-        PriceText(opp.bestBuy,   Color(0xFF69DB7C), Modifier.width(95.dp))
+        PriceText(opp.bestBuy,   Color(0xFFFF6B6B), Modifier.width(95.dp))
+        PriceText(opp.bestSell,  Color(0xFF69DB7C), Modifier.width(95.dp))
         MarginText(opp.marginPct, Modifier.width(65.dp))
         PriceText(opp.netProfit, Color(0xFF69DB7C),  Modifier.width(95.dp))
         Text(if (opp.dailyVolume > 0) fVol(opp.dailyVolume) else "—",
@@ -1076,16 +1076,17 @@ private fun computeRegion(
 // ─── History helper ───────────────────────────────────────────────────────
 
 private fun fetchHistory(typeId: Int, regionId: Int, fetchFromEsi: Boolean): List<org.eve.trader.core.model.MarketHistoryModel> {
-    val dbHistory = MarketDao.getHistory(typeId, regionId, 30)
+    val effectiveRegionId = if (typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else regionId
+    val dbHistory = MarketDao.getHistory(typeId, effectiveRegionId, 30)
     if (dbHistory.isNotEmpty() || !fetchFromEsi) return dbHistory
     return try {
-        val entries = EsiClient.getMarketRegionHistory(regionId, typeId)
+        val entries = EsiClient.getMarketRegionHistory(effectiveRegionId, typeId)
         entries.forEach { entry ->
             runCatching {
                 MarketDao.insertHistory(
                     org.eve.trader.core.model.MarketHistoryModel(
                         typeId     = typeId,
-                        regionId   = regionId,
+                        regionId   = effectiveRegionId,
                         date       = entry["date"] as? String ?: "",
                         average    = (entry["average"] as? Number)?.toDouble() ?: 0.0,
                         volume     = (entry["volume"] as? Number)?.toLong() ?: 0L,
@@ -1096,7 +1097,7 @@ private fun fetchHistory(typeId: Int, regionId: Int, fetchFromEsi: Boolean): Lis
                 )
             }
         }
-        MarketDao.getHistory(typeId, regionId, 30)
+        MarketDao.getHistory(typeId, effectiveRegionId, 30)
     } catch (_: Exception) { emptyList() }
 }
 
