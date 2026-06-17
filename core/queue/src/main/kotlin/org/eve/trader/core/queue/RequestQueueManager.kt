@@ -16,16 +16,19 @@ object RequestQueueManager {
 
     private val queue = ArrayDeque<QueuedRequest>()
 
+    @Synchronized
     fun enqueue(request: QueuedRequest) {
         queue.add(request)
         updateState()
     }
 
+    @Synchronized
     fun enqueueMultiple(requests: List<QueuedRequest>) {
         queue.addAll(requests)
         updateState()
     }
 
+    @Synchronized
     fun dequeue(): QueuedRequest? {
         return if (queue.isNotEmpty()) {
             val request = queue.removeFirst()
@@ -34,15 +37,16 @@ object RequestQueueManager {
         } else null
     }
 
+    @Synchronized
     fun updateProgress(requestId: String, progress: Float) {
-        val updated = _requests.value.map {
+        _requests.value = _requests.value.map {
             if (it.id == requestId) it.copy(progress = progress) else it
         }
-        _requests.value = updated
     }
 
+    @Synchronized
     fun completeRequest(requestId: String, error: String? = null) {
-        val updated = _requests.value.map {
+        _requests.value = _requests.value.map {
             if (it.id == requestId) {
                 it.copy(
                     status = if (error != null) RequestStatus.FAILED else RequestStatus.COMPLETED,
@@ -52,11 +56,11 @@ object RequestQueueManager {
                 )
             } else it
         }
-        _requests.value = updated
     }
 
+    @Synchronized
     fun markInProgress(requestId: String) {
-        val updated = _requests.value.map {
+        _requests.value = _requests.value.map {
             if (it.id == requestId) {
                 it.copy(
                     status = RequestStatus.IN_PROGRESS,
@@ -65,14 +69,15 @@ object RequestQueueManager {
                 )
             } else it
         }
-        _requests.value = updated
     }
 
+    @Synchronized
     fun clearCompleted() {
         _requests.value = _requests.value.filter { it.status != RequestStatus.COMPLETED && it.status != RequestStatus.FAILED }
         queue.removeIf { it.status == RequestStatus.COMPLETED || it.status == RequestStatus.FAILED }
     }
 
+    @Synchronized
     fun clearAll() {
         queue.clear()
         _requests.value = emptyList()
@@ -89,7 +94,10 @@ object RequestQueueManager {
             return list.sumOf { it.progress.toDouble() }.toFloat() / list.size
         }
 
+    @Synchronized
     private fun updateState() {
-        _requests.value = queue.toList() + _requests.value.filter { it.status == RequestStatus.IN_PROGRESS || it.status == RequestStatus.COMPLETED || it.status == RequestStatus.FAILED }
+        _requests.value = queue.toList() + _requests.value.filter {
+            it.status == RequestStatus.IN_PROGRESS || it.status == RequestStatus.COMPLETED || it.status == RequestStatus.FAILED
+        }
     }
 }
