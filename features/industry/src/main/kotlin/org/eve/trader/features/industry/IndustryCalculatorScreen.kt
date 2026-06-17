@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -29,7 +30,7 @@ fun IndustryCalculatorScreen() {
     var selectedType by remember { mutableStateOf<org.eve.trader.core.model.StaticTypeModel?>(null) }
     var meLevel by remember { mutableIntStateOf(0) }
     var quantity by remember { mutableIntStateOf(1) }
-    var jobCost by remember { mutableDoubleStateOf(0.0) }
+
     var showBom by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -121,7 +122,7 @@ fun IndustryCalculatorScreen() {
 
             // BOM toggle
             Button(onClick = { showBom = !showBom }) {
-                Icon(Icons.Default.List, null, modifier = Modifier.size(18.dp))
+                Icon(Icons.AutoMirrored.Filled.List, null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(if (showBom) "Hide Materials" else "Show Bill of Materials")
             }

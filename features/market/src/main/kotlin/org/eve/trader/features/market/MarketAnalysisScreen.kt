@@ -306,13 +306,19 @@ private fun StationTradingTab(
                                                             minMarginD, minDailyVolL, maxBuyPriceD,
                                                             minNetProfitD, brokerFeePctD, salesTaxPctD,
                                                         )
-                                                        mutex.withLock {
+                                                        // Protect shared list mutation on IO, then update Compose state on Main
+                                                        val (sorted, c, f) = mutex.withLock {
                                                             checked++
-                                                            if (opp != null) {
-                                                                found.add(opp)
-                                                                results = found.sortedByDescending { it.netProfit }
-                                                            }
-                                                            statusMsg = "$checked/${typeIds.size} checked, ${found.size} found"
+                                                            if (opp != null) found.add(opp)
+                                                            Triple(
+                                                                if (opp != null) found.sortedByDescending { it.netProfit } else null,
+                                                                checked,
+                                                                found.size,
+                                                            )
+                                                        }
+                                                        withContext(Dispatchers.Main) {
+                                                            if (sorted != null) results = sorted
+                                                            statusMsg = "$c/${typeIds.size} checked, $f found"
                                                         }
                                                     }
                                                 }
