@@ -505,68 +505,59 @@ private fun InterRegionTab(
                                 val sellName = allRegions.find { it.regionId == sellRegionId }?.name ?: "sell"
                                 val filterGroupId  = selectedSubGroup?.marketGroupId ?: selectedTopGroup?.marketGroupId
                                 val filterGroupIds = filterGroupId?.let { withContext(Dispatchers.IO) { buildGroupSubtree(it) } }
-                                val iskPerM3D    = iskPerM3.toDoubleOrNull()    ?: 1000.0
-                                val maxCargoM3D  = maxCargoM3.toDoubleOrNull()  ?: 10000.0
-                                val minMarginD   = minMargin.toDoubleOrNull()   ?: 5.0
-                                val minNetD      = minNetProfit.toDoubleOrNull() ?: 0.0
-                                val brokerFeeD   = brokerFee.toDoubleOrNull()   ?: 3.0
-                                val salesTaxD    = salesTax.toDoubleOrNull()    ?: 8.0
+                                val iskPerM3D   = iskPerM3.toDoubleOrNull()     ?: 1000.0
+                                val maxCargoM3D = maxCargoM3.toDoubleOrNull()   ?: 10000.0
+                                val minMarginD  = minMargin.toDoubleOrNull()    ?: 5.0
+                                val minNetD     = minNetProfit.toDoubleOrNull() ?: 0.0
+                                val brokerFeeD  = brokerFee.toDoubleOrNull()    ?: 3.0
+                                val salesTaxD   = salesTax.toDoubleOrNull()     ?: 8.0
                                 try {
-                                    // Fetch both regions in parallel
-                                    statusMsg = "Fetching $buyName + $sellName…"
-                                    val (buyOrders, sellOrders) = withContext(Dispatchers.IO) {
-                                        coroutineScope {
-                                            val bDef = async { EsiClient.getMarketRegionOrders(buyRegionId) }
-                                            val sDef = async { EsiClient.getMarketRegionOrders(sellRegionId) }
-                                            bDef.await() to sDef.await()
-                                        }
+                                    val typeIds = withContext(Dispatchers.IO) {
+                                        if (filterGroupIds != null) StaticDataDao.getTypeIdsByMarketGroups(filterGroupIds)
+                                        else StaticDataDao.getAllMarketTypeIds()
                                     }
+                                    statusMsg = "0/${typeIds.size} types…"
 
-                                    // Fast pre-filter (no history, no ESI calls)
-                                    statusMsg = "Finding candidates…"
-                                    val candidates = withContext(Dispatchers.IO) {
-                                        computeRegionCandidates(
-                                            buyOrders, sellOrders, buyName, sellName, tradeType,
-                                            filterGroupIds, iskPerM3D, maxCargoM3D, minMarginD, minNetD, brokerFeeD, salesTaxD,
-                                        )
-                                    }
+                                    val semaphore = Semaphore(8)
+                                    val mutex     = Mutex()
+                                    val found     = mutableListOf<RegionOpportunity>()
+                                    var checked   = 0
 
-                                    if (candidates.isEmpty()) {
-                                        statusMsg = "0 opportunities found"
-                                    } else {
-                                        // Enrich with history in parallel — table fills progressively
-                                        statusMsg = "Enriching ${candidates.size} items…"
-                                        val semaphore = Semaphore(10)
-                                        val mutex     = Mutex()
-                                        val found     = mutableListOf<RegionOpportunity>()
-                                        var checked   = 0
-
-                                        withContext(Dispatchers.IO) {
-                                            coroutineScope {
-                                                candidates.map { cand ->
-                                                    async {
-                                                        semaphore.withPermit {
-                                                            runCatching {
-                                                                val history = fetchHistory(cand.typeId, sellRegionId, true)
-                                                                val vol   = if (history.isNotEmpty()) history.map { it.volume }.average().toLong() else 0L
-                                                                val opp   = cand.copy(dailyVolume = vol, priceChange7d = compute7dChange(history))
-                                                                val (sorted, c, f) = mutex.withLock {
-                                                                    checked++
-                                                                    found.add(opp)
-                                                                    Triple(found.sortedByDescending { it.netProfit }, checked, found.size)
-                                                                }
-                                                                withContext(Dispatchers.Main) {
-                                                                    results   = sorted
-                                                                    statusMsg = "$c/${candidates.size} checked, $f found"
-                                                                }
-                                                            }
+                                    coroutineScope {
+                                        typeIds.map { typeId ->
+                                            async(Dispatchers.IO) {
+                                                semaphore.withPermit {
+                                                    runCatching {
+                                                        // Both regions for this type fetched simultaneously
+                                                        val (buyOrders, sellOrders) = coroutineScope {
+                                                            val bDef = async { EsiClient.getMarketRegionOrders(buyRegionId,  typeId = typeId) }
+                                                            val sDef = async { EsiClient.getMarketRegionOrders(sellRegionId, typeId = typeId) }
+                                                            bDef.await() to sDef.await()
+                                                        }
+                                                        val opp = computeRegionOpportunityForType(
+                                                            typeId, buyOrders, sellOrders, sellRegionId,
+                                                            buyName, sellName, tradeType, filterGroupIds,
+                                                            iskPerM3D, maxCargoM3D, minMarginD, minNetD, brokerFeeD, salesTaxD,
+                                                        )
+                                                        val (sorted, c, f) = mutex.withLock {
+                                                            checked++
+                                                            if (opp != null) found.add(opp)
+                                                            Triple(
+                                                                if (opp != null) found.sortedByDescending { it.netProfit } else null,
+                                                                checked,
+                                                                found.size,
+                                                            )
+                                                        }
+                                                        withContext(Dispatchers.Main) {
+                                                            if (sorted != null) results = sorted
+                                                            statusMsg = "$c/${typeIds.size} checked, $f found"
                                                         }
                                                     }
-                                                }.awaitAll()
+                                                }
                                             }
-                                        }
-                                        statusMsg = "${results.size} opportunities found"
+                                        }.awaitAll()
                                     }
+                                    statusMsg = "${found.size} opportunities found"
                                 } catch (e: Exception) { statusMsg = "Error: ${e.message}" }
                                 isAnalyzing = false
                             }
@@ -1100,10 +1091,11 @@ private fun computeOpportunityForType(
     )
 }
 
-// Fast candidate finder — no history/ESI calls; history is enriched in parallel by the caller
-private fun computeRegionCandidates(
-    buyOrders: List<Map<String, Any?>>,
-    sellOrders: List<Map<String, Any?>>,
+private fun computeRegionOpportunityForType(
+    typeId: Int,
+    buyRegionOrders: List<Map<String, Any?>>,
+    sellRegionOrders: List<Map<String, Any?>>,
+    sellRegionId: Int,
     buyRegionName: String,
     sellRegionName: String,
     tradeType: InterRegionTradeType,
@@ -1114,62 +1106,58 @@ private fun computeRegionCandidates(
     minNetProfit: Double,
     brokerFeePct: Double,
     salesTaxPct: Double,
-): List<RegionOpportunity> {
+): RegionOpportunity? {
     fun Map<String, Any?>.price()    = (get("price") as? Number)?.toDouble() ?: 0.0
     fun Map<String, Any?>.isBuyOrd() = get("is_buy_order") as? Boolean == true
-    fun Map<String, Any?>.tid()      = (get("type_id") as? Number)?.toInt() ?: 0
 
-    val srcSell = buyOrders .filter { !it.isBuyOrd() }.groupBy { it.tid() }.mapValues { (_, o) -> o.minOf { it.price() } }
-    val srcBuy  = buyOrders .filter {  it.isBuyOrd() }.groupBy { it.tid() }.mapValues { (_, o) -> o.maxOf { it.price() } }
-    val dstBuy  = sellOrders.filter {  it.isBuyOrd() }.groupBy { it.tid() }.mapValues { (_, o) -> o.maxOf { it.price() } }
-    val dstSell = sellOrders.filter { !it.isBuyOrd() }.groupBy { it.tid() }.mapValues { (_, o) -> o.minOf { it.price() } }
+    val srcSell = buyRegionOrders.filter  { !it.isBuyOrd() }.minOfOrNull { it.price() }
+    val srcBuy  = buyRegionOrders.filter  {  it.isBuyOrd() }.maxOfOrNull { it.price() }
+    val dstBuy  = sellRegionOrders.filter {  it.isBuyOrd() }.maxOfOrNull { it.price() }
+    val dstSell = sellRegionOrders.filter { !it.isBuyOrd() }.minOfOrNull { it.price() }
 
-    val sourcePrices = when (tradeType) {
+    val buyPrice = when (tradeType) {
         InterRegionTradeType.SELL_TO_BUY, InterRegionTradeType.SELL_TO_SELL -> srcSell
         InterRegionTradeType.BUY_TO_BUY,  InterRegionTradeType.BUY_TO_SELL  -> srcBuy
-    }
-    val destPrices = when (tradeType) {
+    } ?: return null
+    val sellPrice = when (tradeType) {
         InterRegionTradeType.SELL_TO_BUY, InterRegionTradeType.BUY_TO_BUY   -> dstBuy
-        InterRegionTradeType.SELL_TO_SELL, InterRegionTradeType.BUY_TO_SELL  -> dstSell
-    }
+        InterRegionTradeType.SELL_TO_SELL, InterRegionTradeType.BUY_TO_SELL -> dstSell
+    } ?: return null
 
-    val results = mutableListOf<RegionOpportunity>()
-    sourcePrices.keys.intersect(destPrices.keys).forEach { typeId ->
-        if (typeId == 0) return@forEach
-        val buyPrice  = sourcePrices[typeId] ?: return@forEach
-        val sellPrice = destPrices[typeId]   ?: return@forEach
-        if (sellPrice <= buyPrice) return@forEach
+    if (sellPrice <= buyPrice) return null
 
-        val type = StaticDataDao.getTypeById(typeId) ?: return@forEach
-        if (filterMarketGroupIds != null && type.marketGroupId !in filterMarketGroupIds) return@forEach
+    val type = StaticDataDao.getTypeById(typeId) ?: return null
+    if (filterMarketGroupIds != null && type.marketGroupId !in filterMarketGroupIds) return null
 
-        val itemVol = type.packagedVolume.takeIf { it > 0 } ?: type.volume.takeIf { it > 0 } ?: 1.0
-        if (itemVol > maxCargoM3) return@forEach
+    val itemVol = type.packagedVolume.takeIf { it > 0 } ?: type.volume.takeIf { it > 0 } ?: 1.0
+    if (itemVol > maxCargoM3) return null
 
-        val shipping    = itemVol * iskPerM3
-        val grossProfit = sellPrice - buyPrice
-        val fees        = sellPrice * (salesTaxPct + brokerFeePct) / 100.0
-        val netProfit   = grossProfit - fees - shipping
-        if (netProfit < minNetProfit) return@forEach
-        val marginPct = grossProfit / buyPrice * 100.0
-        if (marginPct < minMarginPct) return@forEach
+    val shipping    = itemVol * iskPerM3
+    val grossProfit = sellPrice - buyPrice
+    val fees        = sellPrice * (salesTaxPct + brokerFeePct) / 100.0
+    val netProfit   = grossProfit - fees - shipping
+    if (netProfit < minNetProfit) return null
+    val marginPct = grossProfit / buyPrice * 100.0
+    if (marginPct < minMarginPct) return null
 
-        results += RegionOpportunity(
-            typeId              = typeId,
-            typeName            = type.name,
-            buyRegionName       = buyRegionName,
-            sellRegionName      = sellRegionName,
-            buyPrice            = buyPrice,
-            sellPrice           = sellPrice,
-            grossProfit         = grossProfit,
-            netProfit           = netProfit,
-            marginPct           = marginPct,
-            itemVolumeM3        = itemVol,
-            shippingCostPerUnit = shipping,
-            dailyVolume         = 0L,
-        )
-    }
-    return results
+    val history = fetchHistory(typeId, sellRegionId, true)
+    val vol = if (history.isNotEmpty()) history.map { it.volume }.average().toLong() else 0L
+
+    return RegionOpportunity(
+        typeId              = typeId,
+        typeName            = type.name,
+        buyRegionName       = buyRegionName,
+        sellRegionName      = sellRegionName,
+        buyPrice            = buyPrice,
+        sellPrice           = sellPrice,
+        grossProfit         = grossProfit,
+        netProfit           = netProfit,
+        marginPct           = marginPct,
+        itemVolumeM3        = itemVol,
+        shippingCostPerUnit = shipping,
+        dailyVolume         = vol,
+        priceChange7d       = compute7dChange(history),
+    )
 }
 
 // ─── History helpers ──────────────────────────────────────────────────────
