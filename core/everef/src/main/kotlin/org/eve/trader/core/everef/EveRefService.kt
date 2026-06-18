@@ -198,11 +198,12 @@ object EveRefService {
 
     private fun downloadAndParse(file: FileEntry) {
         val request = Request.Builder().url(file.url).build()
-        EveHttpClient.getClient().newCall(request).execute().use { response ->
+        val rows = EveHttpClient.getClient().newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
             val body = response.body ?: throw Exception("Empty response")
 
-            BZip2CompressorInputStream(body.byteStream()).use { bzStream ->
+            // BufferedInputStream avoids byte-at-a-time reads into BZip2 decompressor
+            BZip2CompressorInputStream(body.byteStream().buffered(65536)).use { bzStream ->
                 BufferedReader(InputStreamReader(bzStream)).use { reader ->
                     val headerLine = reader.readLine() ?: throw Exception("Empty CSV for ${file.date}")
                     val header = headerLine.split(",").map { it.trim().lowercase() }
@@ -223,21 +224,20 @@ object EveRefService {
                         throw Exception("Unrecognized CSV header for ${file.date}: $headerLine")
                     }
 
-                    val batch = mutableListOf<MarketHistoryModel>()
+                    // Collect all rows first; one DB transaction per file is much faster
+                    // than one transaction per BATCH_SIZE rows (avoids repeated lock contention)
+                    val result = mutableListOf<MarketHistoryModel>()
                     var line = reader.readLine()
                     while (line != null) {
                         parseLine(line, typeIdIdx, regionIdIdx, dateIdx, highestIdx, averageIdx, lowestIdx, volumeIdx, orderCountIdx)
-                            ?.let { batch.add(it) }
-                        if (batch.size >= BATCH_SIZE) {
-                            MarketDao.insertHistoryBatch(batch, "everef")
-                            batch.clear()
-                        }
+                            ?.let { result.add(it) }
                         line = reader.readLine()
                     }
-                    if (batch.isNotEmpty()) MarketDao.insertHistoryBatch(batch, "everef")
+                    result
                 }
             }
         }
+        if (rows.isNotEmpty()) MarketDao.insertHistoryBatch(rows, "everef")
         EveRefDao.markDownloaded(file.date, file.name, file.size)
     }
 

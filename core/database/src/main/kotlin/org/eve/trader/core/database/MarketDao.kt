@@ -36,6 +36,7 @@ object MarketDao {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent()
             ).use { stmt ->
+                var count = 0
                 for (entry in entries) {
                     stmt.setInt(1, entry.typeId)
                     stmt.setInt(2, entry.regionId)
@@ -47,6 +48,7 @@ object MarketDao {
                     stmt.setDouble(8, entry.lowest)
                     stmt.setString(9, source)
                     stmt.addBatch()
+                    if (++count % 10_000 == 0) stmt.executeBatch()
                 }
                 stmt.executeBatch()
             }
