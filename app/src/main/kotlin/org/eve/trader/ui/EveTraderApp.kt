@@ -38,6 +38,7 @@ import org.eve.trader.features.contracts.ContractTrackerScreen
 import org.eve.trader.features.watchlist.WatchlistScreen
 import org.eve.trader.features.market.MarketAnalysisScreen
 import org.eve.trader.features.settings.SettingsScreen
+import org.eve.trader.core.everef.EveRefService
 
 enum class AppScreen(val label: String, val icon: ImageVector) {
     DASHBOARD("Dashboard", Icons.Default.Dashboard),
@@ -68,6 +69,9 @@ fun EveTraderApp() {
                 StaticDataImporter.isImportNeeded() -> StaticDataImporter.importAll()
                 StaticDataImporter.checkVersionChanged() -> StaticDataImporter.importAll()
             }
+            if (EveRefService.getSelectedSource() == "everef") {
+                EveRefService.sync()
+            }
         }
     }
 
@@ -97,10 +101,6 @@ fun EveTraderApp() {
                     onThemeToggle = { darkTheme = !darkTheme },
                     eveColors = eveColors,
                     onShowProgress = { showProgressDialog = true },
-                
-                    onUpdateSde = {
-                        coroutineScope.launch(Dispatchers.IO) { StaticDataImporter.importAll() }
-                    },
                 )
             },
             content = { padding ->
@@ -248,7 +248,6 @@ private fun TopBar(
     onThemeToggle: () -> Unit,
     eveColors: EveColors,
     onShowProgress: () -> Unit,
-    onUpdateSde: () -> Unit,
 ) {
     TopAppBar(
         title = {
@@ -267,13 +266,6 @@ private fun TopBar(
             }
         },
         actions = {
-            IconButton(onClick = onUpdateSde) {
-                Icon(
-                    imageVector = Icons.Default.Download,
-                    contentDescription = "Update static data (SDE)",
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
-            }
             IconButton(onClick = onShowProgress) {
                 Icon(
                     imageVector = Icons.Default.Sync,
