@@ -73,6 +73,8 @@ dependencies {
     implementation(project(":features:industry"))
     implementation(project(":features:contracts"))
     implementation(project(":features:watchlist"))
+    implementation(project(":features:settings"))
+    implementation(project(":core:everef"))
 
     // Compose
     implementation(compose.desktop.currentOs)

@@ -51,6 +51,7 @@ data class StationOpportunity(
     val sellOrderCount: Int,
     val buyOrderCount: Int,
     val estimatedDailyProfit: Double,
+    val priceChange7d: Double = Double.NaN,
 )
 
 data class RegionOpportunity(
@@ -66,12 +67,13 @@ data class RegionOpportunity(
     val itemVolumeM3: Double,
     val shippingCostPerUnit: Double,
     val dailyVolume: Long,
+    val priceChange7d: Double = Double.NaN,
 )
 
 // ─── Sort / trade-type enums ───────────────────────────────────────────────
 
-private enum class StationSortCol { NAME, BUY_PRICE, SELL_PRICE, MARGIN, NET_PROFIT, VOLUME, DAILY_PROFIT }
-private enum class RegionSortCol  { NAME, BUY_PRICE, SELL_PRICE, MARGIN, ITEM_VOL, SHIPPING, NET_PROFIT, VOLUME }
+private enum class StationSortCol { NAME, BUY_PRICE, SELL_PRICE, MARGIN, NET_PROFIT, VOLUME, DAILY_PROFIT, TREND_7D }
+private enum class RegionSortCol  { NAME, BUY_PRICE, SELL_PRICE, MARGIN, ITEM_VOL, SHIPPING, NET_PROFIT, VOLUME, TREND_7D }
 
 private enum class InterRegionTradeType(val label: String) {
     SELL_TO_BUY ("Sell → Buy (instant)"),
@@ -89,6 +91,7 @@ private fun sortStation(list: List<StationOpportunity>, col: StationSortCol, asc
         StationSortCol.NET_PROFIT   -> compareBy { it.netProfit }
         StationSortCol.VOLUME       -> compareBy { it.dailyVolume }
         StationSortCol.DAILY_PROFIT -> compareBy { it.estimatedDailyProfit }
+        StationSortCol.TREND_7D     -> compareBy { if (it.priceChange7d.isNaN()) Double.MIN_VALUE else it.priceChange7d }
     }
     return if (asc) list.sortedWith(cmp) else list.sortedWith(cmp.reversed())
 }
@@ -103,6 +106,7 @@ private fun sortRegion(list: List<RegionOpportunity>, col: RegionSortCol, asc: B
         RegionSortCol.SHIPPING   -> compareBy { it.shippingCostPerUnit }
         RegionSortCol.NET_PROFIT -> compareBy { it.netProfit }
         RegionSortCol.VOLUME     -> compareBy { it.dailyVolume }
+        RegionSortCol.TREND_7D   -> compareBy { if (it.priceChange7d.isNaN()) Double.MIN_VALUE else it.priceChange7d }
     }
     return if (asc) list.sortedWith(cmp) else list.sortedWith(cmp.reversed())
 }
@@ -499,30 +503,70 @@ private fun InterRegionTab(
                                 isAnalyzing = true; results = emptyList()
                                 val buyName  = allRegions.find { it.regionId == buyRegionId  }?.name ?: "buy"
                                 val sellName = allRegions.find { it.regionId == sellRegionId }?.name ?: "sell"
-                                val filterGroupId = selectedSubGroup?.marketGroupId ?: selectedTopGroup?.marketGroupId
+                                val filterGroupId  = selectedSubGroup?.marketGroupId ?: selectedTopGroup?.marketGroupId
                                 val filterGroupIds = filterGroupId?.let { withContext(Dispatchers.IO) { buildGroupSubtree(it) } }
+                                val iskPerM3D    = iskPerM3.toDoubleOrNull()    ?: 1000.0
+                                val maxCargoM3D  = maxCargoM3.toDoubleOrNull()  ?: 10000.0
+                                val minMarginD   = minMargin.toDoubleOrNull()   ?: 5.0
+                                val minNetD      = minNetProfit.toDoubleOrNull() ?: 0.0
+                                val brokerFeeD   = brokerFee.toDoubleOrNull()   ?: 3.0
+                                val salesTaxD    = salesTax.toDoubleOrNull()    ?: 8.0
                                 try {
-                                    statusMsg = "Fetching $buyName…"
-                                    val buyOrders  = withContext(Dispatchers.IO) { EsiClient.getMarketRegionOrders(buyRegionId)  }
-                                    statusMsg = "Fetching $sellName…"
-                                    val sellOrders = withContext(Dispatchers.IO) { EsiClient.getMarketRegionOrders(sellRegionId) }
-                                    statusMsg = "Analyzing ${buyOrders.size + sellOrders.size} orders…"
-                                    results = withContext(Dispatchers.IO) {
-                                        computeRegion(
-                                            buyOrders, sellOrders,
-                                            buyRegionId, sellRegionId,
-                                            buyName, sellName,
-                                            tradeType            = tradeType,
-                                            filterMarketGroupIds = filterGroupIds,
-                                            iskPerM3             = iskPerM3.toDoubleOrNull() ?: 1000.0,
-                                            maxCargoM3           = maxCargoM3.toDoubleOrNull() ?: 10000.0,
-                                            minMarginPct         = minMargin.toDoubleOrNull() ?: 5.0,
-                                            minNetProfit         = minNetProfit.toDoubleOrNull() ?: 0.0,
-                                            brokerFeePct         = brokerFee.toDoubleOrNull() ?: 3.0,
-                                            salesTaxPct          = salesTax.toDoubleOrNull() ?: 8.0,
+                                    // Fetch both regions in parallel
+                                    statusMsg = "Fetching $buyName + $sellName…"
+                                    val (buyOrders, sellOrders) = withContext(Dispatchers.IO) {
+                                        coroutineScope {
+                                            val bDef = async { EsiClient.getMarketRegionOrders(buyRegionId) }
+                                            val sDef = async { EsiClient.getMarketRegionOrders(sellRegionId) }
+                                            bDef.await() to sDef.await()
+                                        }
+                                    }
+
+                                    // Fast pre-filter (no history, no ESI calls)
+                                    statusMsg = "Finding candidates…"
+                                    val candidates = withContext(Dispatchers.IO) {
+                                        computeRegionCandidates(
+                                            buyOrders, sellOrders, buyName, sellName, tradeType,
+                                            filterGroupIds, iskPerM3D, maxCargoM3D, minMarginD, minNetD, brokerFeeD, salesTaxD,
                                         )
                                     }
-                                    statusMsg = "${results.size} opportunities found"
+
+                                    if (candidates.isEmpty()) {
+                                        statusMsg = "0 opportunities found"
+                                    } else {
+                                        // Enrich with history in parallel — table fills progressively
+                                        statusMsg = "Enriching ${candidates.size} items…"
+                                        val semaphore = Semaphore(10)
+                                        val mutex     = Mutex()
+                                        val found     = mutableListOf<RegionOpportunity>()
+                                        var checked   = 0
+
+                                        withContext(Dispatchers.IO) {
+                                            coroutineScope {
+                                                candidates.map { cand ->
+                                                    async {
+                                                        semaphore.withPermit {
+                                                            runCatching {
+                                                                val history = fetchHistory(cand.typeId, sellRegionId, true)
+                                                                val vol   = if (history.isNotEmpty()) history.map { it.volume }.average().toLong() else 0L
+                                                                val opp   = cand.copy(dailyVolume = vol, priceChange7d = compute7dChange(history))
+                                                                val (sorted, c, f) = mutex.withLock {
+                                                                    checked++
+                                                                    found.add(opp)
+                                                                    Triple(found.sortedByDescending { it.netProfit }, checked, found.size)
+                                                                }
+                                                                withContext(Dispatchers.Main) {
+                                                                    results   = sorted
+                                                                    statusMsg = "$c/${candidates.size} checked, $f found"
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }.awaitAll()
+                                            }
+                                        }
+                                        statusMsg = "${results.size} opportunities found"
+                                    }
                                 } catch (e: Exception) { statusMsg = "Error: ${e.message}" }
                                 isAnalyzing = false
                             }
@@ -850,6 +894,7 @@ private fun StationHeader(sort: StationSortCol, asc: Boolean, onSort: (StationSo
             ACol("Sell At",    StationSortCol.SELL_PRICE,   sort, asc, onSort, Modifier.width(95.dp))
             ACol("Margin",     StationSortCol.MARGIN,       sort, asc, onSort, Modifier.width(65.dp))
             ACol("Net/unit",   StationSortCol.NET_PROFIT,   sort, asc, onSort, Modifier.width(95.dp))
+            ACol("7d",         StationSortCol.TREND_7D,     sort, asc, onSort, Modifier.width(65.dp))
             ACol("Vol/day",    StationSortCol.VOLUME,       sort, asc, onSort, Modifier.width(75.dp))
             ACol("Est. Daily", StationSortCol.DAILY_PROFIT, sort, asc, onSort, Modifier.width(95.dp))
             Text("Orders", style = MaterialTheme.typography.labelSmall,
@@ -869,6 +914,7 @@ private fun RegionHeader(sort: RegionSortCol, asc: Boolean, onSort: (RegionSortC
             ACol("m³/unit",   RegionSortCol.ITEM_VOL,   sort, asc, onSort, Modifier.width(70.dp))
             ACol("Ship/unit", RegionSortCol.SHIPPING,   sort, asc, onSort, Modifier.width(90.dp))
             ACol("Net/unit",  RegionSortCol.NET_PROFIT, sort, asc, onSort, Modifier.width(95.dp))
+            ACol("7d",        RegionSortCol.TREND_7D,   sort, asc, onSort, Modifier.width(65.dp))
             ACol("Vol/day",   RegionSortCol.VOLUME,     sort, asc, onSort, Modifier.width(70.dp))
         }
     }
@@ -888,7 +934,8 @@ private fun StationRow(opp: StationOpportunity, index: Int) {
         PriceText(opp.bestBuy,   Color(0xFFFF6B6B), Modifier.width(95.dp))
         PriceText(opp.bestSell,  Color(0xFF69DB7C), Modifier.width(95.dp))
         MarginText(opp.marginPct, Modifier.width(65.dp))
-        PriceText(opp.netProfit, Color(0xFF69DB7C),  Modifier.width(95.dp))
+        PriceText(opp.netProfit, Color(0xFF69DB7C), Modifier.width(95.dp))
+        TrendText(opp.priceChange7d, Modifier.width(65.dp))
         Text(if (opp.dailyVolume > 0) fVol(opp.dailyVolume) else "—",
             style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.width(75.dp))
         Text(if (opp.estimatedDailyProfit > 0) fPrice(opp.estimatedDailyProfit) else "—",
@@ -915,6 +962,7 @@ private fun RegionRow(opp: RegionOpportunity, index: Int) {
             style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.width(70.dp))
         PriceText(opp.shippingCostPerUnit, Color(0xFFFF8C00), Modifier.width(90.dp))
         PriceText(opp.netProfit, Color(0xFF69DB7C), Modifier.width(95.dp), bold = true)
+        TrendText(opp.priceChange7d, Modifier.width(65.dp))
         Text(if (opp.dailyVolume > 0) fVol(opp.dailyVolume) else "—",
             style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.width(70.dp))
     }
@@ -947,6 +995,23 @@ private fun <T> ACol(label: String, col: T, current: T, asc: Boolean, onSort: (T
 private fun PriceText(value: Double, color: Color, modifier: Modifier, bold: Boolean = false) {
     Text(fPrice(value), style = MaterialTheme.typography.bodySmall, color = color,
         fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal, modifier = modifier)
+}
+
+@Composable
+private fun TrendText(changePct: Double, modifier: Modifier) {
+    if (changePct.isNaN()) {
+        Text("—", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f), modifier = modifier)
+        return
+    }
+    val positive = changePct >= 0
+    val color    = if (positive) Color(0xFF69DB7C) else Color(0xFFFF6B6B)
+    val arrow    = if (positive) "▲" else "▼"
+    Text(
+        "$arrow ${String.format("%.1f", Math.abs(changePct))}%",
+        style = MaterialTheme.typography.bodySmall,
+        color = color,
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -1031,14 +1096,14 @@ private fun computeOpportunityForType(
         sellOrderCount       = sells.size,
         buyOrderCount        = buys.size,
         estimatedDailyProfit = netProfit * avgDailyVol.coerceAtLeast(1),
+        priceChange7d        = compute7dChange(history),
     )
 }
 
-private fun computeRegion(
+// Fast candidate finder — no history/ESI calls; history is enriched in parallel by the caller
+private fun computeRegionCandidates(
     buyOrders: List<Map<String, Any?>>,
     sellOrders: List<Map<String, Any?>>,
-    @Suppress("UNUSED_PARAMETER") buyRegionId: Int,
-    sellRegionId: Int,
     buyRegionName: String,
     sellRegionName: String,
     tradeType: InterRegionTradeType,
@@ -1050,9 +1115,9 @@ private fun computeRegion(
     brokerFeePct: Double,
     salesTaxPct: Double,
 ): List<RegionOpportunity> {
-    fun Map<String, Any?>.price()     = (get("price") as? Number)?.toDouble() ?: 0.0
-    fun Map<String, Any?>.isBuyOrd()  = get("is_buy_order") as? Boolean == true
-    fun Map<String, Any?>.tid()       = (get("type_id") as? Number)?.toInt() ?: 0
+    fun Map<String, Any?>.price()    = (get("price") as? Number)?.toDouble() ?: 0.0
+    fun Map<String, Any?>.isBuyOrd() = get("is_buy_order") as? Boolean == true
+    fun Map<String, Any?>.tid()      = (get("type_id") as? Number)?.toInt() ?: 0
 
     val srcSell = buyOrders .filter { !it.isBuyOrd() }.groupBy { it.tid() }.mapValues { (_, o) -> o.minOf { it.price() } }
     val srcBuy  = buyOrders .filter {  it.isBuyOrd() }.groupBy { it.tid() }.mapValues { (_, o) -> o.maxOf { it.price() } }
@@ -1064,14 +1129,12 @@ private fun computeRegion(
         InterRegionTradeType.BUY_TO_BUY,  InterRegionTradeType.BUY_TO_SELL  -> srcBuy
     }
     val destPrices = when (tradeType) {
-        InterRegionTradeType.SELL_TO_BUY, InterRegionTradeType.BUY_TO_BUY  -> dstBuy
-        InterRegionTradeType.SELL_TO_SELL, InterRegionTradeType.BUY_TO_SELL -> dstSell
+        InterRegionTradeType.SELL_TO_BUY, InterRegionTradeType.BUY_TO_BUY   -> dstBuy
+        InterRegionTradeType.SELL_TO_SELL, InterRegionTradeType.BUY_TO_SELL  -> dstSell
     }
 
-    val common  = sourcePrices.keys.intersect(destPrices.keys)
     val results = mutableListOf<RegionOpportunity>()
-
-    common.forEach { typeId ->
+    sourcePrices.keys.intersect(destPrices.keys).forEach { typeId ->
         if (typeId == 0) return@forEach
         val buyPrice  = sourcePrices[typeId] ?: return@forEach
         val sellPrice = destPrices[typeId]   ?: return@forEach
@@ -1091,9 +1154,6 @@ private fun computeRegion(
         val marginPct = grossProfit / buyPrice * 100.0
         if (marginPct < minMarginPct) return@forEach
 
-        val history = fetchHistory(typeId, sellRegionId, filterMarketGroupIds != null)
-        val avgVol  = if (history.isNotEmpty()) history.map { it.volume }.average().toLong() else 0L
-
         results += RegionOpportunity(
             typeId              = typeId,
             typeName            = type.name,
@@ -1106,13 +1166,23 @@ private fun computeRegion(
             marginPct           = marginPct,
             itemVolumeM3        = itemVol,
             shippingCostPerUnit = shipping,
-            dailyVolume         = avgVol,
+            dailyVolume         = 0L,
         )
     }
-    return results.sortedByDescending { it.netProfit }
+    return results
 }
 
-// ─── History helper ───────────────────────────────────────────────────────
+// ─── History helpers ──────────────────────────────────────────────────────
+
+private fun compute7dChange(history: List<org.eve.trader.core.model.MarketHistoryModel>): Double {
+    // history is sorted DESC (newest first)
+    val recent = history.take(7)
+    if (recent.size < 2) return Double.NaN
+    val latest = recent.first().average
+    val oldest = recent.last().average
+    if (oldest <= 0.0) return Double.NaN
+    return (latest - oldest) / oldest * 100.0
+}
 
 private fun fetchHistory(typeId: Int, regionId: Int, fetchFromEsi: Boolean): List<org.eve.trader.core.model.MarketHistoryModel> {
     val effectiveRegionId = if (typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else regionId

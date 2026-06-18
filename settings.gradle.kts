@@ -25,6 +25,7 @@ include(":core:esi")
 include(":core:queue")
 include(":core:staticdata")
 include(":core:image")
+include(":core:everef")
 
 // UI modules
 include(":ui:theme")
@@ -41,6 +42,7 @@ include(":features:alerts")
 include(":features:industry")
 include(":features:contracts")
 include(":features:watchlist")
+include(":features:settings")
 
 // Main app
 include(":app")

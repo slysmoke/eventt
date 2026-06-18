@@ -9,6 +9,7 @@ sqldelight = "2.0.1"
 ktor = "2.3.8"
 koin = "3.5.3"
 vico = "2.0.0-alpha.14"
+commons-compress = "1.27.1"
 
 [libraries]
 # Compose
@@ -43,6 +44,9 @@ koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }
 
 # Charts
 vico-compose = { module = "com.patrykandpatrick.vico:compose-m3", version.ref = "vico" }
+
+# Compression
+commons-compress = { module = "org.apache.commons:commons-compress", version.ref = "commons-compress" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

@@ -37,6 +37,7 @@ import org.eve.trader.features.industry.IndustryCalculatorScreen
 import org.eve.trader.features.contracts.ContractTrackerScreen
 import org.eve.trader.features.watchlist.WatchlistScreen
 import org.eve.trader.features.market.MarketAnalysisScreen
+import org.eve.trader.features.settings.SettingsScreen
 
 enum class AppScreen(val label: String, val icon: ImageVector) {
     DASHBOARD("Dashboard", Icons.Default.Dashboard),
@@ -50,6 +51,7 @@ enum class AppScreen(val label: String, val icon: ImageVector) {
     ALERTS("Alerts", Icons.Default.Notifications),
     CONTRACTS("Contracts", Icons.Default.Description),
     INDUSTRY("Industry", Icons.Default.Factory),
+    SETTINGS("Settings", Icons.Default.Settings),
 }
 
 @Composable
@@ -439,6 +441,7 @@ private fun ScreenContent(screen: AppScreen) {
                             AppScreen.ALERTS      -> PriceAlertsScreen()
                             AppScreen.CONTRACTS   -> ContractTrackerScreen()
                             AppScreen.INDUSTRY    -> IndustryCalculatorScreen()
+                            AppScreen.SETTINGS    -> SettingsScreen()
                         }
                     }
                 }

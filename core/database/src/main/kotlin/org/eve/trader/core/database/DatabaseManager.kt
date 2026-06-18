@@ -88,6 +88,7 @@ object DatabaseManager {
             "CREATE TABLE IF NOT EXISTS market_groups (market_group_id INTEGER PRIMARY KEY, name TEXT NOT NULL, parent_group_id INTEGER)",
             "ALTER TABLE esi_cache ADD COLUMN etag TEXT",
             "ALTER TABLE esi_cache ADD COLUMN last_modified TEXT",
+            "ALTER TABLE market_history ADD COLUMN source TEXT DEFAULT 'esi'",
         )
         conn.createStatement().use { stmt ->
             migrations.forEach { sql ->
@@ -446,6 +447,16 @@ object DatabaseManager {
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
+            )
+            """.trimIndent(),
+
+            // EveRef bulk download tracking
+            """
+            CREATE TABLE IF NOT EXISTS everef_downloads (
+                date TEXT PRIMARY KEY,
+                file_name TEXT NOT NULL,
+                size INTEGER NOT NULL,
+                downloaded_at INTEGER DEFAULT (strftime('%s', 'now') * 1000)
             )
             """.trimIndent(),
         )

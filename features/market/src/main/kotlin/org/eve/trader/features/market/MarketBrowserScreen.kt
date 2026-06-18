@@ -863,6 +863,7 @@ private fun PriceLineChart(
         val bPad = 22.dp.toPx()
         val chartW = size.width - lPad - rPad
         val chartH = size.height - tPad - bPad
+        if (chartW <= 0 || chartH <= 0) return@Canvas
         val minVal = data.minOrNull()!!
         val maxVal = data.maxOrNull()!!
         val valRange = (maxVal - minVal).coerceAtLeast(1e-10)
@@ -900,7 +901,7 @@ private fun PriceLineChart(
             val x = idxX(i)
             val lm = textMeasurer.measure(dates.getOrElse(i) { "" }, TextStyle(fontSize = 9.sp, color = labelColor))
             drawText(lm, topLeft = Offset(
-                (x - lm.size.width / 2f).coerceIn(lPad, lPad + chartW - lm.size.width),
+                (x - lm.size.width / 2f).coerceIn(lPad, maxOf(lPad, lPad + chartW - lm.size.width)),
                 size.height - bPad + 4.dp.toPx(),
             ))
         }
@@ -923,7 +924,7 @@ private fun PriceLineChart(
 
             var ttX = x + 12.dp.toPx()
             if (ttX + ttW > lPad + chartW) ttX = x - ttW - 12.dp.toPx()
-            val ttY = (y - ttH - 8.dp.toPx()).coerceIn(tPad, tPad + chartH - ttH)
+            val ttY = (y - ttH - 8.dp.toPx()).coerceIn(tPad, maxOf(tPad, tPad + chartH - ttH))
 
             drawRoundRect(Color(0xEE0D1117), Offset(ttX, ttY), Size(ttW, ttH), CornerRadius(4.dp.toPx()))
             drawText(lm1, topLeft = Offset(ttX + pad, ttY + pad))
@@ -971,6 +972,7 @@ private fun VolumeBarChart(
         val bPad = 4.dp.toPx()
         val chartW = size.width - lPad - rPad
         val chartH = size.height - tPad - bPad
+        if (chartW <= 0 || chartH <= 0) return@Canvas
         val barW = (chartW / data.size - 1f).coerceAtLeast(1f)
 
         fun barX(i: Int) = lPad + i.toFloat() / data.size * chartW
@@ -1009,7 +1011,7 @@ private fun VolumeBarChart(
 
             var ttX = cx + 8.dp.toPx()
             if (ttX + ttW > lPad + chartW) ttX = cx - ttW - 8.dp.toPx()
-            val ttY = (y - ttH - 4.dp.toPx()).coerceIn(tPad, tPad + chartH - ttH)
+            val ttY = (y - ttH - 4.dp.toPx()).coerceIn(tPad, maxOf(tPad, tPad + chartH - ttH))
 
             drawRoundRect(Color(0xEE0D1117), Offset(ttX, ttY), Size(ttW, ttH), CornerRadius(4.dp.toPx()))
             drawText(lm1, topLeft = Offset(ttX + pad, ttY + pad))
