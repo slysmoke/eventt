@@ -91,15 +91,15 @@ object WatchlistDao {
         }
     }
 
-    fun getLatestPrice(typeId: Int, stationId: Long): WatchlistPriceSnapshot? {
+    fun getLatestPrice(typeId: Int): WatchlistPriceSnapshot? {
         return DatabaseManager.transaction {
             prepareStatement(
-                "SELECT * FROM watchlist_prices WHERE type_id = ? AND station_id = ? ORDER BY captured_at DESC LIMIT 1"
+                "SELECT * FROM watchlist_prices WHERE type_id = ? ORDER BY captured_at DESC LIMIT 1"
             ).use { stmt ->
                 stmt.setInt(1, typeId)
-                stmt.setLong(2, stationId)
                 stmt.executeQuery().use { rs ->
                     if (rs.next()) {
+                        val sparklineJson = rs.getString("sparkline_data") ?: "[]"
                         WatchlistPriceSnapshot(
                             typeId = rs.getInt("type_id"),
                             stationId = rs.getLong("station_id"),
@@ -111,11 +111,26 @@ object WatchlistDao {
                             changePercent24h = rs.getDouble("change_percent_24h"),
                             changePercent7d = rs.getDouble("change_percent_7d"),
                             changePercent30d = rs.getDouble("change_percent_30d"),
+                            sparklineData = parseSparklineJson(sparklineJson),
                         )
                     } else null
                 }
             }
         }
+    }
+
+    private fun parseSparklineJson(json: String): List<Pair<String, Double>> {
+        // Format stored: [["2024-01-01",1234.5],...]
+        return runCatching {
+            json.trim('[', ']').split("],[").mapNotNull { entry ->
+                val clean = entry.trim('[', ']')
+                val parts = clean.split(",")
+                if (parts.size < 2) return@mapNotNull null
+                val date = parts[0].trim('"')
+                val price = parts[1].toDoubleOrNull() ?: return@mapNotNull null
+                date to price
+            }
+        }.getOrDefault(emptyList())
     }
 
     fun getPriceHistory(typeId: Int, stationId: Long, days: Int = 30): List<WatchlistPriceSnapshot> {

@@ -17,10 +17,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eve.trader.core.database.AlertDao
-import org.eve.trader.core.database.DatabaseManager
 import org.eve.trader.core.database.StaticDataDao
+import org.eve.trader.core.esi.EsiClient
 import org.eve.trader.core.model.PriceAlertModel
 import org.eve.trader.ui.common.*
+
+private const val JITA_REGION_ID = 10000002
 
 @Composable
 fun PriceAlertsScreen() {
@@ -30,7 +32,9 @@ fun PriceAlertsScreen() {
     var showOnlyEnabled by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        loadAlerts(showOnlyEnabled) { alerts = it }
+        alerts = withContext(Dispatchers.IO) {
+            if (showOnlyEnabled) AlertDao.getEnabled() else AlertDao.getAll()
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -45,7 +49,10 @@ fun PriceAlertsScreen() {
                     selected = showOnlyEnabled,
                     onClick = {
                         showOnlyEnabled = true
-                        loadAlerts(true) { alerts = it }
+                        scope.launch(Dispatchers.IO) {
+                            val loaded = AlertDao.getEnabled()
+                            withContext(Dispatchers.Main) { alerts = loaded }
+                        }
                     },
                     label = { Text("Active") },
                 )
@@ -73,13 +80,15 @@ fun PriceAlertsScreen() {
                         onToggle = {
                             scope.launch(Dispatchers.IO) {
                                 AlertDao.setEnabled(alert.id, !alert.enabled)
-                                withContext(Dispatchers.Main) { loadAlerts(showOnlyEnabled) { alerts = it } }
+                                val loaded = if (showOnlyEnabled) AlertDao.getEnabled() else AlertDao.getAll()
+                                withContext(Dispatchers.Main) { alerts = loaded }
                             }
                         },
                         onDelete = {
                             scope.launch(Dispatchers.IO) {
                                 AlertDao.delete(alert.id)
-                                withContext(Dispatchers.Main) { loadAlerts(showOnlyEnabled) { alerts = it } }
+                                val loaded = if (showOnlyEnabled) AlertDao.getEnabled() else AlertDao.getAll()
+                                withContext(Dispatchers.Main) { alerts = loaded }
                             }
                         },
                     )
@@ -94,8 +103,9 @@ fun PriceAlertsScreen() {
             onAdd = { alert ->
                 scope.launch(Dispatchers.IO) {
                     AlertDao.insert(alert)
+                    val loaded = if (showOnlyEnabled) AlertDao.getEnabled() else AlertDao.getAll()
                     withContext(Dispatchers.Main) {
-                        loadAlerts(showOnlyEnabled) { alerts = it }
+                        alerts = loaded
                         showAddDialog = false
                     }
                 }
@@ -156,7 +166,32 @@ private fun AddAlertDialog(
     var searchResults by remember { mutableStateOf<List<org.eve.trader.core.model.StaticTypeModel>>(emptyList()) }
     var targetPrice by remember { mutableStateOf("") }
     var condition by remember { mutableStateOf("below") }
+    var orderType by remember { mutableStateOf("sell") }
+    var currentBestSell by remember { mutableStateOf<Double?>(null) }
+    var currentBestBuy by remember { mutableStateOf<Double?>(null) }
+    var isPriceFetching by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    // Fetch current price whenever type or orderType changes
+    LaunchedEffect(selectedType, orderType) {
+        val type = selectedType ?: return@LaunchedEffect
+        isPriceFetching = true
+        currentBestSell = null
+        currentBestBuy = null
+        val orders = withContext(Dispatchers.IO) {
+            runCatching { EsiClient.getMarketRegionOrders(JITA_REGION_ID, typeId = type.typeId) }.getOrDefault(emptyList())
+        }
+        currentBestSell = orders.filter { (it["is_buy_order"] as? Boolean) == false }
+            .minOfOrNull { (it["price"] as? Number)?.toDouble() ?: Double.MAX_VALUE }
+        currentBestBuy = orders.filter { (it["is_buy_order"] as? Boolean) == true }
+            .maxOfOrNull { (it["price"] as? Number)?.toDouble() ?: 0.0 }
+        // Pre-fill target price with current price if not yet set
+        if (targetPrice.isEmpty()) {
+            val current = if (orderType == "sell") currentBestSell else currentBestBuy
+            current?.let { targetPrice = String.format("%.2f", it) }
+        }
+        isPriceFetching = false
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -171,6 +206,8 @@ private fun AddAlertDialog(
                             scope.launch(Dispatchers.IO) {
                                 searchResults = StaticDataDao.searchTypes(q, limit = 10)
                             }
+                        } else {
+                            searchResults = emptyList()
                         }
                     },
                     placeholder = "Search item...",
@@ -184,6 +221,7 @@ private fun AddAlertDialog(
                                     selectedType = type
                                     searchQuery = type.name
                                     searchResults = emptyList()
+                                    targetPrice = ""
                                 }.padding(8.dp),
                             ) {
                                 Text(type.name, style = MaterialTheme.typography.bodyMedium)
@@ -194,6 +232,50 @@ private fun AddAlertDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
+                // Order type selector
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Price type:", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    Spacer(Modifier.width(8.dp))
+                    FilterChip(
+                        selected = orderType == "sell",
+                        onClick = { orderType = "sell"; targetPrice = "" },
+                        label = { Text("Sell") },
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    FilterChip(
+                        selected = orderType == "buy",
+                        onClick = { orderType = "buy"; targetPrice = "" },
+                        label = { Text("Buy") },
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Current price hint
+                if (selectedType != null) {
+                    if (isPriceFetching) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Fetching Jita price…", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        }
+                    } else {
+                        val bestSell = currentBestSell
+                        val bestBuy = currentBestBuy
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            if (bestSell != null)
+                                Text("Sell: ${formatIsk(bestSell)}", style = MaterialTheme.typography.labelSmall,
+                                    color = if (orderType == "sell") MaterialTheme.colorScheme.primary else Color.Gray)
+                            if (bestBuy != null)
+                                Text("Buy: ${formatIsk(bestBuy)}", style = MaterialTheme.typography.labelSmall,
+                                    color = if (orderType == "buy") MaterialTheme.colorScheme.primary else Color.Gray)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Condition
                 Row {
                     FilterChip(selected = condition == "below", onClick = { condition = "below" }, label = { Text("Below") })
                     Spacer(modifier = Modifier.width(4.dp))
@@ -222,6 +304,8 @@ private fun AddAlertDialog(
                             typeName = type.name,
                             targetPrice = price,
                             condition = condition,
+                            orderType = orderType,
+                            regionId = JITA_REGION_ID,
                         )
                     )
                 },
@@ -234,14 +318,6 @@ private fun AddAlertDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         },
     )
-}
-
-private fun loadAlerts(enabledOnly: Boolean, callback: (List<PriceAlertModel>) -> Unit) {
-    try {
-        callback(if (enabledOnly) AlertDao.getEnabled() else AlertDao.getAll())
-    } catch (e: Exception) {
-        println("Error loading alerts: ${e.message}")
-    }
 }
 
 private fun formatIsk(value: Double): String {

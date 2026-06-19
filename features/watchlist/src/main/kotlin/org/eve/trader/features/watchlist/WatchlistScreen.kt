@@ -41,7 +41,9 @@ fun WatchlistScreen() {
     var entryToDelete by remember { mutableStateOf<WatchlistEntryModel?>(null) }
 
     LaunchedEffect(Unit) {
-        loadWatchlists { watchlists = it; if (it.isNotEmpty()) selectedWatchlist = it.keys.first() }
+        val loaded = withContext(Dispatchers.IO) { WatchlistDao.getAllWatchlists() }
+        watchlists = loaded
+        if (loaded.isNotEmpty()) selectedWatchlist = loaded.keys.first()
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -82,19 +84,19 @@ fun WatchlistScreen() {
                 item {
                     OutlinedButton(onClick = {
                         val newName = "Watchlist ${watchlists.size + 1}"
-                        // Insert a dummy entry to create the list, then reload
-                        WatchlistDao.insert(
-                            org.eve.trader.core.model.WatchlistEntryModel(
-                                typeId = 0, typeName = "", watchlistName = newName,
+                        scope.launch(Dispatchers.IO) {
+                            // Insert a dummy entry to create the list, then remove it
+                            val dummyId = WatchlistDao.insert(
+                                org.eve.trader.core.model.WatchlistEntryModel(
+                                    typeId = 0, typeName = "", watchlistName = newName,
+                                )
                             )
-                        )
-                        loadWatchlists { loaded ->
-                            // Remove the dummy
-                            loaded[newName]?.find { it.typeId == 0 }?.let { dummy ->
-                                WatchlistDao.delete(dummy.id)
+                            WatchlistDao.delete(dummyId)
+                            val loaded = WatchlistDao.getAllWatchlists()
+                            withContext(Dispatchers.Main) {
+                                watchlists = loaded
+                                selectedWatchlist = newName
                             }
-                            watchlists = loaded
-                            selectedWatchlist = newName
                         }
                     }) {
                         Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
@@ -135,8 +137,9 @@ fun WatchlistScreen() {
                                             watchlistName = selectedWatchlist,
                                         )
                                     )
+                                    val loaded = WatchlistDao.getAllWatchlists()
                                     withContext(Dispatchers.Main) {
-                                        loadWatchlists { watchlists = it }
+                                        watchlists = loaded
                                         searchQuery = ""
                                         searchResults = emptyList()
                                     }
@@ -170,9 +173,8 @@ fun WatchlistScreen() {
                 onRefresh = { entry ->
                     scope.launch(Dispatchers.IO) {
                         refreshEntryPrice(entry)
-                        withContext(Dispatchers.Main) {
-                            loadWatchlists { watchlists = it }
-                        }
+                        val loaded = WatchlistDao.getAllWatchlists()
+                        withContext(Dispatchers.Main) { watchlists = loaded }
                     }
                 },
             )
@@ -190,8 +192,9 @@ fun WatchlistScreen() {
                     onClick = {
                         scope.launch(Dispatchers.IO) {
                             WatchlistDao.delete(entry.id)
+                            val loaded = WatchlistDao.getAllWatchlists()
                             withContext(Dispatchers.Main) {
-                                loadWatchlists { watchlists = it }
+                                watchlists = loaded
                                 entryToDelete = null
                             }
                         }
@@ -245,7 +248,7 @@ private fun WatchlistRow(
 
     LaunchedEffect(entry.typeId) {
         withContext(Dispatchers.IO) {
-            priceState.value = WatchlistDao.getLatestPrice(entry.typeId, DEFAULT_REGION_ID.toLong())
+            priceState.value = WatchlistDao.getLatestPrice(entry.typeId)
         }
     }
 
@@ -332,14 +335,6 @@ private fun MiniSparkline(data: List<Double>, modifier: Modifier = Modifier) {
 }
 
 // ─── Data Operations ────────────────────────────────────────────────────
-
-private fun loadWatchlists(callback: (Map<String, List<WatchlistEntryModel>>) -> Unit) {
-    try {
-        callback(WatchlistDao.getAllWatchlists())
-    } catch (e: Exception) {
-        println("[Watchlist] Error loading: ${e.message}")
-    }
-}
 
 /** Refresh prices for all entries in all watchlists. */
 private suspend fun refreshAllPrices(watchlists: Map<String, List<WatchlistEntryModel>>) {

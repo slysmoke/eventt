@@ -32,7 +32,9 @@ import org.eve.trader.features.assets.AssetViewerScreen
 import org.eve.trader.features.wallet.WalletScreen
 import org.eve.trader.features.orders.OrdersScreen
 import org.eve.trader.features.dashboard.DashboardScreen
+import org.eve.trader.features.alerts.AlertMonitor
 import org.eve.trader.features.alerts.PriceAlertsScreen
+import org.eve.trader.core.model.PriceAlertModel
 import org.eve.trader.features.industry.IndustryCalculatorScreen
 import org.eve.trader.features.contracts.ContractTrackerScreen
 import org.eve.trader.features.watchlist.WatchlistScreen
@@ -86,6 +88,12 @@ fun EveTraderApp() {
         }
     }
 
+    // Alert monitor — starts polling loop and collects triggered alerts
+    val triggeredAlerts by AlertMonitor.triggered.collectAsState()
+    LaunchedEffect(Unit) {
+        AlertMonitor.start(coroutineScope)
+    }
+
     MaterialTheme(
         colorScheme = colorScheme,
         typography = EveTypography
@@ -119,6 +127,14 @@ fun EveTraderApp() {
                                         }
                                     }
                                 },
+                            )
+                        }
+
+                        // Alert notification banners
+                        triggeredAlerts.forEach { alert ->
+                            AlertNotificationBanner(
+                                alert = alert,
+                                onDismiss = { AlertMonitor.dismiss(alert) },
                             )
                         }
 
@@ -398,6 +414,56 @@ private fun SdeImportOverlay(state: StaticDataImporter.ImportState) {
             }
         }
     }
+}
+
+@Composable
+private fun AlertNotificationBanner(
+    alert: PriceAlertModel,
+    onDismiss: () -> Unit,
+) {
+    val isAbove = alert.condition == "above"
+    Surface(
+        color = if (isAbove) Color(0xFF1B4332) else Color(0xFF3B1212),
+        tonalElevation = 4.dp,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(
+                if (isAbove) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = if (isAbove) Color(0xFF69DB7C) else Color(0xFFFF6B6B),
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    alert.typeName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                )
+                Text(
+                    "${alert.orderType.replaceFirstChar { it.uppercase() }} price " +
+                    "${if (isAbove) "rose above" else "dropped below"} " +
+                    formatAlertPrice(alert.targetPrice),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.75f),
+                )
+            }
+            IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                Icon(Icons.Default.Close, null, Modifier.size(14.dp), tint = Color.White.copy(alpha = 0.6f))
+            }
+        }
+    }
+}
+
+private fun formatAlertPrice(v: Double): String = when {
+    v >= 1_000_000_000 -> String.format("%.2fB ISK", v / 1_000_000_000)
+    v >= 1_000_000     -> String.format("%.2fM ISK", v / 1_000_000)
+    v >= 1_000         -> String.format("%.1fK ISK", v / 1_000)
+    else               -> String.format("%,.2f ISK", v)
 }
 
 @Composable
