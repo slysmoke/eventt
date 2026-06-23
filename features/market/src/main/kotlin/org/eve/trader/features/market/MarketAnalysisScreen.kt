@@ -858,7 +858,7 @@ private fun StationPicker(
     var searchQuery by remember { mutableStateOf("") }
 
     val selectedName = remember(selectedStationId, stations) {
-        stations.find { it.stationId == selectedStationId }?.name?.substringAfterLast(" - ") ?: "All stations"
+        stations.find { it.stationId == selectedStationId }?.name ?: "All stations"
     }
     val filtered = remember(searchQuery, stations) {
         if (searchQuery.isBlank()) stations.take(14)
@@ -894,7 +894,7 @@ private fun StationPicker(
             DropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { expanded = false; searchQuery = "" },
-                modifier = Modifier.width(width + 60.dp).heightIn(max = 360.dp),
+                modifier = Modifier.width(width + 120.dp).heightIn(max = 400.dp),
             ) {
                 Box(Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
                     OutlinedTextField(
@@ -932,12 +932,12 @@ private fun StationPicker(
                     filtered.forEach { station ->
                         DropdownMenuItem(
                             text = {
-                                Column {
-                                    Text(station.name.substringAfterLast(" - "), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    if (station.systemName.isNotBlank()) {
-                                        Text(station.systemName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                                    }
-                                }
+                                Text(
+                                    station.name,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
                             },
                             onClick = { onSelect(station.stationId); expanded = false; searchQuery = "" },
                             leadingIcon = if (station.stationId == selectedStationId) {

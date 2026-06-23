@@ -9,6 +9,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import okhttp3.Request
 import org.eve.trader.core.database.StaticDataDao
+import org.eve.trader.core.esi.EsiClient
 import org.eve.trader.core.http.EveHttpClient
 import org.eve.trader.core.model.*
 import java.io.BufferedReader
@@ -189,22 +190,20 @@ object StaticDataImporter {
         val obj = Json.parseToJsonElement(line).jsonObject
         val systemId = obj["_key"]?.jsonPrimitive?.intOrNull ?: return
         val name = obj["name"]?.jsonObject?.get("en")?.jsonPrimitive?.content ?: return
-        val regionId = obj["region_id"]?.jsonPrimitive?.intOrNull ?: 0
+        val regionId = obj["regionID"]?.jsonPrimitive?.intOrNull ?: 0
         _systems.add(StaticSystemModel(systemId = systemId, name = name, regionId = regionId))
     }
 
-    private val _stations = mutableListOf<StaticStationModel>()
+    // npcStations.jsonl has no name field — names are resolved from ESI after parsing
+    private data class RawNpcStation(val stationId: Long, val solarSystemId: Int, val typeId: Int)
+    private val _rawNpcStations = mutableListOf<RawNpcStation>()
+
     private fun parseStationLine(line: String) {
         val obj = Json.parseToJsonElement(line).jsonObject
         val stationId = obj["_key"]?.jsonPrimitive?.longOrNull ?: return
-        val name = obj["name"]?.jsonObject?.get("en")?.jsonPrimitive?.content ?: return
-        val systemId = obj["system_id"]?.jsonPrimitive?.intOrNull ?: 0
-        val regionId = obj["region_id"]?.jsonPrimitive?.intOrNull ?: 0
-        val typeId = obj["type_id"]?.jsonPrimitive?.intOrNull ?: 0
-        _stations.add(StaticStationModel(
-            stationId = stationId, name = name, systemId = systemId,
-            regionId = regionId, typeId = typeId,
-        ))
+        val systemId  = obj["solarSystemID"]?.jsonPrimitive?.intOrNull ?: return
+        val typeId    = obj["typeID"]?.jsonPrimitive?.intOrNull ?: 0
+        _rawNpcStations.add(RawNpcStation(stationId, systemId, typeId))
     }
 
     // ─── Save to DB ─────────────────────────────────────────────────────
@@ -242,8 +241,29 @@ object StaticDataImporter {
             StaticDataDao.bulkInsertSystems(chunk)
         }
 
-        setState(0.70f, "Saving ${_stations.size} stations…")
-        _stations.chunked(2000).forEach { chunk ->
+        // Build lookup maps from already-parsed data
+        val systemNameById   = _systems.associate { it.systemId to it.name }
+        val systemRegionById = _systems.associate { it.systemId to it.regionId }
+        val regionNameById   = _regions.associate { it.regionId to it.name }
+
+        // Resolve NPC station names via ESI /universe/names/ (batches of 1000)
+        setState(0.70f, "Resolving ${_rawNpcStations.size} NPC station names from ESI…")
+        val nameMap = EsiClient.resolveNames(_rawNpcStations.map { it.stationId.toInt() })
+
+        val npcStations = _rawNpcStations.map { raw ->
+            val regionId = systemRegionById[raw.solarSystemId] ?: 0
+            StaticStationModel(
+                stationId  = raw.stationId,
+                name       = nameMap[raw.stationId.toInt()] ?: "Station ${raw.stationId}",
+                systemId   = raw.solarSystemId,
+                systemName = systemNameById[raw.solarSystemId] ?: "",
+                regionId   = regionId,
+                regionName = regionNameById[regionId] ?: "",
+                typeId     = raw.typeId,
+            )
+        }
+        setState(0.78f, "Saving ${npcStations.size} NPC stations…")
+        npcStations.chunked(2000).forEach { chunk ->
             StaticDataDao.bulkInsertStations(chunk)
         }
 
@@ -254,7 +274,7 @@ object StaticDataImporter {
         _marketGroups.clear()
         _regions.clear()
         _systems.clear()
-        _stations.clear()
+        _rawNpcStations.clear()
     }
 
     // ─── State ──────────────────────────────────────────────────────────

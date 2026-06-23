@@ -19,6 +19,7 @@ import org.eve.trader.core.database.StaticDataDao
 import org.eve.trader.core.everef.EveRefDao
 import org.eve.trader.core.everef.EveRefService
 import org.eve.trader.core.staticdata.CitadelService
+import org.eve.trader.core.staticdata.StaticDataImporter
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -26,6 +27,7 @@ import java.util.*
 fun SettingsScreen() {
     val scope = rememberCoroutineScope()
     val syncState by EveRefService.state.collectAsState()
+    val sdeState  by StaticDataImporter.state.collectAsState()
 
     var selectedSource by remember { mutableStateOf("esi") }
     var periodMonths by remember { mutableStateOf(12) }
@@ -38,6 +40,10 @@ fun SettingsScreen() {
     var citadelCount by remember { mutableStateOf(0) }
     var citadelLastSync by remember { mutableStateOf<Long?>(null) }
 
+    var sdeBuildNumber by remember { mutableStateOf<String?>(null) }
+    var sdeImportDate  by remember { mutableStateOf<Long?>(null) }
+    var sdeTypeCount   by remember { mutableStateOf(0) }
+
     fun reloadStats() {
         downloadCount = EveRefDao.getDownloadCount()
         earliestDate  = EveRefDao.getEarliestDate()
@@ -45,6 +51,9 @@ fun SettingsScreen() {
         lastSyncMillis = EveRefService.getLastSyncMillis()
         citadelCount   = CitadelService.getCitadelCount()
         citadelLastSync = CitadelService.getLastSyncMillis()
+        sdeBuildNumber = StaticDataDao.getSetting("sde_build_number")
+        sdeImportDate  = StaticDataDao.getSetting("sde_import_date")?.toLongOrNull()
+        sdeTypeCount   = StaticDataDao.countTypes()
     }
 
     LaunchedEffect(Unit) {
@@ -66,6 +75,11 @@ fun SettingsScreen() {
             withContext(Dispatchers.IO) { reloadStats() }
         }
     }
+    LaunchedEffect(sdeState.isRunning) {
+        if (!sdeState.isRunning) {
+            withContext(Dispatchers.IO) { reloadStats() }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -77,6 +91,14 @@ fun SettingsScreen() {
         Text("Settings", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
 
         CharacterFeesCard()
+
+        SdeCard(
+            sdeState = sdeState,
+            buildNumber = sdeBuildNumber,
+            importDate = sdeImportDate,
+            typeCount = sdeTypeCount,
+            onImport = { scope.launch { StaticDataImporter.importAll() } },
+        )
 
         CitadelCard(
             syncState = citadelSyncState,
@@ -293,6 +315,91 @@ private fun EveRefSettings(
                     )
                     Text(
                         syncState.status,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SdeCard(
+    sdeState: StaticDataImporter.ImportState,
+    buildNumber: String?,
+    importDate: Long?,
+    typeCount: Int,
+    onImport: () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.Storage, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text("Static Data (SDE)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            }
+
+            Text(
+                "Universe data: types, market groups, regions, NPC stations. " +
+                "Downloaded from the official EVE Online SDE. Re-import to pick up NPC stations or new content.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            HorizontalDivider()
+
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = MaterialTheme.shapes.small,
+            ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (typeCount > 0) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CheckCircle, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                            Text("$typeCount types loaded", style = MaterialTheme.typography.bodySmall)
+                        }
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Warning, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error)
+                            Text("No SDE data — import required", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    if (buildNumber != null) {
+                        Text("Build: $buildNumber", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (importDate != null) {
+                        Text("Imported: ${formatTimestamp(importDate)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (sdeState.error != null) {
+                        Text("Error: ${sdeState.error}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(onClick = onImport, enabled = !sdeState.isRunning) {
+                    if (sdeState.isRunning) {
+                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                        Spacer(Modifier.width(8.dp))
+                    } else {
+                        Icon(Icons.Default.Download, null, Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text(if (sdeState.isRunning) "Importing…" else if (typeCount > 0) "Re-import SDE" else "Import SDE")
+                }
+                if (sdeState.isRunning) {
+                    Text(sdeState.status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            if (sdeState.isRunning || sdeState.progress > 0f) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    LinearProgressIndicator(
+                        progress = { sdeState.progress },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        sdeState.status,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
