@@ -18,11 +18,14 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.eve.trader.core.database.DatabaseManager
 import org.eve.trader.core.database.WalletDao
 import org.eve.trader.core.database.CharacterDao
+import org.eve.trader.core.database.StaticDataDao
 import org.eve.trader.core.esi.EsiClient
 import org.eve.trader.ui.common.*
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.background
 
 @Composable
 fun WalletScreen() {
@@ -129,39 +132,94 @@ fun WalletScreen() {
 @Composable
 private fun TransactionList(transactions: List<Map<String, Any?>>) {
     if (transactions.isEmpty()) {
-        EmptyState(icon = Icons.Default.Receipt, title = "No Transactions", description = "Click refresh to fetch from ESI.")
+        EmptyState(icon = Icons.Default.Receipt, title = "No Transactions", description = "Select a character to load transactions.")
         return
     }
 
-    LazyColumn(modifier = Modifier.fillMaxWidth()) {
-        items(transactions) { tx ->
-            val isBuy = tx["is_buy"] as? Boolean ?: false
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = if (isBuy) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                        contentDescription = null,
-                        tint = if (isBuy) Color(0xFF69DB7C) else Color(0xFFFF6B6B),
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Column {
-                        Text(tx["type_name"]?.toString() ?: "Unknown", style = MaterialTheme.typography.bodyMedium)
-                        Text(tx["date"]?.toString()?.take(10) ?: "", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+    Column {
+        // Header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TxHeader("Date",       Modifier.weight(1.8f))
+            TxHeader("B/S",        Modifier.weight(0.6f))
+            TxHeader("Item",       Modifier.weight(3f))
+            TxHeader("Qty",        Modifier.weight(1f), rightAlign = true)
+            TxHeader("Unit Price", Modifier.weight(2f), rightAlign = true)
+            TxHeader("Total",      Modifier.weight(2f), rightAlign = true)
+            TxHeader("Client",     Modifier.weight(2f))
+            TxHeader("Station",    Modifier.weight(2.5f))
+        }
+        HorizontalDivider()
+        LazyColumn(modifier = Modifier.fillMaxWidth()) {
+            items(transactions) { tx ->
+                val isBuy = tx["is_buy"] as? Boolean ?: false
+                val unitPrice = (tx["unit_price"] as? Number)?.toDouble() ?: 0.0
+                val quantity = (tx["quantity"] as? Number)?.toInt() ?: 0
+                val total = (tx["total"] as? Number)?.toDouble()
+                    ?.takeIf { it > 0 } ?: (unitPrice * quantity)
+                val typeName = tx["type_name"]?.toString()?.ifEmpty { null }
+                    ?: "Unknown (${tx["type_id"]})"
+                val clientName = tx["client_name"]?.toString()?.ifEmpty { null }
+                    ?: tx["client_id"]?.let { "#$it" } ?: ""
+                val locationName = tx["location_name"]?.toString()?.ifEmpty { null }
+                    ?: tx["location_id"]?.toString() ?: ""
+                val dateStr = tx["date"]?.toString()?.take(16)?.replace("T", " ") ?: ""
+                val buyColor = Color(0xFF69DB7C)
+                val sellColor = Color(0xFFFF6B6B)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(dateStr, modifier = Modifier.weight(1.8f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Surface(
+                        modifier = Modifier.weight(0.6f),
+                        color = (if (isBuy) buyColor else sellColor).copy(alpha = 0.15f),
+                        shape = MaterialTheme.shapes.extraSmall,
+                    ) {
+                        Text(
+                            if (isBuy) "Buy" else "Sell",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isBuy) buyColor else sellColor,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                            fontWeight = FontWeight.Bold,
+                        )
                     }
+                    Text(typeName, modifier = Modifier.weight(3f).padding(start = 4.dp), style = MaterialTheme.typography.bodyMedium, overflow = TextOverflow.Ellipsis, maxLines = 1)
+                    Text("%,d".format(quantity), modifier = Modifier.weight(1f), textAlign = TextAlign.End, style = MaterialTheme.typography.bodySmall)
+                    Text(formatIsk(unitPrice), modifier = Modifier.weight(2f), textAlign = TextAlign.End, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        formatIsk(total),
+                        modifier = Modifier.weight(2f),
+                        textAlign = TextAlign.End,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = if (isBuy) sellColor else buyColor,
+                    )
+                    Text(clientName, modifier = Modifier.weight(2f).padding(start = 8.dp), style = MaterialTheme.typography.bodySmall, overflow = TextOverflow.Ellipsis, maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(locationName, modifier = Modifier.weight(2.5f).padding(start = 8.dp), style = MaterialTheme.typography.bodySmall, overflow = TextOverflow.Ellipsis, maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("×${tx["quantity"]}", style = MaterialTheme.typography.bodySmall)
-                    val total = (tx["total"] as? Number)?.toDouble() ?: 0.0
-                    Text(formatIsk(total), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                }
+                HorizontalDivider(thickness = 0.5.dp)
             }
-            HorizontalDivider()
         }
     }
+}
+
+@Composable
+private fun TxHeader(label: String, modifier: Modifier, rightAlign: Boolean = false) {
+    Text(
+        label,
+        modifier = modifier,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = if (rightAlign) TextAlign.End else TextAlign.Start,
+        fontWeight = FontWeight.SemiBold,
+    )
 }
 
 @Composable
@@ -247,12 +305,12 @@ private suspend fun loadWalletData(
     journalCallback: (List<Map<String, Any?>>) -> Unit,
 ) {
     withContext(Dispatchers.IO) {
-        // Load from DB
+        // Load from DB (resolve type/station names locally for any that are missing)
         val summary = WalletDao.getWalletSummary(characterId = characterId)
         balanceCallback(summary.balance)
         dailyCallback(summary.dailyBreakdown)
-        transactionsCallback(WalletDao.getTransactions(characterId = characterId, limit = 50))
-        journalCallback(WalletDao.getJournalEntries(characterId = characterId, limit = 50))
+        transactionsCallback(resolveLocalNames(WalletDao.getTransactions(characterId = characterId, limit = 200)))
+        journalCallback(WalletDao.getJournalEntries(characterId = characterId, limit = 200))
 
         // Fetch from ESI
         try {
@@ -292,31 +350,65 @@ private suspend fun loadWalletData(
 
         try {
             val txList = EsiClient.getCharacterTransactions(characterId)
+
+            // Batch-resolve names before inserting
+            val typeIds = txList.mapNotNull { (it["type_id"] as? Number)?.toInt() }.toSet()
+            val typeNames = typeIds.associateWith { id -> StaticDataDao.getTypeName(id) ?: "" }
+
+            val locationIds = txList.mapNotNull { (it["location_id"] as? Number)?.toLong() }.toSet()
+            val locationNames = locationIds.associateWith { id -> StaticDataDao.getStationById(id)?.name ?: "" }
+
+            val clientIds = txList.mapNotNull { (it["client_id"] as? Number)?.toInt() }.filter { it > 0 }.toSet()
+            val clientNames = if (clientIds.isNotEmpty()) EsiClient.resolveNames(clientIds.toList()) else emptyMap()
+
             txList.forEach { tx ->
+                val typeId = (tx["type_id"] as? Number)?.toInt() ?: 0
+                val locationId = (tx["location_id"] as? Number)?.toLong() ?: 0L
+                val clientId = (tx["client_id"] as? Number)?.toInt() ?: 0
+                val unitPrice = (tx["unit_price"] as? Number)?.toDouble() ?: 0.0
+                val quantity = (tx["quantity"] as? Number)?.toInt() ?: 0
                 try {
                     WalletDao.insertTransaction(
                         transactionId = (tx["transaction_id"] as? Number)?.toLong() ?: 0,
                         date = tx["date"] as? String ?: "",
-                        typeId = (tx["type_id"] as? Number)?.toInt() ?: 0,
-                        typeName = "",
-                        quantity = (tx["quantity"] as? Number)?.toInt() ?: 0,
-                        unitPrice = (tx["unit_price"] as? Number)?.toDouble() ?: 0.0,
-                        total = (tx["total"] as? Number)?.toDouble() ?: 0.0,
+                        typeId = typeId,
+                        typeName = typeNames[typeId] ?: "",
+                        quantity = quantity,
+                        unitPrice = unitPrice,
+                        total = unitPrice * quantity,
                         isBuy = (tx["is_buy"] as? Boolean) ?: false,
-                        clientId = (tx["client_id"] as? Number)?.toInt() ?: 0,
-                        clientName = "",
-                        locationId = (tx["location_id"] as? Number)?.toLong() ?: 0,
-                        locationName = "",
+                        clientId = clientId,
+                        clientName = clientNames[clientId] ?: "",
+                        locationId = locationId,
+                        locationName = locationNames[locationId] ?: "",
                         isCorp = false,
                         characterId = characterId,
                         corporationId = null,
                     )
-                } catch (e: Exception) { /* skip duplicates */ }
+                } catch (_: Exception) {}
             }
-            transactionsCallback(WalletDao.getTransactions(characterId = characterId, limit = 50))
+            transactionsCallback(resolveLocalNames(WalletDao.getTransactions(characterId = characterId, limit = 200)))
         } catch (e: Exception) {
             println("Error fetching transactions: ${e.message}")
         }
+    }
+}
+
+private fun resolveLocalNames(rows: List<Map<String, Any?>>): List<Map<String, Any?>> {
+    return rows.map { tx ->
+        val needsType = (tx["type_name"] as? String).isNullOrEmpty()
+        val needsLocation = (tx["location_name"] as? String).isNullOrEmpty()
+        if (!needsType && !needsLocation) return@map tx
+        val updated = tx.toMutableMap()
+        if (needsType) {
+            val typeId = (tx["type_id"] as? Number)?.toInt() ?: 0
+            updated["type_name"] = StaticDataDao.getTypeName(typeId) ?: ""
+        }
+        if (needsLocation) {
+            val locationId = (tx["location_id"] as? Number)?.toLong() ?: 0L
+            updated["location_name"] = StaticDataDao.getStationById(locationId)?.name ?: ""
+        }
+        updated
     }
 }
 

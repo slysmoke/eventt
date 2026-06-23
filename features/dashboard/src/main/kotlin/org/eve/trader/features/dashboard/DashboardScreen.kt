@@ -137,11 +137,6 @@ private fun loadDashboardSummary(): DashboardSummary {
         try { AssetDao.getTotalValue(corporationId = (corp["id"] as? Number)?.toInt()) } catch (e: Exception) { 0.0 }
     }
 
-    val allOrders = characters.flatMap { char ->
-        try { TrackedOrderDao.getByCharacter(char.id) } catch (e: Exception) { emptyList() }
-    }
-    val activeOrderCount = allOrders.size
-
     val watchlistCount = try {
         WatchlistDao.getAllWatchlists().values.sumOf { it.size }
     } catch (e: Exception) { 0 }
@@ -152,7 +147,7 @@ private fun loadDashboardSummary(): DashboardSummary {
 
     return DashboardSummary(
         totalAssetValue = totalAssetValue,
-        activeOrderCount = activeOrderCount,
+        activeOrderCount = 0,
         watchlistCount = watchlistCount,
         triggeredAlertCount = alertCount,
         characterCount = characters.size,

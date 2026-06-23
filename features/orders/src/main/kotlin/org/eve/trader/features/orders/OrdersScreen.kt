@@ -1,12 +1,11 @@
 package org.eve.trader.features.orders
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -14,27 +13,97 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.eve.trader.core.database.DatabaseManager
-import org.eve.trader.core.database.TrackedOrderDao
 import org.eve.trader.core.database.CharacterDao
+import org.eve.trader.core.database.StaticDataDao
 import org.eve.trader.core.esi.EsiClient
-import org.eve.trader.core.model.TrackedOrderModel
-import org.eve.trader.ui.common.*
+import org.eve.trader.ui.common.EmptyState
+import org.eve.trader.ui.common.LoadingOverlay
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
+
+private data class CharacterOrder(
+    val orderId: Long,
+    val typeId: Int,
+    val typeName: String,
+    val locationId: Long,
+    val stationName: String,
+    val price: Double,
+    val volumeTotal: Int,
+    val volumeRemaining: Int,
+    val isBuyOrder: Boolean,
+    val duration: Int,
+    val issued: String,
+    val range: String,
+    val minVolume: Int,
+    val state: String,
+) {
+    val total: Double get() = price * volumeRemaining
+    val timeLeftSeconds: Long get() {
+        return try {
+            val issuedTime = OffsetDateTime.parse(issued).withOffsetSameInstant(ZoneOffset.UTC)
+            val expiresAt = issuedTime.plusDays(duration.toLong())
+            val now = OffsetDateTime.now(ZoneOffset.UTC)
+            ChronoUnit.SECONDS.between(now, expiresAt).coerceAtLeast(0)
+        } catch (_: Exception) { 0L }
+    }
+}
+
+private enum class SortCol { NAME, PRICE, VOLUME, TOTAL, TIME_LEFT, STATION }
+private enum class SortDir { ASC, DESC }
 
 @Composable
 fun OrdersScreen() {
     val scope = rememberCoroutineScope()
-    var orders by remember { mutableStateOf<List<TrackedOrderModel>>(emptyList()) }
+    val characters = remember { try { CharacterDao.getAll() } catch (_: Exception) { emptyList() } }
+    var selectedCharId by remember { mutableStateOf(characters.firstOrNull()?.id) }
+    var orders by remember { mutableStateOf<List<CharacterOrder>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
-    var showAddDialog by remember { mutableStateOf(false) }
-    var activeTab by remember { mutableStateOf(0) } // 0 = tracked, 1 = active ESI orders
+    var activeTab by remember { mutableStateOf(0) }  // 0 = sell, 1 = buy
+    var sortCol by remember { mutableStateOf(SortCol.NAME) }
+    var sortDir by remember { mutableStateOf(SortDir.ASC) }
 
-    LaunchedEffect(Unit) {
-        loadOrders { list -> orders = list }
+    fun loadOrders(charId: Int) {
+        scope.launch(Dispatchers.IO) {
+            withContext(Dispatchers.Main) { isLoading = true }
+            try {
+                val raw = EsiClient.getCharacterOrders(charId)
+                val parsed = raw.map { m ->
+                    val typeId = (m["type_id"] as? Number)?.toInt() ?: 0
+                    val locationId = (m["location_id"] as? Number)?.toLong() ?: 0L
+                    CharacterOrder(
+                        orderId = (m["order_id"] as? Number)?.toLong() ?: 0L,
+                        typeId = typeId,
+                        typeName = StaticDataDao.getTypeName(typeId) ?: "Unknown ($typeId)",
+                        locationId = locationId,
+                        stationName = StaticDataDao.getStationById(locationId)?.name ?: locationId.toString(),
+                        price = (m["price"] as? Number)?.toDouble() ?: 0.0,
+                        volumeTotal = (m["volume_total"] as? Number)?.toInt() ?: 0,
+                        volumeRemaining = (m["volume_remain"] as? Number)?.toInt() ?: 0,
+                        isBuyOrder = (m["is_buy_order"] as? Boolean) ?: false,
+                        duration = (m["duration"] as? Number)?.toInt() ?: 0,
+                        issued = (m["issued"] as? String) ?: "",
+                        range = (m["range"] as? String) ?: "",
+                        minVolume = (m["min_volume"] as? Number)?.toInt() ?: 1,
+                        state = (m["state"] as? String) ?: "active",
+                    )
+                }
+                withContext(Dispatchers.Main) { orders = parsed }
+            } catch (_: Exception) {
+            } finally {
+                withContext(Dispatchers.Main) { isLoading = false }
+            }
+        }
+    }
+
+    LaunchedEffect(selectedCharId) {
+        selectedCharId?.let { loadOrders(it) }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -44,323 +113,343 @@ fun OrdersScreen() {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Orders", style = MaterialTheme.typography.headlineMedium)
-            Button(onClick = { showAddDialog = true }) {
-                Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Track Order")
+            selectedCharId?.let { charId ->
+                IconButton(onClick = { loadOrders(charId) }, enabled = !isLoading) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                }
             }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Tabs
+        if (characters.size > 1) {
+            ScrollableTabRow(
+                selectedTabIndex = characters.indexOfFirst { it.id == selectedCharId }.coerceAtLeast(0),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                characters.forEach { char ->
+                    Tab(
+                        selected = char.id == selectedCharId,
+                        onClick = { selectedCharId = char.id },
+                        text = { Text(char.name) },
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        val sellCount = orders.count { !it.isBuyOrder }
+        val buyCount = orders.count { it.isBuyOrder }
         TabRow(selectedTabIndex = activeTab) {
-            Tab(selected = activeTab == 0, onClick = { activeTab = 0 }) { Text("Tracked", modifier = Modifier.padding(8.dp)) }
-            Tab(selected = activeTab == 1, onClick = { activeTab = 1 }) { Text("Active (ESI)", modifier = Modifier.padding(8.dp)) }
+            Tab(selected = activeTab == 0, onClick = { activeTab = 0 }) {
+                Text("Sell ($sellCount)", modifier = Modifier.padding(8.dp))
+            }
+            Tab(selected = activeTab == 1, onClick = { activeTab = 1 }) {
+                Text("Buy ($buyCount)", modifier = Modifier.padding(8.dp))
+            }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        when (activeTab) {
-            0 -> TrackedOrdersView(orders)
-            1 -> ActiveOrdersView()
-        }
-    }
+        val filtered = orders.filter { if (activeTab == 0) !it.isBuyOrder else it.isBuyOrder }
+        val sorted = applySort(filtered, sortCol, sortDir)
 
-    if (showAddDialog) {
-        AddTrackedOrderDialog(
-            onDismiss = { showAddDialog = false },
-            onAdd = { order ->
-                scope.launch(Dispatchers.IO) {
-                    TrackedOrderDao.insert(order)
-                    withContext(Dispatchers.Main) {
-                        loadOrders { list -> orders = list }
-                        showAddDialog = false
-                    }
-                }
-            },
-        )
+        fun onHeaderClick(col: SortCol) {
+            if (sortCol == col) sortDir = if (sortDir == SortDir.ASC) SortDir.DESC else SortDir.ASC
+            else { sortCol = col; sortDir = SortDir.ASC }
+        }
+
+        if (sorted.isEmpty() && !isLoading) {
+            EmptyState(
+                icon = Icons.Default.Receipt,
+                title = if (activeTab == 0) "No Sell Orders" else "No Buy Orders",
+                description = if (characters.isEmpty()) "Add a character to view orders." else "No active orders for this character.",
+            )
+        } else if (activeTab == 0) {
+            SellOrdersTable(sorted, sortCol, sortDir, ::onHeaderClick)
+        } else {
+            BuyOrdersTable(sorted, sortCol, sortDir, ::onHeaderClick)
+        }
     }
 
     LoadingOverlay(isLoading = isLoading, message = "Loading orders...")
 }
 
-@Composable
-private fun TrackedOrdersView(orders: List<TrackedOrderModel>) {
-    if (orders.isEmpty()) {
-        EmptyState(
-            icon = Icons.AutoMirrored.Filled.TrendingUp,
-            title = "No Tracked Orders",
-            description = "Add a tracked order to track your buy prices and margins.",
-        )
-        return
+private fun applySort(list: List<CharacterOrder>, col: SortCol, dir: SortDir): List<CharacterOrder> {
+    val sorted = when (col) {
+        SortCol.NAME      -> list.sortedBy { it.typeName }
+        SortCol.PRICE     -> list.sortedBy { it.price }
+        SortCol.VOLUME    -> list.sortedBy { it.volumeRemaining }
+        SortCol.TOTAL     -> list.sortedBy { it.total }
+        SortCol.TIME_LEFT -> list.sortedBy { it.timeLeftSeconds }
+        SortCol.STATION   -> list.sortedBy { it.stationName }
     }
-
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        items(orders) { order ->
-            TrackedOrderCard(order)
-        }
-    }
+    return if (dir == SortDir.DESC) sorted.reversed() else sorted
 }
 
 @Composable
-private fun TrackedOrderCard(order: TrackedOrderModel) {
-    val marginColor = when {
-        order.marginPercent > 0 -> Color(0xFF69DB7C)
-        order.marginPercent < 0 -> Color(0xFFFF6B6B)
-        else -> Color.Gray
-    }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(order.typeName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Surface(
-                    color = marginColor.copy(alpha = 0.15f),
-                    shape = MaterialTheme.shapes.small,
-                ) {
-                    Text(
-                        text = "${if (order.marginPercent >= 0) "+" else ""}${String.format("%.1f", order.marginPercent)}%",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = marginColor,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
-                    Text("Buy Price", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                    Text(formatIsk(order.buyPrice), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Quantity", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                    Text(order.quantity.toString(), style = MaterialTheme.typography.bodyMedium)
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Total Cost", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                    Text(formatIsk(order.totalCost), style = MaterialTheme.typography.bodyMedium)
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("Current Value", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                    Text(formatIsk(order.totalValue), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-                }
-            }
-
-            if (order.notes.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(order.notes, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-            }
-        }
-    }
-}
-
-@Composable
-private fun ActiveOrdersView() {
-    val characters = remember {
-        try { CharacterDao.getAll() } catch (e: Exception) { emptyList() }
-    }
-    var ordersData by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-
-    Column {
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            items(characters) { char ->
-                Button(
-                    onClick = {
-                        isLoading = true
-                        scope.launch(Dispatchers.IO) {
-                            try {
-                                val orders = EsiClient.getCharacterOrders(char.id)
-                                withContext(Dispatchers.Main) {
-                                    ordersData = orders
-                                    isLoading = false
-                                }
-                            } catch (e: Exception) {
-                                withContext(Dispatchers.Main) { isLoading = false }
-                            }
-                        }
-                    },
-                    enabled = !isLoading,
-                ) {
-                    Text(char.name)
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        if (ordersData.isEmpty()) {
-            EmptyState(
-                icon = Icons.Default.Receipt,
-                title = "Select a Character",
-                description = "Choose a character to view their active ESI orders.",
-            )
-        } else {
-            LazyColumn {
-                items(ordersData.take(50)) { order ->
-                    val isBuy = (order["is_buy_order"] as? Boolean) ?: false
-                    val price = (order["price"] as? Number)?.toDouble() ?: 0.0
-                    val volume = (order["volume_remain"] as? Number)?.toInt() ?: 0
-                    val typeId = (order["type_id"] as? Number)?.toInt() ?: 0
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = if (isBuy) Icons.Default.ShoppingCart else Icons.Default.Store,
-                                contentDescription = null,
-                                tint = if (isBuy) Color(0xFF69DB7C) else Color(0xFFFF6B6B),
-                                modifier = Modifier.size(18.dp),
-                            )
-                            Column {
-                                Text("Type ID: $typeId", style = MaterialTheme.typography.bodyMedium)
-                                Text("Issued: ${(order["issued"] as? String)?.take(10) ?: ""}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                            }
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(formatIsk(price), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                            Text("Vol: $volume", style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-                    HorizontalDivider()
-                }
-            }
-        }
-    }
-
-    LoadingOverlay(isLoading = isLoading, message = "Fetching orders from ESI...")
-}
-
-@Composable
-private fun AddTrackedOrderDialog(
-    onDismiss: () -> Unit,
-    onAdd: (TrackedOrderModel) -> Unit,
+private fun SellOrdersTable(
+    orders: List<CharacterOrder>,
+    sortCol: SortCol,
+    sortDir: SortDir,
+    onSort: (SortCol) -> Unit,
 ) {
-    var typeName by remember { mutableStateOf("") }
-    var buyPrice by remember { mutableStateOf("") }
-    var quantity by remember { mutableStateOf("") }
-    var notes by remember { mutableStateOf("") }
-    var typeId by remember { mutableStateOf(0) }
-    var searchQuery by remember { mutableStateOf("") }
-    var searchResults by remember { mutableStateOf<List<org.eve.trader.core.model.StaticTypeModel>>(emptyList()) }
-    val scope = rememberCoroutineScope()
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Track New Order") },
-        text = {
-            Column {
-                SearchField(
-                    query = searchQuery,
-                    onQueryChange = { q ->
-                        searchQuery = q
-                        if (q.length >= 2) {
-                            scope.launch(Dispatchers.IO) {
-                                searchResults = org.eve.trader.core.database.StaticDataDao.searchTypes(q, limit = 10)
-                            }
-                        }
-                    },
-                    placeholder = "Search item...",
-                )
-
-                if (searchResults.isNotEmpty()) {
-                    LazyColumn(modifier = Modifier.heightIn(max = 150.dp)) {
-                        items(searchResults) { type ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth().clickable {
-                                    typeId = type.typeId
-                                    typeName = type.name
-                                    searchQuery = type.name
-                                    searchResults = emptyList()
-                                }.padding(8.dp),
-                            ) {
-                                Text(type.name, style = MaterialTheme.typography.bodyMedium)
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = buyPrice,
-                    onValueChange = { buyPrice = it },
-                    label = { Text("Buy Price (ISK)") },
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                OutlinedTextField(
-                    value = quantity,
-                    onValueChange = { quantity = it },
-                    label = { Text("Quantity") },
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                OutlinedTextField(
-                    value = notes,
-                    onValueChange = { notes = it },
-                    label = { Text("Notes (optional)") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SortHeader("Name", SortCol.NAME, sortCol, sortDir, onSort, Modifier.weight(3f))
+            SortHeader("Price", SortCol.PRICE, sortCol, sortDir, onSort, Modifier.weight(2f), rightAlign = true)
+            SortHeader("Volume", SortCol.VOLUME, sortCol, sortDir, onSort, Modifier.weight(2f), rightAlign = true)
+            SortHeader("Total", SortCol.TOTAL, sortCol, sortDir, onSort, Modifier.weight(2f), rightAlign = true)
+            SortHeader("Time Left", SortCol.TIME_LEFT, sortCol, sortDir, onSort, Modifier.weight(1.5f), rightAlign = true)
+            SortHeader("Station", SortCol.STATION, sortCol, sortDir, onSort, Modifier.weight(3f))
+        }
+        HorizontalDivider()
+        LazyColumn {
+            items(orders, key = { it.orderId }) { order ->
+                SellOrderRow(order)
+                HorizontalDivider(thickness = 0.5.dp)
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val price = buyPrice.toDoubleOrNull() ?: 0.0
-                    val qty = quantity.toIntOrNull() ?: 0
-                    if (typeId > 0 && price > 0 && qty > 0) {
-                        onAdd(
-                            TrackedOrderModel(
-                                typeId = typeId,
-                                typeName = typeName,
-                                buyPrice = price,
-                                quantity = qty,
-                                notes = notes,
-                            )
-                        )
-                    }
-                },
-                enabled = typeId > 0 && buyPrice.toDoubleOrNull() != null && quantity.toIntOrNull() != null,
-            ) {
-                Text("Add")
+        }
+    }
+}
+
+@Composable
+private fun BuyOrdersTable(
+    orders: List<CharacterOrder>,
+    sortCol: SortCol,
+    sortDir: SortDir,
+    onSort: (SortCol) -> Unit,
+) {
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SortHeader("Name", SortCol.NAME, sortCol, sortDir, onSort, Modifier.weight(3f))
+            SortHeader("Price", SortCol.PRICE, sortCol, sortDir, onSort, Modifier.weight(2f), rightAlign = true)
+            SortHeader("Volume", SortCol.VOLUME, sortCol, sortDir, onSort, Modifier.weight(2f), rightAlign = true)
+            SortHeader("Total", SortCol.TOTAL, sortCol, sortDir, onSort, Modifier.weight(2f), rightAlign = true)
+            StaticHeader("Range", Modifier.weight(1.5f))
+            StaticHeader("Min Qty", Modifier.weight(1f), rightAlign = true)
+            SortHeader("Time Left", SortCol.TIME_LEFT, sortCol, sortDir, onSort, Modifier.weight(1.5f), rightAlign = true)
+            SortHeader("Station", SortCol.STATION, sortCol, sortDir, onSort, Modifier.weight(3f))
+        }
+        HorizontalDivider()
+        LazyColumn {
+            items(orders, key = { it.orderId }) { order ->
+                BuyOrderRow(order)
+                HorizontalDivider(thickness = 0.5.dp)
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        },
+        }
+    }
+}
+
+@Composable
+private fun SellOrderRow(order: CharacterOrder) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            order.typeName,
+            modifier = Modifier.weight(3f),
+            overflow = TextOverflow.Ellipsis,
+            maxLines = 1,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            formatIsk(order.price),
+            modifier = Modifier.weight(2f),
+            textAlign = TextAlign.End,
+            color = Color(0xFFFF6B6B),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            "${formatNumber(order.volumeRemaining)}/${formatNumber(order.volumeTotal)}",
+            modifier = Modifier.weight(2f),
+            textAlign = TextAlign.End,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Text(
+            formatIsk(order.total),
+            modifier = Modifier.weight(2f),
+            textAlign = TextAlign.End,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            formatTimeLeft(order.timeLeftSeconds),
+            modifier = Modifier.weight(1.5f),
+            textAlign = TextAlign.End,
+            style = MaterialTheme.typography.bodySmall,
+            color = timeLeftColor(order.timeLeftSeconds),
+        )
+        Text(
+            order.stationName,
+            modifier = Modifier.weight(3f),
+            overflow = TextOverflow.Ellipsis,
+            maxLines = 1,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun BuyOrderRow(order: CharacterOrder) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            order.typeName,
+            modifier = Modifier.weight(3f),
+            overflow = TextOverflow.Ellipsis,
+            maxLines = 1,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            formatIsk(order.price),
+            modifier = Modifier.weight(2f),
+            textAlign = TextAlign.End,
+            color = Color(0xFF69DB7C),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            "${formatNumber(order.volumeRemaining)}/${formatNumber(order.volumeTotal)}",
+            modifier = Modifier.weight(2f),
+            textAlign = TextAlign.End,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Text(
+            formatIsk(order.total),
+            modifier = Modifier.weight(2f),
+            textAlign = TextAlign.End,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            formatRange(order.range),
+            modifier = Modifier.weight(1.5f),
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Text(
+            formatNumber(order.minVolume),
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.End,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Text(
+            formatTimeLeft(order.timeLeftSeconds),
+            modifier = Modifier.weight(1.5f),
+            textAlign = TextAlign.End,
+            style = MaterialTheme.typography.bodySmall,
+            color = timeLeftColor(order.timeLeftSeconds),
+        )
+        Text(
+            order.stationName,
+            modifier = Modifier.weight(3f),
+            overflow = TextOverflow.Ellipsis,
+            maxLines = 1,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun SortHeader(
+    label: String,
+    col: SortCol,
+    currentCol: SortCol,
+    dir: SortDir,
+    onSort: (SortCol) -> Unit,
+    modifier: Modifier,
+    rightAlign: Boolean = false,
+) {
+    val isActive = currentCol == col
+    val labelColor = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    Row(
+        modifier = modifier.clickable { onSort(col) },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = if (rightAlign) Arrangement.End else Arrangement.Start,
+    ) {
+        if (isActive && rightAlign) {
+            Icon(
+                imageVector = if (dir == SortDir.ASC) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                contentDescription = null,
+                modifier = Modifier.size(12.dp),
+                tint = labelColor,
+            )
+            Spacer(modifier = Modifier.width(2.dp))
+        }
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+            color = labelColor,
+        )
+        if (isActive && !rightAlign) {
+            Spacer(modifier = Modifier.width(2.dp))
+            Icon(
+                imageVector = if (dir == SortDir.ASC) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                contentDescription = null,
+                modifier = Modifier.size(12.dp),
+                tint = labelColor,
+            )
+        }
+    }
+}
+
+@Composable
+private fun StaticHeader(label: String, modifier: Modifier, rightAlign: Boolean = false) {
+    Text(
+        label,
+        modifier = modifier,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = if (rightAlign) TextAlign.End else TextAlign.Start,
     )
 }
 
-private fun loadOrders(callback: (List<TrackedOrderModel>) -> Unit) {
-    try {
-        callback(TrackedOrderDao.getAll())
-    } catch (e: Exception) {
-        println("Error loading orders: ${e.message}")
+private fun formatRange(range: String): String = when (range) {
+    "station"     -> "Station"
+    "solarsystem" -> "System"
+    "region"      -> "Region"
+    else          -> range.toIntOrNull()?.let { "$it jumps" } ?: range
+}
+
+private fun formatTimeLeft(seconds: Long): String {
+    if (seconds <= 0) return "Expired"
+    val d = seconds / 86400
+    val h = (seconds % 86400) / 3600
+    val m = (seconds % 3600) / 60
+    return when {
+        d > 0 -> "${d}d ${h}h"
+        h > 0 -> "${h}h ${m}m"
+        else  -> "${m}m"
     }
 }
 
-private fun formatIsk(value: Double): String {
-    return when {
-        kotlin.math.abs(value) >= 1_000_000_000_000 -> String.format("%.2fT", value / 1_000_000_000_000)
-        kotlin.math.abs(value) >= 1_000_000_000 -> String.format("%.2fB", value / 1_000_000_000)
-        kotlin.math.abs(value) >= 1_000_000 -> String.format("%.2fM", value / 1_000_000)
-        kotlin.math.abs(value) >= 1_000 -> String.format("%.2fK", value / 1_000)
-        else -> String.format("%,.2f", value)
-    }
+private fun timeLeftColor(seconds: Long): Color = when {
+    seconds <= 0       -> Color(0xFFFF6B6B)
+    seconds < 86400    -> Color(0xFFFFD43B)
+    else               -> Color.Unspecified
+}
+
+private fun formatNumber(value: Int): String = "%,d".format(value)
+
+private fun formatIsk(value: Double): String = when {
+    kotlin.math.abs(value) >= 1_000_000_000_000 -> "%.2fT".format(value / 1_000_000_000_000)
+    kotlin.math.abs(value) >= 1_000_000_000     -> "%.2fB".format(value / 1_000_000_000)
+    kotlin.math.abs(value) >= 1_000_000         -> "%.2fM".format(value / 1_000_000)
+    kotlin.math.abs(value) >= 1_000             -> "%.2fK".format(value / 1_000)
+    else                                         -> "%,.2f".format(value)
 }
