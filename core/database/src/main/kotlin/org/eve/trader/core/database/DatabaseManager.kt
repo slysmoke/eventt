@@ -489,7 +489,7 @@ object DatabaseManager {
             "CREATE INDEX IF NOT EXISTS idx_assets_type ON assets(type_id)",
             "CREATE INDEX IF NOT EXISTS idx_assets_character ON assets(character_id)",
             "CREATE INDEX IF NOT EXISTS idx_assets_corporation ON assets(corporation_id)",
-            "CREATE INDEX IF NOT EXISTS idx_market_history_lookup ON market_history(type_id, region_id, date)",
+            "CREATE INDEX IF NOT EXISTS idx_market_history_source_date ON market_history(source, date)",
             "CREATE INDEX IF NOT EXISTS idx_watchlist_type ON watchlist(type_id)",
             "CREATE INDEX IF NOT EXISTS idx_watchlist_name ON watchlist(watchlist_name)",
             "CREATE INDEX IF NOT EXISTS idx_watchlist_prices_lookup ON watchlist_prices(type_id, station_id)",
