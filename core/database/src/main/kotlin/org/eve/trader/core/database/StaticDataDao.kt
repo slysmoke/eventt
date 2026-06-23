@@ -125,6 +125,14 @@ object StaticDataDao {
         }
     }
 
+    fun getCitadelCount(): Int {
+        return DatabaseManager.transaction {
+            prepareStatement("SELECT COUNT(*) FROM static_stations WHERE station_id > 1000000000000").use { stmt ->
+                stmt.executeQuery().use { rs -> if (rs.next()) rs.getInt(1) else 0 }
+            }
+        }
+    }
+
     fun countTypes(): Int {
         return DatabaseManager.transaction {
             prepareStatement("SELECT COUNT(*) FROM static_types").use { stmt ->

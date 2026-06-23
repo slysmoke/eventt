@@ -225,32 +225,142 @@ private fun TxHeader(label: String, modifier: Modifier, rightAlign: Boolean = fa
 @Composable
 private fun JournalList(journal: List<Map<String, Any?>>) {
     if (journal.isEmpty()) {
-        EmptyState(icon = Icons.AutoMirrored.Filled.List, title = "No Journal Entries", description = "Fetch journal from ESI to see entries.")
+        EmptyState(icon = Icons.AutoMirrored.Filled.List, title = "No Journal Entries", description = "Select a character to load journal.")
         return
     }
 
-    LazyColumn(modifier = Modifier.fillMaxWidth()) {
-        items(journal) { entry ->
-            val amount = (entry["amount"] as? Number)?.toDouble() ?: 0.0
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+    val totalTax    = journal.filter { it["ref_type"] == "transaction_tax" }.sumOf { (it["amount"] as? Number)?.toDouble() ?: 0.0 }
+    val totalBroker = journal.filter { it["ref_type"] == "brokers_fee"     }.sumOf { (it["amount"] as? Number)?.toDouble() ?: 0.0 }
+
+    Column {
+        // Tax summary
+        if (totalTax != 0.0 || totalBroker != 0.0) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f),
+                shape = MaterialTheme.shapes.small,
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(entry["ref_type"]?.toString() ?: "", style = MaterialTheme.typography.bodyMedium)
-                    Text(entry["date"]?.toString()?.take(10) ?: "", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(24.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onErrorContainer)
+                    Text("Taxes paid (shown entries):", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+                    if (totalTax != 0.0) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Sales Tax", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                            Text(formatIsk(totalTax), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Color(0xFFFF6B6B))
+                        }
+                    }
+                    if (totalBroker != 0.0) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Broker's Fee", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                            Text(formatIsk(totalBroker), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Color(0xFFFF6B6B))
+                        }
+                    }
+                    if (totalTax != 0.0 && totalBroker != 0.0) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Total", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                            Text(formatIsk(totalTax + totalBroker), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Color(0xFFFF6B6B))
+                        }
+                    }
                 }
-                Text(
-                    text = "${if (amount >= 0) "+" else ""}${formatIsk(amount)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = if (amount >= 0) Color(0xFF69DB7C) else Color(0xFFFF6B6B),
-                )
             }
-            HorizontalDivider()
+            Spacer(modifier = Modifier.height(6.dp))
+        }
+
+        // Table header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TxHeader("Date",        Modifier.weight(1.8f))
+            TxHeader("Type",        Modifier.weight(2.5f))
+            TxHeader("Description", Modifier.weight(3f))
+            TxHeader("Amount",      Modifier.weight(2f), rightAlign = true)
+            TxHeader("Tax",         Modifier.weight(1.5f), rightAlign = true)
+            TxHeader("Balance",     Modifier.weight(2f), rightAlign = true)
+        }
+        HorizontalDivider()
+
+        LazyColumn(modifier = Modifier.fillMaxWidth()) {
+            items(journal) { entry ->
+                val amount    = (entry["amount"]     as? Number)?.toDouble() ?: 0.0
+                val taxAmount = (entry["tax_amount"] as? Number)?.toDouble()
+                val balance   = (entry["balance"]    as? Number)?.toDouble() ?: 0.0
+                val refType   = entry["ref_type"]?.toString() ?: ""
+                val reason    = entry["reason"]?.toString()?.trim() ?: ""
+                val dateStr   = entry["date"]?.toString()?.take(16)?.replace("T", " ") ?: ""
+                val amountColor = if (amount >= 0) Color(0xFF69DB7C) else Color(0xFFFF6B6B)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(dateStr,                 modifier = Modifier.weight(1.8f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(formatRefType(refType),  modifier = Modifier.weight(2.5f), style = MaterialTheme.typography.bodySmall, overflow = TextOverflow.Ellipsis, maxLines = 1)
+                    Text(reason,                  modifier = Modifier.weight(3f).padding(start = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, overflow = TextOverflow.Ellipsis, maxLines = 1)
+                    Text(
+                        "${if (amount >= 0) "+" else ""}${formatIsk(amount)}",
+                        modifier = Modifier.weight(2f),
+                        textAlign = TextAlign.End,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = amountColor,
+                    )
+                    Text(
+                        if (taxAmount != null && taxAmount != 0.0) formatIsk(taxAmount) else "—",
+                        modifier = Modifier.weight(1.5f),
+                        textAlign = TextAlign.End,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (taxAmount != null && taxAmount != 0.0) Color(0xFFFF6B6B) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        formatIsk(balance),
+                        modifier = Modifier.weight(2f),
+                        textAlign = TextAlign.End,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                HorizontalDivider(thickness = 0.5.dp)
+            }
         }
     }
+}
+
+private fun formatRefType(refType: String): String = when (refType) {
+    "transaction_tax"                  -> "Sales Tax"
+    "brokers_fee"                      -> "Broker's Fee"
+    "market_transaction"               -> "Market Transaction"
+    "market_escrow"                    -> "Buy Order Escrow"
+    "market_escrow_refund"             -> "Escrow Refund"
+    "player_trading"                   -> "Trade"
+    "contract_price"                   -> "Contract"
+    "contract_reward"                  -> "Contract Reward"
+    "contract_deposit"                 -> "Contract Deposit"
+    "contract_deposit_refund"          -> "Contract Deposit Refund"
+    "contract_price_payment_corp"      -> "Corp Contract"
+    "bounty_prizes"                    -> "Bounty"
+    "industry_job_tax"                 -> "Industry Tax"
+    "manufacturing"                    -> "Manufacturing"
+    "reprocessing_tax"                 -> "Reprocessing Tax"
+    "jump_clone_installation_fee"      -> "Clone Jump Fee"
+    "planetary_import_tax"             -> "PI Import Tax"
+    "planetary_export_tax"             -> "PI Export Tax"
+    "corporation_account_withdrawal"   -> "Corp Withdrawal"
+    "corporation_dividend_payment"     -> "Dividend"
+    "structure_gate_jump"              -> "Jump Gate"
+    "asset_safety_recovery_tax"        -> "Asset Safety Tax"
+    "skill_purchase"                   -> "Skill Purchase"
+    "agent_mission_reward"             -> "Mission Reward"
+    "agent_mission_time_bonus_reward"  -> "Mission Bonus"
+    else -> refType.replace('_', ' ').split(' ')
+        .joinToString(" ") { it.replaceFirstChar(Char::uppercaseChar) }
 }
 
 @Composable

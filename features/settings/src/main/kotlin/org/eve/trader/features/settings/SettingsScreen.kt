@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eve.trader.core.everef.EveRefDao
 import org.eve.trader.core.everef.EveRefService
+import org.eve.trader.core.staticdata.CitadelService
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -31,11 +32,17 @@ fun SettingsScreen() {
     var latestDate by remember { mutableStateOf<String?>(null) }
     var lastSyncMillis by remember { mutableStateOf<Long?>(null) }
 
+    val citadelSyncState by CitadelService.state.collectAsState()
+    var citadelCount by remember { mutableStateOf(0) }
+    var citadelLastSync by remember { mutableStateOf<Long?>(null) }
+
     fun reloadStats() {
         downloadCount = EveRefDao.getDownloadCount()
         earliestDate  = EveRefDao.getEarliestDate()
         latestDate    = EveRefDao.getLatestDate()
         lastSyncMillis = EveRefService.getLastSyncMillis()
+        citadelCount   = CitadelService.getCitadelCount()
+        citadelLastSync = CitadelService.getLastSyncMillis()
     }
 
     LaunchedEffect(Unit) {
@@ -46,9 +53,14 @@ fun SettingsScreen() {
         }
     }
 
-    // Refresh stats once sync finishes
+    // Refresh stats once either sync finishes
     LaunchedEffect(syncState.isRunning) {
         if (!syncState.isRunning) {
+            withContext(Dispatchers.IO) { reloadStats() }
+        }
+    }
+    LaunchedEffect(citadelSyncState.isRunning) {
+        if (!citadelSyncState.isRunning) {
             withContext(Dispatchers.IO) { reloadStats() }
         }
     }
@@ -61,6 +73,13 @@ fun SettingsScreen() {
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         Text("Settings", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+
+        CitadelCard(
+            syncState = citadelSyncState,
+            citadelCount = citadelCount,
+            lastSyncMillis = citadelLastSync,
+            onSync = { scope.launch { CitadelService.sync() } },
+        )
 
         MarketHistorySourceCard(
             selectedSource = selectedSource,
@@ -273,6 +292,77 @@ private fun EveRefSettings(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CitadelCard(
+    syncState: CitadelService.SyncState,
+    citadelCount: Int,
+    lastSyncMillis: Long?,
+    onSync: () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.LocationCity, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text("Player Structures (Citadels)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            }
+
+            Text(
+                "Downloads the community citadel database from slysmoke/evernus-db. " +
+                "Enables name and system resolution for player-owned structures in orders, assets, and wallet.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            HorizontalDivider()
+
+            // Status
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = MaterialTheme.shapes.small,
+            ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (citadelCount > 0) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CheckCircle, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                            Text("$citadelCount structures in database", style = MaterialTheme.typography.bodySmall)
+                        }
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Info, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("No citadel data. Structures will show ID instead of name.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    if (lastSyncMillis != null) {
+                        Text("Last sync: ${formatTimestamp(lastSyncMillis)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (!syncState.isRunning && syncState.status.isNotEmpty() && syncState.error == null) {
+                        Text(syncState.status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    }
+                    if (syncState.error != null) {
+                        Text("Error: ${syncState.error}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(onClick = onSync, enabled = !syncState.isRunning) {
+                    if (syncState.isRunning) {
+                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                        Spacer(Modifier.width(8.dp))
+                    } else {
+                        Icon(Icons.Default.Sync, null, Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text(if (syncState.isRunning) "Syncing…" else "Sync Citadels")
+                }
+                if (syncState.isRunning) {
+                    Text(syncState.status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
