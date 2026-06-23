@@ -42,6 +42,7 @@ import org.eve.trader.core.database.AppState
 import org.eve.trader.core.database.MarketDao
 import org.eve.trader.core.database.StaticDataDao
 import org.eve.trader.core.esi.EsiClient
+import org.eve.trader.core.everef.EveRefService
 import org.eve.trader.core.model.StaticMarketGroupModel
 import org.eve.trader.core.model.StaticRegionModel
 import org.eve.trader.core.model.StaticStationModel
@@ -75,14 +76,15 @@ data class RegionOpportunity(
     val marginPct: Double,
     val itemVolumeM3: Double,
     val shippingCostPerUnit: Double,
-    val dailyVolume: Long,
+    val dailyVolume: Long,       // sell region
+    val dailyVolumeSrc: Long,    // buy region
     val priceChange7d: Double = Double.NaN,
 )
 
 // ─── Sort / trade-type enums ───────────────────────────────────────────────
 
 private enum class StationSortCol { NAME, BUY_PRICE, SELL_PRICE, MARGIN, NET_PROFIT, VOLUME, DAILY_PROFIT, TREND_7D }
-private enum class RegionSortCol  { NAME, BUY_PRICE, SELL_PRICE, MARGIN, ITEM_VOL, SHIPPING, NET_PROFIT, VOLUME, TREND_7D }
+private enum class RegionSortCol  { NAME, BUY_PRICE, SELL_PRICE, MARGIN, ITEM_VOL, SHIPPING, NET_PROFIT, VOLUME, TREND_7D, NET_VOL }
 
 private enum class InterRegionTradeType(val label: String) {
     SELL_TO_BUY ("Sell → Buy (instant)"),
@@ -105,7 +107,16 @@ private fun sortStation(list: List<StationOpportunity>, col: StationSortCol, asc
     return if (asc) list.sortedWith(cmp) else list.sortedWith(cmp.reversed())
 }
 
-private fun sortRegion(list: List<RegionOpportunity>, col: RegionSortCol, asc: Boolean): List<RegionOpportunity> {
+private fun sortRegion(
+    list: List<RegionOpportunity>,
+    col: RegionSortCol,
+    asc: Boolean,
+    volCapEnabled: Boolean = false,
+    volCapPct: Double = 100.0,
+): List<RegionOpportunity> {
+    fun effVol(opp: RegionOpportunity): Long =
+        if (volCapEnabled && opp.dailyVolumeSrc > 0) (opp.dailyVolumeSrc * volCapPct / 100.0).toLong().coerceAtLeast(1)
+        else opp.dailyVolume
     val cmp: Comparator<RegionOpportunity> = when (col) {
         RegionSortCol.NAME       -> compareBy { it.typeName }
         RegionSortCol.BUY_PRICE  -> compareBy { it.buyPrice }
@@ -114,8 +125,9 @@ private fun sortRegion(list: List<RegionOpportunity>, col: RegionSortCol, asc: B
         RegionSortCol.ITEM_VOL   -> compareBy { it.itemVolumeM3 }
         RegionSortCol.SHIPPING   -> compareBy { it.shippingCostPerUnit }
         RegionSortCol.NET_PROFIT -> compareBy { it.netProfit }
-        RegionSortCol.VOLUME     -> compareBy { it.dailyVolume }
+        RegionSortCol.VOLUME     -> compareBy { effVol(it) }
         RegionSortCol.TREND_7D   -> compareBy { if (it.priceChange7d.isNaN()) Double.MIN_VALUE else it.priceChange7d }
+        RegionSortCol.NET_VOL    -> compareBy { it.netProfit * effVol(it) }
     }
     return if (asc) list.sortedWith(cmp) else list.sortedWith(cmp.reversed())
 }
@@ -143,7 +155,9 @@ private object S {
     const val IR_MARGIN      = "analysis.r.margin"
     const val IR_ISK_PER_M3  = "analysis.r.iskPerM3"
     const val IR_MAX_CARGO   = "analysis.r.maxCargo"
-    const val IR_MIN_PROFIT  = "analysis.r.minProfit"
+    const val IR_MIN_PROFIT      = "analysis.r.minProfit"
+    const val IR_VOL_CAP_ENABLED = "analysis.r.volCapEnabled"
+    const val IR_VOL_CAP_PCT     = "analysis.r.volCapPct"
 
     fun get(key: String): String? = StaticDataDao.getSetting(key)
     fun set(key: String, value: String) = StaticDataDao.setSetting(key, value)
@@ -335,6 +349,7 @@ private fun StationTradingTab(
                                     val brokerFeePctD = brokerFeePct
                                     val salesTaxPctD  = salesTaxPct
                                     val stationIdSnap = stationId
+                                    val histSrc = withContext(Dispatchers.IO) { EveRefService.getSelectedSource() }
 
                                     val semaphore = Semaphore(10)
                                     val mutex     = Mutex()
@@ -352,7 +367,7 @@ private fun StationTradingTab(
                                                             typeId, orders, effRegion,
                                                             minMarginD, minDailyVolL, maxBuyPriceD,
                                                             minNetProfitD, brokerFeePctD, salesTaxPctD,
-                                                            stationIdSnap,
+                                                            stationIdSnap, histSrc,
                                                         )
                                                         // Protect shared list mutation on IO, then update Compose state on Main
                                                         val (sorted, c, f) = mutex.withLock {
@@ -499,10 +514,12 @@ private fun InterRegionTab(
     var isAnalyzing      by remember { mutableStateOf(false) }
     var statusMsg        by remember { mutableStateOf("") }
     var results          by remember { mutableStateOf<List<RegionOpportunity>>(emptyList()) }
-    var sortCol          by remember { mutableStateOf(RegionSortCol.NET_PROFIT) }
+    var sortCol          by remember { mutableStateOf(RegionSortCol.NET_VOL) }
     var sortAsc          by remember { mutableStateOf(false) }
     var brokerFeePct     by remember { mutableStateOf(3.0) }
     var salesTaxPct      by remember { mutableStateOf(8.0) }
+    var volCapEnabled    by remember { mutableStateOf(false) }
+    var volCapPct        by remember { mutableStateOf("10") }
 
     // Load persisted settings + character tax values
     LaunchedEffect(charId) {
@@ -514,10 +531,12 @@ private fun InterRegionTab(
             S.get(S.IR_TRADE_TYPE)?.let { name ->
                 InterRegionTradeType.entries.find { it.name == name }?.let { tradeType = it }
             }
-            S.get(S.IR_MARGIN)?.let     { minMargin    = it }
-            S.get(S.IR_ISK_PER_M3)?.let { iskPerM3     = it }
-            S.get(S.IR_MAX_CARGO)?.let  { maxCargoM3   = it }
-            S.get(S.IR_MIN_PROFIT)?.let { minNetProfit = it }
+            S.get(S.IR_MARGIN)?.let           { minMargin    = it }
+            S.get(S.IR_ISK_PER_M3)?.let       { iskPerM3     = it }
+            S.get(S.IR_MAX_CARGO)?.let         { maxCargoM3   = it }
+            S.get(S.IR_MIN_PROFIT)?.let        { minNetProfit = it }
+            S.get(S.IR_VOL_CAP_ENABLED)?.let   { volCapEnabled = it == "true" }
+            S.get(S.IR_VOL_CAP_PCT)?.let       { volCapPct    = it }
             if (charId != null) {
                 brokerFeePct = StaticDataDao.getCharBrokersFee(charId)
                 salesTaxPct  = StaticDataDao.getCharSalesTax(charId)
@@ -622,6 +641,34 @@ private fun InterRegionTab(
                 ParamField("Max m³",    maxCargoM3,   88.dp)  { maxCargoM3   = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MAX_CARGO,  it) } } }
                 ParamField("Min Net",   minNetProfit, 108.dp) { minNetProfit = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MIN_PROFIT, it) } } }
                 FilterDivider()
+                Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                    Text("Src vol %", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = volCapEnabled,
+                            onCheckedChange = {
+                                volCapEnabled = it
+                                scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_VOL_CAP_ENABLED, it.toString()) } }
+                            },
+                            modifier = Modifier.size(24.dp),
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        OutlinedTextField(
+                            value = volCapPct,
+                            onValueChange = { v ->
+                                volCapPct = v
+                                scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_VOL_CAP_PCT, v) } }
+                            },
+                            label = { Text("%") },
+                            enabled = volCapEnabled,
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.width(68.dp),
+                        )
+                    }
+                }
+                FilterDivider()
                 // Read-only tax display
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
@@ -655,6 +702,7 @@ private fun InterRegionTab(
                                 val salesTaxD      = salesTaxPct
                                 val buyStSnap      = buyStationId
                                 val sellStSnap     = sellStationId
+                                val histSrc        = withContext(Dispatchers.IO) { EveRefService.getSelectedSource() }
                                 try {
                                     val typeIds = withContext(Dispatchers.IO) {
                                         if (filterGroupIds != null) StaticDataDao.getTypeIdsByMarketGroups(filterGroupIds)
@@ -679,10 +727,10 @@ private fun InterRegionTab(
                                                             bDef.await() to sDef.await()
                                                         }
                                                         val opp = computeRegionOpportunityForType(
-                                                            typeId, buyOrders, sellOrders, sellRegionId,
+                                                            typeId, buyOrders, sellOrders, buyRegionId, sellRegionId,
                                                             buyName, sellName, tradeType, filterGroupIds,
                                                             iskPerM3D, maxCargoM3D, minMarginD, minNetD, brokerFeeD, salesTaxD,
-                                                            buyStSnap, sellStSnap,
+                                                            buyStSnap, sellStSnap, histSrc,
                                                         )
                                                         val (sorted, c, f) = mutex.withLock {
                                                             checked++
@@ -742,7 +790,10 @@ private fun InterRegionTab(
                 secondary = "Finds items priced low in the buy region that sell for more in the sell region",
             )
         } else {
-            val sorted = remember(results, sortCol, sortAsc) { sortRegion(results, sortCol, sortAsc) }
+            val volCapPctVal = volCapPct.toDoubleOrNull()?.coerceIn(0.01, 100.0) ?: 10.0
+            val sorted = remember(results, sortCol, sortAsc, volCapEnabled, volCapPctVal) {
+                sortRegion(results, sortCol, sortAsc, volCapEnabled, volCapPctVal)
+            }
             var selectedIds by remember(results) { mutableStateOf(setOf<Int>()) }
             val listState = rememberLazyListState()
             var dragStartIdx by remember { mutableStateOf<Int?>(null) }
@@ -757,7 +808,12 @@ private fun InterRegionTab(
                     onCopy = {
                         val text = sorted
                             .filter { it.typeId in selectedIds }
-                            .joinToString("\n") { "${it.typeName}\t${it.dailyVolume.coerceAtLeast(1)}" }
+                            .joinToString("\n") { opp ->
+                                val ev = if (volCapEnabled && opp.dailyVolumeSrc > 0)
+                                    (opp.dailyVolumeSrc * volCapPctVal / 100.0).toLong().coerceAtLeast(1)
+                                else opp.dailyVolume.coerceAtLeast(1)
+                                "${opp.typeName}\t$ev"
+                            }
                         copyToClipboard(text)
                     },
                     onClear = { selectedIds = emptySet() },
@@ -793,7 +849,7 @@ private fun InterRegionTab(
             ) {
                 LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                     itemsIndexed(sorted, key = { _, it -> it.typeId }) { idx, opp ->
-                        RegionRow(opp, idx, opp.typeId in selectedIds)
+                        RegionRow(opp, idx, opp.typeId in selectedIds, volCapEnabled, volCapPctVal)
                     }
                 }
             }
@@ -1211,6 +1267,7 @@ private fun RegionHeader(sort: RegionSortCol, asc: Boolean, onSort: (RegionSortC
             ACol("Net/unit",  RegionSortCol.NET_PROFIT, sort, asc, onSort, Modifier.width(95.dp))
             ACol("7d",        RegionSortCol.TREND_7D,   sort, asc, onSort, Modifier.width(65.dp))
             ACol("Vol/day",   RegionSortCol.VOLUME,     sort, asc, onSort, Modifier.width(70.dp))
+            ACol("Net×Vol",   RegionSortCol.NET_VOL,    sort, asc, onSort, Modifier.width(95.dp))
         }
     }
 }
@@ -1248,7 +1305,16 @@ private fun StationRow(opp: StationOpportunity, index: Int, selected: Boolean) {
 }
 
 @Composable
-private fun RegionRow(opp: RegionOpportunity, index: Int, selected: Boolean) {
+private fun RegionRow(
+    opp: RegionOpportunity,
+    index: Int,
+    selected: Boolean,
+    volCapEnabled: Boolean = false,
+    volCapPct: Double = 100.0,
+) {
+    val effVol = if (volCapEnabled && opp.dailyVolumeSrc > 0)
+        (opp.dailyVolumeSrc * volCapPct / 100.0).toLong().coerceAtLeast(1)
+    else opp.dailyVolume
     val bg = when {
         selected    -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
         index % 2 == 1 -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.025f)
@@ -1265,13 +1331,14 @@ private fun RegionRow(opp: RegionOpportunity, index: Int, selected: Boolean) {
         PriceText(opp.buyPrice,  Color(0xFFFF6B6B), Modifier.width(95.dp))
         PriceText(opp.sellPrice, Color(0xFF69DB7C), Modifier.width(95.dp))
         MarginText(opp.marginPct, Modifier.width(65.dp))
-        Text("${String.format("%.2f", opp.itemVolumeM3)}m³",
+        Text(formatVolume(opp.itemVolumeM3),
             style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.width(70.dp))
         PriceText(opp.shippingCostPerUnit, Color(0xFFFF8C00), Modifier.width(90.dp))
         PriceText(opp.netProfit, Color(0xFF69DB7C), Modifier.width(95.dp), bold = true)
         TrendText(opp.priceChange7d, Modifier.width(65.dp))
-        Text(if (opp.dailyVolume > 0) fVol(opp.dailyVolume) else "—",
+        Text(if (effVol > 0) fVol(effVol) else "—",
             style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.width(70.dp))
+        PriceText(opp.netProfit * effVol, Color(0xFF4DABF7), Modifier.width(95.dp), bold = true)
     }
     HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
 }
@@ -1370,6 +1437,7 @@ private fun computeOpportunityForType(
     brokerFeePct: Double,
     salesTaxPct: Double,
     stationId: Long? = null,
+    historySource: String = "esi",
 ): StationOpportunity? {
     fun Map<String, Any?>.loc() = (get("location_id") as? Number)?.toLong()
     val sells = orders.filter { (it["is_buy_order"] as? Boolean) == false && (stationId == null || it.loc() == stationId) }
@@ -1389,7 +1457,7 @@ private fun computeOpportunityForType(
     if (netProfit < minNetProfit) return null
 
     val type = StaticDataDao.getTypeById(typeId) ?: return null
-    val history     = fetchHistory(typeId, regionId, true)
+    val history     = fetchHistory(typeId, regionId, historySource)
     val avgDailyVol = if (history.isNotEmpty()) history.map { it.volume }.average().toLong() else 0L
     if (avgDailyVol < minDailyVol && minDailyVol > 0) return null
 
@@ -1413,6 +1481,7 @@ private fun computeRegionOpportunityForType(
     typeId: Int,
     buyRegionOrders: List<Map<String, Any?>>,
     sellRegionOrders: List<Map<String, Any?>>,
+    buyRegionId: Int,
     sellRegionId: Int,
     buyRegionName: String,
     sellRegionName: String,
@@ -1426,6 +1495,7 @@ private fun computeRegionOpportunityForType(
     salesTaxPct: Double,
     buyStationId: Long? = null,
     sellStationId: Long? = null,
+    historySource: String = "esi",
 ): RegionOpportunity? {
     fun Map<String, Any?>.price()    = (get("price") as? Number)?.toDouble() ?: 0.0
     fun Map<String, Any?>.isBuyOrd() = get("is_buy_order") as? Boolean == true
@@ -1458,14 +1528,21 @@ private fun computeRegionOpportunityForType(
 
     val shipping    = itemVol * iskPerM3
     val grossProfit = sellPrice - buyPrice
-    val fees        = sellPrice * (salesTaxPct + brokerFeePct) / 100.0
+    val fees = when (tradeType) {
+        InterRegionTradeType.SELL_TO_BUY  -> sellPrice * salesTaxPct / 100.0
+        InterRegionTradeType.SELL_TO_SELL -> sellPrice * (salesTaxPct + brokerFeePct) / 100.0
+        InterRegionTradeType.BUY_TO_BUY   -> buyPrice * brokerFeePct / 100.0 + sellPrice * salesTaxPct / 100.0
+        InterRegionTradeType.BUY_TO_SELL  -> buyPrice * brokerFeePct / 100.0 + sellPrice * (salesTaxPct + brokerFeePct) / 100.0
+    }
     val netProfit   = grossProfit - fees - shipping
     if (netProfit < minNetProfit) return null
     val marginPct = grossProfit / buyPrice * 100.0
     if (marginPct < minMarginPct) return null
 
-    val history = fetchHistory(typeId, sellRegionId, true)
-    val vol = if (history.isNotEmpty()) history.map { it.volume }.average().toLong() else 0L
+    val sellHistory = fetchHistory(typeId, sellRegionId, historySource)
+    val buyHistory  = fetchHistory(typeId, buyRegionId,  historySource)
+    val volSell = if (sellHistory.isNotEmpty()) sellHistory.map { it.volume }.average().toLong() else 0L
+    val volBuy  = if (buyHistory.isNotEmpty())  buyHistory.map  { it.volume }.average().toLong() else 0L
 
     return RegionOpportunity(
         typeId              = typeId,
@@ -1479,8 +1556,9 @@ private fun computeRegionOpportunityForType(
         marginPct           = marginPct,
         itemVolumeM3        = itemVol,
         shippingCostPerUnit = shipping,
-        dailyVolume         = vol,
-        priceChange7d       = compute7dChange(history),
+        dailyVolume         = volSell,
+        dailyVolumeSrc      = volBuy,
+        priceChange7d       = compute7dChange(sellHistory),
     )
 }
 
@@ -1496,10 +1574,13 @@ private fun compute7dChange(history: List<org.eve.trader.core.model.MarketHistor
     return (latest - oldest) / oldest * 100.0
 }
 
-private fun fetchHistory(typeId: Int, regionId: Int, fetchFromEsi: Boolean): List<org.eve.trader.core.model.MarketHistoryModel> {
+private fun fetchHistory(typeId: Int, regionId: Int, historySource: String): List<org.eve.trader.core.model.MarketHistoryModel> {
     val effectiveRegionId = if (typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else regionId
-    val dbHistory = MarketDao.getHistory(typeId, effectiveRegionId, 30)
-    if (dbHistory.isNotEmpty() || !fetchFromEsi) return dbHistory
+    if (historySource != "esi") {
+        return MarketDao.getHistory(typeId, effectiveRegionId, 30)
+    }
+    val dbHistory = MarketDao.getHistoryBySource(typeId, effectiveRegionId, 30, source = "esi")
+    if (dbHistory.isNotEmpty()) return dbHistory
     return try {
         val entries = EsiClient.getMarketRegionHistory(effectiveRegionId, typeId)
         entries.forEach { entry ->
@@ -1518,7 +1599,7 @@ private fun fetchHistory(typeId: Int, regionId: Int, fetchFromEsi: Boolean): Lis
                 )
             }
         }
-        MarketDao.getHistory(typeId, effectiveRegionId, 30)
+        MarketDao.getHistoryBySource(typeId, effectiveRegionId, 30, source = "esi")
     } catch (_: Exception) { emptyList() }
 }
 
@@ -1578,6 +1659,12 @@ private fun fPrice(v: Double): String = when {
     v >= 1_000_000     -> String.format("%.2fM", v / 1_000_000)
     v >= 1_000         -> String.format("%.1fK", v / 1_000)
     else               -> String.format("%.2f", v)
+}
+
+private fun formatVolume(m3: Double): String = when {
+    m3 >= 1_000.0 -> String.format("%.1fk", m3 / 1_000.0)
+    m3 >= 10.0    -> String.format("%.0f", m3)
+    else          -> String.format("%.2f", m3)
 }
 
 private fun fVol(v: Long): String = when {

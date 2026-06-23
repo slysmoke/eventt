@@ -13,6 +13,7 @@ dependencies {
     implementation(project(":core:esi"))
     implementation(project(":core:image"))
     implementation(project(":core:staticdata"))
+    implementation(project(":core:everef"))
     implementation(project(":ui:theme"))
     implementation(project(":ui:common"))
     implementation(compose.desktop.currentOs)

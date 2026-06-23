@@ -1153,7 +1153,8 @@ private suspend fun resolveLocationNames(locationIds: Set<Long>): Map<Long, Stri
             }
         }
         locationIds.filter { it > Int.MAX_VALUE }.forEach { id ->
-            result[id] = "Player Structure"
+            val name = StaticDataDao.getStationById(id)?.name
+            result[id] = name ?: "Unknown Structure ($id)"
         }
         result
     }

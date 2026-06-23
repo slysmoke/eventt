@@ -64,17 +64,25 @@ object MarketDao {
         }
     }
 
-    fun getHistory(typeId: Int, regionId: Int, days: Int = 90): List<MarketHistoryModel> {
+    fun getHistory(typeId: Int, regionId: Int, days: Int = 90): List<MarketHistoryModel> =
+        getHistoryBySource(typeId, regionId, days, source = null)
+
+    fun getHistoryBySource(typeId: Int, regionId: Int, days: Int = 90, source: String?): List<MarketHistoryModel> {
         return DatabaseManager.transaction {
-            prepareStatement(
-                """
-                SELECT * FROM market_history WHERE type_id = ? AND region_id = ?
-                ORDER BY date DESC LIMIT ?
-                """.trimIndent()
-            ).use { stmt ->
+            val sql = buildString {
+                append("SELECT * FROM market_history WHERE type_id = ? AND region_id = ?")
+                if (source != null) append(" AND source = ?")
+                append(" ORDER BY date DESC LIMIT ?")
+            }
+            prepareStatement(sql).use { stmt ->
                 stmt.setInt(1, typeId)
                 stmt.setInt(2, regionId)
-                stmt.setInt(3, days)
+                if (source != null) {
+                    stmt.setString(3, source)
+                    stmt.setInt(4, days)
+                } else {
+                    stmt.setInt(3, days)
+                }
                 stmt.executeQuery().use { rs ->
                     val list = mutableListOf<MarketHistoryModel>()
                     while (rs.next()) {
