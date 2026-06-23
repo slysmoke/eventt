@@ -764,13 +764,14 @@ private fun HistoryChartView(history: List<MarketHistoryModel>, type: StaticType
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        val filteredHistory = history.take(historyDays)
+        // Sort oldest-first, take most recent N days
+        val filteredHistory = history.sortedBy { it.date }.takeLast(historyDays)
 
         // Price chart
         ContentCard("Average Price — ${type.name}") {
             PriceLineChart(
-                data = filteredHistory.reversed().map { it.average },
-                dates = filteredHistory.reversed().map { it.date.take(10) },
+                data = filteredHistory.map { it.average },
+                dates = filteredHistory.map { it.date.take(10) },
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.fillMaxWidth().height(220.dp),
             )
@@ -781,8 +782,8 @@ private fun HistoryChartView(history: List<MarketHistoryModel>, type: StaticType
         // Volume chart
         ContentCard("Volume") {
             VolumeBarChart(
-                data = filteredHistory.reversed().map { it.volume.toDouble() },
-                dates = filteredHistory.reversed().map { it.date.take(10) },
+                data = filteredHistory.map { it.volume.toDouble() },
+                dates = filteredHistory.map { it.date.take(10) },
                 color = MaterialTheme.colorScheme.tertiary,
                 modifier = Modifier.fillMaxWidth().height(160.dp),
             )
