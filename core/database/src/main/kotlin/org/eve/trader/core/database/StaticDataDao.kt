@@ -192,6 +192,17 @@ object StaticDataDao {
         }
     }
 
+    fun getGroupNameForType(typeId: Int): String? {
+        return DatabaseManager.transaction {
+            prepareStatement(
+                "SELECT g.name FROM static_types t JOIN static_groups g ON t.group_id = g.group_id WHERE t.type_id = ?"
+            ).use { stmt ->
+                stmt.setInt(1, typeId)
+                stmt.executeQuery().use { rs -> if (rs.next()) rs.getString(1) else null }
+            }
+        }
+    }
+
     // ─── Market Groups ──────────────────────────────────────────────────
 
     fun insertMarketGroup(group: StaticMarketGroupModel) {
