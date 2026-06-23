@@ -408,6 +408,15 @@ object StaticDataDao {
         }
     }
 
+    fun getStationsByRegion(regionId: Int): List<StaticStationModel> {
+        return DatabaseManager.transaction {
+            prepareStatement("SELECT * FROM static_stations WHERE region_id = ? ORDER BY name").use { stmt ->
+                stmt.setInt(1, regionId)
+                stmt.executeQuery().mapResultSetToStations()
+            }
+        }
+    }
+
     fun searchStations(query: String, limit: Int = 20): List<StaticStationModel> {
         return DatabaseManager.transaction {
             prepareStatement("SELECT * FROM static_stations WHERE name LIKE ? ORDER BY name LIMIT ?").use { stmt ->

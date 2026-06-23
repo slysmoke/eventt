@@ -37,6 +37,7 @@ import org.eve.trader.core.database.StaticDataDao
 import org.eve.trader.core.esi.EsiClient
 import org.eve.trader.core.model.StaticMarketGroupModel
 import org.eve.trader.core.model.StaticRegionModel
+import org.eve.trader.core.model.StaticStationModel
 
 // ─── Data models ──────────────────────────────────────────────────────────
 
@@ -115,8 +116,9 @@ private fun sortRegion(list: List<RegionOpportunity>, col: RegionSortCol, asc: B
 // ─── Settings helpers ─────────────────────────────────────────────────────
 
 private object S {
-    // Station keys
+    // Station trading keys
     const val ST_REGION      = "analysis.s.region"
+    const val ST_STATION     = "analysis.s.station"
     const val ST_CAT_TOP     = "analysis.s.catTop"
     const val ST_CAT_SUB     = "analysis.s.catSub"
     const val ST_MARGIN      = "analysis.s.margin"
@@ -124,8 +126,10 @@ private object S {
     const val ST_MAX_PRICE   = "analysis.s.maxPrice"
     const val ST_MIN_PROFIT  = "analysis.s.minProfit"
     // Inter-region keys
-    const val IR_BUY_REGION  = "analysis.r.buyRegion"
-    const val IR_SELL_REGION = "analysis.r.sellRegion"
+    const val IR_BUY_REGION   = "analysis.r.buyRegion"
+    const val IR_BUY_STATION  = "analysis.r.buyStation"
+    const val IR_SELL_REGION  = "analysis.r.sellRegion"
+    const val IR_SELL_STATION = "analysis.r.sellStation"
     const val IR_TRADE_TYPE  = "analysis.r.tradeType"
     const val IR_CAT_TOP     = "analysis.r.catTop"
     const val IR_CAT_SUB     = "analysis.r.catSub"
@@ -183,6 +187,8 @@ private fun StationTradingTab(
     val scope = rememberCoroutineScope()
 
     var regionId         by remember { mutableStateOf(10000002) }
+    var stationId        by remember { mutableStateOf<Long?>(null) }
+    var stations         by remember { mutableStateOf<List<StaticStationModel>>(emptyList()) }
     var selectedTopGroup by remember { mutableStateOf<StaticMarketGroupModel?>(null) }
     var selectedSubGroup by remember { mutableStateOf<StaticMarketGroupModel?>(null) }
     var subGroups        by remember { mutableStateOf<List<StaticMarketGroupModel>>(emptyList()) }
@@ -202,6 +208,7 @@ private fun StationTradingTab(
     LaunchedEffect(charId) {
         withContext(Dispatchers.IO) {
             S.get(S.ST_REGION)?.toIntOrNull()?.let     { regionId    = it }
+            S.get(S.ST_STATION)?.toLongOrNull()?.let   { stationId   = it }
             S.get(S.ST_MARGIN)?.let                    { minMargin   = it }
             S.get(S.ST_MIN_VOL)?.let                   { minDailyVol = it }
             S.get(S.ST_MAX_PRICE)?.let                 { maxBuyPrice = it }
@@ -210,6 +217,17 @@ private fun StationTradingTab(
                 brokerFeePct = StaticDataDao.getCharBrokersFee(charId)
                 salesTaxPct  = StaticDataDao.getCharSalesTax(charId)
             }
+        }
+    }
+
+    // Reload stations when region changes
+    LaunchedEffect(regionId) {
+        val loaded = withContext(Dispatchers.IO) { StaticDataDao.getStationsByRegion(regionId) }
+        stations = loaded
+        // If saved station is in the new region keep it, otherwise clear
+        if (stationId != null && loaded.none { it.stationId == stationId }) {
+            stationId = null
+            scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_STATION, "") } }
         }
     }
 
@@ -246,6 +264,10 @@ private fun StationTradingTab(
                 RegionPicker(allRegions, regionId, width = 180.dp) {
                     regionId = it
                     scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_REGION, it.toString()) } }
+                }
+                StationPicker(stations, stationId, width = 200.dp) {
+                    stationId = it
+                    scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_STATION, it?.toString() ?: "") } }
                 }
                 FilterDivider()
                 GroupDropdown("Category", topGroups, selectedTopGroup, "All categories", 150.dp) { g ->
@@ -305,6 +327,7 @@ private fun StationTradingTab(
                                     val minNetProfitD = minNetProfit.toDoubleOrNull() ?: 0.0
                                     val brokerFeePctD = brokerFeePct
                                     val salesTaxPctD  = salesTaxPct
+                                    val stationIdSnap = stationId
 
                                     val semaphore = Semaphore(10)
                                     val mutex     = Mutex()
@@ -322,6 +345,7 @@ private fun StationTradingTab(
                                                             typeId, orders, effRegion,
                                                             minMarginD, minDailyVolL, maxBuyPriceD,
                                                             minNetProfitD, brokerFeePctD, salesTaxPctD,
+                                                            stationIdSnap,
                                                         )
                                                         // Protect shared list mutation on IO, then update Compose state on Main
                                                         val (sorted, c, f) = mutex.withLock {
@@ -404,7 +428,11 @@ private fun InterRegionTab(
     val scope = rememberCoroutineScope()
 
     var buyRegionId      by remember { mutableStateOf(10000002) }
+    var buyStationId     by remember { mutableStateOf<Long?>(null) }
+    var buyStations      by remember { mutableStateOf<List<StaticStationModel>>(emptyList()) }
     var sellRegionId     by remember { mutableStateOf(10000043) }
+    var sellStationId    by remember { mutableStateOf<Long?>(null) }
+    var sellStations     by remember { mutableStateOf<List<StaticStationModel>>(emptyList()) }
     var tradeType        by remember { mutableStateOf(InterRegionTradeType.SELL_TO_BUY) }
     var selectedTopGroup by remember { mutableStateOf<StaticMarketGroupModel?>(null) }
     var selectedSubGroup by remember { mutableStateOf<StaticMarketGroupModel?>(null) }
@@ -424,8 +452,10 @@ private fun InterRegionTab(
     // Load persisted settings + character tax values
     LaunchedEffect(charId) {
         withContext(Dispatchers.IO) {
-            S.get(S.IR_BUY_REGION)?.toIntOrNull()?.let  { buyRegionId  = it }
-            S.get(S.IR_SELL_REGION)?.toIntOrNull()?.let { sellRegionId = it }
+            S.get(S.IR_BUY_REGION)?.toIntOrNull()?.let   { buyRegionId  = it }
+            S.get(S.IR_BUY_STATION)?.toLongOrNull()?.let { buyStationId = it }
+            S.get(S.IR_SELL_REGION)?.toIntOrNull()?.let  { sellRegionId = it }
+            S.get(S.IR_SELL_STATION)?.toLongOrNull()?.let{ sellStationId = it }
             S.get(S.IR_TRADE_TYPE)?.let { name ->
                 InterRegionTradeType.entries.find { it.name == name }?.let { tradeType = it }
             }
@@ -437,6 +467,26 @@ private fun InterRegionTab(
                 brokerFeePct = StaticDataDao.getCharBrokersFee(charId)
                 salesTaxPct  = StaticDataDao.getCharSalesTax(charId)
             }
+        }
+    }
+
+    // Reload stations when buy region changes
+    LaunchedEffect(buyRegionId) {
+        val loaded = withContext(Dispatchers.IO) { StaticDataDao.getStationsByRegion(buyRegionId) }
+        buyStations = loaded
+        if (buyStationId != null && loaded.none { it.stationId == buyStationId }) {
+            buyStationId = null
+            scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_BUY_STATION, "") } }
+        }
+    }
+
+    // Reload stations when sell region changes
+    LaunchedEffect(sellRegionId) {
+        val loaded = withContext(Dispatchers.IO) { StaticDataDao.getStationsByRegion(sellRegionId) }
+        sellStations = loaded
+        if (sellStationId != null && loaded.none { it.stationId == sellStationId }) {
+            sellStationId = null
+            scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SELL_STATION, "") } }
         }
     }
 
@@ -473,9 +523,18 @@ private fun InterRegionTab(
                     buyRegionId = it
                     scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_BUY_REGION, it.toString()) } }
                 }
+                StationPicker(buyStations, buyStationId, width = 200.dp, label = "Buy Station") {
+                    buyStationId = it
+                    scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_BUY_STATION, it?.toString() ?: "") } }
+                }
+                FilterDivider()
                 RegionPicker(allRegions, sellRegionId, width = 168.dp, label = "Sell Region") {
                     sellRegionId = it
                     scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SELL_REGION, it.toString()) } }
+                }
+                StationPicker(sellStations, sellStationId, width = 200.dp, label = "Sell Station") {
+                    sellStationId = it
+                    scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SELL_STATION, it?.toString() ?: "") } }
                 }
                 FilterDivider()
                 TradeTypeChip(tradeType) {
@@ -533,12 +592,14 @@ private fun InterRegionTab(
                                 val sellName = allRegions.find { it.regionId == sellRegionId }?.name ?: "sell"
                                 val filterGroupId  = selectedSubGroup?.marketGroupId ?: selectedTopGroup?.marketGroupId
                                 val filterGroupIds = filterGroupId?.let { withContext(Dispatchers.IO) { buildGroupSubtree(it) } }
-                                val iskPerM3D   = iskPerM3.toDoubleOrNull()     ?: 1000.0
-                                val maxCargoM3D = maxCargoM3.toDoubleOrNull()   ?: 10000.0
-                                val minMarginD  = minMargin.toDoubleOrNull()    ?: 5.0
-                                val minNetD     = minNetProfit.toDoubleOrNull() ?: 0.0
-                                val brokerFeeD  = brokerFeePct
-                                val salesTaxD   = salesTaxPct
+                                val iskPerM3D      = iskPerM3.toDoubleOrNull()     ?: 1000.0
+                                val maxCargoM3D    = maxCargoM3.toDoubleOrNull()   ?: 10000.0
+                                val minMarginD     = minMargin.toDoubleOrNull()    ?: 5.0
+                                val minNetD        = minNetProfit.toDoubleOrNull() ?: 0.0
+                                val brokerFeeD     = brokerFeePct
+                                val salesTaxD      = salesTaxPct
+                                val buyStSnap      = buyStationId
+                                val sellStSnap     = sellStationId
                                 try {
                                     val typeIds = withContext(Dispatchers.IO) {
                                         if (filterGroupIds != null) StaticDataDao.getTypeIdsByMarketGroups(filterGroupIds)
@@ -566,6 +627,7 @@ private fun InterRegionTab(
                                                             typeId, buyOrders, sellOrders, sellRegionId,
                                                             buyName, sellName, tradeType, filterGroupIds,
                                                             iskPerM3D, maxCargoM3D, minMarginD, minNetD, brokerFeeD, salesTaxD,
+                                                            buyStSnap, sellStSnap,
                                                         )
                                                         val (sorted, c, f) = mutex.withLock {
                                                             checked++
@@ -772,6 +834,113 @@ private fun RegionPicker(
                             text = { Text(region.name, style = MaterialTheme.typography.bodySmall) },
                             onClick = { onSelect(region.regionId); expanded = false; searchQuery = "" },
                             leadingIcon = if (region.regionId == selectedRegionId) {
+                                { Icon(Icons.Default.Check, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary) }
+                            } else null,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─── Station picker ───────────────────────────────────────────────────────
+
+@Composable
+private fun StationPicker(
+    stations: List<StaticStationModel>,
+    selectedStationId: Long?,
+    width: Dp = 200.dp,
+    label: String = "Station",
+    onSelect: (Long?) -> Unit,
+) {
+    var expanded    by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+
+    val selectedName = remember(selectedStationId, stations) {
+        stations.find { it.stationId == selectedStationId }?.name?.substringAfterLast(" - ") ?: "All stations"
+    }
+    val filtered = remember(searchQuery, stations) {
+        if (searchQuery.isBlank()) stations.take(14)
+        else stations.filter { it.name.contains(searchQuery, ignoreCase = true) }.take(14)
+    }
+
+    FilterControl(label) {
+        Box {
+            ChipSurface(onClick = { expanded = true; searchQuery = "" }, width = width) {
+                Text(
+                    selectedName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (selectedStationId == null) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                            else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                if (selectedStationId != null) {
+                    Icon(
+                        Icons.Default.Close, null,
+                        Modifier.size(12.dp).clickable { onSelect(null) },
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    )
+                    Spacer(Modifier.width(2.dp))
+                }
+                Icon(
+                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    null, Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+            }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false; searchQuery = "" },
+                modifier = Modifier.width(width + 60.dp).heightIn(max = 360.dp),
+            ) {
+                Box(Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = MaterialTheme.typography.bodySmall,
+                        singleLine = true,
+                        placeholder = { Text("Search station…", style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
+                        leadingIcon = { Icon(Icons.Default.Search, null, Modifier.size(16.dp)) },
+                    )
+                }
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text("All stations", style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
+                    onClick = { onSelect(null); expanded = false; searchQuery = "" },
+                    leadingIcon = if (selectedStationId == null) {
+                        { Icon(Icons.Default.Check, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary) }
+                    } else null,
+                )
+                HorizontalDivider()
+                if (stations.isEmpty()) {
+                    DropdownMenuItem(
+                        text = { Text("No stations in this region", style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
+                        onClick = {},
+                        enabled = false,
+                    )
+                } else if (filtered.isEmpty()) {
+                    DropdownMenuItem(
+                        text = { Text("No match for \"$searchQuery\"", style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
+                        onClick = {},
+                        enabled = false,
+                    )
+                } else {
+                    filtered.forEach { station ->
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(station.name.substringAfterLast(" - "), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    if (station.systemName.isNotBlank()) {
+                                        Text(station.systemName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                                    }
+                                }
+                            },
+                            onClick = { onSelect(station.stationId); expanded = false; searchQuery = "" },
+                            leadingIcon = if (station.stationId == selectedStationId) {
                                 { Icon(Icons.Default.Check, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary) }
                             } else null,
                         )
@@ -1081,9 +1250,11 @@ private fun computeOpportunityForType(
     minNetProfit: Double,
     brokerFeePct: Double,
     salesTaxPct: Double,
+    stationId: Long? = null,
 ): StationOpportunity? {
-    val sells = orders.filter { (it["is_buy_order"] as? Boolean) == false }
-    val buys  = orders.filter { (it["is_buy_order"] as? Boolean) == true  }
+    fun Map<String, Any?>.loc() = (get("location_id") as? Number)?.toLong()
+    val sells = orders.filter { (it["is_buy_order"] as? Boolean) == false && (stationId == null || it.loc() == stationId) }
+    val buys  = orders.filter { (it["is_buy_order"] as? Boolean) == true  && (stationId == null || it.loc() == stationId) }
     if (sells.isEmpty() || buys.isEmpty()) return null
 
     val bestSell = sells.minOf { (it["price"] as? Number)?.toDouble() ?: Double.MAX_VALUE }
@@ -1134,14 +1305,20 @@ private fun computeRegionOpportunityForType(
     minNetProfit: Double,
     brokerFeePct: Double,
     salesTaxPct: Double,
+    buyStationId: Long? = null,
+    sellStationId: Long? = null,
 ): RegionOpportunity? {
     fun Map<String, Any?>.price()    = (get("price") as? Number)?.toDouble() ?: 0.0
     fun Map<String, Any?>.isBuyOrd() = get("is_buy_order") as? Boolean == true
+    fun Map<String, Any?>.loc()      = (get("location_id") as? Number)?.toLong()
 
-    val srcSell = buyRegionOrders.filter  { !it.isBuyOrd() }.minOfOrNull { it.price() }
-    val srcBuy  = buyRegionOrders.filter  {  it.isBuyOrd() }.maxOfOrNull { it.price() }
-    val dstBuy  = sellRegionOrders.filter {  it.isBuyOrd() }.maxOfOrNull { it.price() }
-    val dstSell = sellRegionOrders.filter { !it.isBuyOrd() }.minOfOrNull { it.price() }
+    val buyFiltered  = if (buyStationId  != null) buyRegionOrders.filter  { it.loc() == buyStationId  } else buyRegionOrders
+    val sellFiltered = if (sellStationId != null) sellRegionOrders.filter { it.loc() == sellStationId } else sellRegionOrders
+
+    val srcSell = buyFiltered.filter  { !it.isBuyOrd() }.minOfOrNull { it.price() }
+    val srcBuy  = buyFiltered.filter  {  it.isBuyOrd() }.maxOfOrNull { it.price() }
+    val dstBuy  = sellFiltered.filter {  it.isBuyOrd() }.maxOfOrNull { it.price() }
+    val dstSell = sellFiltered.filter { !it.isBuyOrd() }.minOfOrNull { it.price() }
 
     val buyPrice = when (tradeType) {
         InterRegionTradeType.SELL_TO_BUY, InterRegionTradeType.SELL_TO_SELL -> srcSell
