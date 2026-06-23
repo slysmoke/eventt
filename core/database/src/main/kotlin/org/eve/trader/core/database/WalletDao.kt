@@ -245,6 +245,45 @@ object WalletDao {
         }
     }
 
+    fun getTransactionBreakdown(
+        characterId: Int? = null,
+        corporationId: Int? = null,
+        since: String = "1970-01-01",
+    ): List<DailyWalletEntry> {
+        return DatabaseManager.transaction {
+            val where = buildWhereClause(characterId, corporationId)
+            val whereSql = if (where.sql.isEmpty()) "WHERE date >= ?" else "${where.sql} AND date >= ?"
+            prepareStatement("""
+                SELECT
+                    substr(date, 1, 10) as day,
+                    SUM(CASE WHEN is_buy = 0 THEN total ELSE 0 END) as income,
+                    SUM(CASE WHEN is_buy = 1 THEN total ELSE 0 END) as expenses,
+                    SUM(CASE WHEN is_buy = 0 THEN total ELSE -total END) as net
+                FROM transactions
+                $whereSql
+                GROUP BY substr(date, 1, 10)
+                ORDER BY day DESC
+                LIMIT 90
+            """.trimIndent()).use { stmt ->
+                var i = 1
+                where.params.forEach { stmt.setObject(i++, it) }
+                stmt.setString(i, since)
+                stmt.executeQuery().use { rs ->
+                    val list = mutableListOf<DailyWalletEntry>()
+                    while (rs.next()) {
+                        list.add(DailyWalletEntry(
+                            date     = rs.getString("day"),
+                            income   = rs.getDouble("income"),
+                            expenses = rs.getDouble("expenses"),
+                            net      = rs.getDouble("net"),
+                        ))
+                    }
+                    list
+                }
+            }
+        }
+    }
+
     // ─── Helper ───────────────────────────────────────────────────────────
 
     private data class WhereClause(val sql: String, val params: List<Any?>)

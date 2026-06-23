@@ -17,7 +17,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.eve.trader.core.database.*
 import org.eve.trader.core.model.PriceAlertModel
-import org.eve.trader.core.model.WalletSummary
 import java.time.LocalDate
 
 private val POSITIVE = Color(0xFF69DB7C)
@@ -26,7 +25,8 @@ private val ACCENT   = Color(0xFF4A90D9)
 
 @Composable
 fun DashboardScreen(charId: Int?) {
-    var walletSummary   by remember { mutableStateOf<WalletSummary?>(null) }
+    var walletBalance   by remember { mutableStateOf(0.0) }
+    var txBreakdown     by remember { mutableStateOf<List<org.eve.trader.core.model.DailyWalletEntry>>(emptyList()) }
     var assetValue      by remember { mutableStateOf(0.0) }
     var recentTx        by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
     var triggeredAlerts by remember { mutableStateOf<List<PriceAlertModel>>(emptyList()) }
@@ -36,7 +36,9 @@ fun DashboardScreen(charId: Int?) {
         isLoading = true
         withContext(Dispatchers.IO) {
             try {
-                walletSummary   = WalletDao.getWalletSummary(characterId = charId)
+                val since90 = LocalDate.now().minusDays(90).toString()
+                walletBalance   = WalletDao.getWalletSummary(characterId = charId).balance
+                txBreakdown     = WalletDao.getTransactionBreakdown(characterId = charId, since = since90)
                 assetValue      = if (charId != null) AssetDao.getTotalValue(characterId = charId) else 0.0
                 recentTx        = WalletDao.getTransactions(characterId = charId, limit = 12)
                 triggeredAlerts = AlertDao.getEnabled().filter { it.triggered }
@@ -55,14 +57,12 @@ fun DashboardScreen(charId: Int?) {
     val today        = LocalDate.now().toString()
     val week7Start   = LocalDate.now().minusDays(7).toString()
     val month30Start = LocalDate.now().minusDays(30).toString()
-    val ws           = walletSummary
-    val breakdown    = ws?.dailyBreakdown ?: emptyList()
 
-    val todayPL   = breakdown.firstOrNull { it.date == today }?.net ?: 0.0
-    val week7PL   = breakdown.filter { it.date >= week7Start }.sumOf { it.net }
-    val month30PL = breakdown.filter { it.date >= month30Start }.sumOf { it.net }
-    val income30d = breakdown.filter { it.date >= month30Start }.sumOf { it.income }
-    val spend30d  = breakdown.filter { it.date >= month30Start }.sumOf { it.expenses }
+    val todayPL   = txBreakdown.firstOrNull { it.date == today }?.net ?: 0.0
+    val week7PL   = txBreakdown.filter { it.date >= week7Start }.sumOf { it.net }
+    val month30PL = txBreakdown.filter { it.date >= month30Start }.sumOf { it.net }
+    val income30d = txBreakdown.filter { it.date >= month30Start }.sumOf { it.income }
+    val spend30d  = txBreakdown.filter { it.date >= month30Start }.sumOf { it.expenses }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
@@ -87,7 +87,7 @@ fun DashboardScreen(charId: Int?) {
                     modifier    = Modifier.weight(1f),
                     icon        = Icons.Default.AccountBalance,
                     label       = "Wallet Balance",
-                    value       = formatIsk(ws?.balance ?: 0.0),
+                    value       = formatIsk(walletBalance),
                     color       = ACCENT,
                 )
                 KpiCard(
