@@ -21,6 +21,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import java.awt.Toolkit
+import java.awt.datatransfer.StringSelection
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -407,11 +409,29 @@ private fun StationTradingTab(
             )
         } else {
             val sorted = remember(results, sortCol, sortAsc) { sortStation(results, sortCol, sortAsc) }
+            var selectedIds by remember(results) { mutableStateOf(setOf<Int>()) }
+
             StationHeader(sortCol, sortAsc) { col ->
                 if (sortCol == col) sortAsc = !sortAsc else { sortCol = col; sortAsc = false }
             }
+            if (selectedIds.isNotEmpty()) {
+                SelectionBar(
+                    count = selectedIds.size,
+                    onCopy = {
+                        val text = sorted
+                            .filter { it.typeId in selectedIds }
+                            .joinToString("\n") { "${it.typeName}\t${it.dailyVolume.coerceAtLeast(1)}" }
+                        copyToClipboard(text)
+                    },
+                    onClear = { selectedIds = emptySet() },
+                )
+            }
             LazyColumn(modifier = Modifier.fillMaxSize()) {
-                itemsIndexed(sorted, key = { _, it -> it.typeId }) { idx, opp -> StationRow(opp, idx) }
+                itemsIndexed(sorted, key = { _, it -> it.typeId }) { idx, opp ->
+                    StationRow(opp, idx, opp.typeId in selectedIds) {
+                        selectedIds = if (opp.typeId in selectedIds) selectedIds - opp.typeId else selectedIds + opp.typeId
+                    }
+                }
             }
         }
     }
@@ -688,11 +708,29 @@ private fun InterRegionTab(
             )
         } else {
             val sorted = remember(results, sortCol, sortAsc) { sortRegion(results, sortCol, sortAsc) }
+            var selectedIds by remember(results) { mutableStateOf(setOf<Int>()) }
+
             RegionHeader(sortCol, sortAsc) { col ->
                 if (sortCol == col) sortAsc = !sortAsc else { sortCol = col; sortAsc = false }
             }
+            if (selectedIds.isNotEmpty()) {
+                SelectionBar(
+                    count = selectedIds.size,
+                    onCopy = {
+                        val text = sorted
+                            .filter { it.typeId in selectedIds }
+                            .joinToString("\n") { "${it.typeName}\t${it.dailyVolume.coerceAtLeast(1)}" }
+                        copyToClipboard(text)
+                    },
+                    onClear = { selectedIds = emptySet() },
+                )
+            }
             LazyColumn(modifier = Modifier.fillMaxSize()) {
-                itemsIndexed(sorted, key = { _, it -> it.typeId }) { idx, opp -> RegionRow(opp, idx) }
+                itemsIndexed(sorted, key = { _, it -> it.typeId }) { idx, opp ->
+                    RegionRow(opp, idx, opp.typeId in selectedIds) {
+                        selectedIds = if (opp.typeId in selectedIds) selectedIds - opp.typeId else selectedIds + opp.typeId
+                    }
+                }
             }
         }
     }
@@ -1077,6 +1115,8 @@ private fun ParamField(label: String, value: String, width: Dp, onValue: (String
 private fun StationHeader(sort: StationSortCol, asc: Boolean, onSort: (StationSortCol) -> Unit) {
     Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("#", style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f), modifier = Modifier.width(28.dp))
             ACol("Item",       StationSortCol.NAME,         sort, asc, onSort, Modifier.weight(1f))
             ACol("Buy At",     StationSortCol.BUY_PRICE,    sort, asc, onSort, Modifier.width(95.dp))
             ACol("Sell At",    StationSortCol.SELL_PRICE,   sort, asc, onSort, Modifier.width(95.dp))
@@ -1095,6 +1135,8 @@ private fun StationHeader(sort: StationSortCol, asc: Boolean, onSort: (StationSo
 private fun RegionHeader(sort: RegionSortCol, asc: Boolean, onSort: (RegionSortCol) -> Unit) {
     Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("#", style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f), modifier = Modifier.width(28.dp))
             ACol("Item",      RegionSortCol.NAME,       sort, asc, onSort, Modifier.weight(1f))
             ACol("Buy",       RegionSortCol.BUY_PRICE,  sort, asc, onSort, Modifier.width(95.dp))
             ACol("Sell",      RegionSortCol.SELL_PRICE, sort, asc, onSort, Modifier.width(95.dp))
@@ -1111,12 +1153,18 @@ private fun RegionHeader(sort: RegionSortCol, asc: Boolean, onSort: (RegionSortC
 // ─── Table rows ───────────────────────────────────────────────────────────
 
 @Composable
-private fun StationRow(opp: StationOpportunity, index: Int) {
-    val bg = if (index % 2 == 0) Color.Transparent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.025f)
+private fun StationRow(opp: StationOpportunity, index: Int, selected: Boolean, onToggle: () -> Unit) {
+    val bg = when {
+        selected    -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+        index % 2 == 1 -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.025f)
+        else        -> Color.Transparent
+    }
     Row(
-        modifier = Modifier.fillMaxWidth().background(bg).padding(horizontal = 10.dp, vertical = 3.dp),
+        modifier = Modifier.fillMaxWidth().background(bg).clickable { onToggle() }.padding(horizontal = 10.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Text("${index + 1}", style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f), modifier = Modifier.width(28.dp))
         Text(opp.typeName, style = MaterialTheme.typography.bodySmall, maxLines = 1,
             overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         PriceText(opp.bestBuy,   Color(0xFFFF6B6B), Modifier.width(95.dp))
@@ -1135,12 +1183,18 @@ private fun StationRow(opp: StationOpportunity, index: Int) {
 }
 
 @Composable
-private fun RegionRow(opp: RegionOpportunity, index: Int) {
-    val bg = if (index % 2 == 0) Color.Transparent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.025f)
+private fun RegionRow(opp: RegionOpportunity, index: Int, selected: Boolean, onToggle: () -> Unit) {
+    val bg = when {
+        selected    -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+        index % 2 == 1 -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.025f)
+        else        -> Color.Transparent
+    }
     Row(
-        modifier = Modifier.fillMaxWidth().background(bg).padding(horizontal = 10.dp, vertical = 3.dp),
+        modifier = Modifier.fillMaxWidth().background(bg).clickable { onToggle() }.padding(horizontal = 10.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Text("${index + 1}", style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f), modifier = Modifier.width(28.dp))
         Text(opp.typeName, style = MaterialTheme.typography.bodySmall, maxLines = 1,
             overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         PriceText(opp.buyPrice,  Color(0xFFFF6B6B), Modifier.width(95.dp))
@@ -1401,6 +1455,50 @@ private fun fetchHistory(typeId: Int, regionId: Int, fetchFromEsi: Boolean): Lis
         }
         MarketDao.getHistory(typeId, effectiveRegionId, 30)
     } catch (_: Exception) { emptyList() }
+}
+
+// ─── Selection bar ────────────────────────────────────────────────────────
+
+@Composable
+private fun SelectionBar(count: Int, onCopy: () -> Unit, onClear: () -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.secondaryContainer) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(Icons.Default.CheckBox, null, Modifier.size(14.dp),
+                tint = MaterialTheme.colorScheme.onSecondaryContainer)
+            Text(
+                "$count selected",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            Spacer(Modifier.weight(1f))
+            TextButton(
+                onClick = onCopy,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                modifier = Modifier.height(28.dp),
+            ) {
+                Icon(Icons.Default.ContentCopy, null, Modifier.size(13.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Copy list", style = MaterialTheme.typography.labelSmall)
+            }
+            TextButton(
+                onClick = onClear,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                modifier = Modifier.height(28.dp),
+            ) {
+                Text("Clear", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+}
+
+private fun copyToClipboard(text: String) {
+    val sel = StringSelection(text)
+    Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, null)
 }
 
 // ─── Format helpers ───────────────────────────────────────────────────────
