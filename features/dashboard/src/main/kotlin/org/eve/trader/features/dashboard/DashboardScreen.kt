@@ -1,8 +1,7 @@
 package org.eve.trader.features.dashboard
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -12,104 +11,280 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.eve.trader.core.database.*
-import org.eve.trader.core.model.DashboardSummary
-import org.eve.trader.ui.common.LoadingOverlay
+import org.eve.trader.core.model.PriceAlertModel
+import org.eve.trader.core.model.WalletSummary
+import java.time.LocalDate
+
+private val POSITIVE = Color(0xFF69DB7C)
+private val NEGATIVE = Color(0xFFFF6B6B)
+private val ACCENT   = Color(0xFF4A90D9)
 
 @Composable
-fun DashboardScreen() {
-    var summary by remember { mutableStateOf<DashboardSummary?>(null) }
-    var isLoading by remember { mutableStateOf(false) }
+fun DashboardScreen(charId: Int?) {
+    var walletSummary   by remember { mutableStateOf<WalletSummary?>(null) }
+    var assetValue      by remember { mutableStateOf(0.0) }
+    var recentTx        by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
+    var triggeredAlerts by remember { mutableStateOf<List<PriceAlertModel>>(emptyList()) }
+    var isLoading       by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(charId) {
         isLoading = true
         withContext(Dispatchers.IO) {
-            summary = loadDashboardSummary()
+            try {
+                walletSummary   = WalletDao.getWalletSummary(characterId = charId)
+                assetValue      = if (charId != null) AssetDao.getTotalValue(characterId = charId) else 0.0
+                recentTx        = WalletDao.getTransactions(characterId = charId, limit = 12)
+                triggeredAlerts = AlertDao.getEnabled().filter { it.triggered }
+            } catch (_: Exception) { }
         }
         isLoading = false
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Dashboard", style = MaterialTheme.typography.headlineMedium)
+    if (charId == null) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No character selected", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+        }
+        return
+    }
 
-        Spacer(modifier = Modifier.height(16.dp))
+    val today        = LocalDate.now().toString()
+    val week7Start   = LocalDate.now().minusDays(7).toString()
+    val month30Start = LocalDate.now().minusDays(30).toString()
+    val ws           = walletSummary
+    val breakdown    = ws?.dailyBreakdown ?: emptyList()
 
-        summary?.let { s ->
-            // Top row: Key metrics
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 180.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+    val todayPL   = breakdown.firstOrNull { it.date == today }?.net ?: 0.0
+    val week7PL   = breakdown.filter { it.date >= week7Start }.sumOf { it.net }
+    val month30PL = breakdown.filter { it.date >= month30Start }.sumOf { it.net }
+    val income30d = breakdown.filter { it.date >= month30Start }.sumOf { it.income }
+    val spend30d  = breakdown.filter { it.date >= month30Start }.sumOf { it.expenses }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        // Header
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                item { DashboardCard(Icons.Default.AccountBalance, "Total Assets", formatIsk(s.totalAssetValue), Color(0xFF4A90D9)) }
-                item { DashboardCard(Icons.Default.ShoppingCart, "Active Orders", s.activeOrderCount.toString(), Color(0xFF69DB7C)) }
-                item { DashboardCard(Icons.Default.Receipt, "Active Contracts", s.activeContractCount.toString(), Color(0xFFB197FC)) }
-                item { DashboardCard(Icons.Default.Notifications, "Price Alerts", s.triggeredAlertCount.toString(), Color(0xFFFF8C00)) }
-                item { DashboardCard(Icons.Default.ShowChart, "Watchlist Items", s.watchlistCount.toString(), Color(0xFFE599F7)) }
-                item { DashboardCard(Icons.Default.Person, "Characters", s.characterCount.toString(), Color(0xFF66D9E8)) }
-                item { DashboardCard(Icons.Default.Business, "Corporations", s.corporationCount.toString(), Color(0xFFFCC419)) }
+                Text("Dashboard", style = MaterialTheme.typography.headlineMedium)
+                if (isLoading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
             }
+        }
 
-            Spacer(modifier = Modifier.height(16.dp))
+        // Top KPI row
+        item {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                KpiCard(
+                    modifier    = Modifier.weight(1f),
+                    icon        = Icons.Default.AccountBalance,
+                    label       = "Wallet Balance",
+                    value       = formatIsk(ws?.balance ?: 0.0),
+                    color       = ACCENT,
+                )
+                KpiCard(
+                    modifier    = Modifier.weight(1f),
+                    icon        = Icons.Default.Storage,
+                    label       = "Asset Value",
+                    value       = formatIsk(assetValue),
+                    color       = Color(0xFF66D9E8),
+                )
+                KpiCard(
+                    modifier    = Modifier.weight(1f),
+                    icon        = Icons.Default.TrendingUp,
+                    label       = "P&L 30d",
+                    value       = formatIsk(month30PL, showSign = true),
+                    color       = if (month30PL >= 0) POSITIVE else NEGATIVE,
+                    valueColor  = if (month30PL >= 0) POSITIVE else NEGATIVE,
+                )
+            }
+        }
 
-            // P&L Summary
-            ContentCard("Profit & Loss") {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    PnlCard("Today", s.todayPL)
-                    PnlCard("This Week", s.weekPL)
-                    PnlCard("This Month", s.monthPL)
+        // P&L mini cards
+        item {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                PnlMiniCard(modifier = Modifier.weight(1f), label = "P&L Today",    value = todayPL,  showSign = true)
+                PnlMiniCard(modifier = Modifier.weight(1f), label = "P&L 7 days",   value = week7PL,  showSign = true)
+                PnlMiniCard(modifier = Modifier.weight(1f), label = "Income 30d",   value = income30d, forceColor = POSITIVE)
+                PnlMiniCard(modifier = Modifier.weight(1f), label = "Expenses 30d", value = spend30d,  forceColor = NEGATIVE)
+            }
+        }
+
+        // Transactions + Alerts
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Card(
+                    modifier = Modifier.weight(0.6f),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        SectionHeader("Recent Transactions", count = recentTx.size.takeIf { it > 0 })
+                        Spacer(Modifier.height(8.dp))
+                        if (recentTx.isEmpty()) {
+                            EmptyHint("No transactions recorded")
+                        } else {
+                            recentTx.forEachIndexed { i, tx ->
+                                TransactionRow(tx)
+                                if (i < recentTx.lastIndex) {
+                                    HorizontalDivider(
+                                        thickness = 0.5.dp,
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Card(
+                    modifier = Modifier.weight(0.4f),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        SectionHeader("Triggered Alerts", badge = triggeredAlerts.size.takeIf { it > 0 })
+                        Spacer(Modifier.height(8.dp))
+                        if (triggeredAlerts.isEmpty()) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Icon(Icons.Default.CheckCircle, null, tint = POSITIVE, modifier = Modifier.size(16.dp))
+                                Text(
+                                    "No triggered alerts",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                                )
+                            }
+                        } else {
+                            triggeredAlerts.forEachIndexed { i, alert ->
+                                AlertRow(alert)
+                                if (i < triggeredAlerts.lastIndex) {
+                                    HorizontalDivider(
+                                        thickness = 0.5.dp,
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
-        } ?: run {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+        }
+    }
+}
+
+// ─── Sub-composables ──────────────────────────────────────────────────────
+
+@Composable
+private fun SectionHeader(title: String, count: Int? = null, badge: Int? = null) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        when {
+            badge != null -> Badge { Text("$badge") }
+            count != null -> Text(
+                "$count",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmptyHint(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+    )
+}
+
+@Composable
+private fun KpiCard(
+    modifier: Modifier = Modifier,
+    icon: ImageVector,
+    label: String,
+    value: String,
+    color: Color,
+    valueColor: Color = Color.Unspecified,
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box(modifier = Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+                Surface(
+                    color = color.copy(alpha = 0.12f),
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier.fillMaxSize(),
+                ) {}
+                Icon(icon, null, tint = color, modifier = Modifier.size(24.dp))
+            }
+            Column {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+                Text(
+                    value,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = if (valueColor == Color.Unspecified) MaterialTheme.colorScheme.onSurface else valueColor,
+                )
             }
         }
     }
-
-    LoadingOverlay(isLoading = isLoading, message = "Loading dashboard...")
 }
 
 @Composable
-private fun DashboardCard(icon: ImageVector, label: String, value: String, color: Color) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(32.dp))
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(value, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(label, style = MaterialTheme.typography.labelMedium, color = Color.Gray)
-        }
+private fun PnlMiniCard(
+    modifier: Modifier = Modifier,
+    label: String,
+    value: Double,
+    showSign: Boolean = false,
+    forceColor: Color? = null,
+) {
+    val color = forceColor ?: when {
+        value > 0 -> POSITIVE
+        value < 0 -> NEGATIVE
+        else      -> Color.Gray
     }
-}
-
-@Composable
-private fun PnlCard(label: String, value: Double) {
-    val color = when {
-        value > 0 -> Color(0xFF69DB7C)
-        value < 0 -> Color(0xFFFF6B6B)
-        else -> Color.Gray
-    }
-
     Card(
-        modifier = Modifier,
-        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.1f)),
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.08f)),
     ) {
-        Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(label, style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth()) {
             Text(
-                text = "${if (value >= 0) "+" else ""}${formatIsk(value)} ISK",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            )
+            Text(
+                formatIsk(value, showSign = showSign),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
                 color = color,
             )
         }
@@ -117,50 +292,95 @@ private fun PnlCard(label: String, value: Double) {
 }
 
 @Composable
-private fun ContentCard(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(8.dp))
-            content()
+private fun TransactionRow(tx: Map<String, Any?>) {
+    val isBuy     = tx["is_buy"] as? Boolean ?: false
+    val typeName  = tx["type_name"] as? String ?: "Unknown"
+    val qty       = (tx["quantity"] as? Number)?.toInt() ?: 0
+    val unitPrice = (tx["unit_price"] as? Number)?.toDouble() ?: 0.0
+    val total     = (tx["total"] as? Number)?.toDouble() ?: 0.0
+    val date      = (tx["date"] as? String)?.take(10) ?: ""
+    val color     = if (isBuy) NEGATIVE else POSITIVE
+
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Surface(color = color.copy(alpha = 0.15f), shape = MaterialTheme.shapes.extraSmall) {
+            Text(
+                if (isBuy) "BUY" else "SELL",
+                style = MaterialTheme.typography.labelSmall,
+                color = color,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+            )
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(typeName, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                "${qty}x @ ${formatIsk(unitPrice)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+            )
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                formatIsk(total),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                color = color,
+            )
+            Text(
+                date,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+            )
         }
     }
 }
 
-private fun loadDashboardSummary(): DashboardSummary {
-    val characters = try { CharacterDao.getAll() } catch (e: Exception) { emptyList() }
-    val corporations = try { CorporationDao.getAll() } catch (e: Exception) { emptyList() }
-
-    val totalAssetValue = characters.sumOf { char ->
-        try { AssetDao.getTotalValue(characterId = char.id) } catch (e: Exception) { 0.0 }
-    } + corporations.sumOf { corp ->
-        try { AssetDao.getTotalValue(corporationId = (corp["id"] as? Number)?.toInt()) } catch (e: Exception) { 0.0 }
+@Composable
+private fun AlertRow(alert: PriceAlertModel) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(Icons.Default.Notifications, null, tint = Color(0xFFFF8C00), modifier = Modifier.size(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(alert.typeName, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                "${alert.condition} ${formatIsk(alert.targetPrice)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+            )
+        }
+        Surface(
+            color = Color(0xFFFF8C00).copy(alpha = 0.15f),
+            shape = MaterialTheme.shapes.extraSmall,
+        ) {
+            Text(
+                alert.orderType.uppercase(),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFFFF8C00),
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+            )
+        }
     }
-
-    val watchlistCount = try {
-        WatchlistDao.getAllWatchlists().values.sumOf { it.size }
-    } catch (e: Exception) { 0 }
-
-    val alertCount = try {
-        AlertDao.getEnabled().size
-    } catch (e: Exception) { 0 }
-
-    return DashboardSummary(
-        totalAssetValue = totalAssetValue,
-        activeOrderCount = 0,
-        watchlistCount = watchlistCount,
-        triggeredAlertCount = alertCount,
-        characterCount = characters.size,
-        corporationCount = corporations.size,
-    )
 }
 
-private fun formatIsk(value: Double): String {
-    return when {
-        kotlin.math.abs(value) >= 1_000_000_000_000 -> String.format("%.2fT", value / 1_000_000_000_000)
-        kotlin.math.abs(value) >= 1_000_000_000 -> String.format("%.2fB", value / 1_000_000_000)
-        kotlin.math.abs(value) >= 1_000_000 -> String.format("%.2fM", value / 1_000_000)
-        kotlin.math.abs(value) >= 1_000 -> String.format("%.2fK", value / 1_000)
-        else -> String.format("%,.2f", value)
+// ─── Formatting ───────────────────────────────────────────────────────────
+
+private fun formatIsk(value: Double, showSign: Boolean = false): String {
+    val abs  = kotlin.math.abs(value)
+    val sign = if (showSign && value > 0) "+" else if (value < 0) "-" else ""
+    val formatted = when {
+        abs >= 1_000_000_000_000.0 -> String.format("%.2fT", abs / 1_000_000_000_000.0)
+        abs >= 1_000_000_000.0     -> String.format("%.2fB", abs / 1_000_000_000.0)
+        abs >= 1_000_000.0         -> String.format("%.2fM", abs / 1_000_000.0)
+        abs >= 1_000.0             -> String.format("%.2fK", abs / 1_000.0)
+        else                       -> String.format("%,.2f", abs)
     }
+    return "$sign$formatted"
 }

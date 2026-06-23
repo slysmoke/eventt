@@ -626,7 +626,7 @@ private fun ScreenContent(screen: AppScreen, selectedCharId: Int?) {
                             .clipToBounds()
                     ) {
                         when (s) {
-                            AppScreen.DASHBOARD   -> DashboardScreen()
+                            AppScreen.DASHBOARD   -> DashboardScreen(charId = selectedCharId)
                             AppScreen.CHARACTERS  -> CharacterManagementScreen()
                             AppScreen.MARKET      -> MarketBrowserScreen()
                             AppScreen.ANALYSIS    -> MarketAnalysisScreen()
