@@ -68,16 +68,20 @@ fun EveTraderApp() {
     val eveColors = if (darkTheme) DarkEveColors else LightEveColors
 
     val importState by StaticDataImporter.state.collectAsState()
+    val everefState by EveRefService.state.collectAsState()
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             when {
                 StaticDataImporter.isImportNeeded() -> StaticDataImporter.importAll()
                 StaticDataImporter.checkVersionChanged() -> StaticDataImporter.importAll()
             }
+            AppState.init()
+        }
+        // EveRef sync runs in parallel — does not block UI or AppState init
+        launch(Dispatchers.IO) {
             if (EveRefService.getSelectedSource() == "everef") {
                 EveRefService.sync()
             }
-            AppState.init()
         }
     }
 
@@ -132,6 +136,11 @@ fun EveTraderApp() {
                                     }
                                 },
                             )
+                        }
+
+                        // EveRef sync progress banner
+                        if (everefState.isRunning) {
+                            EveRefSyncBanner(everefState)
                         }
 
                         // Alert notification banners
@@ -539,6 +548,60 @@ private fun formatAlertPrice(v: Double): String = when {
     v >= 1_000_000     -> String.format("%.2fM ISK", v / 1_000_000)
     v >= 1_000         -> String.format("%.1fK ISK", v / 1_000)
     else               -> String.format("%,.2f ISK", v)
+}
+
+@Composable
+private fun EveRefSyncBanner(state: EveRefService.SyncState) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        tonalElevation = 4.dp,
+    ) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Syncing market history (EveRef)…",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                    if (state.status.isNotEmpty()) {
+                        Text(
+                            buildString {
+                                append(state.status)
+                                if (state.totalFiles > 0) {
+                                    append("  •  ${state.filesDownloaded}/${state.totalFiles} files")
+                                }
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f),
+                        )
+                    }
+                }
+                Text(
+                    "${(state.progress * 100).toInt()}%",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+            LinearProgressIndicator(
+                progress = { state.progress },
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.secondary,
+                trackColor = MaterialTheme.colorScheme.secondaryContainer,
+            )
+        }
+    }
 }
 
 @Composable
