@@ -31,6 +31,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import org.eve.trader.core.database.AppState
 import org.eve.trader.core.database.MarketDao
 import org.eve.trader.core.database.StaticDataDao
 import org.eve.trader.core.esi.EsiClient
@@ -119,8 +120,6 @@ private object S {
     const val ST_CAT_TOP     = "analysis.s.catTop"
     const val ST_CAT_SUB     = "analysis.s.catSub"
     const val ST_MARGIN      = "analysis.s.margin"
-    const val ST_BROKER      = "analysis.s.broker"
-    const val ST_TAX         = "analysis.s.tax"
     const val ST_MIN_VOL     = "analysis.s.minVol"
     const val ST_MAX_PRICE   = "analysis.s.maxPrice"
     const val ST_MIN_PROFIT  = "analysis.s.minProfit"
@@ -131,8 +130,6 @@ private object S {
     const val IR_CAT_TOP     = "analysis.r.catTop"
     const val IR_CAT_SUB     = "analysis.r.catSub"
     const val IR_MARGIN      = "analysis.r.margin"
-    const val IR_BROKER      = "analysis.r.broker"
-    const val IR_TAX         = "analysis.r.tax"
     const val IR_ISK_PER_M3  = "analysis.r.iskPerM3"
     const val IR_MAX_CARGO   = "analysis.r.maxCargo"
     const val IR_MIN_PROFIT  = "analysis.r.minProfit"
@@ -146,6 +143,7 @@ private object S {
 @Composable
 fun MarketAnalysisScreen() {
     var selectedTab by remember { mutableStateOf(0) }
+    val selectedCharId by AppState.selectedCharId.collectAsState()
 
     val allRegions by produceState(initialValue = emptyList<StaticRegionModel>()) {
         value = withContext(Dispatchers.IO) { StaticDataDao.getAllRegions() }
@@ -165,10 +163,10 @@ fun MarketAnalysisScreen() {
         }
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             Box(modifier = if (selectedTab == 0) Modifier.fillMaxSize() else Modifier.requiredSize(0.dp).clipToBounds()) {
-                StationTradingTab(allRegions, topGroups)
+                StationTradingTab(allRegions, topGroups, selectedCharId)
             }
             Box(modifier = if (selectedTab == 1) Modifier.fillMaxSize() else Modifier.requiredSize(0.dp).clipToBounds()) {
-                InterRegionTab(allRegions, topGroups)
+                InterRegionTab(allRegions, topGroups, selectedCharId)
             }
         }
     }
@@ -180,6 +178,7 @@ fun MarketAnalysisScreen() {
 private fun StationTradingTab(
     allRegions: List<StaticRegionModel>,
     topGroups: List<StaticMarketGroupModel>,
+    charId: Int?,
 ) {
     val scope = rememberCoroutineScope()
 
@@ -188,8 +187,6 @@ private fun StationTradingTab(
     var selectedSubGroup by remember { mutableStateOf<StaticMarketGroupModel?>(null) }
     var subGroups        by remember { mutableStateOf<List<StaticMarketGroupModel>>(emptyList()) }
     var minMargin        by remember { mutableStateOf("5") }
-    var brokerFee        by remember { mutableStateOf("3") }
-    var salesTax         by remember { mutableStateOf("8") }
     var minDailyVol      by remember { mutableStateOf("10") }
     var maxBuyPrice      by remember { mutableStateOf("500000000") }
     var minNetProfit     by remember { mutableStateOf("100000") }
@@ -198,17 +195,21 @@ private fun StationTradingTab(
     var results          by remember { mutableStateOf<List<StationOpportunity>>(emptyList()) }
     var sortCol          by remember { mutableStateOf(StationSortCol.NET_PROFIT) }
     var sortAsc          by remember { mutableStateOf(false) }
+    var brokerFeePct     by remember { mutableStateOf(3.0) }
+    var salesTaxPct      by remember { mutableStateOf(8.0) }
 
-    // Load persisted settings
-    LaunchedEffect(Unit) {
+    // Load persisted settings + character tax values
+    LaunchedEffect(charId) {
         withContext(Dispatchers.IO) {
             S.get(S.ST_REGION)?.toIntOrNull()?.let     { regionId    = it }
             S.get(S.ST_MARGIN)?.let                    { minMargin   = it }
-            S.get(S.ST_BROKER)?.let                    { brokerFee   = it }
-            S.get(S.ST_TAX)?.let                       { salesTax    = it }
             S.get(S.ST_MIN_VOL)?.let                   { minDailyVol = it }
             S.get(S.ST_MAX_PRICE)?.let                 { maxBuyPrice = it }
             S.get(S.ST_MIN_PROFIT)?.let                { minNetProfit= it }
+            if (charId != null) {
+                brokerFeePct = StaticDataDao.getCharBrokersFee(charId)
+                salesTaxPct  = StaticDataDao.getCharSalesTax(charId)
+            }
         }
     }
 
@@ -262,11 +263,23 @@ private fun StationTradingTab(
                 }
                 FilterDivider()
                 ParamField("Margin %",  minMargin,    68.dp)  { minMargin   = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MARGIN,     it) } } }
-                ParamField("Broker %",  brokerFee,    68.dp)  { brokerFee   = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_BROKER,     it) } } }
-                ParamField("Tax %",     salesTax,     60.dp)  { salesTax    = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_TAX,        it) } } }
                 ParamField("Min Vol",   minDailyVol,  72.dp)  { minDailyVol = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MIN_VOL,    it) } } }
                 ParamField("Max Buy",   maxBuyPrice,  105.dp) { maxBuyPrice  = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MAX_PRICE,  it) } } }
                 ParamField("Min Net",   minNetProfit, 100.dp) { minNetProfit = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MIN_PROFIT, it) } } }
+                FilterDivider()
+                // Read-only tax display
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        "Fees (character)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    )
+                    Text(
+                        "Tax ${String.format("%.2f", salesTaxPct)}%  |  Broker ${String.format("%.2f", brokerFeePct)}%",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                    )
+                }
                 FilterDivider()
                 // Align button to bottom of the row (matching field bottom)
                 Column(verticalArrangement = Arrangement.Bottom) {
@@ -290,8 +303,8 @@ private fun StationTradingTab(
                                     val minDailyVolL  = minDailyVol.toLongOrNull()    ?: 0L
                                     val maxBuyPriceD  = maxBuyPrice.toDoubleOrNull()  ?: Double.MAX_VALUE
                                     val minNetProfitD = minNetProfit.toDoubleOrNull() ?: 0.0
-                                    val brokerFeePctD = brokerFee.toDoubleOrNull()    ?: 3.0
-                                    val salesTaxPctD  = salesTax.toDoubleOrNull()     ?: 8.0
+                                    val brokerFeePctD = brokerFeePct
+                                    val salesTaxPctD  = salesTaxPct
 
                                     val semaphore = Semaphore(10)
                                     val mutex     = Mutex()
@@ -386,6 +399,7 @@ private fun StationTradingTab(
 private fun InterRegionTab(
     allRegions: List<StaticRegionModel>,
     topGroups: List<StaticMarketGroupModel>,
+    charId: Int?,
 ) {
     val scope = rememberCoroutineScope()
 
@@ -396,8 +410,6 @@ private fun InterRegionTab(
     var selectedSubGroup by remember { mutableStateOf<StaticMarketGroupModel?>(null) }
     var subGroups        by remember { mutableStateOf<List<StaticMarketGroupModel>>(emptyList()) }
     var minMargin        by remember { mutableStateOf("5") }
-    var brokerFee        by remember { mutableStateOf("3") }
-    var salesTax         by remember { mutableStateOf("8") }
     var iskPerM3         by remember { mutableStateOf("1000") }
     var maxCargoM3       by remember { mutableStateOf("10000") }
     var minNetProfit     by remember { mutableStateOf("5000000") }
@@ -406,9 +418,11 @@ private fun InterRegionTab(
     var results          by remember { mutableStateOf<List<RegionOpportunity>>(emptyList()) }
     var sortCol          by remember { mutableStateOf(RegionSortCol.NET_PROFIT) }
     var sortAsc          by remember { mutableStateOf(false) }
+    var brokerFeePct     by remember { mutableStateOf(3.0) }
+    var salesTaxPct      by remember { mutableStateOf(8.0) }
 
-    // Load persisted settings
-    LaunchedEffect(Unit) {
+    // Load persisted settings + character tax values
+    LaunchedEffect(charId) {
         withContext(Dispatchers.IO) {
             S.get(S.IR_BUY_REGION)?.toIntOrNull()?.let  { buyRegionId  = it }
             S.get(S.IR_SELL_REGION)?.toIntOrNull()?.let { sellRegionId = it }
@@ -416,11 +430,13 @@ private fun InterRegionTab(
                 InterRegionTradeType.entries.find { it.name == name }?.let { tradeType = it }
             }
             S.get(S.IR_MARGIN)?.let     { minMargin    = it }
-            S.get(S.IR_BROKER)?.let     { brokerFee    = it }
-            S.get(S.IR_TAX)?.let        { salesTax     = it }
             S.get(S.IR_ISK_PER_M3)?.let { iskPerM3     = it }
             S.get(S.IR_MAX_CARGO)?.let  { maxCargoM3   = it }
             S.get(S.IR_MIN_PROFIT)?.let { minNetProfit = it }
+            if (charId != null) {
+                brokerFeePct = StaticDataDao.getCharBrokersFee(charId)
+                salesTaxPct  = StaticDataDao.getCharSalesTax(charId)
+            }
         }
     }
 
@@ -488,11 +504,23 @@ private fun InterRegionTab(
                 verticalAlignment = Alignment.Bottom,
             ) {
                 ParamField("Margin %",  minMargin,    68.dp)  { minMargin    = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MARGIN,     it) } } }
-                ParamField("Broker %",  brokerFee,    68.dp)  { brokerFee    = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_BROKER,     it) } } }
-                ParamField("Tax %",     salesTax,     60.dp)  { salesTax     = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_TAX,        it) } } }
                 ParamField("ISK/m³",    iskPerM3,     88.dp)  { iskPerM3     = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_ISK_PER_M3, it) } } }
                 ParamField("Max m³",    maxCargoM3,   88.dp)  { maxCargoM3   = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MAX_CARGO,  it) } } }
                 ParamField("Min Net",   minNetProfit, 108.dp) { minNetProfit = it; scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MIN_PROFIT, it) } } }
+                FilterDivider()
+                // Read-only tax display
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        "Fees (character)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    )
+                    Text(
+                        "Tax ${String.format("%.2f", salesTaxPct)}%  |  Broker ${String.format("%.2f", brokerFeePct)}%",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                    )
+                }
                 FilterDivider()
                 Column(verticalArrangement = Arrangement.Bottom) {
                     Spacer(Modifier.height(19.dp))
@@ -509,8 +537,8 @@ private fun InterRegionTab(
                                 val maxCargoM3D = maxCargoM3.toDoubleOrNull()   ?: 10000.0
                                 val minMarginD  = minMargin.toDoubleOrNull()    ?: 5.0
                                 val minNetD     = minNetProfit.toDoubleOrNull() ?: 0.0
-                                val brokerFeeD  = brokerFee.toDoubleOrNull()    ?: 3.0
-                                val salesTaxD   = salesTax.toDoubleOrNull()     ?: 8.0
+                                val brokerFeeD  = brokerFeePct
+                                val salesTaxD   = salesTaxPct
                                 try {
                                     val typeIds = withContext(Dispatchers.IO) {
                                         if (filterGroupIds != null) StaticDataDao.getTypeIdsByMarketGroups(filterGroupIds)
