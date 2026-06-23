@@ -5,7 +5,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
@@ -15,7 +17,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -410,6 +415,9 @@ private fun StationTradingTab(
         } else {
             val sorted = remember(results, sortCol, sortAsc) { sortStation(results, sortCol, sortAsc) }
             var selectedIds by remember(results) { mutableStateOf(setOf<Int>()) }
+            val listState = rememberLazyListState()
+            var dragStartIdx by remember { mutableStateOf<Int?>(null) }
+            var isDragging    by remember { mutableStateOf(false) }
 
             StationHeader(sortCol, sortAsc) { col ->
                 if (sortCol == col) sortAsc = !sortAsc else { sortCol = col; sortAsc = false }
@@ -426,10 +434,37 @@ private fun StationTradingTab(
                     onClear = { selectedIds = emptySet() },
                 )
             }
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                itemsIndexed(sorted, key = { _, it -> it.typeId }) { idx, opp ->
-                    StationRow(opp, idx, opp.typeId in selectedIds) {
-                        selectedIds = if (opp.typeId in selectedIds) selectedIds - opp.typeId else selectedIds + opp.typeId
+            @OptIn(ExperimentalComposeUiApi::class)
+            Box(
+                modifier = Modifier.fillMaxSize()
+                    .onPointerEvent(PointerEventType.Press) { e ->
+                        dragStartIdx = itemIndexAt(e.changes.first().position.y, listState)
+                        isDragging = false
+                    }
+                    .onPointerEvent(PointerEventType.Move) { e ->
+                        val start = dragStartIdx ?: return@onPointerEvent
+                        if (!e.changes.first().pressed) { dragStartIdx = null; return@onPointerEvent }
+                        val cur = itemIndexAt(e.changes.first().position.y, listState) ?: return@onPointerEvent
+                        if (cur != start || isDragging) {
+                            isDragging = true
+                            val lo = minOf(start, cur); val hi = maxOf(start, cur)
+                            selectedIds = sorted.subList(lo, minOf(hi + 1, sorted.size)).map { it.typeId }.toSet()
+                        }
+                    }
+                    .onPointerEvent(PointerEventType.Release) { _ ->
+                        if (!isDragging) {
+                            val idx = dragStartIdx
+                            if (idx != null) {
+                                val id = sorted.getOrNull(idx)?.typeId
+                                if (id != null) selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id
+                            }
+                        }
+                        dragStartIdx = null; isDragging = false
+                    }
+            ) {
+                LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                    itemsIndexed(sorted, key = { _, it -> it.typeId }) { idx, opp ->
+                        StationRow(opp, idx, opp.typeId in selectedIds)
                     }
                 }
             }
@@ -709,6 +744,9 @@ private fun InterRegionTab(
         } else {
             val sorted = remember(results, sortCol, sortAsc) { sortRegion(results, sortCol, sortAsc) }
             var selectedIds by remember(results) { mutableStateOf(setOf<Int>()) }
+            val listState = rememberLazyListState()
+            var dragStartIdx by remember { mutableStateOf<Int?>(null) }
+            var isDragging    by remember { mutableStateOf(false) }
 
             RegionHeader(sortCol, sortAsc) { col ->
                 if (sortCol == col) sortAsc = !sortAsc else { sortCol = col; sortAsc = false }
@@ -725,10 +763,37 @@ private fun InterRegionTab(
                     onClear = { selectedIds = emptySet() },
                 )
             }
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                itemsIndexed(sorted, key = { _, it -> it.typeId }) { idx, opp ->
-                    RegionRow(opp, idx, opp.typeId in selectedIds) {
-                        selectedIds = if (opp.typeId in selectedIds) selectedIds - opp.typeId else selectedIds + opp.typeId
+            @OptIn(ExperimentalComposeUiApi::class)
+            Box(
+                modifier = Modifier.fillMaxSize()
+                    .onPointerEvent(PointerEventType.Press) { e ->
+                        dragStartIdx = itemIndexAt(e.changes.first().position.y, listState)
+                        isDragging = false
+                    }
+                    .onPointerEvent(PointerEventType.Move) { e ->
+                        val start = dragStartIdx ?: return@onPointerEvent
+                        if (!e.changes.first().pressed) { dragStartIdx = null; return@onPointerEvent }
+                        val cur = itemIndexAt(e.changes.first().position.y, listState) ?: return@onPointerEvent
+                        if (cur != start || isDragging) {
+                            isDragging = true
+                            val lo = minOf(start, cur); val hi = maxOf(start, cur)
+                            selectedIds = sorted.subList(lo, minOf(hi + 1, sorted.size)).map { it.typeId }.toSet()
+                        }
+                    }
+                    .onPointerEvent(PointerEventType.Release) { _ ->
+                        if (!isDragging) {
+                            val idx = dragStartIdx
+                            if (idx != null) {
+                                val id = sorted.getOrNull(idx)?.typeId
+                                if (id != null) selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id
+                            }
+                        }
+                        dragStartIdx = null; isDragging = false
+                    }
+            ) {
+                LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                    itemsIndexed(sorted, key = { _, it -> it.typeId }) { idx, opp ->
+                        RegionRow(opp, idx, opp.typeId in selectedIds)
                     }
                 }
             }
@@ -1153,14 +1218,14 @@ private fun RegionHeader(sort: RegionSortCol, asc: Boolean, onSort: (RegionSortC
 // ─── Table rows ───────────────────────────────────────────────────────────
 
 @Composable
-private fun StationRow(opp: StationOpportunity, index: Int, selected: Boolean, onToggle: () -> Unit) {
+private fun StationRow(opp: StationOpportunity, index: Int, selected: Boolean) {
     val bg = when {
         selected    -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
         index % 2 == 1 -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.025f)
         else        -> Color.Transparent
     }
     Row(
-        modifier = Modifier.fillMaxWidth().background(bg).clickable { onToggle() }.padding(horizontal = 10.dp, vertical = 3.dp),
+        modifier = Modifier.fillMaxWidth().background(bg).padding(horizontal = 10.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text("${index + 1}", style = MaterialTheme.typography.labelSmall,
@@ -1183,14 +1248,14 @@ private fun StationRow(opp: StationOpportunity, index: Int, selected: Boolean, o
 }
 
 @Composable
-private fun RegionRow(opp: RegionOpportunity, index: Int, selected: Boolean, onToggle: () -> Unit) {
+private fun RegionRow(opp: RegionOpportunity, index: Int, selected: Boolean) {
     val bg = when {
         selected    -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
         index % 2 == 1 -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.025f)
         else        -> Color.Transparent
     }
     Row(
-        modifier = Modifier.fillMaxWidth().background(bg).clickable { onToggle() }.padding(horizontal = 10.dp, vertical = 3.dp),
+        modifier = Modifier.fillMaxWidth().background(bg).padding(horizontal = 10.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text("${index + 1}", style = MaterialTheme.typography.labelSmall,
@@ -1456,6 +1521,11 @@ private fun fetchHistory(typeId: Int, regionId: Int, fetchFromEsi: Boolean): Lis
         MarketDao.getHistory(typeId, effectiveRegionId, 30)
     } catch (_: Exception) { emptyList() }
 }
+
+// ─── Drag-select helpers ──────────────────────────────────────────────────
+
+private fun itemIndexAt(y: Float, state: LazyListState): Int? =
+    state.layoutInfo.visibleItemsInfo.firstOrNull { y >= it.offset && y < it.offset + it.size }?.index
 
 // ─── Selection bar ────────────────────────────────────────────────────────
 
