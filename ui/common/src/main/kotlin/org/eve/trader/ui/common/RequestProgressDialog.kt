@@ -10,163 +10,186 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import org.eve.trader.core.model.QueuedRequest
 import org.eve.trader.core.model.RequestStatus
 import org.eve.trader.core.queue.RequestQueueManager
 
-/**
- * Progress dialog showing all in-flight ESI requests.
- */
+val EveTraderBlue = Color(0xFF4A90D9)
+
 @Composable
 fun RequestProgressDialog(onDismiss: () -> Unit) {
     val requests by RequestQueueManager.requests.collectAsState()
 
+    val active    = requests.filter { it.status == RequestStatus.QUEUED || it.status == RequestStatus.IN_PROGRESS }
+    val failed    = requests.filter { it.status == RequestStatus.FAILED }
+    val completed = requests.count  { it.status == RequestStatus.COMPLETED }
+    val total     = requests.size
+    val progress  = RequestQueueManager.overallProgress
+
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = Modifier.widthIn(max = 560.dp),
         title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Sync, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (active.isNotEmpty()) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF69DB7C), modifier = Modifier.size(20.dp))
+                }
                 Text("ESI Requests")
             }
         },
         text = {
-            Column {
-                // Overall progress
-                val progress = RequestQueueManager.overallProgress
-                val total = RequestQueueManager.totalRequests
-                val completed = RequestQueueManager.completedRequests
-                val failed = RequestQueueManager.failedRequests
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                // Progress bar
+                LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
 
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                )
+                // Summary line
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    SummaryChip("${active.size} active",   if (active.isNotEmpty()) EveTraderBlue else Color.Gray)
+                    SummaryChip("$completed done",         Color(0xFF69DB7C))
+                    if (failed.isNotEmpty()) {
+                        SummaryChip("${failed.size} failed", Color(0xFFFF6B6B))
+                    }
+                    if (total > 0) {
+                        Text(
+                            "$completed / $total",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                            modifier = Modifier.align(Alignment.CenterVertically),
+                        )
+                    }
+                }
 
-                Text(
-                    text = "$completed / $total completed${if (failed > 0) " ($failed failed)" else ""}",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Request list
-                if (requests.isEmpty()) {
-                    Text(
-                        text = "No active requests",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                    )
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.heightIn(max = 300.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                // Active + failed list (not showing completed — just counted above)
+                val visible = active + failed
+                if (visible.isEmpty() && requests.isNotEmpty()) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
-                        items(requests) { request ->
-                            RequestItemRow(request)
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF69DB7C), modifier = Modifier.size(16.dp))
+                            Text("All requests completed", style = MaterialTheme.typography.bodySmall)
                         }
                     }
+                } else if (visible.isNotEmpty()) {
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 260.dp).fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        items(visible, key = { it.id }) { request ->
+                            RequestRow(
+                                status      = request.status,
+                                description = request.description,
+                                source      = request.source.name.lowercase(),
+                                progress    = request.progress,
+                                error       = request.error,
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        "No active requests",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    )
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Close")
-            }
+            TextButton(onClick = onDismiss) { Text("Close") }
         },
         dismissButton = {
-            TextButton(onClick = {
-                RequestQueueManager.clearCompleted()
-            }) {
-                Text("Clear Completed")
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (requests.isNotEmpty()) {
+                    TextButton(onClick = { RequestQueueManager.clearAll() }) {
+                        Text("Clear All", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                TextButton(onClick = { RequestQueueManager.clearCompleted() }) {
+                    Text("Clear Completed")
+                }
             }
         },
     )
 }
 
 @Composable
-private fun RequestItemRow(request: QueuedRequest) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+private fun SummaryChip(label: String, color: Color) {
+    Surface(
+        color = color.copy(alpha = 0.12f),
+        shape = MaterialTheme.shapes.extraSmall,
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Status icon
-                when (request.status) {
-                    RequestStatus.QUEUED -> Icon(
-                        Icons.Default.Schedule,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                        modifier = Modifier.size(16.dp),
-                    )
-                    RequestStatus.IN_PROGRESS -> Icon(
-                        Icons.Default.Sync,
-                        contentDescription = null,
-                        tint = EveTraderBlue,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    RequestStatus.COMPLETED -> Icon(
-                        Icons.Default.Check,
-                        contentDescription = null,
-                        tint = Color.Green,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    RequestStatus.FAILED -> Icon(
-                        Icons.Default.Error,
-                        contentDescription = null,
-                        tint = Color.Red,
-                        modifier = Modifier.size(16.dp),
-                    )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium,
+            color = color,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+        )
+    }
+}
+
+@Composable
+private fun RequestRow(
+    status: RequestStatus,
+    description: String,
+    source: String,
+    progress: Float,
+    error: String?,
+) {
+    Surface(
+        color = when (status) {
+            RequestStatus.FAILED      -> Color(0xFFFF6B6B).copy(alpha = 0.08f)
+            RequestStatus.IN_PROGRESS -> EveTraderBlue.copy(alpha = 0.06f)
+            else                      -> Color.Transparent
+        },
+        shape = MaterialTheme.shapes.extraSmall,
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                when (status) {
+                    RequestStatus.QUEUED      -> Icon(Icons.Default.Schedule, null, Modifier.size(13.dp), tint = Color.Gray)
+                    RequestStatus.IN_PROGRESS -> Icon(Icons.Default.Sync,     null, Modifier.size(13.dp), tint = EveTraderBlue)
+                    RequestStatus.FAILED      -> Icon(Icons.Default.Error,    null, Modifier.size(13.dp), tint = Color(0xFFFF6B6B))
+                    RequestStatus.COMPLETED   -> Icon(Icons.Default.Check,    null, Modifier.size(13.dp), tint = Color(0xFF69DB7C))
                 }
-
-                Spacer(modifier = Modifier.width(4.dp))
-
-                // Endpoint
                 Text(
-                    text = request.description,
-                    style = MaterialTheme.typography.bodySmall,
+                    description,
+                    style = MaterialTheme.typography.labelSmall,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
                 )
-
-                // Source badge
-                Spacer(modifier = Modifier.width(4.dp))
-                Surface(
-                    color = if (request.source == org.eve.trader.core.model.RequestSource.CACHE)
-                        Color.Green.copy(alpha = 0.2f) else Color.Blue.copy(alpha = 0.2f),
-                    shape = MaterialTheme.shapes.small,
-                ) {
+                if (source.isNotEmpty()) {
                     Text(
-                        text = request.source.name.lowercase(),
+                        source,
                         style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                        color = if (request.source == org.eve.trader.core.model.RequestSource.CACHE)
-                            Color.Green else Color.Blue,
+                        color = if (source == "cache") Color(0xFF69DB7C).copy(alpha = 0.8f) else EveTraderBlue.copy(alpha = 0.8f),
                     )
                 }
             }
-
-            // Progress bar for in-progress requests
-            if (request.status == RequestStatus.IN_PROGRESS) {
+            if (status == RequestStatus.IN_PROGRESS) {
                 LinearProgressIndicator(
-                    progress = { request.progress },
-                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                    progress = { progress },
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp).height(2.dp),
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
                 )
             }
-
-            // Error message
-            request.error?.let { errorMsg ->
-                Text(
-                    text = errorMsg,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.Red,
-                    maxLines = 1,
-                )
+            error?.let {
+                Text(it, style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF6B6B), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
 }
-
-val EveTraderBlue = Color(0xFF4A90D9)
