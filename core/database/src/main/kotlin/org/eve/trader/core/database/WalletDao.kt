@@ -40,6 +40,23 @@ object WalletDao {
         }
     }
 
+    fun updateTransactionNames(transactionId: Long, clientName: String? = null, locationName: String? = null) {
+        val parts = buildList {
+            if (clientName != null)  add("client_name = ?")
+            if (locationName != null) add("location_name = ?")
+        }
+        if (parts.isEmpty()) return
+        DatabaseManager.transaction {
+            prepareStatement("UPDATE transactions SET ${parts.joinToString(", ")} WHERE transaction_id = ?").use { stmt ->
+                var i = 1
+                if (clientName != null)  stmt.setString(i++, clientName)
+                if (locationName != null) stmt.setString(i++, locationName)
+                stmt.setLong(i, transactionId)
+                stmt.executeUpdate()
+            }
+        }
+    }
+
     fun getTransactions(
         characterId: Int? = null,
         corporationId: Int? = null,

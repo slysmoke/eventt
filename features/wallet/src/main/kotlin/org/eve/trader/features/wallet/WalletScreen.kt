@@ -415,11 +415,11 @@ private suspend fun loadWalletData(
     journalCallback: (List<Map<String, Any?>>) -> Unit,
 ) {
     withContext(Dispatchers.IO) {
-        // Load from DB (resolve type/station names locally for any that are missing)
+        // Load from DB, resolve names (local + ESI fallback for old records)
         val summary = WalletDao.getWalletSummary(characterId = characterId)
         balanceCallback(summary.balance)
         dailyCallback(summary.dailyBreakdown)
-        transactionsCallback(resolveLocalNames(WalletDao.getTransactions(characterId = characterId, limit = 200)))
+        transactionsCallback(resolveAllNames(WalletDao.getTransactions(characterId = characterId, limit = 200)))
         journalCallback(WalletDao.getJournalEntries(characterId = characterId, limit = 200))
 
         // Fetch from ESI
@@ -497,9 +497,64 @@ private suspend fun loadWalletData(
                     )
                 } catch (_: Exception) {}
             }
-            transactionsCallback(resolveLocalNames(WalletDao.getTransactions(characterId = characterId, limit = 200)))
+            transactionsCallback(resolveAllNames(WalletDao.getTransactions(characterId = characterId, limit = 200)))
         } catch (e: Exception) {
             println("Error fetching transactions: ${e.message}")
+        }
+    }
+}
+
+// Resolves type/station names locally, then falls back to ESI /universe/names/ for anything
+// still missing (old DB records inserted before name-resolution was in place).
+// Persists resolved names back to the DB so subsequent loads don't need ESI.
+private fun resolveAllNames(rows: List<Map<String, Any?>>): List<Map<String, Any?>> {
+    val afterLocal = resolveLocalNames(rows)
+
+    // Collect IDs that are still unresolved
+    val missingClientIds = afterLocal
+        .filter { (it["client_name"] as? String).isNullOrEmpty() }
+        .mapNotNull { (it["client_id"] as? Number)?.toInt() }
+        .filter { it > 0 }.distinct()
+
+    // Only NPC station IDs fit in Int; citadels (> 10^12) must come from static_stations
+    val missingLocationIds = afterLocal
+        .filter { (it["location_name"] as? String).isNullOrEmpty() }
+        .mapNotNull { tx ->
+            val id = (tx["location_id"] as? Number)?.toLong() ?: return@mapNotNull null
+            if (id > Int.MAX_VALUE.toLong()) null else id.toInt()
+        }
+        .filter { it > 0 }.distinct()
+
+    val toResolve = (missingClientIds + missingLocationIds).distinct()
+    if (toResolve.isEmpty()) return afterLocal
+
+    val esiNames = try { EsiClient.resolveNames(toResolve) } catch (_: Exception) { emptyMap() }
+    if (esiNames.isEmpty()) return afterLocal
+
+    val clientSet   = missingClientIds.toSet()
+    val locationSet = missingLocationIds.toSet()
+
+    return afterLocal.map { tx ->
+        val txId = (tx["transaction_id"] as? Number)?.toLong() ?: return@map tx
+
+        val newClient = if ((tx["client_name"] as? String).isNullOrEmpty()) {
+            val id = (tx["client_id"] as? Number)?.toInt() ?: 0
+            if (id in clientSet) esiNames[id] else null
+        } else null
+
+        val newLocation = if ((tx["location_name"] as? String).isNullOrEmpty()) {
+            val lid = (tx["location_id"] as? Number)?.toLong() ?: 0L
+            if (lid <= Int.MAX_VALUE && lid.toInt() in locationSet) esiNames[lid.toInt()] else null
+        } else null
+
+        if (newClient == null && newLocation == null) return@map tx
+
+        // Persist so next load skips ESI
+        WalletDao.updateTransactionNames(txId, clientName = newClient, locationName = newLocation)
+
+        tx.toMutableMap().apply {
+            newClient?.let   { put("client_name",   it) }
+            newLocation?.let { put("location_name", it) }
         }
     }
 }
