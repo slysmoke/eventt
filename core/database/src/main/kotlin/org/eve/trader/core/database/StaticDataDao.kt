@@ -530,6 +530,13 @@ object StaticDataDao {
         }
     }
 
+    // ─── Character tax settings ───────────────────────────────────────────
+
+    fun getCharSalesTax(charId: Int): Double  = getSetting("char.$charId.sales_tax")?.toDoubleOrNull()  ?: 8.0
+    fun getCharBrokersFee(charId: Int): Double = getSetting("char.$charId.brokers_fee")?.toDoubleOrNull() ?: 3.0
+    fun setCharSalesTax(charId: Int, pct: Double)   = setSetting("char.$charId.sales_tax",   "%.4f".format(pct))
+    fun setCharBrokersFee(charId: Int, pct: Double) = setSetting("char.$charId.brokers_fee", "%.4f".format(pct))
+
     // ─── Helpers ──────────────────────────────────────────────────────────
 
     private fun java.sql.ResultSet.mapResultSetToType(): StaticTypeModel {

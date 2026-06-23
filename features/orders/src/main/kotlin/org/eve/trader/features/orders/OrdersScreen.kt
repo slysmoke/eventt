@@ -21,7 +21,6 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.eve.trader.core.database.CharacterDao
 import org.eve.trader.core.database.StaticDataDao
 import org.eve.trader.core.esi.EsiClient
 import org.eve.trader.ui.common.EmptyState
@@ -72,10 +71,8 @@ private enum class SortCol { NAME, GROUP, PRICE, VOLUME, TOTAL, TIME_LEFT, ORDER
 private enum class SortDir { ASC, DESC }
 
 @Composable
-fun OrdersScreen() {
+fun OrdersScreen(charId: Int?) {
     val scope = rememberCoroutineScope()
-    val characters = remember { try { CharacterDao.getAll() } catch (_: Exception) { emptyList() } }
-    var selectedCharId by remember { mutableStateOf(characters.firstOrNull()?.id) }
     var orders by remember { mutableStateOf<List<CharacterOrder>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var activeTab by remember { mutableStateOf(0) }
@@ -116,7 +113,7 @@ fun OrdersScreen() {
         }
     }
 
-    LaunchedEffect(selectedCharId) { selectedCharId?.let { loadOrders(it) } }
+    LaunchedEffect(charId) { charId?.let { loadOrders(it) } }
 
     Column(modifier = Modifier.fillMaxSize()) {
         // ── Top bar ──────────────────────────────────────────────────────
@@ -126,20 +123,9 @@ fun OrdersScreen() {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Orders", style = MaterialTheme.typography.headlineMedium)
-            selectedCharId?.let { charId ->
-                IconButton(onClick = { loadOrders(charId) }, enabled = !isLoading) {
+            charId?.let { id ->
+                IconButton(onClick = { loadOrders(id) }, enabled = !isLoading) {
                     Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                }
-            }
-        }
-
-        if (characters.size > 1) {
-            ScrollableTabRow(
-                selectedTabIndex = characters.indexOfFirst { it.id == selectedCharId }.coerceAtLeast(0),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            ) {
-                characters.forEach { char ->
-                    Tab(selected = char.id == selectedCharId, onClick = { selectedCharId = char.id }, text = { Text(char.name) })
                 }
             }
         }
@@ -170,7 +156,7 @@ fun OrdersScreen() {
                 EmptyState(
                     icon = Icons.Default.Receipt,
                     title = if (activeTab == 0) "No Sell Orders" else "No Buy Orders",
-                    description = if (characters.isEmpty()) "Add a character to view orders." else "No active orders.",
+                    description = if (charId == null) "Add a character to view orders." else "No active orders.",
                 )
             } else if (activeTab == 0) {
                 SellOrdersTable(sorted, sortCol, sortDir, ::onSort)

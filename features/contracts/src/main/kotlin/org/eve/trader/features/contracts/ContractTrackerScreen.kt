@@ -16,7 +16,6 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.eve.trader.core.database.CharacterDao
 import org.eve.trader.core.database.ContractDao
 import org.eve.trader.core.database.DatabaseManager
 import org.eve.trader.core.esi.EsiClient
@@ -24,7 +23,7 @@ import org.eve.trader.core.model.ContractModel
 import org.eve.trader.ui.common.*
 
 @Composable
-fun ContractTrackerScreen() {
+fun ContractTrackerScreen(charId: Int?) {
     val scope = rememberCoroutineScope()
     var contracts by remember { mutableStateOf<List<ContractModel>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
@@ -35,40 +34,19 @@ fun ContractTrackerScreen() {
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Contract Tracker", style = MaterialTheme.typography.headlineMedium)
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Status filters
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            items(listOf("all" to "All", "outstanding" to "Outstanding", "in_progress" to "In Progress", "finished" to "Finished", "cancelled" to "Cancelled")) { (key, label) ->
-                FilterChip(
-                    selected = statusFilter == key,
-                    onClick = {
-                        statusFilter = key
-                        if (key == "all") {
-                            loadContracts { contracts = it }
-                        } else {
-                            loadContractsByStatus(key) { contracts = it }
-                        }
-                    },
-                    label = { Text(label, style = MaterialTheme.typography.bodySmall) },
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Refresh button
-        val characters = remember { try { CharacterDao.getAll() } catch (e: Exception) { emptyList() } }
-        Row {
-            characters.forEach { char ->
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Contract Tracker", style = MaterialTheme.typography.headlineMedium)
+            charId?.let { id ->
                 Button(
                     onClick = {
                         isLoading = true
                         scope.launch(Dispatchers.IO) {
                             try {
-                                val rawContracts = EsiClient.getCharacterContracts(char.id)
+                                val rawContracts = EsiClient.getCharacterContracts(id)
                                 val models = rawContracts.mapNotNull { raw ->
                                     val contractId = (raw["contract_id"] as? Number)?.toInt() ?: return@mapNotNull null
                                     ContractModel(
@@ -94,7 +72,7 @@ fun ContractTrackerScreen() {
                                         buyout = (raw["buyout"] as? Number)?.toDouble() ?: 0.0,
                                         forCorp = (raw["for_corporation"] as? Boolean) ?: false,
                                         isCorp = false,
-                                        characterId = char.id,
+                                        characterId = id,
                                     )
                                 }
                                 models.forEach { ContractDao.upsert(it) }
@@ -111,8 +89,28 @@ fun ContractTrackerScreen() {
                 ) {
                     Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(char.name)
+                    Text("Refresh")
                 }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Status filters
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            items(listOf("all" to "All", "outstanding" to "Outstanding", "in_progress" to "In Progress", "finished" to "Finished", "cancelled" to "Cancelled")) { (key, label) ->
+                FilterChip(
+                    selected = statusFilter == key,
+                    onClick = {
+                        statusFilter = key
+                        if (key == "all") {
+                            loadContracts { contracts = it }
+                        } else {
+                            loadContractsByStatus(key) { contracts = it }
+                        }
+                    },
+                    label = { Text(label, style = MaterialTheme.typography.bodySmall) },
+                )
             }
         }
 

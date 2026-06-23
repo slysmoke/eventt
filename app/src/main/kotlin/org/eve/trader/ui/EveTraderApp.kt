@@ -20,6 +20,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eve.trader.AppVersion
+import org.eve.trader.core.database.AppState
+import org.eve.trader.core.database.CharacterDao
+import org.eve.trader.core.model.CharacterModel
 import org.eve.trader.core.staticdata.StaticDataImporter
 import org.eve.trader.update.UpdateChecker
 import org.eve.trader.update.UpdateInfo
@@ -74,6 +77,7 @@ fun EveTraderApp() {
             if (EveRefService.getSelectedSource() == "everef") {
                 EveRefService.sync()
             }
+            AppState.init()
         }
     }
 
@@ -139,12 +143,14 @@ fun EveTraderApp() {
                         }
 
                         Row(modifier = Modifier.weight(1f)) {
+                            val selectedCharId by AppState.selectedCharId.collectAsState()
                             Sidebar(
                                 eveColors = eveColors,
                                 selectedScreen = selectedScreen,
+                                selectedCharId = selectedCharId,
                                 onScreenSelected = { selectedScreen = it },
                             )
-                            ScreenContent(selectedScreen)
+                            ScreenContent(selectedScreen, selectedCharId)
                         }
                     }
 
@@ -307,8 +313,13 @@ private fun TopBar(
 private fun Sidebar(
     eveColors: EveColors,
     selectedScreen: AppScreen,
+    selectedCharId: Int?,
     onScreenSelected: (AppScreen) -> Unit,
 ) {
+    val characters = remember { try { CharacterDao.getAll() } catch (_: Exception) { emptyList<CharacterModel>() } }
+    var charMenuExpanded by remember { mutableStateOf(false) }
+    val selectedChar = characters.find { it.id == selectedCharId }
+
     Surface(
         modifier = Modifier.width(200.dp).fillMaxHeight(),
         color = eveColors.headerColor,
@@ -330,7 +341,71 @@ private fun Sidebar(
                 Text("EVE Trader", style = MaterialTheme.typography.titleMedium, color = eveColors.accentColor)
             }
 
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+
+            // Character selector
+            if (characters.isNotEmpty()) {
+                Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.15f),
+                        onClick = { charMenuExpanded = true },
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Default.Person,
+                                contentDescription = null,
+                                tint = eveColors.accentColor,
+                                modifier = Modifier.size(14.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                selectedChar?.name ?: "Select character",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Icon(
+                                Icons.Default.ArrowDropDown,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
+
+                    DropdownMenu(
+                        expanded = charMenuExpanded,
+                        onDismissRequest = { charMenuExpanded = false },
+                    ) {
+                        characters.forEach { char ->
+                            DropdownMenuItem(
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        if (char.id == selectedCharId) {
+                                            Icon(Icons.Default.Check, null, Modifier.size(14.dp), tint = eveColors.accentColor)
+                                        } else {
+                                            Spacer(Modifier.size(14.dp))
+                                        }
+                                        Text(char.name, style = MaterialTheme.typography.bodyMedium)
+                                    }
+                                },
+                                onClick = {
+                                    AppState.selectCharacter(char.id)
+                                    charMenuExpanded = false
+                                },
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+            }
 
             // Navigation items
             AppScreen.entries.forEach { screen ->
@@ -467,7 +542,7 @@ private fun formatAlertPrice(v: Double): String = when {
 }
 
 @Composable
-private fun ScreenContent(screen: AppScreen) {
+private fun ScreenContent(screen: AppScreen, selectedCharId: Int?) {
     // Track which screens have been visited so we only mount them on first visit,
     // but keep them in the composition afterwards to preserve their state.
     var visited by remember { mutableStateOf(setOf(screen)) }
@@ -492,12 +567,12 @@ private fun ScreenContent(screen: AppScreen) {
                             AppScreen.CHARACTERS  -> CharacterManagementScreen()
                             AppScreen.MARKET      -> MarketBrowserScreen()
                             AppScreen.ANALYSIS    -> MarketAnalysisScreen()
-                            AppScreen.ASSETS      -> AssetViewerScreen()
-                            AppScreen.WALLET      -> WalletScreen()
-                            AppScreen.ORDERS      -> OrdersScreen()
+                            AppScreen.ASSETS      -> AssetViewerScreen(charId = selectedCharId)
+                            AppScreen.WALLET      -> WalletScreen(charId = selectedCharId)
+                            AppScreen.ORDERS      -> OrdersScreen(charId = selectedCharId)
                             AppScreen.WATCHLIST   -> WatchlistScreen()
                             AppScreen.ALERTS      -> PriceAlertsScreen()
-                            AppScreen.CONTRACTS   -> ContractTrackerScreen()
+                            AppScreen.CONTRACTS   -> ContractTrackerScreen(charId = selectedCharId)
                             AppScreen.INDUSTRY    -> IndustryCalculatorScreen()
                             AppScreen.SETTINGS    -> SettingsScreen()
                         }

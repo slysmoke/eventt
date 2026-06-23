@@ -2,7 +2,6 @@ package org.eve.trader.features.wallet
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
@@ -19,7 +18,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eve.trader.core.database.WalletDao
-import org.eve.trader.core.database.CharacterDao
 import org.eve.trader.core.database.StaticDataDao
 import org.eve.trader.core.esi.EsiClient
 import org.eve.trader.ui.common.*
@@ -28,9 +26,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.background
 
 @Composable
-fun WalletScreen() {
+fun WalletScreen(charId: Int?) {
     val scope = rememberCoroutineScope()
-    var selectedCharacter by remember { mutableStateOf<org.eve.trader.core.model.CharacterModel?>(null) }
     var balance by remember { mutableStateOf(0.0) }
     var dailyBreakdown by remember { mutableStateOf<List<org.eve.trader.core.model.DailyWalletEntry>>(emptyList()) }
     var transactions by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
@@ -38,11 +35,9 @@ fun WalletScreen() {
     var isLoading by remember { mutableStateOf(false) }
     var activeTab by remember { mutableStateOf(0) }
 
-    LaunchedEffect(Unit) {
-        val chars = withContext(Dispatchers.IO) { CharacterDao.getAll() }
-        if (chars.isNotEmpty()) {
-            selectedCharacter = chars[0]
-            loadWalletData(chars[0].id,
+    LaunchedEffect(charId) {
+        if (charId != null) {
+            loadWalletData(charId,
                 balanceCallback = { balance = it },
                 dailyCallback = { dailyBreakdown = it },
                 transactionsCallback = { transactions = it },
@@ -52,36 +47,29 @@ fun WalletScreen() {
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Wallet", style = MaterialTheme.typography.headlineMedium)
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Character selector
-        val characters = remember {
-            try { CharacterDao.getAll() } catch (e: Exception) { emptyList() }
-        }
-        if (characters.isNotEmpty()) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                items(characters) { char ->
-                    FilterChip(
-                        selected = selectedCharacter?.id == char.id,
-                        onClick = {
-                            selectedCharacter = char
-                            scope.launch {
-                                loadWalletData(char.id,
-                                    balanceCallback = { balance = it },
-                                    dailyCallback = { dailyBreakdown = it },
-                                    transactionsCallback = { transactions = it },
-                                    journalCallback = { journal = it },
-                                )
-                            }
-                        },
-                        label = { Text(char.name, style = MaterialTheme.typography.bodySmall) },
-                    )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Wallet", style = MaterialTheme.typography.headlineMedium)
+            charId?.let { id ->
+                IconButton(onClick = {
+                    scope.launch {
+                        loadWalletData(id,
+                            balanceCallback = { balance = it },
+                            dailyCallback = { dailyBreakdown = it },
+                            transactionsCallback = { transactions = it },
+                            journalCallback = { journal = it },
+                        )
+                    }
+                }) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                 }
             }
-            Spacer(modifier = Modifier.height(8.dp))
         }
+
+        Spacer(modifier = Modifier.height(8.dp))
 
         // Balance card
         Card(

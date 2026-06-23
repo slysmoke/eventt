@@ -14,6 +14,8 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.eve.trader.core.database.CharacterDao
+import org.eve.trader.core.database.StaticDataDao
 import org.eve.trader.core.everef.EveRefDao
 import org.eve.trader.core.everef.EveRefService
 import org.eve.trader.core.staticdata.CitadelService
@@ -73,6 +75,8 @@ fun SettingsScreen() {
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         Text("Settings", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+
+        CharacterFeesCard()
 
         CitadelCard(
             syncState = citadelSyncState,
@@ -372,4 +376,109 @@ private fun CitadelCard(
 private fun formatTimestamp(millis: Long): String {
     val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
     return sdf.format(Date(millis))
+}
+
+@Composable
+private fun CharacterFeesCard() {
+    val scope = rememberCoroutineScope()
+    val characters = remember { try { CharacterDao.getAll() } catch (_: Exception) { emptyList() } }
+
+    if (characters.isEmpty()) return
+
+    // Load current tax values for all characters
+    val salesTaxValues = remember {
+        mutableStateMapOf<Int, String>().also { map ->
+            characters.forEach { char ->
+                map[char.id] = "%.2f".format(StaticDataDao.getCharSalesTax(char.id))
+            }
+        }
+    }
+    val brokersFeeValues = remember {
+        mutableStateMapOf<Int, String>().also { map ->
+            characters.forEach { char ->
+                map[char.id] = "%.2f".format(StaticDataDao.getCharBrokersFee(char.id))
+            }
+        }
+    }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.Percent, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text("Character Fees", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            }
+
+            Text(
+                "Set the actual fees for each character. Used to calculate net profit in analysis.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            HorizontalDivider()
+
+            characters.forEach { char ->
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(char.name, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        TaxField(
+                            label = "Sales Tax %",
+                            value = salesTaxValues[char.id] ?: "8.00",
+                            onValueChange = { v ->
+                                salesTaxValues[char.id] = v
+                                v.toDoubleOrNull()?.let { pct ->
+                                    scope.launch(Dispatchers.IO) { StaticDataDao.setCharSalesTax(char.id, pct.coerceIn(0.0, 100.0)) }
+                                }
+                            },
+                            modifier = Modifier.width(140.dp),
+                        )
+
+                        TaxField(
+                            label = "Broker's Fee %",
+                            value = brokersFeeValues[char.id] ?: "3.00",
+                            onValueChange = { v ->
+                                brokersFeeValues[char.id] = v
+                                v.toDoubleOrNull()?.let { pct ->
+                                    scope.launch(Dispatchers.IO) { StaticDataDao.setCharBrokersFee(char.id, pct.coerceIn(0.0, 100.0)) }
+                                }
+                            },
+                            modifier = Modifier.width(140.dp),
+                        )
+
+                        val tax = salesTaxValues[char.id]?.toDoubleOrNull() ?: 0.0
+                        val fee = brokersFeeValues[char.id]?.toDoubleOrNull() ?: 0.0
+                        Text(
+                            "Total: ${"%.2f".format(tax + fee)}%",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
+                if (char != characters.last()) HorizontalDivider()
+            }
+        }
+    }
+}
+
+@Composable
+private fun TaxField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { v ->
+            // Allow digits, dot, and at most one dot
+            val filtered = v.filter { it.isDigit() || it == '.' }
+            if (filtered.count { it == '.' } <= 1) onValueChange(filtered)
+        },
+        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+        suffix = { Text("%", style = MaterialTheme.typography.bodySmall) },
+        singleLine = true,
+        modifier = modifier,
+        textStyle = MaterialTheme.typography.bodyMedium,
+    )
 }

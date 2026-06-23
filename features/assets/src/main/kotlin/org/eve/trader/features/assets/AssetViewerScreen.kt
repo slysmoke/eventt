@@ -3,8 +3,6 @@ package org.eve.trader.features.assets
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -28,18 +26,17 @@ import org.eve.trader.core.model.AssetModel
 import org.eve.trader.ui.common.*
 
 @Composable
-fun AssetViewerScreen() {
+fun AssetViewerScreen(charId: Int?) {
     val scope = rememberCoroutineScope()
     var assets by remember { mutableStateOf<List<AssetModel>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var groupByLocation by remember { mutableStateOf(true) }
-    var selectedCharacterId by remember { mutableStateOf<Int?>(null) }
     var selectedCorporationId by remember { mutableStateOf<Int?>(null) }
     var showRefreshDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        loadAssets(selectedCharacterId, selectedCorporationId) { list -> assets = list }
+    LaunchedEffect(charId) {
+        loadAssets(charId, selectedCorporationId) { list -> assets = list }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -143,14 +140,15 @@ fun AssetViewerScreen() {
     // Refresh dialog
     if (showRefreshDialog) {
         RefreshAssetDialog(
+            charId = charId,
             onDismiss = { showRefreshDialog = false },
-            onRefreshCharacter = { charId ->
+            onRefreshCharacter = { id ->
                 scope.launch(Dispatchers.IO) {
                     isLoading = true
                     try {
-                        fetchCharacterAssets(charId)
+                        fetchCharacterAssets(id)
                         withContext(Dispatchers.Main) {
-                            loadAssets(charId, null) { list -> assets = list }
+                            loadAssets(id, null) { list -> assets = list }
                             isLoading = false
                             showRefreshDialog = false
                         }
@@ -284,43 +282,26 @@ private fun AssetRow(asset: AssetModel) {
 
 @Composable
 private fun RefreshAssetDialog(
+    charId: Int?,
     onDismiss: () -> Unit,
     onRefreshCharacter: (Int) -> Unit,
     onRefreshCorporation: (Int) -> Unit,
 ) {
-    val characters = remember {
-        try {
-            org.eve.trader.core.database.CharacterDao.getAll()
-        } catch (e: Exception) { emptyList() }
+    val character = remember(charId) {
+        if (charId == null) null
+        else try { org.eve.trader.core.database.CharacterDao.getById(charId) } catch (_: Exception) { null }
     }
-    var selectedCharId by remember { mutableStateOf<Int?>(characters.firstOrNull()?.id) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Refresh Assets") },
         text = {
-            Column {
-                Text("Choose what to fetch from ESI:")
-                Spacer(modifier = Modifier.height(8.dp))
-
-                if (characters.isNotEmpty()) {
-                    Text("Character:", style = MaterialTheme.typography.labelMedium)
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        items(characters) { char ->
-                            FilterChip(
-                                selected = selectedCharId == char.id,
-                                onClick = { selectedCharId = char.id },
-                                label = { Text(char.name, style = MaterialTheme.typography.bodySmall) },
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Fetch assets from ESI for the selected character.")
 
                 Button(
-                    onClick = { selectedCharId?.let { onRefreshCharacter(it) } },
-                    enabled = selectedCharId != null,
+                    onClick = { charId?.let { onRefreshCharacter(it) } },
+                    enabled = charId != null,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Icon(Icons.Default.Person, null, modifier = Modifier.size(18.dp))
@@ -329,11 +310,8 @@ private fun RefreshAssetDialog(
                 }
 
                 Button(
-                    onClick = { selectedCharId?.let { charId ->
-                        val char = characters.find { it.id == charId }
-                        char?.corporationId?.let { onRefreshCorporation(it) }
-                    } },
-                    enabled = characters.any { it.corporationId != null },
+                    onClick = { character?.corporationId?.let { onRefreshCorporation(it) } },
+                    enabled = character?.corporationId != null,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
                 ) {
