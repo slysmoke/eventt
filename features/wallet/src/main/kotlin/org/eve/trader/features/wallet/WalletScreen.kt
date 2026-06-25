@@ -408,7 +408,7 @@ private suspend fun loadWalletData(
         balanceCallback(summary.balance)
         dailyCallback(summary.dailyBreakdown)
         transactionsCallback(resolveAllNames(WalletDao.getTransactions(characterId = characterId, limit = 200)))
-        journalCallback(WalletDao.getJournalEntries(characterId = characterId, limit = 200))
+        journalCallback(WalletDao.getJournalEntries(characterId = characterId))
 
         // Fetch from ESI
         try {
@@ -441,7 +441,7 @@ private suspend fun loadWalletData(
                     )
                 } catch (e: Exception) { /* skip duplicates or bad entries */ }
             }
-            journalCallback(WalletDao.getJournalEntries(characterId = characterId, limit = 200))
+            journalCallback(WalletDao.getJournalEntries(characterId = characterId))
         } catch (e: Exception) {
             println("Error fetching journal: ${e.message}")
         }

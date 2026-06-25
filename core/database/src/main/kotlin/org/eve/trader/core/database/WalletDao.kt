@@ -139,18 +139,21 @@ object WalletDao {
     fun getJournalEntries(
         characterId: Int? = null,
         corporationId: Int? = null,
-        limit: Int = 100,
+        limit: Int? = null,
         offset: Int = 0,
     ): List<Map<String, Any?>> {
         return DatabaseManager.transaction {
             val where = buildWhereClause(characterId, corporationId)
+            val limitClause = if (limit != null) " LIMIT ? OFFSET ?" else ""
             prepareStatement(
-                "SELECT * FROM journal ${where.sql} ORDER BY date DESC LIMIT ? OFFSET ?"
+                "SELECT * FROM journal ${where.sql} ORDER BY date DESC$limitClause"
             ).use { stmt ->
                 var i = 1
                 where.params.forEach { stmt.setObject(i++, it) }
-                stmt.setInt(i++, limit)
-                stmt.setInt(i, offset)
+                if (limit != null) {
+                    stmt.setInt(i++, limit)
+                    stmt.setInt(i, offset)
+                }
                 stmt.executeQuery().use { rs ->
                     val result = mutableListOf<Map<String, Any?>>()
                     while (rs.next()) {
