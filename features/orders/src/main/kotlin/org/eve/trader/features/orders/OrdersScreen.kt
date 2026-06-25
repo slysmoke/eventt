@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.eve.trader.core.database.OrderHistoryDao
 import org.eve.trader.core.database.StaticDataDao
 import org.eve.trader.core.esi.EsiClient
 import org.eve.trader.ui.common.EmptyState
@@ -74,6 +75,7 @@ private enum class SortDir { ASC, DESC }
 fun OrdersScreen(charId: Int?) {
     val scope = rememberCoroutineScope()
     var orders by remember { mutableStateOf<List<CharacterOrder>>(emptyList()) }
+    var historyOrders by remember { mutableStateOf<List<OrderHistoryDao.OrderHistoryRecord>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var activeTab by remember { mutableStateOf(0) }
     var sortCol by remember { mutableStateOf(SortCol.NAME) }
@@ -83,6 +85,7 @@ fun OrdersScreen(charId: Int?) {
         scope.launch(Dispatchers.IO) {
             withContext(Dispatchers.Main) { isLoading = true }
             try {
+                // Load active orders from ESI
                 val raw = EsiClient.getCharacterOrders(charId)
                 val parsed = raw.map { m ->
                     val typeId     = (m["type_id"]     as? Number)?.toInt()  ?: 0
@@ -106,6 +109,33 @@ fun OrdersScreen(charId: Int?) {
                     )
                 }
                 withContext(Dispatchers.Main) { orders = parsed }
+
+                // Load order history from ESI and persist to DB
+                val rawHistory = EsiClient.getCharacterOrdersHistory(charId)
+                val historyRecords = rawHistory.map { m ->
+                    val typeId     = (m["type_id"]     as? Number)?.toInt()  ?: 0
+                    val locationId = (m["location_id"] as? Number)?.toLong() ?: 0L
+                    OrderHistoryDao.OrderHistoryRecord(
+                        orderId         = (m["order_id"]       as? Number)?.toLong()  ?: 0L,
+                        typeId          = typeId,
+                        typeName        = StaticDataDao.getTypeName(typeId)            ?: "Unknown ($typeId)",
+                        locationId      = locationId,
+                        stationName     = StaticDataDao.getStationById(locationId)?.name ?: locationId.toString(),
+                        price           = (m["price"]          as? Number)?.toDouble() ?: 0.0,
+                        volumeTotal     = (m["volume_total"]   as? Number)?.toInt()   ?: 0,
+                        volumeRemaining = (m["volume_remain"]  as? Number)?.toInt()   ?: 0,
+                        isBuyOrder      = (m["is_buy_order"]   as? Boolean)            ?: false,
+                        duration        = (m["duration"]       as? Number)?.toInt()   ?: 0,
+                        issued          = (m["issued"]         as? String)            ?: "",
+                        range           = (m["range"]          as? String)            ?: "station",
+                        minVolume       = (m["min_volume"]     as? Number)?.toInt()   ?: 1,
+                        state           = (m["state"]          as? String)            ?: "expired",
+                        characterId     = charId,
+                    )
+                }
+                OrderHistoryDao.upsertAll(historyRecords)
+                val stored = OrderHistoryDao.getAll(charId)
+                withContext(Dispatchers.Main) { historyOrders = stored }
             } catch (_: Exception) {
             } finally {
                 withContext(Dispatchers.Main) { isLoading = false }
@@ -113,7 +143,14 @@ fun OrdersScreen(charId: Int?) {
         }
     }
 
-    LaunchedEffect(charId) { charId?.let { loadOrders(it) } }
+    // Also load persisted history immediately without waiting for ESI
+    LaunchedEffect(charId) {
+        charId?.let { id ->
+            val stored = withContext(Dispatchers.IO) { OrderHistoryDao.getAll(id) }
+            historyOrders = stored
+            loadOrders(id)
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         // ── Top bar ──────────────────────────────────────────────────────
@@ -140,10 +177,10 @@ fun OrdersScreen(charId: Int?) {
             Tab(selected = activeTab == 1, onClick = { activeTab = 1 }) {
                 Text("Buy (${buyOrders.size})", modifier = Modifier.padding(8.dp))
             }
+            Tab(selected = activeTab == 2, onClick = { activeTab = 2 }) {
+                Text("History (${historyOrders.size})", modifier = Modifier.padding(8.dp))
+            }
         }
-
-        val filtered = if (activeTab == 0) sellOrders else buyOrders
-        val sorted   = applySort(filtered, sortCol, sortDir)
 
         fun onSort(col: SortCol) {
             if (sortCol == col) sortDir = if (sortDir == SortDir.ASC) SortDir.DESC else SortDir.ASC
@@ -152,22 +189,44 @@ fun OrdersScreen(charId: Int?) {
 
         // ── Table ─────────────────────────────────────────────────────────
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            if (sorted.isEmpty() && !isLoading) {
-                EmptyState(
-                    icon = Icons.Default.Receipt,
-                    title = if (activeTab == 0) "No Sell Orders" else "No Buy Orders",
-                    description = if (charId == null) "Add a character to view orders." else "No active orders.",
-                )
-            } else if (activeTab == 0) {
-                SellOrdersTable(sorted, sortCol, sortDir, ::onSort)
-            } else {
-                BuyOrdersTable(sorted, sortCol, sortDir, ::onSort)
+            when (activeTab) {
+                2 -> {
+                    if (historyOrders.isEmpty() && !isLoading) {
+                        EmptyState(
+                            icon = Icons.Default.History,
+                            title = "No Order History",
+                            description = if (charId == null) "Add a character to view order history." else "No completed orders found.",
+                        )
+                    } else {
+                        OrderHistoryTable(historyOrders)
+                    }
+                }
+                else -> {
+                    val filtered = if (activeTab == 0) sellOrders else buyOrders
+                    val sorted   = applySort(filtered, sortCol, sortDir)
+                    if (sorted.isEmpty() && !isLoading) {
+                        EmptyState(
+                            icon = Icons.Default.Receipt,
+                            title = if (activeTab == 0) "No Sell Orders" else "No Buy Orders",
+                            description = if (charId == null) "Add a character to view orders." else "No active orders.",
+                        )
+                    } else if (activeTab == 0) {
+                        SellOrdersTable(sorted, sortCol, sortDir, ::onSort)
+                    } else {
+                        BuyOrdersTable(sorted, sortCol, sortDir, ::onSort)
+                    }
+                }
             }
         }
 
         // ── Summary bar ───────────────────────────────────────────────────
-        if (filtered.isNotEmpty()) {
-            OrdersSummaryBar(filtered)
+        if (activeTab != 2) {
+            val filtered = if (activeTab == 0) sellOrders else buyOrders
+            if (filtered.isNotEmpty()) {
+                OrdersSummaryBar(filtered)
+            }
+        } else if (historyOrders.isNotEmpty()) {
+            HistorySummaryBar(historyOrders)
         }
     }
 
@@ -243,6 +302,99 @@ private fun BuyOrdersTable(orders: List<CharacterOrder>, sortCol: SortCol, sortD
                 BuyOrderRow(order)
                 HorizontalDivider(thickness = 0.5.dp)
             }
+        }
+    }
+}
+
+@Composable
+private fun OrderHistoryTable(orders: List<OrderHistoryDao.OrderHistoryRecord>) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            StaticHeader("Name",    Modifier.weight(3f))
+            StaticHeader("Type",    Modifier.weight(1f))
+            StaticHeader("State",   Modifier.weight(1.5f))
+            StaticHeader("Price",   Modifier.weight(2f))
+            StaticHeader("Volume",  Modifier.weight(2f))
+            StaticHeader("Issued",  Modifier.weight(2f))
+            StaticHeader("Station", Modifier.weight(3f))
+        }
+        HorizontalDivider()
+        LazyColumn {
+            items(orders, key = { it.orderId }) { order ->
+                OrderHistoryRow(order)
+                HorizontalDivider(thickness = 0.5.dp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun OrderHistoryRow(order: OrderHistoryDao.OrderHistoryRecord) {
+    val stateColor = when (order.state) {
+        "fulfilled" -> Color(0xFF69DB7C)
+        "cancelled" -> Color(0xFFFF6B6B)
+        else        -> Color(0xFFFFD43B)  // expired
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(order.typeName, modifier = Modifier.weight(3f), style = MaterialTheme.typography.bodyMedium, overflow = TextOverflow.Ellipsis, maxLines = 1)
+        Text(
+            if (order.isBuyOrder) "Buy" else "Sell",
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodySmall,
+            color = if (order.isBuyOrder) BUY_COLOR else SELL_COLOR,
+        )
+        Text(
+            order.state.replaceFirstChar { it.uppercase() },
+            modifier = Modifier.weight(1.5f),
+            style = MaterialTheme.typography.bodySmall,
+            color = stateColor,
+        )
+        Text(formatIsk(order.price), modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodyMedium)
+        Text(
+            "${formatNumber(order.volumeRemaining)}/${formatNumber(order.volumeTotal)}",
+            modifier = Modifier.weight(2f),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            order.issued.take(16).replace("T", " "),
+            modifier = Modifier.weight(2f),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(order.stationName, modifier = Modifier.weight(3f).padding(start = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, overflow = TextOverflow.Ellipsis, maxLines = 1)
+    }
+}
+
+@Composable
+private fun HistorySummaryBar(orders: List<OrderHistoryDao.OrderHistoryRecord>) {
+    val fulfilled = orders.count { it.state == "fulfilled" }
+    val cancelled = orders.count { it.state == "cancelled" }
+    val expired   = orders.count { it.state == "expired" }
+    val totalSold = orders.filter { !it.isBuyOrder && it.state == "fulfilled" }
+        .sumOf { it.price * (it.volumeTotal - it.volumeRemaining) }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        tonalElevation = 2.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SummaryItem("Total", orders.size.toString())
+            SummaryItem("Fulfilled", fulfilled.toString())
+            SummaryItem("Cancelled", cancelled.toString())
+            SummaryItem("Expired", expired.toString())
+            if (totalSold > 0) SummaryItem("Sell volume", "${formatIsk(totalSold)} ISK")
         }
     }
 }

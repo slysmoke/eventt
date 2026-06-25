@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
@@ -90,6 +91,7 @@ fun MarketBrowserScreen() {
     var isSdeImporting by remember { mutableStateOf(false) }
     var showAddToWatchlist by remember { mutableStateOf(false) }
     var showAddToAlert by remember { mutableStateOf(false) }
+    var contextMenuOrder by remember { mutableStateOf<MarketOrder?>(null) }
 
     LaunchedEffect(Unit) {
         val groups = withContext(Dispatchers.IO) { StaticDataDao.getTopMarketGroups() }
@@ -222,7 +224,7 @@ fun MarketBrowserScreen() {
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         if (showOrderBook) {
-                            OrderBookView(orderBook)
+                            OrderBookView(orderBook, onCreateAlert = { order -> contextMenuOrder = order })
                         } else {
                             HistoryChartView(history, selectedType!!)
                         }
@@ -287,13 +289,24 @@ fun MarketBrowserScreen() {
         )
     }
 
-    // Add to Alert dialog
+    // Add to Alert dialog (from header button)
     if (showAddToAlert && selectedType != null) {
         AddToAlertDialog(
             type = selectedType!!,
             orderBook = orderBook,
             onDismiss = { showAddToAlert = false },
             onAdded = { showAddToAlert = false },
+        )
+    }
+
+    // Add to Alert dialog (from right-click on order row)
+    if (contextMenuOrder != null && selectedType != null) {
+        AddToAlertDialog(
+            type = selectedType!!,
+            orderBook = orderBook,
+            prefilledPrice = contextMenuOrder!!.price,
+            onDismiss = { contextMenuOrder = null },
+            onAdded = { contextMenuOrder = null },
         )
     }
 }
@@ -537,7 +550,10 @@ private fun sortOrders(orders: List<MarketOrder>, col: OrderSortColumn, asc: Boo
 }
 
 @Composable
-private fun OrderBookView(orders: Pair<List<MarketOrder>, List<MarketOrder>>) {
+private fun OrderBookView(
+    orders: Pair<List<MarketOrder>, List<MarketOrder>>,
+    onCreateAlert: ((MarketOrder) -> Unit)? = null,
+) {
     val (rawSell, rawBuy) = orders
 
     var sellSort by remember { mutableStateOf(OrderSortColumn.PRICE) }
@@ -556,6 +572,7 @@ private fun OrderBookView(orders: Pair<List<MarketOrder>, List<MarketOrder>>) {
             sortCol = sellSort, ascending = sellAsc,
             modifier = Modifier.weight(1f),
             onSort = { col -> if (sellSort == col) sellAsc = !sellAsc else { sellSort = col; sellAsc = true } },
+            onCreateAlert = onCreateAlert,
         )
         HorizontalDivider(thickness = 2.dp)
         OrderTable(
@@ -565,6 +582,7 @@ private fun OrderBookView(orders: Pair<List<MarketOrder>, List<MarketOrder>>) {
             sortCol = buySort, ascending = buyAsc,
             modifier = Modifier.weight(1f),
             onSort = { col -> if (buySort == col) buyAsc = !buyAsc else { buySort = col; buyAsc = false } },
+            onCreateAlert = onCreateAlert,
         )
     }
 }
@@ -580,6 +598,7 @@ private fun OrderTable(
     ascending: Boolean,
     modifier: Modifier = Modifier,
     onSort: (OrderSortColumn) -> Unit,
+    onCreateAlert: ((MarketOrder) -> Unit)? = null,
 ) {
     Column(modifier = modifier) {
         // Section title bar
@@ -620,7 +639,7 @@ private fun OrderTable(
                 Text("No orders", style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.padding(12.dp))
             } else {
                 orders.forEachIndexed { index, order ->
-                    OrderRow(order = order, isBuy = isBuy, index = index)
+                    OrderRow(order = order, isBuy = isBuy, index = index, onCreateAlert = onCreateAlert)
                 }
             }
         }
@@ -664,18 +683,35 @@ private fun SortableCol(
 }
 
 @Composable
-private fun OrderRow(order: MarketOrder, isBuy: Boolean, index: Int) {
+private fun OrderRow(
+    order: MarketOrder,
+    isBuy: Boolean,
+    index: Int,
+    onCreateAlert: ((MarketOrder) -> Unit)? = null,
+) {
     val priceColor = if (!isBuy) Color(0xFFFF6B6B) else Color(0xFF69DB7C)
     val expiry  = remember(order.issued, order.duration) { computeExpiry(order.issued, order.duration) }
     val expColor = remember(order.issued, order.duration) { expiryColor(order.issued, order.duration) }
     val rowBg = if (index % 2 == 0) Color.Transparent
                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.025f)
+    var showContextMenu by remember { mutableStateOf(false) }
 
+    Box {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(rowBg)
-            .padding(horizontal = 10.dp, vertical = 3.dp),
+            .padding(horizontal = 10.dp, vertical = 3.dp)
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
+                            showContextMenu = true
+                        }
+                    }
+                }
+            },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -732,6 +768,17 @@ private fun OrderRow(order: MarketOrder, isBuy: Boolean, index: Int) {
             modifier = Modifier.width(56.dp),
         )
     }
+    DropdownMenu(expanded = showContextMenu, onDismissRequest = { showContextMenu = false }) {
+        DropdownMenuItem(
+            text = { Text("Create Price Alert") },
+            leadingIcon = { Icon(Icons.Default.Notifications, null, modifier = Modifier.size(16.dp)) },
+            onClick = {
+                showContextMenu = false
+                onCreateAlert?.invoke(order)
+            },
+        )
+    }
+    } // Box
     HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
 }
 
@@ -764,10 +811,22 @@ private fun HistoryChartView(history: List<MarketHistoryModel>, type: StaticType
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Sort oldest-first, take most recent N days
-        val filteredHistory = history.sortedBy { it.date }.takeLast(historyDays)
+        // Filter by actual calendar date range (not by data-point count)
+        val cutoffDate = java.time.LocalDate.now().minusDays(historyDays.toLong()).toString()
+        val filteredHistory = history.sortedBy { it.date }.filter { it.date.take(10) >= cutoffDate }
 
-        // Price chart
+        // Full calendar grid: every date in [cutoff, today], zero-filled for missing days.
+        // Used for volume chart so gaps are shown as 0 bars, not omitted.
+        val (paddedVolumes, paddedDates) = run {
+            val dataMap = filteredHistory.associate { it.date.take(10) to it.volume.toDouble() }
+            val today = java.time.LocalDate.now()
+            val allDates = (0 until historyDays).map {
+                today.minusDays((historyDays - 1 - it).toLong()).toString()
+            }
+            allDates.map { dataMap[it] ?: 0.0 } to allDates
+        }
+
+        // Price chart — only trading days (zero price on no-trade day would distort the line)
         ContentCard("Average Price — ${type.name}") {
             PriceLineChart(
                 data = filteredHistory.map { it.average },
@@ -779,11 +838,11 @@ private fun HistoryChartView(history: List<MarketHistoryModel>, type: StaticType
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Volume chart
-        ContentCard("Volume") {
+        // Volume chart — full calendar range with 0 for no-trade days
+        ContentCard("Volume (${filteredHistory.size} trading days / $historyDays calendar days)") {
             VolumeBarChart(
-                data = filteredHistory.map { it.volume.toDouble() },
-                dates = filteredHistory.map { it.date.take(10) },
+                data = paddedVolumes,
+                dates = paddedDates,
                 color = MaterialTheme.colorScheme.tertiary,
                 modifier = Modifier.fillMaxWidth().height(160.dp),
             )
@@ -791,19 +850,20 @@ private fun HistoryChartView(history: List<MarketHistoryModel>, type: StaticType
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Stats
-        val avgPrice = filteredHistory.averageOf { it.average }
+        // Stats — vol/day uses calendar days as denominator, not trading-day count
+        val avgPrice    = filteredHistory.averageOf { it.average }
         val highestPrice = filteredHistory.maxOfOrNull { it.highest } ?: 0.0
-        val lowestPrice = filteredHistory.minOfOrNull { it.lowest } ?: 0.0
-        val totalVolume = filteredHistory.sumOf { it.volume }
-        val orderCount = filteredHistory.sumOf { it.orderCount }
+        val lowestPrice  = filteredHistory.minOfOrNull { it.lowest }  ?: 0.0
+        val totalVolume  = filteredHistory.sumOf { it.volume }
+        val orderCount   = filteredHistory.sumOf { it.orderCount }
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard("Avg Price", formatPrice(avgPrice), Modifier.weight(1f))
-            StatCard("Highest", formatPrice(highestPrice), Modifier.weight(1f))
-            StatCard("Lowest", formatPrice(lowestPrice), Modifier.weight(1f))
-            StatCard("Total Vol", formatVolume(totalVolume), Modifier.weight(1f))
-            StatCard("Orders", formatVolume(orderCount), Modifier.weight(1f))
+            StatCard("Avg Price",   formatPrice(avgPrice),                          Modifier.weight(1f))
+            StatCard("Highest",     formatPrice(highestPrice),                      Modifier.weight(1f))
+            StatCard("Lowest",      formatPrice(lowestPrice),                       Modifier.weight(1f))
+            StatCard("Total Vol",   formatVolume(totalVolume),                      Modifier.weight(1f))
+            StatCard("Vol/Day",     formatVolPerDay(totalVolume, historyDays),      Modifier.weight(1f))
+            StatCard("Orders",      formatVolume(orderCount),                       Modifier.weight(1f))
         }
     }
 }
@@ -1213,6 +1273,17 @@ private fun <T> List<T>.averageOf(selector: (T) -> Double): Double {
     return sumOf(selector) / size
 }
 
+private fun formatVolPerDay(totalVol: Long, calendarDays: Int): String {
+    val perDay = totalVol.toDouble() / calendarDays.coerceAtLeast(1)
+    return when {
+        perDay >= 1_000_000 -> String.format("%.1fM", perDay / 1_000_000)
+        perDay >= 1_000     -> String.format("%.1fK", perDay / 1_000)
+        perDay >= 10        -> String.format("%.0f",  perDay)
+        perDay >= 1         -> String.format("%.1f",  perDay)
+        else                -> String.format("%.2f",  perDay)
+    }
+}
+
 // ─── Add to Watchlist Dialog ────────────────────────────────────────────
 
 @Composable
@@ -1268,11 +1339,12 @@ private fun AddToWatchlistDialog(
 private fun AddToAlertDialog(
     type: StaticTypeModel,
     orderBook: Pair<List<MarketOrder>, List<MarketOrder>>,
+    prefilledPrice: Double? = null,
     onDismiss: () -> Unit,
     onAdded: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    var targetPrice by remember { mutableStateOf("") }
+    var targetPrice by remember { mutableStateOf(prefilledPrice?.let { String.format("%.2f", it) } ?: "") }
     var condition by remember { mutableStateOf("below") }
 
     val (sellOrders, buyOrders) = orderBook
@@ -1318,6 +1390,7 @@ private fun AddToAlertDialog(
                         AlertDao.insert(PriceAlertModel(
                             typeId = type.typeId, typeName = type.name,
                             targetPrice = price, condition = condition,
+                            regionId = if (type.typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else 10000002,
                         ))
                         withContext(Dispatchers.Main) { onAdded() }
                     }

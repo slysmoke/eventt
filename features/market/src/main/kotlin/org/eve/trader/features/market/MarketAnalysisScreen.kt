@@ -1458,7 +1458,9 @@ private fun computeOpportunityForType(
 
     val type = StaticDataDao.getTypeById(typeId) ?: return null
     val history     = fetchHistory(typeId, regionId, historySource)
-    val avgDailyVol = if (history.isNotEmpty()) history.map { it.volume }.average().toLong() else 0L
+    // Divide by 30 calendar days, not by the count of trading days in history.
+    // ESI omits days with no trades, so history.size < 30 for illiquid items.
+    val avgDailyVol = history.sumOf { it.volume } / 30L
     if (avgDailyVol < minDailyVol && minDailyVol > 0) return null
 
     return StationOpportunity(
@@ -1541,8 +1543,8 @@ private fun computeRegionOpportunityForType(
 
     val sellHistory = fetchHistory(typeId, sellRegionId, historySource)
     val buyHistory  = fetchHistory(typeId, buyRegionId,  historySource)
-    val volSell = if (sellHistory.isNotEmpty()) sellHistory.map { it.volume }.average().toLong() else 0L
-    val volBuy  = if (buyHistory.isNotEmpty())  buyHistory.map  { it.volume }.average().toLong() else 0L
+    val volSell = sellHistory.sumOf { it.volume } / 30L
+    val volBuy  = buyHistory.sumOf  { it.volume } / 30L
 
     return RegionOpportunity(
         typeId              = typeId,

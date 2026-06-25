@@ -23,6 +23,11 @@ import org.eve.trader.core.model.PriceAlertModel
 import org.eve.trader.ui.common.*
 
 private const val JITA_REGION_ID = 10000002
+private const val PLEX_REGION_ID = 19000001
+private const val PLEX_TYPE_ID   = 44992
+
+private fun effectiveRegionId(typeId: Int) =
+    if (typeId == PLEX_TYPE_ID) PLEX_REGION_ID else JITA_REGION_ID
 
 @Composable
 fun PriceAlertsScreen() {
@@ -179,7 +184,7 @@ private fun AddAlertDialog(
         currentBestSell = null
         currentBestBuy = null
         val orders = withContext(Dispatchers.IO) {
-            runCatching { EsiClient.getMarketRegionOrders(JITA_REGION_ID, typeId = type.typeId) }.getOrDefault(emptyList())
+            runCatching { EsiClient.getMarketRegionOrders(effectiveRegionId(type.typeId), typeId = type.typeId) }.getOrDefault(emptyList())
         }
         currentBestSell = orders.filter { (it["is_buy_order"] as? Boolean) == false }
             .minOfOrNull { (it["price"] as? Number)?.toDouble() ?: Double.MAX_VALUE }
@@ -305,7 +310,7 @@ private fun AddAlertDialog(
                             targetPrice = price,
                             condition = condition,
                             orderType = orderType,
-                            regionId = JITA_REGION_ID,
+                            regionId = effectiveRegionId(type.typeId),
                         )
                     )
                 },

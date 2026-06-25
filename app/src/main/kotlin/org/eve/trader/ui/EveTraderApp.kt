@@ -609,7 +609,11 @@ private fun ScreenContent(screen: AppScreen, selectedCharId: Int?) {
     // Track which screens have been visited so we only mount them on first visit,
     // but keep them in the composition afterwards to preserve their state.
     var visited by remember { mutableStateOf(setOf(screen)) }
-    LaunchedEffect(screen) { visited = visited + screen }
+    var dashboardRefreshTrigger by remember { mutableStateOf(0) }
+    LaunchedEffect(screen) {
+        visited = visited + screen
+        if (screen == AppScreen.DASHBOARD) dashboardRefreshTrigger++
+    }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -626,7 +630,7 @@ private fun ScreenContent(screen: AppScreen, selectedCharId: Int?) {
                             .clipToBounds()
                     ) {
                         when (s) {
-                            AppScreen.DASHBOARD   -> DashboardScreen(charId = selectedCharId)
+                            AppScreen.DASHBOARD   -> DashboardScreen(charId = selectedCharId, refreshTrigger = dashboardRefreshTrigger)
                             AppScreen.CHARACTERS  -> CharacterManagementScreen()
                             AppScreen.MARKET      -> MarketBrowserScreen()
                             AppScreen.ANALYSIS    -> MarketAnalysisScreen()

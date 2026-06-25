@@ -92,10 +92,15 @@ object StaticDataDao {
     fun searchTypes(query: String, limit: Int = 50): List<StaticTypeModel> {
         return DatabaseManager.transaction {
             prepareStatement(
-                "SELECT * FROM static_types WHERE published = 1 AND name LIKE ? ORDER BY name LIMIT ?"
+                """SELECT * FROM static_types WHERE published = 1 AND name LIKE ?
+                   ORDER BY CASE WHEN lower(name) = lower(?) THEN 0
+                                 WHEN lower(name) LIKE lower(?) || '%' THEN 1
+                                 ELSE 2 END, name LIMIT ?"""
             ).use { stmt ->
                 stmt.setString(1, "%$query%")
-                stmt.setInt(2, limit)
+                stmt.setString(2, query)
+                stmt.setString(3, query)
+                stmt.setInt(4, limit)
                 stmt.executeQuery().mapResultSetToTypes()
             }
         }
@@ -105,10 +110,15 @@ object StaticDataDao {
     fun searchMarketTypes(query: String, limit: Int = 50): List<StaticTypeModel> {
         return DatabaseManager.transaction {
             prepareStatement(
-                "SELECT * FROM static_types WHERE market_group_id IS NOT NULL AND name LIKE ? ORDER BY name LIMIT ?"
+                """SELECT * FROM static_types WHERE market_group_id IS NOT NULL AND name LIKE ?
+                   ORDER BY CASE WHEN lower(name) = lower(?) THEN 0
+                                 WHEN lower(name) LIKE lower(?) || '%' THEN 1
+                                 ELSE 2 END, name LIMIT ?"""
             ).use { stmt ->
                 stmt.setString(1, "%$query%")
-                stmt.setInt(2, limit)
+                stmt.setString(2, query)
+                stmt.setString(3, query)
+                stmt.setInt(4, limit)
                 stmt.executeQuery().mapResultSetToTypes()
             }
         }

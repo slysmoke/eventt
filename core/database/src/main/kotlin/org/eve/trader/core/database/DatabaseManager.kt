@@ -459,6 +459,27 @@ object DatabaseManager {
                 downloaded_at INTEGER DEFAULT (strftime('%s', 'now') * 1000)
             )
             """.trimIndent(),
+
+            // Completed / expired / cancelled order history from ESI
+            """
+            CREATE TABLE IF NOT EXISTS order_history (
+                order_id INTEGER PRIMARY KEY,
+                type_id INTEGER NOT NULL,
+                type_name TEXT DEFAULT '',
+                location_id INTEGER DEFAULT 0,
+                station_name TEXT DEFAULT '',
+                price REAL NOT NULL,
+                volume_total INTEGER NOT NULL,
+                volume_remaining INTEGER NOT NULL,
+                is_buy_order INTEGER NOT NULL DEFAULT 0,
+                duration INTEGER NOT NULL DEFAULT 90,
+                issued TEXT NOT NULL,
+                range TEXT DEFAULT 'station',
+                min_volume INTEGER DEFAULT 1,
+                state TEXT DEFAULT 'expired',
+                character_id INTEGER
+            )
+            """.trimIndent(),
         )
 
         // using conn parameter
@@ -505,6 +526,8 @@ object DatabaseManager {
             "CREATE INDEX IF NOT EXISTS idx_static_types_market ON static_types(market_group_id) WHERE market_group_id IS NOT NULL",
             "CREATE INDEX IF NOT EXISTS idx_market_groups_parent ON market_groups(parent_group_id)",
             "CREATE INDEX IF NOT EXISTS idx_market_groups_name ON market_groups(name)",
+            "CREATE INDEX IF NOT EXISTS idx_order_history_character ON order_history(character_id, is_buy_order)",
+            "CREATE INDEX IF NOT EXISTS idx_order_history_issued ON order_history(issued)",
         )
 
         // using conn parameter

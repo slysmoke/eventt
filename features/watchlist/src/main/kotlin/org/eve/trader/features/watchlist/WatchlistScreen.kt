@@ -29,6 +29,8 @@ import org.eve.trader.ui.common.*
 
 // The Forge (Jita) is the default trade hub for price lookups
 private const val DEFAULT_REGION_ID = 10000002
+private const val PLEX_REGION_ID    = 19000001
+private const val PLEX_TYPE_ID      = 44992
 
 @Composable
 fun WatchlistScreen() {
@@ -352,8 +354,9 @@ private suspend fun refreshAllPrices(watchlists: Map<String, List<WatchlistEntry
 private suspend fun refreshEntryPrice(entry: WatchlistEntryModel) {
     if (entry.typeId <= 0) return
 
-    // Fetch orders from Jita region
-    val rawOrders = EsiClient.getMarketRegionOrders(DEFAULT_REGION_ID, typeId = entry.typeId)
+    val regionId = if (entry.typeId == PLEX_TYPE_ID) PLEX_REGION_ID else DEFAULT_REGION_ID
+
+    val rawOrders = EsiClient.getMarketRegionOrders(regionId, typeId = entry.typeId)
     val sellOrders = rawOrders.filter { (it["is_buy_order"] as? Boolean) == false }
     val buyOrders = rawOrders.filter { (it["is_buy_order"] as? Boolean) == true }
 
@@ -364,19 +367,23 @@ private suspend fun refreshEntryPrice(entry: WatchlistEntryModel) {
     val totalVolume = rawOrders.sumOf { (it["volume_remain"] as? Number)?.toLong() ?: 0 }
 
     // Fetch history for sparkline
-    val rawHistory = EsiClient.getMarketRegionHistory(DEFAULT_REGION_ID, entry.typeId)
+    val rawHistory = EsiClient.getMarketRegionHistory(regionId, entry.typeId)
     val sparklineData = rawHistory.takeLast(30).map { hist ->
         (hist["date"] as? String ?: "") to ((hist["average"] as? Number)?.toDouble() ?: 0.0)
     }
 
-    // Calculate changes
-    val currentAvg = sparklineData.lastOrNull()?.second ?: 0.0
-    val dayAgo = sparklineData.getOrNull(sparklineData.size - 2)?.second ?: 0.0
-    val weekAgo = sparklineData.getOrNull(sparklineData.size - 8)?.second ?: 0.0
+    // Calculate changes using actual dates, not data-point offsets.
+    // ESI omits days with no trades, so index-based offsets (e.g. size-8) are wrong
+    // when there are gaps in the history.
+    val currentAvg  = sparklineData.lastOrNull()?.second ?: 0.0
+    val dayAgoDate  = java.time.LocalDate.now().minusDays(1).toString()
+    val weekAgoDate = java.time.LocalDate.now().minusDays(7).toString()
+    val dayAgo  = sparklineData.filter { it.first <= dayAgoDate  }.lastOrNull()?.second ?: 0.0
+    val weekAgo = sparklineData.filter { it.first <= weekAgoDate }.lastOrNull()?.second ?: 0.0
 
-    val change24h = if (dayAgo > 0) ((currentAvg - dayAgo) / dayAgo) * 100 else 0.0
-    val change7d = if (weekAgo > 0) ((currentAvg - weekAgo) / weekAgo) * 100 else 0.0
-    val change30d = 0.0 // Would need 30 days of history
+    val change24h = if (dayAgo  > 0) ((currentAvg - dayAgo)  / dayAgo)  * 100 else 0.0
+    val change7d  = if (weekAgo > 0) ((currentAvg - weekAgo) / weekAgo) * 100 else 0.0
+    val change30d = 0.0
 
     val snapshot = WatchlistPriceSnapshot(
         typeId = entry.typeId,

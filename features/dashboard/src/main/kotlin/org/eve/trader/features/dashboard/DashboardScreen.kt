@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.eve.trader.core.database.*
+import org.eve.trader.core.esi.EsiClient
 import org.eve.trader.core.model.PriceAlertModel
 import java.time.LocalDate
 
@@ -24,7 +25,7 @@ private val NEGATIVE = Color(0xFFFF6B6B)
 private val ACCENT   = Color(0xFF4A90D9)
 
 @Composable
-fun DashboardScreen(charId: Int?) {
+fun DashboardScreen(charId: Int?, refreshTrigger: Int = 0) {
     var walletBalance   by remember { mutableStateOf(0.0) }
     var txBreakdown     by remember { mutableStateOf<List<org.eve.trader.core.model.DailyWalletEntry>>(emptyList()) }
     var assetValue      by remember { mutableStateOf(0.0) }
@@ -32,17 +33,82 @@ fun DashboardScreen(charId: Int?) {
     var triggeredAlerts by remember { mutableStateOf<List<PriceAlertModel>>(emptyList()) }
     var isLoading       by remember { mutableStateOf(false) }
 
-    LaunchedEffect(charId) {
+    LaunchedEffect(charId, refreshTrigger) {
         isLoading = true
         withContext(Dispatchers.IO) {
+            val since90 = LocalDate.now().minusDays(90).toString()
             try {
-                val since90 = LocalDate.now().minusDays(90).toString()
                 walletBalance   = WalletDao.getWalletSummary(characterId = charId).balance
                 txBreakdown     = WalletDao.getTransactionBreakdown(characterId = charId, since = since90)
                 assetValue      = if (charId != null) AssetDao.getTotalValue(characterId = charId) else 0.0
                 recentTx        = WalletDao.getTransactions(characterId = charId, limit = 12)
                 triggeredAlerts = AlertDao.getEnabled().filter { it.triggered }
             } catch (_: Exception) { }
+
+            if (charId != null) {
+                try {
+                    walletBalance = EsiClient.getCharacterWallet(charId)
+                } catch (e: Exception) { println("Dashboard: wallet ESI error: ${e.message}") }
+
+                try {
+                    val journalEntries = EsiClient.getCharacterJournal(charId)
+                    journalEntries.forEach { entry ->
+                        try {
+                            WalletDao.insertJournalEntry(
+                                entryId       = (entry["id"]             as? Number)?.toLong()  ?: 0,
+                                date          = entry["date"]            as? String              ?: "",
+                                amount        = (entry["amount"]         as? Number)?.toDouble() ?: 0.0,
+                                balance       = (entry["balance"]        as? Number)?.toDouble() ?: 0.0,
+                                reason        = entry["reason"]          as? String              ?: "",
+                                refType       = entry["ref_type"]        as? String              ?: "",
+                                firstPartyId  = (entry["first_party_id"] as? Number)?.toInt()  ?: 0,
+                                firstPartyName  = "",
+                                secondPartyId = (entry["second_party_id"] as? Number)?.toInt() ?: 0,
+                                secondPartyName = "",
+                                taxAmount     = (entry["tax"]            as? Number)?.toDouble(),
+                                isCorp        = false,
+                                characterId   = charId,
+                                corporationId = null,
+                                divisionId    = null,
+                            )
+                        } catch (_: Exception) {}
+                    }
+                    walletBalance = WalletDao.getWalletSummary(characterId = charId).balance
+                    txBreakdown   = WalletDao.getTransactionBreakdown(characterId = charId, since = since90)
+                } catch (e: Exception) { println("Dashboard: journal ESI error: ${e.message}") }
+
+                try {
+                    val txList = EsiClient.getCharacterTransactions(charId)
+                    val typeNames = txList.mapNotNull { (it["type_id"] as? Number)?.toInt() }.toSet()
+                        .associateWith { id -> StaticDataDao.getTypeName(id) ?: "" }
+                    txList.forEach { tx ->
+                        val typeId    = (tx["type_id"]   as? Number)?.toInt()    ?: 0
+                        val unitPrice = (tx["unit_price"] as? Number)?.toDouble() ?: 0.0
+                        val quantity  = (tx["quantity"]   as? Number)?.toInt()    ?: 0
+                        try {
+                            WalletDao.insertTransaction(
+                                transactionId = (tx["transaction_id"] as? Number)?.toLong() ?: 0,
+                                date          = tx["date"] as? String ?: "",
+                                typeId        = typeId,
+                                typeName      = typeNames[typeId] ?: "",
+                                quantity      = quantity,
+                                unitPrice     = unitPrice,
+                                total         = unitPrice * quantity,
+                                isBuy         = (tx["is_buy"] as? Boolean) ?: false,
+                                clientId      = (tx["client_id"]   as? Number)?.toInt()  ?: 0,
+                                clientName    = "",
+                                locationId    = (tx["location_id"] as? Number)?.toLong() ?: 0L,
+                                locationName  = "",
+                                isCorp        = false,
+                                characterId   = charId,
+                                corporationId = null,
+                            )
+                        } catch (_: Exception) {}
+                    }
+                    recentTx    = WalletDao.getTransactions(characterId = charId, limit = 12)
+                    txBreakdown = WalletDao.getTransactionBreakdown(characterId = charId, since = since90)
+                } catch (e: Exception) { println("Dashboard: transactions ESI error: ${e.message}") }
+            }
         }
         isLoading = false
     }

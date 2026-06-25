@@ -441,7 +441,7 @@ private suspend fun loadWalletData(
                     )
                 } catch (e: Exception) { /* skip duplicates or bad entries */ }
             }
-            journalCallback(WalletDao.getJournalEntries(characterId = characterId, limit = 50))
+            journalCallback(WalletDao.getJournalEntries(characterId = characterId, limit = 200))
         } catch (e: Exception) {
             println("Error fetching journal: ${e.message}")
         }
