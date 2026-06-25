@@ -27,7 +27,7 @@
             echo "Kotlin Desktop Development Environment"
             echo "JDK: $(java -version 2>&1 | head -n 1)"
             echo "Kotlin: $(kotlin -version 2>&1)"
-            echo "Gradle: $(gradle --version 2>&1 | head -n 1)"
+            echo "Gradle: $(gradle --version 2>&1 | head -n 3)"
 
             export LD_LIBRARY_PATH=${pkgs.libGL}/lib:${pkgs.libGLU}/lib:${pkgs.libxkbcommon}/lib:$LD_LIBRARY_PATH
           '';
