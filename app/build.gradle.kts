@@ -74,6 +74,7 @@ dependencies {
     implementation(project(":features:contracts"))
     implementation(project(":features:watchlist"))
     implementation(project(":features:settings"))
+    implementation(project(":features:overlay"))
     implementation(project(":core:everef"))
 
     // Compose

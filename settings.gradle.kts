@@ -43,6 +43,7 @@ include(":features:industry")
 include(":features:contracts")
 include(":features:watchlist")
 include(":features:settings")
+include(":features:overlay")
 
 // Main app
 include(":app")

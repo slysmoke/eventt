@@ -44,6 +44,7 @@ import org.eve.trader.features.watchlist.WatchlistScreen
 import org.eve.trader.features.market.MarketAnalysisScreen
 import org.eve.trader.features.settings.SettingsScreen
 import org.eve.trader.core.everef.EveRefService
+import org.eve.trader.features.overlay.OverlayWindow
 
 enum class AppScreen(val label: String, val icon: ImageVector) {
     DASHBOARD("Dashboard", Icons.Default.Dashboard),
@@ -102,6 +103,12 @@ fun EveTraderApp() {
         AlertMonitor.start(coroutineScope)
     }
 
+    // Trade overlay window — independent of the main theme, lives at the app level
+    var showOverlay by remember { mutableStateOf(false) }
+    if (showOverlay) {
+        OverlayWindow(onClose = { showOverlay = false })
+    }
+
     MaterialTheme(
         colorScheme = colorScheme,
         typography = EveTypography
@@ -117,6 +124,8 @@ fun EveTraderApp() {
                     onThemeToggle = { darkTheme = !darkTheme },
                     eveColors = eveColors,
                     onShowProgress = { showProgressDialog = true },
+                    overlayActive = showOverlay,
+                    onToggleOverlay = { showOverlay = !showOverlay },
                 )
             },
             content = { padding ->
@@ -279,6 +288,8 @@ private fun TopBar(
     onThemeToggle: () -> Unit,
     eveColors: EveColors,
     onShowProgress: () -> Unit,
+    overlayActive: Boolean = false,
+    onToggleOverlay: () -> Unit = {},
 ) {
     TopAppBar(
         title = {
@@ -302,6 +313,13 @@ private fun TopBar(
                     imageVector = Icons.Default.Sync,
                     contentDescription = "Show request progress",
                     tint = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            IconButton(onClick = onToggleOverlay) {
+                Icon(
+                    imageVector = Icons.Default.Calculate,
+                    contentDescription = "Trade overlay",
+                    tint = if (overlayActive) eveColors.accentColor else MaterialTheme.colorScheme.onSurface,
                 )
             }
             IconButton(onClick = onThemeToggle) {
