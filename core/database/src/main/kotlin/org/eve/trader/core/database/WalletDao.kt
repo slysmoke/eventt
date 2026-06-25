@@ -57,6 +57,39 @@ object WalletDao {
         }
     }
 
+    data class RawTxRecord(
+        val date: String,
+        val typeId: Int,
+        val typeName: String,
+        val quantity: Int,
+        val unitPrice: Double,
+        val isBuy: Boolean,
+    )
+
+    fun getAllTransactions(characterId: Int): List<RawTxRecord> {
+        return DatabaseManager.transaction {
+            prepareStatement(
+                "SELECT date, type_id, type_name, quantity, unit_price, is_buy FROM transactions WHERE character_id = ? ORDER BY date ASC"
+            ).use { stmt ->
+                stmt.setInt(1, characterId)
+                stmt.executeQuery().use { rs ->
+                    val result = mutableListOf<RawTxRecord>()
+                    while (rs.next()) {
+                        result.add(RawTxRecord(
+                            date      = rs.getString("date"),
+                            typeId    = rs.getInt("type_id"),
+                            typeName  = rs.getString("type_name"),
+                            quantity  = rs.getInt("quantity"),
+                            unitPrice = rs.getDouble("unit_price"),
+                            isBuy     = rs.getInt("is_buy") == 1,
+                        ))
+                    }
+                    result
+                }
+            }
+        }
+    }
+
     fun getTransactions(
         characterId: Int? = null,
         corporationId: Int? = null,
