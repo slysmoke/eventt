@@ -77,14 +77,14 @@ private enum class SortDir { ASC, DESC }
 @Composable
 fun OrdersScreen(charId: Int?) {
     val scope = rememberCoroutineScope()
-    var orders            by remember { mutableStateOf<List<CharacterOrder>>(emptyList()) }
-    var historyOrders     by remember { mutableStateOf<List<OrderHistoryDao.OrderHistoryRecord>>(emptyList()) }
-    var fifoResult        by remember { mutableStateOf<CostBasisService.FifoResult?>(null) }
-    var isLoading         by remember { mutableStateOf(false) }
+    var orders             by remember { mutableStateOf<List<CharacterOrder>>(emptyList()) }
+    var historyOrders      by remember { mutableStateOf<List<OrderHistoryDao.OrderHistoryRecord>>(emptyList()) }
+    var fifoResult         by remember { mutableStateOf<CostBasisService.FifoResult?>(null) }
+    var isLoading          by remember { mutableStateOf(false) }
     var refreshAvailableAt by remember { mutableStateOf<Long?>(null) }
-    var activeTab         by remember { mutableStateOf(0) }
-    var sortCol           by remember { mutableStateOf(SortCol.NAME) }
-    var sortDir           by remember { mutableStateOf(SortDir.ASC) }
+    var activeTab          by remember { mutableStateOf(0) }
+    var sortCol            by remember { mutableStateOf(SortCol.NAME) }
+    var sortDir            by remember { mutableStateOf(SortDir.ASC) }
 
     fun loadOrders(charId: Int) {
         scope.launch(Dispatchers.IO) {
@@ -140,7 +140,11 @@ fun OrdersScreen(charId: Int?) {
                 val stored = OrderHistoryDao.getAll(charId)
                 withContext(Dispatchers.Main) { historyOrders = stored }
 
-                val fifo = CostBasisService.compute(charId)
+                val taxConfig = CostBasisService.TaxConfig(
+                    salesTaxPct  = StaticDataDao.getCharSalesTax(charId),
+                    brokerFeePct = StaticDataDao.getCharBrokersFee(charId),
+                )
+                val fifo = CostBasisService.compute(charId, taxConfig)
                 val expiry = EsiClient.getEndpointExpiry("/characters/$charId/orders/")
                 withContext(Dispatchers.Main) {
                     fifoResult = fifo
@@ -157,7 +161,13 @@ fun OrdersScreen(charId: Int?) {
         charId?.let { id ->
             val stored = withContext(Dispatchers.IO) { OrderHistoryDao.getAll(id) }
             historyOrders = stored
-            val fifo = withContext(Dispatchers.IO) { CostBasisService.compute(id) }
+            val taxConfig = withContext(Dispatchers.IO) {
+                CostBasisService.TaxConfig(
+                    salesTaxPct  = StaticDataDao.getCharSalesTax(id),
+                    brokerFeePct = StaticDataDao.getCharBrokersFee(id),
+                )
+            }
+            val fifo = withContext(Dispatchers.IO) { CostBasisService.compute(id, taxConfig) }
             fifoResult = fifo
             loadOrders(id)
         }
@@ -237,7 +247,8 @@ fun OrdersScreen(charId: Int?) {
                             description = if (charId == null) "Add a character to view orders." else "No active orders.",
                         )
                     } else if (activeTab == 0) {
-                        SellOrdersTable(sorted, sortCol, sortDir, ::onSort, inventory)
+                        val tax = fifoResult?.taxConfig ?: CostBasisService.TaxConfig()
+                        SellOrdersTable(sorted, sortCol, sortDir, ::onSort, inventory, tax)
                     } else {
                         BuyOrdersTable(sorted, sortCol, sortDir, ::onSort)
                     }
@@ -250,7 +261,10 @@ fun OrdersScreen(charId: Int?) {
             2 -> if (historyOrders.isNotEmpty()) HistorySummaryBar(historyOrders, fifoResult)
             else -> {
                 val filtered = if (activeTab == 0) sellOrders else buyOrders
-                if (filtered.isNotEmpty()) OrdersSummaryBar(filtered, if (activeTab == 0) inventory else null)
+                if (filtered.isNotEmpty()) {
+                    val tax = fifoResult?.taxConfig ?: CostBasisService.TaxConfig()
+                    OrdersSummaryBar(filtered, if (activeTab == 0) inventory else null, tax)
+                }
             }
         }
     }
@@ -283,6 +297,7 @@ private fun SellOrdersTable(
     sortDir: SortDir,
     onSort: (SortCol) -> Unit,
     inventory: Map<Int, CostBasisService.InventoryItem>,
+    taxConfig: CostBasisService.TaxConfig,
 ) {
     Column {
         Row(
@@ -302,7 +317,7 @@ private fun SellOrdersTable(
         HorizontalDivider()
         LazyColumn {
             items(orders, key = { it.orderId }) { order ->
-                SellOrderRow(order, inventory[order.typeId])
+                SellOrderRow(order, inventory[order.typeId], taxConfig)
                 HorizontalDivider(thickness = 0.5.dp)
             }
         }
@@ -396,11 +411,12 @@ private fun InventoryTable(
             StaticHeader("Realized P&L", Modifier.weight(2f))
         }
         HorizontalDivider()
+        val tax = fifoResult?.taxConfig ?: CostBasisService.TaxConfig()
         LazyColumn {
             items(items, key = { it.typeId }) { item ->
                 val activeOrder = sellByType[item.typeId]?.maxByOrNull { it.price }
                 val realized    = realizedByType[item.typeId]?.sumOf { it.profit }
-                InventoryRow(item, activeOrder, realized)
+                InventoryRow(item, activeOrder, realized, tax)
                 HorizontalDivider(thickness = 0.5.dp)
             }
         }
@@ -410,9 +426,14 @@ private fun InventoryTable(
 // ── Rows ──────────────────────────────────────────────────────────────────
 
 @Composable
-private fun SellOrderRow(order: CharacterOrder, inv: CostBasisService.InventoryItem?) {
-    val profitPerUnit = inv?.let { order.price - it.avgCostBasis }
-    val marginPct     = inv?.let { if (it.avgCostBasis > 0) (order.price - it.avgCostBasis) / it.avgCostBasis * 100 else null }
+private fun SellOrderRow(
+    order: CharacterOrder,
+    inv: CostBasisService.InventoryItem?,
+    taxConfig: CostBasisService.TaxConfig,
+) {
+    val netSellPrice  = order.price * taxConfig.sellMultiplier
+    val profitPerUnit = inv?.let { netSellPrice - it.avgCostBasis }
+    val marginPct     = inv?.let { if (it.avgCostBasis > 0) (netSellPrice - it.avgCostBasis) / it.avgCostBasis * 100 else null }
     val profitColor   = profitPerUnit?.let { if (it >= 0) PROFIT_COLOR else LOSS_COLOR } ?: MaterialTheme.colorScheme.onSurfaceVariant
 
     Row(
@@ -536,8 +557,10 @@ private fun InventoryRow(
     item: CostBasisService.InventoryItem,
     activeOrder: CharacterOrder?,
     realizedPnl: Double?,
+    taxConfig: CostBasisService.TaxConfig,
 ) {
-    val profitPerUnit = activeOrder?.let { it.price - item.avgCostBasis }
+    val netSellPrice  = activeOrder?.let { it.price * taxConfig.sellMultiplier }
+    val profitPerUnit = netSellPrice?.let { it - item.avgCostBasis }
     val marginPct     = profitPerUnit?.let { if (item.avgCostBasis > 0) it / item.avgCostBasis * 100 else null }
     val profitColor   = profitPerUnit?.let { if (it >= 0) PROFIT_COLOR else LOSS_COLOR } ?: MaterialTheme.colorScheme.onSurfaceVariant
     val realizedColor = realizedPnl?.let { if (it >= 0) PROFIT_COLOR else LOSS_COLOR } ?: MaterialTheme.colorScheme.onSurfaceVariant
@@ -653,7 +676,11 @@ private fun StaticHeader(label: String, modifier: Modifier, rightAlign: Boolean 
 // ── Summary bars ──────────────────────────────────────────────────────────
 
 @Composable
-private fun OrdersSummaryBar(orders: List<CharacterOrder>, inventory: Map<Int, CostBasisService.InventoryItem>?) {
+private fun OrdersSummaryBar(
+    orders: List<CharacterOrder>,
+    inventory: Map<Int, CostBasisService.InventoryItem>?,
+    taxConfig: CostBasisService.TaxConfig = CostBasisService.TaxConfig(),
+) {
     val active        = orders.filter { it.state == "active" }
     val totalRemain   = active.sumOf { it.volumeRemaining }
     val totalEntered  = active.sumOf { it.volumeTotal }
@@ -662,7 +689,7 @@ private fun OrdersSummaryBar(orders: List<CharacterOrder>, inventory: Map<Int, C
     val totalProfit   = inventory?.let {
         active.sumOf { o ->
             val cb = it[o.typeId]?.avgCostBasis ?: return@sumOf 0.0
-            (o.price - cb) * o.volumeRemaining
+            (o.price * taxConfig.sellMultiplier - cb) * o.volumeRemaining
         }.takeIf { it != 0.0 }
     }
 
