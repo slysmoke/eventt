@@ -456,4 +456,18 @@ object EsiClient {
         val fullParams = (params ?: emptyMap()).toMutableMap().apply { put("datasource", ESI_DATASOURCE) }
         return EsiCacheManager.getExpiry(endpoint, fullParams)
     }
+
+    // ─── UI Endpoints (in-game window control) ────────────────────────────
+
+    /** Opens the market details window in the running EVE client for the given type. */
+    fun openMarketWindow(characterId: Int, typeId: Int) {
+        val token = SsoAuthManager.ensureTokenFresh(characterId) ?: return
+        val url = "$ESI_BASE_URL/ui/openwindow/marketdetails/?datasource=$ESI_DATASOURCE&type_id=$typeId"
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Authorization", "Bearer $token")
+            .post(ByteArray(0).toRequestBody(null))
+            .build()
+        EveHttpClient.getClient().newCall(request).execute().use { /* 204 No Content = success */ }
+    }
 }

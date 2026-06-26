@@ -2,6 +2,7 @@ package org.eve.trader.features.orders
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,7 +13,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -27,16 +31,20 @@ import org.eve.trader.core.esi.EsiClient
 import org.eve.trader.ui.common.EmptyState
 import org.eve.trader.ui.common.EsiRefreshButton
 import org.eve.trader.ui.common.LoadingOverlay
+import java.awt.datatransfer.StringSelection
+import java.awt.Toolkit
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
+import java.util.Locale
 
-private val SELL_COLOR   = Color(0xFFFF6B6B)
-private val BUY_COLOR    = Color(0xFF69DB7C)
-private val VOL_SELL     = Color(0xFFFF8C00)
-private val VOL_BUY      = Color(0xFF2E7D32)
-private val PROFIT_COLOR = Color(0xFF69DB7C)
-private val LOSS_COLOR   = Color(0xFFFF6B6B)
+private val SELL_COLOR      = Color(0xFFFF6B6B)
+private val BUY_COLOR       = Color(0xFF69DB7C)
+private val VOL_SELL        = Color(0xFFFF8C00)
+private val VOL_BUY         = Color(0xFF2E7D32)
+private val PROFIT_COLOR    = Color(0xFF69DB7C)
+private val LOSS_COLOR      = Color(0xFFFF6B6B)
+private val UNDERCUT_COLOR  = Color(0xFFFF9800)  // orange — order has been beaten
 
 private data class CharacterOrder(
     val orderId: Long,
@@ -44,6 +52,7 @@ private data class CharacterOrder(
     val typeName: String,
     val groupName: String,
     val locationId: Long,
+    val regionId: Int,
     val stationName: String,
     val price: Double,
     val volumeTotal: Int,
@@ -71,6 +80,12 @@ private data class CharacterOrder(
     val issuedFormatted: String get() = issued.take(16).replace("T", " ")
 }
 
+/** Best competing prices for a (typeId, regionId) pair, excluding the character's own orders. */
+private data class MarketComparison(
+    val bestSell: Double?,  // lowest sell from others — null means no sell competition
+    val bestBuy: Double?,   // highest buy from others — null means no buy competition
+)
+
 private enum class SortCol { NAME, GROUP, PRICE, VOLUME, TOTAL, TIME_LEFT, ORDER_AGE, STATION }
 private enum class SortDir { ASC, DESC }
 
@@ -86,6 +101,51 @@ fun OrdersScreen(charId: Int?) {
     var sortCol            by remember { mutableStateOf(SortCol.NAME) }
     var sortDir            by remember { mutableStateOf(SortDir.ASC) }
 
+    // Market comparison data — loaded after orders, shown as overbid indicators
+    var marketComparisons  by remember { mutableStateOf<Map<Pair<Int, Int>, MarketComparison>>(emptyMap()) }
+    var isLoadingMarket    by remember { mutableStateOf(false) }
+
+    // Selected order for hotkey action
+    var selectedOrderId    by remember { mutableStateOf<Long?>(null) }
+
+    val focusRequester = remember { FocusRequester() }
+
+    fun fetchMarketComparisons(activeOrders: List<CharacterOrder>) {
+        if (activeOrders.isEmpty()) return
+        scope.launch(Dispatchers.IO) {
+            withContext(Dispatchers.Main) { isLoadingMarket = true }
+            try {
+                val uniquePairs = activeOrders
+                    .filter { it.regionId > 0 && it.state == "active" }
+                    .map { it.typeId to it.regionId }
+                    .toSet()
+
+                val result = mutableMapOf<Pair<Int, Int>, MarketComparison>()
+                for ((typeId, regionId) in uniquePairs) {
+                    try {
+                        val ownIds = activeOrders
+                            .filter { it.typeId == typeId && it.regionId == regionId }
+                            .map { it.orderId }
+                            .toSet()
+                        val all = EsiClient.getMarketRegionOrders(regionId, "all", typeId)
+                        val bestSell = all
+                            .filter { !(it["is_buy_order"] as? Boolean ?: false) && (it["order_id"] as? Number)?.toLong() !in ownIds }
+                            .mapNotNull { (it["price"] as? Number)?.toDouble() }
+                            .minOrNull()
+                        val bestBuy = all
+                            .filter { (it["is_buy_order"] as? Boolean ?: false) && (it["order_id"] as? Number)?.toLong() !in ownIds }
+                            .mapNotNull { (it["price"] as? Number)?.toDouble() }
+                            .maxOrNull()
+                        result[typeId to regionId] = MarketComparison(bestSell, bestBuy)
+                    } catch (_: Exception) {}
+                }
+                withContext(Dispatchers.Main) { marketComparisons = result }
+            } finally {
+                withContext(Dispatchers.Main) { isLoadingMarket = false }
+            }
+        }
+    }
+
     fun loadOrders(charId: Int) {
         scope.launch(Dispatchers.IO) {
             withContext(Dispatchers.Main) { isLoading = true }
@@ -100,6 +160,7 @@ fun OrdersScreen(charId: Int?) {
                         typeName        = StaticDataDao.getTypeName(typeId)           ?: "Unknown ($typeId)",
                         groupName       = StaticDataDao.getGroupNameForType(typeId)   ?: "",
                         locationId      = locationId,
+                        regionId        = if (locationId < 1_000_000_000_000L) StaticDataDao.getStationById(locationId)?.regionId ?: 0 else 0,
                         stationName     = StaticDataDao.getStationById(locationId)?.name ?: locationId.toString(),
                         price           = (m["price"]          as? Number)?.toDouble() ?: 0.0,
                         volumeTotal     = (m["volume_total"]   as? Number)?.toInt()   ?: 0,
@@ -144,15 +205,36 @@ fun OrdersScreen(charId: Int?) {
                     salesTaxPct  = StaticDataDao.getCharSalesTax(charId),
                     brokerFeePct = StaticDataDao.getCharBrokersFee(charId),
                 )
-                val fifo = CostBasisService.compute(charId, taxConfig)
+                val fifo   = CostBasisService.compute(charId, taxConfig)
                 val expiry = EsiClient.getEndpointExpiry("/characters/$charId/orders/")
                 withContext(Dispatchers.Main) {
-                    fifoResult = fifo
+                    fifoResult         = fifo
                     refreshAvailableAt = expiry
                 }
+
+                // Load market comparison data after orders are parsed
+                fetchMarketComparisons(parsed)
             } catch (_: Exception) {
             } finally {
                 withContext(Dispatchers.Main) { isLoading = false }
+            }
+        }
+    }
+
+    // Hotkey action: open market window in-game + copy overbid price to clipboard
+    fun triggerOrderAction(order: CharacterOrder) {
+        val comp = marketComparisons[order.typeId to order.regionId]
+        val overbidPrice = if (order.isBuyOrder) {
+            comp?.bestBuy?.let { it + 0.01 } ?: order.price
+        } else {
+            comp?.bestSell?.let { it - 0.01 } ?: order.price
+        }
+        scope.launch(Dispatchers.IO) {
+            try { charId?.let { EsiClient.openMarketWindow(it, order.typeId) } } catch (_: Exception) {}
+            withContext(Dispatchers.Main) {
+                val text = String.format(Locale.US, "%.2f", overbidPrice)
+                val sel = StringSelection(text)
+                Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, sel)
             }
         }
     }
@@ -173,13 +255,36 @@ fun OrdersScreen(charId: Int?) {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    LaunchedEffect(Unit) {
+        try { focusRequester.requestFocus() } catch (_: Exception) {}
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize()
+            .focusRequester(focusRequester)
+            .focusable()
+            .onKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) {
+                    val sel = selectedOrderId
+                    if (sel != null) {
+                        orders.find { it.orderId == sel }?.let { triggerOrderAction(it) }
+                        true
+                    } else false
+                } else false
+            },
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Orders", style = MaterialTheme.typography.headlineMedium)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Orders", style = MaterialTheme.typography.headlineMedium)
+                if (isLoadingMarket) {
+                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 1.5.dp)
+                    Text("loading market…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
             charId?.let { id ->
                 EsiRefreshButton(
                     isLoading = isLoading,
@@ -248,9 +353,29 @@ fun OrdersScreen(charId: Int?) {
                         )
                     } else if (activeTab == 0) {
                         val tax = fifoResult?.taxConfig ?: CostBasisService.TaxConfig()
-                        SellOrdersTable(sorted, sortCol, sortDir, ::onSort, inventory, tax)
+                        SellOrdersTable(
+                            orders = sorted,
+                            sortCol = sortCol,
+                            sortDir = sortDir,
+                            onSort = ::onSort,
+                            inventory = inventory,
+                            taxConfig = tax,
+                            comparisons = marketComparisons,
+                            selectedOrderId = selectedOrderId,
+                            onSelect = { id -> selectedOrderId = if (selectedOrderId == id) null else id },
+                            onAction = { order -> triggerOrderAction(order) },
+                        )
                     } else {
-                        BuyOrdersTable(sorted, sortCol, sortDir, ::onSort)
+                        BuyOrdersTable(
+                            orders = sorted,
+                            sortCol = sortCol,
+                            sortDir = sortDir,
+                            onSort = ::onSort,
+                            comparisons = marketComparisons,
+                            selectedOrderId = selectedOrderId,
+                            onSelect = { id -> selectedOrderId = if (selectedOrderId == id) null else id },
+                            onAction = { order -> triggerOrderAction(order) },
+                        )
                     }
                 }
             }
@@ -298,6 +423,10 @@ private fun SellOrdersTable(
     onSort: (SortCol) -> Unit,
     inventory: Map<Int, CostBasisService.InventoryItem>,
     taxConfig: CostBasisService.TaxConfig,
+    comparisons: Map<Pair<Int, Int>, MarketComparison>,
+    selectedOrderId: Long?,
+    onSelect: (Long) -> Unit,
+    onAction: (CharacterOrder) -> Unit,
 ) {
     Column {
         Row(
@@ -306,18 +435,28 @@ private fun SellOrdersTable(
         ) {
             SortHeader("Name",      SortCol.NAME,      sortCol, sortDir, onSort, Modifier.weight(3f))
             SortHeader("Group",     SortCol.GROUP,     sortCol, sortDir, onSort, Modifier.weight(1.5f))
-            SortHeader("Price",     SortCol.PRICE,     sortCol, sortDir, onSort, Modifier.weight(2f))
+            StaticHeader("Price / Best", Modifier.weight(2.4f))
             StaticHeader("Cost",    Modifier.weight(1.8f))
             StaticHeader("Profit",  Modifier.weight(1.8f))
             StaticHeader("Margin",  Modifier.weight(1.2f))
             SortHeader("Volume",    SortCol.VOLUME,    sortCol, sortDir, onSort, Modifier.weight(2.5f))
             SortHeader("Time Left", SortCol.TIME_LEFT, sortCol, sortDir, onSort, Modifier.weight(1.5f))
             SortHeader("Station",   SortCol.STATION,   sortCol, sortDir, onSort, Modifier.weight(2.5f))
+            StaticHeader("",        Modifier.width(36.dp))
         }
         HorizontalDivider()
         LazyColumn {
             items(orders, key = { it.orderId }) { order ->
-                SellOrderRow(order, inventory[order.typeId], taxConfig)
+                val comp = comparisons[order.typeId to order.regionId]
+                SellOrderRow(
+                    order = order,
+                    inv = inventory[order.typeId],
+                    taxConfig = taxConfig,
+                    comparison = comp,
+                    isSelected = selectedOrderId == order.orderId,
+                    onSelect = { onSelect(order.orderId) },
+                    onAction = { onAction(order) },
+                )
                 HorizontalDivider(thickness = 0.5.dp)
             }
         }
@@ -325,7 +464,16 @@ private fun SellOrdersTable(
 }
 
 @Composable
-private fun BuyOrdersTable(orders: List<CharacterOrder>, sortCol: SortCol, sortDir: SortDir, onSort: (SortCol) -> Unit) {
+private fun BuyOrdersTable(
+    orders: List<CharacterOrder>,
+    sortCol: SortCol,
+    sortDir: SortDir,
+    onSort: (SortCol) -> Unit,
+    comparisons: Map<Pair<Int, Int>, MarketComparison>,
+    selectedOrderId: Long?,
+    onSelect: (Long) -> Unit,
+    onAction: (CharacterOrder) -> Unit,
+) {
     Column {
         Row(
             modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 8.dp, vertical = 6.dp),
@@ -333,7 +481,7 @@ private fun BuyOrdersTable(orders: List<CharacterOrder>, sortCol: SortCol, sortD
         ) {
             SortHeader("Name",      SortCol.NAME,      sortCol, sortDir, onSort, Modifier.weight(3f))
             SortHeader("Group",     SortCol.GROUP,     sortCol, sortDir, onSort, Modifier.weight(2f))
-            SortHeader("Price",     SortCol.PRICE,     sortCol, sortDir, onSort, Modifier.weight(2f))
+            StaticHeader("Price / Best", Modifier.weight(2.4f))
             SortHeader("Volume",    SortCol.VOLUME,    sortCol, sortDir, onSort, Modifier.weight(2.5f))
             SortHeader("Total",     SortCol.TOTAL,     sortCol, sortDir, onSort, Modifier.weight(2f))
             StaticHeader("Range",   Modifier.weight(1.5f))
@@ -341,11 +489,19 @@ private fun BuyOrdersTable(orders: List<CharacterOrder>, sortCol: SortCol, sortD
             SortHeader("Time Left", SortCol.TIME_LEFT, sortCol, sortDir, onSort, Modifier.weight(1.5f))
             SortHeader("Order Age", SortCol.ORDER_AGE, sortCol, sortDir, onSort, Modifier.weight(1.5f))
             SortHeader("Station",   SortCol.STATION,   sortCol, sortDir, onSort, Modifier.weight(3f))
+            StaticHeader("",        Modifier.width(36.dp))
         }
         HorizontalDivider()
         LazyColumn {
             items(orders, key = { it.orderId }) { order ->
-                BuyOrderRow(order)
+                val comp = comparisons[order.typeId to order.regionId]
+                BuyOrderRow(
+                    order = order,
+                    comparison = comp,
+                    isSelected = selectedOrderId == order.orderId,
+                    onSelect = { onSelect(order.orderId) },
+                    onAction = { onAction(order) },
+                )
                 HorizontalDivider(thickness = 0.5.dp)
             }
         }
@@ -427,22 +583,53 @@ private fun SellOrderRow(
     order: CharacterOrder,
     inv: CostBasisService.InventoryItem?,
     taxConfig: CostBasisService.TaxConfig,
+    comparison: MarketComparison?,
+    isSelected: Boolean,
+    onSelect: () -> Unit,
+    onAction: () -> Unit,
 ) {
     val netSellPrice  = order.price * taxConfig.sellMultiplier
     val profitPerUnit = inv?.let { netSellPrice - it.avgCostBasis }
     val marginPct     = inv?.let { if (it.avgCostBasis > 0) (netSellPrice - it.avgCostBasis) / it.avgCostBasis * 100 else null }
     val profitColor   = profitPerUnit?.let { if (it >= 0) PROFIT_COLOR else LOSS_COLOR } ?: MaterialTheme.colorScheme.onSurfaceVariant
 
+    // Undercut: another sell order is cheaper than ours
+    val isUndercut    = comparison?.bestSell != null && comparison.bestSell < order.price
+    val rowBg         = when {
+        isSelected  -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+        else        -> Color.Transparent
+    }
+
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(rowBg)
+            .clickable { onSelect() }
+            .padding(horizontal = 8.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Name + status dot
         Row(modifier = Modifier.weight(3f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             StatusDot(order.state)
+            if (isUndercut) {
+                Icon(Icons.Default.ArrowDownward, contentDescription = "Undercut", modifier = Modifier.size(11.dp), tint = UNDERCUT_COLOR)
+            }
             Text(order.typeName, style = MaterialTheme.typography.bodyMedium, overflow = TextOverflow.Ellipsis, maxLines = 1)
         }
         Text(order.groupName, modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, overflow = TextOverflow.Ellipsis, maxLines = 1)
-        Text(formatIsk(order.price), modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodyMedium, color = SELL_COLOR)
+
+        // Price column: order price + competing price below if undercut
+        Column(modifier = Modifier.weight(2.4f)) {
+            Text(formatIsk(order.price), style = MaterialTheme.typography.bodyMedium, color = if (isUndercut) UNDERCUT_COLOR else SELL_COLOR)
+            if (isUndercut && comparison?.bestSell != null) {
+                Text(
+                    "Best: ${formatIsk(comparison.bestSell)}",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                    color = UNDERCUT_COLOR.copy(alpha = 0.8f),
+                )
+            }
+        }
+
         Text(
             inv?.let { formatIsk(it.avgCostBasis) } ?: "—",
             modifier = Modifier.weight(1.8f),
@@ -465,21 +652,58 @@ private fun SellOrderRow(
         VolumeBar(order.volumeRemaining, order.volumeTotal, isSell = true, modifier = Modifier.weight(2.5f).padding(horizontal = 4.dp))
         Text(formatDuration(order.timeLeftSeconds), modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.bodySmall, color = timeLeftColor(order.timeLeftSeconds))
         Text(order.stationName, modifier = Modifier.weight(2.5f).padding(start = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, overflow = TextOverflow.Ellipsis, maxLines = 1)
+
+        // Action button: open market in-game + copy overbid price
+        IconButton(modifier = Modifier.size(36.dp), onClick = onAction) {
+            Icon(Icons.Default.OpenInBrowser, contentDescription = "Open in game & copy price", modifier = Modifier.size(16.dp), tint = if (isUndercut) UNDERCUT_COLOR else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
 @Composable
-private fun BuyOrderRow(order: CharacterOrder) {
+private fun BuyOrderRow(
+    order: CharacterOrder,
+    comparison: MarketComparison?,
+    isSelected: Boolean,
+    onSelect: () -> Unit,
+    onAction: () -> Unit,
+) {
+    // Overbid: another buy order pays more than ours
+    val isOverbid = comparison?.bestBuy != null && comparison.bestBuy > order.price
+    val rowBg     = when {
+        isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+        else       -> Color.Transparent
+    }
+
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(rowBg)
+            .clickable { onSelect() }
+            .padding(horizontal = 8.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(modifier = Modifier.weight(3f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             StatusDot(order.state)
+            if (isOverbid) {
+                Icon(Icons.Default.ArrowUpward, contentDescription = "Overbid", modifier = Modifier.size(11.dp), tint = UNDERCUT_COLOR)
+            }
             Text(order.typeName, style = MaterialTheme.typography.bodyMedium, overflow = TextOverflow.Ellipsis, maxLines = 1)
         }
         Text(order.groupName, modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, overflow = TextOverflow.Ellipsis, maxLines = 1)
-        Text(formatIsk(order.price), modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodyMedium, color = BUY_COLOR)
+
+        // Price column: order price + competing price below if overbid
+        Column(modifier = Modifier.weight(2.4f)) {
+            Text(formatIsk(order.price), style = MaterialTheme.typography.bodyMedium, color = if (isOverbid) UNDERCUT_COLOR else BUY_COLOR)
+            if (isOverbid && comparison?.bestBuy != null) {
+                Text(
+                    "Best: ${formatIsk(comparison.bestBuy)}",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                    color = UNDERCUT_COLOR.copy(alpha = 0.8f),
+                )
+            }
+        }
+
         VolumeBar(order.volumeRemaining, order.volumeTotal, isSell = false, modifier = Modifier.weight(2.5f).padding(horizontal = 4.dp))
         Text(formatIsk(order.total), modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodyMedium)
         Text(formatRange(order.range), modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.bodySmall)
@@ -487,6 +711,10 @@ private fun BuyOrderRow(order: CharacterOrder) {
         Text(formatDuration(order.timeLeftSeconds), modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.bodySmall, color = timeLeftColor(order.timeLeftSeconds))
         Text(formatDuration(order.orderAgeSeconds), modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(order.stationName, modifier = Modifier.weight(3f).padding(start = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, overflow = TextOverflow.Ellipsis, maxLines = 1)
+
+        IconButton(modifier = Modifier.size(36.dp), onClick = onAction) {
+            Icon(Icons.Default.OpenInBrowser, contentDescription = "Open in game & copy price", modifier = Modifier.size(16.dp), tint = if (isOverbid) UNDERCUT_COLOR else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
@@ -765,8 +993,6 @@ private fun SummaryItem(label: String, value: String, valueColor: Color = Color.
 
 // ── History P&L helper ────────────────────────────────────────────────────
 
-// Computes (profit, marginPct) for a fulfilled sell order.
-// Tries FIFO date-matching first; falls back to best available cost basis.
 private fun historyPnl(
     order: OrderHistoryDao.OrderHistoryRecord,
     fifoResult: CostBasisService.FifoResult?,
@@ -778,7 +1004,6 @@ private fun historyPnl(
     val taxConfig    = fifoResult.taxConfig
     val netSellPrice = order.price * taxConfig.sellMultiplier
 
-    // 1. FIFO date-matching (most accurate — uses actual wallet transactions)
     val fifoProfit = CostBasisService.pnlForOrder(fifoResult, order.typeId, order.issued, filled)
     if (fifoProfit != null) {
         val cb     = netSellPrice - fifoProfit / filled
@@ -786,7 +1011,6 @@ private fun historyPnl(
         return fifoProfit to margin
     }
 
-    // 2. Fallback: current inventory cost basis or historical average
     val cb = fifoResult.avgCostBasisForType(order.typeId) ?: return null to null
     val profit = (netSellPrice - cb) * filled
     val margin = if (cb > 0) (netSellPrice - cb) / cb * 100 else 0.0
