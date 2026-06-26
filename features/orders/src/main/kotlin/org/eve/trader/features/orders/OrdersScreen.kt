@@ -25,6 +25,7 @@ import org.eve.trader.core.database.OrderHistoryDao
 import org.eve.trader.core.database.StaticDataDao
 import org.eve.trader.core.esi.EsiClient
 import org.eve.trader.ui.common.EmptyState
+import org.eve.trader.ui.common.EsiRefreshButton
 import org.eve.trader.ui.common.LoadingOverlay
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
@@ -76,13 +77,14 @@ private enum class SortDir { ASC, DESC }
 @Composable
 fun OrdersScreen(charId: Int?) {
     val scope = rememberCoroutineScope()
-    var orders       by remember { mutableStateOf<List<CharacterOrder>>(emptyList()) }
-    var historyOrders by remember { mutableStateOf<List<OrderHistoryDao.OrderHistoryRecord>>(emptyList()) }
-    var fifoResult   by remember { mutableStateOf<CostBasisService.FifoResult?>(null) }
-    var isLoading    by remember { mutableStateOf(false) }
-    var activeTab    by remember { mutableStateOf(0) }
-    var sortCol      by remember { mutableStateOf(SortCol.NAME) }
-    var sortDir      by remember { mutableStateOf(SortDir.ASC) }
+    var orders            by remember { mutableStateOf<List<CharacterOrder>>(emptyList()) }
+    var historyOrders     by remember { mutableStateOf<List<OrderHistoryDao.OrderHistoryRecord>>(emptyList()) }
+    var fifoResult        by remember { mutableStateOf<CostBasisService.FifoResult?>(null) }
+    var isLoading         by remember { mutableStateOf(false) }
+    var refreshAvailableAt by remember { mutableStateOf<Long?>(null) }
+    var activeTab         by remember { mutableStateOf(0) }
+    var sortCol           by remember { mutableStateOf(SortCol.NAME) }
+    var sortDir           by remember { mutableStateOf(SortDir.ASC) }
 
     fun loadOrders(charId: Int) {
         scope.launch(Dispatchers.IO) {
@@ -139,7 +141,11 @@ fun OrdersScreen(charId: Int?) {
                 withContext(Dispatchers.Main) { historyOrders = stored }
 
                 val fifo = CostBasisService.compute(charId)
-                withContext(Dispatchers.Main) { fifoResult = fifo }
+                val expiry = EsiClient.getEndpointExpiry("/characters/$charId/orders/")
+                withContext(Dispatchers.Main) {
+                    fifoResult = fifo
+                    refreshAvailableAt = expiry
+                }
             } catch (_: Exception) {
             } finally {
                 withContext(Dispatchers.Main) { isLoading = false }
@@ -165,9 +171,11 @@ fun OrdersScreen(charId: Int?) {
         ) {
             Text("Orders", style = MaterialTheme.typography.headlineMedium)
             charId?.let { id ->
-                IconButton(onClick = { loadOrders(id) }, enabled = !isLoading) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                }
+                EsiRefreshButton(
+                    isLoading = isLoading,
+                    expiresAtMs = refreshAvailableAt,
+                    onClick = { loadOrders(id) },
+                )
             }
         }
 

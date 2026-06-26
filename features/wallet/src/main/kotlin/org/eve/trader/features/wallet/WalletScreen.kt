@@ -28,21 +28,25 @@ import androidx.compose.foundation.background
 @Composable
 fun WalletScreen(charId: Int?) {
     val scope = rememberCoroutineScope()
-    var balance by remember { mutableStateOf(0.0) }
-    var dailyBreakdown by remember { mutableStateOf<List<org.eve.trader.core.model.DailyWalletEntry>>(emptyList()) }
-    var transactions by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
-    var journal by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(false) }
-    var activeTab by remember { mutableStateOf(0) }
+    var balance            by remember { mutableStateOf(0.0) }
+    var dailyBreakdown     by remember { mutableStateOf<List<org.eve.trader.core.model.DailyWalletEntry>>(emptyList()) }
+    var transactions       by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
+    var journal            by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
+    var isLoading          by remember { mutableStateOf(false) }
+    var refreshAvailableAt by remember { mutableStateOf<Long?>(null) }
+    var activeTab          by remember { mutableStateOf(0) }
 
     LaunchedEffect(charId) {
         if (charId != null) {
+            isLoading = true
             loadWalletData(charId,
                 balanceCallback = { balance = it },
                 dailyCallback = { dailyBreakdown = it },
                 transactionsCallback = { transactions = it },
                 journalCallback = { journal = it },
+                expiryCallback = { refreshAvailableAt = it },
             )
+            isLoading = false
         }
     }
 
@@ -54,18 +58,23 @@ fun WalletScreen(charId: Int?) {
         ) {
             Text("Wallet", style = MaterialTheme.typography.headlineMedium)
             charId?.let { id ->
-                IconButton(onClick = {
-                    scope.launch {
-                        loadWalletData(id,
-                            balanceCallback = { balance = it },
-                            dailyCallback = { dailyBreakdown = it },
-                            transactionsCallback = { transactions = it },
-                            journalCallback = { journal = it },
-                        )
-                    }
-                }) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                }
+                EsiRefreshButton(
+                    isLoading = isLoading,
+                    expiresAtMs = refreshAvailableAt,
+                    onClick = {
+                        scope.launch {
+                            isLoading = true
+                            loadWalletData(id,
+                                balanceCallback = { balance = it },
+                                dailyCallback = { dailyBreakdown = it },
+                                transactionsCallback = { transactions = it },
+                                journalCallback = { journal = it },
+                                expiryCallback = { refreshAvailableAt = it },
+                            )
+                            isLoading = false
+                        }
+                    },
+                )
             }
         }
 
@@ -401,6 +410,7 @@ private suspend fun loadWalletData(
     dailyCallback: (List<org.eve.trader.core.model.DailyWalletEntry>) -> Unit,
     transactionsCallback: (List<Map<String, Any?>>) -> Unit,
     journalCallback: (List<Map<String, Any?>>) -> Unit,
+    expiryCallback: (Long?) -> Unit = {},
 ) {
     withContext(Dispatchers.IO) {
         // Load from DB, resolve names (local + ESI fallback for old records)
@@ -489,6 +499,11 @@ private suspend fun loadWalletData(
         } catch (e: Exception) {
             println("Error fetching transactions: ${e.message}")
         }
+
+        val txExpiry      = EsiClient.getEndpointExpiry("/characters/$characterId/wallet/transactions/")
+        val journalExpiry = EsiClient.getEndpointExpiry("/characters/$characterId/wallet/journal/")
+        val expiry = listOfNotNull(txExpiry, journalExpiry).maxOrNull()
+        expiryCallback(expiry)
     }
 }
 

@@ -99,6 +99,12 @@ object EsiCacheManager {
     fun checkState(endpoint: String, params: Map<String, String>? = null): CacheState =
         get(endpoint, params).state
 
+    fun getExpiry(endpoint: String, params: Map<String, String>? = null): Long? {
+        val key = "$endpoint|${computeHash(params)}"
+        mem[key]?.expiresAt?.let { return it }
+        return EsiCacheDao.get(endpoint, params)?.expiresAt
+    }
+
     fun parseExpiresHeader(expiresHeader: String): Long {
         return try {
             val formats = listOf(

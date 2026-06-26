@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.delay
 
 /**
  * Reusable search field with icon.
@@ -153,4 +154,51 @@ fun ConfirmDialog(
             TextButton(onClick = onDismiss) { Text(dismissText) }
         },
     )
+}
+
+// Refresh button with ESI cooldown countdown.
+// Shows "Xm Ys" when data is still fresh; disables button during cooldown.
+@Composable
+fun EsiRefreshButton(
+    isLoading: Boolean,
+    expiresAtMs: Long?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1000)
+            nowMs = System.currentTimeMillis()
+        }
+    }
+
+    val remainingSec = expiresAtMs?.let { ((it - nowMs) / 1000).coerceAtLeast(0) } ?: 0L
+    val coolingDown  = remainingSec > 0
+
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        if (coolingDown) {
+            val mins = remainingSec / 60
+            val secs = remainingSec % 60
+            Text(
+                if (mins > 0) "${mins}m ${"%02d".format(secs)}s" else "${secs}s",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.width(2.dp))
+        }
+        IconButton(onClick = onClick, enabled = !isLoading && !coolingDown) {
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+            } else {
+                Icon(
+                    Icons.Default.Refresh,
+                    contentDescription = "Refresh",
+                    tint = if (coolingDown) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                           else MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+    }
 }
