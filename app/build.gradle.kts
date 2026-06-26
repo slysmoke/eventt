@@ -108,6 +108,8 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "eve-trader"
             packageVersion = appVersion
+
+            modules("java.sql", "java.naming")
         }
     }
 }
