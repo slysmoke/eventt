@@ -1156,9 +1156,9 @@ private fun historyPnl(
     order: OrderHistoryDao.OrderHistoryRecord,
     fifoResult: CostBasisService.FifoResult?,
 ): Pair<Double?, Double?> {
-    if (order.isBuyOrder || order.state != "fulfilled" || fifoResult == null) return null to null
+    if (order.isBuyOrder || fifoResult == null) return null to null
     val filled = order.volumeTotal - order.volumeRemaining
-    if (filled <= 0) return null to null
+    if (filled <= 0) return null to null  // nothing actually sold (cancelled/expired with no fills)
 
     val taxConfig    = fifoResult.taxConfig
     val netSellPrice = order.price * taxConfig.sellMultiplier
