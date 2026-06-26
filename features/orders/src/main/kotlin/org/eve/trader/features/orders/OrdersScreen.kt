@@ -28,6 +28,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.StateFlow
 import org.eve.trader.core.database.OrderHistoryDao
 import org.eve.trader.core.database.StaticDataDao
+import org.eve.trader.core.database.WalletDao
 import org.eve.trader.core.esi.EsiClient
 import org.eve.trader.ui.common.EmptyState
 import org.eve.trader.ui.common.EsiRefreshButton
@@ -206,6 +207,37 @@ fun OrdersScreen(charId: Int?) {
                 val stored = OrderHistoryDao.getAll(charId)
                 withContext(Dispatchers.Main) { historyOrders = stored }
 
+                // Sync wallet transactions to DB before recomputing FIFO.
+                // EsiClient serves from the ESI cache during cooldown, so no extra HTTP call is made.
+                // This ensures newly fulfilled orders get correct P&L once the wallet cache expires.
+                try {
+                    val txList = EsiClient.getCharacterTransactions(charId)
+                    txList.forEach { tx ->
+                        val typeId    = (tx["type_id"]    as? Number)?.toInt()    ?: 0
+                        val qty       = (tx["quantity"]   as? Number)?.toInt()    ?: 0
+                        val unitPrice = (tx["unit_price"] as? Number)?.toDouble() ?: 0.0
+                        runCatching {
+                            WalletDao.insertTransaction(
+                                transactionId = (tx["transaction_id"] as? Number)?.toLong() ?: 0L,
+                                date          = tx["date"] as? String ?: "",
+                                typeId        = typeId,
+                                typeName      = StaticDataDao.getTypeName(typeId) ?: "",
+                                quantity      = qty,
+                                unitPrice     = unitPrice,
+                                total         = unitPrice * qty,
+                                isBuy         = (tx["is_buy"] as? Boolean) ?: false,
+                                clientId      = (tx["client_id"]   as? Number)?.toInt()  ?: 0,
+                                clientName    = "",
+                                locationId    = (tx["location_id"] as? Number)?.toLong() ?: 0L,
+                                locationName  = "",
+                                isCorp        = false,
+                                characterId   = charId,
+                                corporationId = null,
+                            )
+                        }
+                    }
+                } catch (_: Exception) {}
+
                 val taxConfig = CostBasisService.TaxConfig(
                     salesTaxPct  = StaticDataDao.getCharSalesTax(charId),
                     brokerFeePct = StaticDataDao.getCharBrokersFee(charId),
@@ -241,6 +273,17 @@ fun OrdersScreen(charId: Int?) {
                 val sel = StringSelection(text)
                 Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, sel)
             }
+        }
+    }
+
+    fun recalculateFifo(charId: Int) {
+        scope.launch(Dispatchers.IO) {
+            val taxConfig = CostBasisService.TaxConfig(
+                salesTaxPct  = StaticDataDao.getCharSalesTax(charId),
+                brokerFeePct = StaticDataDao.getCharBrokersFee(charId),
+            )
+            val fifo = CostBasisService.compute(charId, taxConfig)
+            withContext(Dispatchers.Main) { fifoResult = fifo }
         }
     }
 
@@ -361,11 +404,24 @@ fun OrdersScreen(charId: Int?) {
                 }
             }
             charId?.let { id ->
-                EsiRefreshButton(
-                    isLoading = isLoading,
-                    expiresAtMs = refreshAvailableAt,
-                    onClick = { loadOrders(id) },
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    IconButton(onClick = { recalculateFifo(id) }, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            Icons.Default.Calculate,
+                            contentDescription = "Recalculate P&L from wallet",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    EsiRefreshButton(
+                        isLoading = isLoading,
+                        expiresAtMs = refreshAvailableAt,
+                        onClick = { loadOrders(id) },
+                    )
+                }
             }
         }
 
