@@ -3,6 +3,8 @@ package org.eve.trader.features.orders
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import org.eve.trader.core.esi.EsiClient
 import java.awt.Toolkit
@@ -41,6 +43,10 @@ object PendingOrdersQueue {
 
     @Volatile private var queue: List<PendingOrder> = emptyList()
 
+    /** The orderId most recently opened via the hotkey. Observed by OrdersScreen to highlight the row. */
+    private val _currentOrderId = MutableStateFlow<Long?>(null)
+    val currentOrderId: StateFlow<Long?> = _currentOrderId
+
     val size: Int get() = queue.size
 
     /** Current 1-based position in the cycle, for display. */
@@ -60,6 +66,7 @@ object PendingOrdersQueue {
     fun clear() {
         queue = emptyList()
         cursor.set(0)
+        _currentOrderId.value = null
     }
 
     /**
@@ -71,6 +78,7 @@ object PendingOrdersQueue {
         val q = queue
         if (q.isEmpty()) return
         val order = q[cursor.getAndIncrement() % q.size]
+        _currentOrderId.value = order.orderId
         scope.launch {
             runCatching { EsiClient.openMarketWindow(order.charId, order.typeId) }
             val text = String.format(Locale.US, "%.2f", order.priceToSet)

@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.StateFlow
 import org.eve.trader.core.database.OrderHistoryDao
 import org.eve.trader.core.database.StaticDataDao
 import org.eve.trader.core.esi.EsiClient
@@ -45,6 +46,7 @@ private val VOL_BUY         = Color(0xFF2E7D32)
 private val PROFIT_COLOR    = Color(0xFF69DB7C)
 private val LOSS_COLOR      = Color(0xFFFF6B6B)
 private val UNDERCUT_COLOR  = Color(0xFFFF9800)  // orange — order has been beaten
+private val ACTIVE_IN_GAME  = Color(0xFF4A90D9)  // blue — currently open in EVE client
 
 private data class CharacterOrder(
     val orderId: Long,
@@ -107,6 +109,9 @@ fun OrdersScreen(charId: Int?) {
 
     // Selected order for hotkey action
     var selectedOrderId    by remember { mutableStateOf<Long?>(null) }
+
+    // Order currently open in the EVE client via the global hotkey
+    val activeOrderId by PendingOrdersQueue.currentOrderId.collectAsState()
 
     val focusRequester = remember { FocusRequester() }
 
@@ -432,6 +437,7 @@ fun OrdersScreen(charId: Int?) {
                             taxConfig = tax,
                             comparisons = marketComparisons,
                             selectedOrderId = selectedOrderId,
+                            activeOrderId = activeOrderId,
                             onSelect = { id -> selectedOrderId = if (selectedOrderId == id) null else id },
                             onAction = { order -> triggerOrderAction(order) },
                         )
@@ -443,6 +449,7 @@ fun OrdersScreen(charId: Int?) {
                             onSort = ::onSort,
                             comparisons = marketComparisons,
                             selectedOrderId = selectedOrderId,
+                            activeOrderId = activeOrderId,
                             onSelect = { id -> selectedOrderId = if (selectedOrderId == id) null else id },
                             onAction = { order -> triggerOrderAction(order) },
                         )
@@ -495,6 +502,7 @@ private fun SellOrdersTable(
     taxConfig: CostBasisService.TaxConfig,
     comparisons: Map<Pair<Int, Int>, MarketComparison>,
     selectedOrderId: Long?,
+    activeOrderId: Long?,
     onSelect: (Long) -> Unit,
     onAction: (CharacterOrder) -> Unit,
 ) {
@@ -524,6 +532,7 @@ private fun SellOrdersTable(
                     taxConfig = taxConfig,
                     comparison = comp,
                     isSelected = selectedOrderId == order.orderId,
+                    isActiveInGame = activeOrderId == order.orderId,
                     onSelect = { onSelect(order.orderId) },
                     onAction = { onAction(order) },
                 )
@@ -541,6 +550,7 @@ private fun BuyOrdersTable(
     onSort: (SortCol) -> Unit,
     comparisons: Map<Pair<Int, Int>, MarketComparison>,
     selectedOrderId: Long?,
+    activeOrderId: Long?,
     onSelect: (Long) -> Unit,
     onAction: (CharacterOrder) -> Unit,
 ) {
@@ -569,6 +579,7 @@ private fun BuyOrdersTable(
                     order = order,
                     comparison = comp,
                     isSelected = selectedOrderId == order.orderId,
+                    isActiveInGame = activeOrderId == order.orderId,
                     onSelect = { onSelect(order.orderId) },
                     onAction = { onAction(order) },
                 )
@@ -655,6 +666,7 @@ private fun SellOrderRow(
     taxConfig: CostBasisService.TaxConfig,
     comparison: MarketComparison?,
     isSelected: Boolean,
+    isActiveInGame: Boolean,
     onSelect: () -> Unit,
     onAction: () -> Unit,
 ) {
@@ -666,8 +678,9 @@ private fun SellOrderRow(
     // Undercut: another sell order is cheaper than ours
     val isUndercut    = comparison?.bestSell != null && comparison.bestSell < order.price
     val rowBg         = when {
-        isSelected  -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
-        else        -> Color.Transparent
+        isActiveInGame -> ACTIVE_IN_GAME.copy(alpha = 0.15f)
+        isSelected     -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+        else           -> Color.Transparent
     }
 
     Row(
@@ -725,7 +738,16 @@ private fun SellOrderRow(
 
         // Action button: open market in-game + copy overbid price
         IconButton(modifier = Modifier.size(36.dp), onClick = onAction) {
-            Icon(Icons.Default.OpenInBrowser, contentDescription = "Open in game & copy price", modifier = Modifier.size(16.dp), tint = if (isUndercut) UNDERCUT_COLOR else MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(
+                Icons.Default.OpenInBrowser,
+                contentDescription = "Open in game & copy price",
+                modifier = Modifier.size(16.dp),
+                tint = when {
+                    isActiveInGame -> ACTIVE_IN_GAME
+                    isUndercut     -> UNDERCUT_COLOR
+                    else           -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
         }
     }
 }
@@ -735,14 +757,16 @@ private fun BuyOrderRow(
     order: CharacterOrder,
     comparison: MarketComparison?,
     isSelected: Boolean,
+    isActiveInGame: Boolean,
     onSelect: () -> Unit,
     onAction: () -> Unit,
 ) {
     // Overbid: another buy order pays more than ours
     val isOverbid = comparison?.bestBuy != null && comparison.bestBuy > order.price
     val rowBg     = when {
-        isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
-        else       -> Color.Transparent
+        isActiveInGame -> ACTIVE_IN_GAME.copy(alpha = 0.15f)
+        isSelected     -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+        else           -> Color.Transparent
     }
 
     Row(
@@ -783,7 +807,16 @@ private fun BuyOrderRow(
         Text(order.stationName, modifier = Modifier.weight(3f).padding(start = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, overflow = TextOverflow.Ellipsis, maxLines = 1)
 
         IconButton(modifier = Modifier.size(36.dp), onClick = onAction) {
-            Icon(Icons.Default.OpenInBrowser, contentDescription = "Open in game & copy price", modifier = Modifier.size(16.dp), tint = if (isOverbid) UNDERCUT_COLOR else MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(
+                Icons.Default.OpenInBrowser,
+                contentDescription = "Open in game & copy price",
+                modifier = Modifier.size(16.dp),
+                tint = when {
+                    isActiveInGame -> ACTIVE_IN_GAME
+                    isOverbid      -> UNDERCUT_COLOR
+                    else           -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
         }
     }
 }
