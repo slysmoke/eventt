@@ -410,7 +410,7 @@ fun OrdersScreen(charId: Int?) {
                 ) {
                     IconButton(onClick = { recalculateFifo(id) }, modifier = Modifier.size(32.dp)) {
                         Icon(
-                            Icons.Default.Calculate,
+                            Icons.Default.Autorenew,
                             contentDescription = "Recalculate P&L from wallet",
                             modifier = Modifier.size(18.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
