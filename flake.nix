@@ -33,7 +33,7 @@
             echo "Kotlin: $(kotlin -version 2>&1)"
             echo "Gradle: $(gradle --version 2>&1 | head -n 3)"
 
-            export LD_LIBRARY_PATH=${pkgs.libGL}/lib:${pkgs.libGLU}/lib:${pkgs.libxkbcommon}/lib:${pkgs.xorg.libXtst}/lib:${pkgs.xorg.libXt}/lib:${pkgs.xorg.libXi}/lib:${pkgs.xorg.libX11}/lib:$LD_LIBRARY_PATH
+            export LD_LIBRARY_PATH=${pkgs.libGL}/lib:${pkgs.libGLU}/lib:${pkgs.libxkbcommon}/lib:${pkgs.libxtst}/lib:${pkgs.libxt}/lib:${pkgs.libxi}/lib:${pkgs.libx11}/lib:$LD_LIBRARY_PATH
           '';
         };
       });
