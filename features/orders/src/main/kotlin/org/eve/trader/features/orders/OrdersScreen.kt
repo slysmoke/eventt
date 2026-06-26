@@ -262,14 +262,20 @@ fun OrdersScreen(charId: Int?) {
     fun triggerOrderAction(order: CharacterOrder) {
         val comp = marketComparisons[order.typeId to order.regionId]
         val overbidPrice = if (order.isBuyOrder) {
-            comp?.bestBuy?.let { it + 0.01 } ?: order.price
+            comp?.bestBuy?.let { base ->
+                val step = eveSigFigStep(base)
+                kotlin.math.round(base / step) * step + step
+            } ?: order.price
         } else {
-            comp?.bestSell?.let { it - 0.01 } ?: order.price
+            comp?.bestSell?.let { base ->
+                val step = eveSigFigStep(base)
+                kotlin.math.round(base / step) * step - step
+            } ?: order.price
         }
         scope.launch(Dispatchers.IO) {
             try { charId?.let { EsiClient.openMarketWindow(it, order.typeId) } } catch (_: Exception) {}
             withContext(Dispatchers.Main) {
-                val text = String.format(Locale.US, "%.2f", overbidPrice)
+                val text = formatEveSigFigPrice(overbidPrice)
                 val sel = StringSelection(text)
                 Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, sel)
             }
@@ -303,11 +309,17 @@ fun OrdersScreen(charId: Int?) {
         } ?: PendingOrdersQueue.clear()
     }
 
-    // Keep the global hotkey queue in sync with current orders + market comparison data.
-    // Beaten orders sort first in the queue so the most urgent ones cycle first.
-    LaunchedEffect(charId, orders, marketComparisons) {
+    // Keep the global hotkey queue in sync with the active tab + market comparison data.
+    // Tab 0 = sell orders only, Tab 1 = buy orders only, other tabs = all.
+    // Beaten orders sort first so the most urgent ones cycle first.
+    LaunchedEffect(charId, orders, marketComparisons, activeTab) {
         val cid = charId ?: return@LaunchedEffect
-        val pending = orders
+        val tabFiltered = when (activeTab) {
+            0    -> orders.filter { !it.isBuyOrder }
+            1    -> orders.filter { it.isBuyOrder }
+            else -> orders
+        }
+        val pending = tabFiltered
             .filter { it.state == "active" }
             .map { order ->
                 val comp = marketComparisons[order.typeId to order.regionId]
@@ -360,9 +372,14 @@ fun OrdersScreen(charId: Int?) {
                     CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 1.5.dp)
                     Text("loading market…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                // Global hotkey queue indicator
-                val queueSize = orders.count { it.state == "active" }
-                val beatenCount = orders.count { o ->
+                // Global hotkey queue indicator — scoped to the visible tab
+                val tabActive = when (activeTab) {
+                    0    -> orders.filter { !it.isBuyOrder && it.state == "active" }
+                    1    -> orders.filter {  it.isBuyOrder && it.state == "active" }
+                    else -> orders.filter { it.state == "active" }
+                }
+                val queueSize   = tabActive.size
+                val beatenCount = tabActive.count { o ->
                     val comp = marketComparisons[o.typeId to o.regionId]
                     if (o.isBuyOrder) comp?.bestBuy?.let { it > o.price } ?: false
                     else comp?.bestSell?.let { it < o.price } ?: false

@@ -11,6 +11,31 @@ import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.floor
+import kotlin.math.log10
+import kotlin.math.pow
+import kotlin.math.round
+
+/**
+ * EVE price rounding: 4 significant figures, minimum 0.01 ISK precision.
+ * Returns the step size for the given price (e.g. 43.15M → 10_000, 45.56 → 0.01, 135.5 → 0.1).
+ */
+internal fun eveSigFigStep(price: Double): Double {
+    if (price <= 0) return 0.01
+    val magnitude = floor(log10(price))
+    return maxOf(0.01, 10.0.pow(magnitude - 3))
+}
+
+/**
+ * Format a price for EVE's order-modification dialog using 4-sigfig precision.
+ * Uses the correct number of decimal places for the price magnitude.
+ */
+internal fun formatEveSigFigPrice(price: Double): String {
+    if (price <= 0) return "0.01"
+    val step     = eveSigFigStep(price)
+    val decimals = maxOf(0, -floor(log10(step)).toInt())
+    return String.format(Locale.US, "%.${decimals}f", price)
+}
 
 data class PendingOrder(
     val charId: Int,
@@ -23,10 +48,13 @@ data class PendingOrder(
     val bestCompetingPrice: Double?,
     val isBeaten: Boolean,
 ) {
-    // Price to paste into the EVE modify-order dialog to beat the competition by 0.01 ISK.
+    // Price to paste into the EVE modify-order dialog to beat the competition by one sigfig step.
     val priceToSet: Double get() = when {
-        isBeaten && bestCompetingPrice != null ->
-            if (isBuyOrder) bestCompetingPrice + 0.01 else bestCompetingPrice - 0.01
+        isBeaten && bestCompetingPrice != null -> {
+            val step    = eveSigFigStep(bestCompetingPrice)
+            val rounded = round(bestCompetingPrice / step) * step
+            if (isBuyOrder) rounded + step else rounded - step
+        }
         else -> ownPrice
     }
 }
@@ -81,7 +109,7 @@ object PendingOrdersQueue {
         _currentOrderId.value = order.orderId
         scope.launch {
             runCatching { EsiClient.openMarketWindow(order.charId, order.typeId) }
-            val text = String.format(Locale.US, "%.2f", order.priceToSet)
+            val text = formatEveSigFigPrice(order.priceToSet)
             val sel  = StringSelection(text)
             Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, sel)
         }
