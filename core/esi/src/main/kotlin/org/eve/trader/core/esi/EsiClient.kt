@@ -452,6 +452,8 @@ object EsiClient {
     fun getContractItems(contractId: Int): List<Map<String, Any?>> =
         getAllMaps(endpoint = "/contracts/$contractId/items/")
 
-    fun getEndpointExpiry(endpoint: String, params: Map<String, String>? = null): Long? =
-        EsiCacheManager.getExpiry(endpoint, params)
+    fun getEndpointExpiry(endpoint: String, params: Map<String, String>? = null): Long? {
+        val fullParams = (params ?: emptyMap()).toMutableMap().apply { put("datasource", ESI_DATASOURCE) }
+        return EsiCacheManager.getExpiry(endpoint, fullParams)
+    }
 }
