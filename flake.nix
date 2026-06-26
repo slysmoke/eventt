@@ -21,10 +21,10 @@
             libGLU
             libxkbcommon
             fontconfig
-            xorg.libXtst   # required by JNativeHook for global keyboard hooks
-            xorg.libXt     # X Toolkit, transitive dep of libXtst
-            xorg.libXi     # X Input Extension, also needed by JNativeHook
-            xorg.libX11
+            libXtst   # required by JNativeHook for global keyboard hooks
+            libXt     # X Toolkit, transitive dep of libXtst
+            libXi     # X Input Extension, also needed by JNativeHook
+            libX11
           ];
 
           shellHook = ''
