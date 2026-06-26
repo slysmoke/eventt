@@ -15,9 +15,8 @@ import java.util.logging.Logger
  *
  * Default hotkey: Ctrl+Shift+Space
  *
- * On Wayland the hook cannot be registered (Wayland forbids global input grabs
- * without elevated privileges). The failure is logged and the app continues
- * normally — all in-app hotkeys still work.
+ * Fails gracefully on Wayland (no global input grabs) or when libXtst is
+ * missing (NixOS without xorg.libXtst in the dev shell).
  */
 object GlobalHotkeyService : NativeKeyListener {
 
@@ -29,20 +28,26 @@ object GlobalHotkeyService : NativeKeyListener {
         private set
 
     fun start() {
-        // JNativeHook logs verbosely to java.util.logging — silence it
-        Logger.getLogger(GlobalScreen::class.java.`package`.name).apply {
-            level = Level.OFF
-            handlers.toList().forEach { it.level = Level.OFF }
-        }
-
         try {
+            // Use a string literal instead of GlobalScreen::class.java.package.name.
+            // Referencing GlobalScreen::class before the try block triggers <clinit>,
+            // which loads the native lib and throws UnsatisfiedLinkError before we can catch it.
+            Logger.getLogger("com.github.kwhat.jnativehook").apply {
+                level = Level.OFF
+                handlers.toList().forEach { it.level = Level.OFF }
+            }
             GlobalScreen.registerNativeHook()
             GlobalScreen.addNativeKeyListener(this)
             isRegistered = true
-            println("[Hotkey] Global hotkey active: Ctrl+Shift+Space  (cycles orders, open market + copy price)")
+            println("[Hotkey] Global hotkey active: Ctrl+Shift+Space  (cycles orders: open market + copy price)")
         } catch (e: NativeHookException) {
             println("[Hotkey] Could not register global hotkey: ${e.message}")
-            println("[Hotkey] Hint: on Wayland this requires a compatibility layer (XWayland or libei/portal).")
+            println("[Hotkey] On Wayland: run under XWayland, or use libei/portal.")
+        } catch (e: UnsatisfiedLinkError) {
+            println("[Hotkey] Missing native library: ${e.message}")
+            println("[Hotkey] NixOS fix: add xorg.libXtst to devShell packages + LD_LIBRARY_PATH in flake.nix")
+        } catch (e: Throwable) {
+            println("[Hotkey] Could not start hotkey service: ${e::class.simpleName}: ${e.message}")
         }
     }
 
