@@ -20,9 +20,8 @@ import java.util.logging.Logger
  */
 object GlobalHotkeyService : NativeKeyListener {
 
-    private const val HOTKEY_CODE = NativeKeyEvent.VC_SPACE
+    private const val HOTKEY_CODE = NativeKeyEvent.VC_Z
     private const val CTRL_MASK   = NativeInputEvent.CTRL_L_MASK or NativeInputEvent.CTRL_R_MASK
-    private const val SHIFT_MASK  = NativeInputEvent.SHIFT_L_MASK or NativeInputEvent.SHIFT_R_MASK
 
     var isRegistered: Boolean = false
         private set
@@ -39,7 +38,7 @@ object GlobalHotkeyService : NativeKeyListener {
             GlobalScreen.registerNativeHook()
             GlobalScreen.addNativeKeyListener(this)
             isRegistered = true
-            println("[Hotkey] Global hotkey active: Ctrl+Shift+Space  (cycles orders: open market + copy price)")
+            println("[Hotkey] Global hotkey active: Ctrl+Z  (cycles orders: open market + copy price)")
         } catch (e: NativeHookException) {
             println("[Hotkey] Could not register global hotkey: ${e.message}")
             println("[Hotkey] On Wayland: run under XWayland, or use libei/portal.")
@@ -61,10 +60,7 @@ object GlobalHotkeyService : NativeKeyListener {
     }
 
     override fun nativeKeyPressed(e: NativeKeyEvent) {
-        if (e.keyCode == HOTKEY_CODE &&
-            (e.modifiers and CTRL_MASK)  != 0 &&
-            (e.modifiers and SHIFT_MASK) != 0
-        ) {
+        if (e.keyCode == HOTKEY_CODE && (e.modifiers and CTRL_MASK) != 0) {
             PendingOrdersQueue.processNext()
         }
     }

@@ -332,7 +332,7 @@ fun OrdersScreen(charId: Int?) {
                         ) {
                             Icon(Icons.Default.Keyboard, contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(
-                                "Ctrl+Shift+Space",
+                                "Ctrl+Z",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
