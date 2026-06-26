@@ -3,7 +3,8 @@ import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 plugins {
     id("org.jetbrains.kotlin.jvm")
     id("org.jetbrains.compose")
-    kotlin("plugin.serialization") version "1.9.22"
+    id("org.jetbrains.kotlin.plugin.compose")
+    kotlin("plugin.serialization") version "2.0.21"
 }
 
 val appVersion: String = rootProject.properties["app.version"] as? String ?: "0.0.0"
