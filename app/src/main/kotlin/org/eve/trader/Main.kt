@@ -18,11 +18,16 @@ fun main() {
         e.printStackTrace()
     }
 
+    GlobalHotkeyService.start()
+
     application {
         Window(
             title = "EVE Trader",
             state = rememberWindowState(width = 1200.dp, height = 800.dp),
-            onCloseRequest = ::exitApplication,
+            onCloseRequest = {
+                GlobalHotkeyService.stop()
+                exitApplication()
+            },
         ) {
             EveTraderApp()
         }

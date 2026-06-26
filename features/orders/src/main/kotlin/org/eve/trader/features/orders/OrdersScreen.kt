@@ -252,7 +252,35 @@ fun OrdersScreen(charId: Int?) {
             val fifo = withContext(Dispatchers.IO) { CostBasisService.compute(id, taxConfig) }
             fifoResult = fifo
             loadOrders(id)
-        }
+        } ?: PendingOrdersQueue.clear()
+    }
+
+    // Keep the global hotkey queue in sync with current orders + market comparison data.
+    // Beaten orders sort first in the queue so the most urgent ones cycle first.
+    LaunchedEffect(charId, orders, marketComparisons) {
+        val cid = charId ?: return@LaunchedEffect
+        val pending = orders
+            .filter { it.state == "active" }
+            .map { order ->
+                val comp = marketComparisons[order.typeId to order.regionId]
+                val isBeaten = if (order.isBuyOrder) {
+                    comp?.bestBuy != null && comp.bestBuy > order.price
+                } else {
+                    comp?.bestSell != null && comp.bestSell < order.price
+                }
+                PendingOrder(
+                    charId             = cid,
+                    orderId            = order.orderId,
+                    typeId             = order.typeId,
+                    typeName           = order.typeName,
+                    isBuyOrder         = order.isBuyOrder,
+                    regionId           = order.regionId,
+                    ownPrice           = order.price,
+                    bestCompetingPrice = if (order.isBuyOrder) comp?.bestBuy else comp?.bestSell,
+                    isBeaten           = isBeaten,
+                )
+            }
+        PendingOrdersQueue.update(pending)
     }
 
     LaunchedEffect(Unit) {
@@ -283,6 +311,48 @@ fun OrdersScreen(charId: Int?) {
                 if (isLoadingMarket) {
                     CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 1.5.dp)
                     Text("loading market…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                // Global hotkey queue indicator
+                val queueSize = orders.count { it.state == "active" }
+                val beatenCount = orders.count { o ->
+                    val comp = marketComparisons[o.typeId to o.regionId]
+                    if (o.isBuyOrder) comp?.bestBuy?.let { it > o.price } ?: false
+                    else comp?.bestSell?.let { it < o.price } ?: false
+                }
+                if (queueSize > 0 && charId != null) {
+                    Spacer(Modifier.width(4.dp))
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Icon(Icons.Default.Keyboard, contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                "Ctrl+Shift+Space",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text("·", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                "$queueSize orders",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            if (beatenCount > 0) {
+                                Text("·", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    "$beatenCount beaten",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = UNDERCUT_COLOR,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                        }
+                    }
                 }
             }
             charId?.let { id ->

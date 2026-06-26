@@ -95,6 +95,9 @@ dependencies {
 
     // Suppress SLF4J "Failed to load StaticLoggerBinder" warning at startup
     runtimeOnly(libs.slf4j.nop)
+
+    // Global keyboard hooks (X11/Linux, macOS, Windows; graceful fail on Wayland)
+    implementation(libs.jnativehook)
 }
 
 compose.desktop {

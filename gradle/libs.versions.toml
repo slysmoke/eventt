@@ -11,6 +11,7 @@ koin = "3.5.3"
 vico = "2.0.0-alpha.14"
 commons-compress = "1.27.1"
 slf4j = "1.7.36"
+jnativehook = "2.2.2"
 
 [libraries]
 # Compose
@@ -51,6 +52,9 @@ commons-compress = { module = "org.apache.commons:commons-compress", version.ref
 
 # Logging
 slf4j-nop = { module = "org.slf4j:slf4j-nop", version.ref = "slf4j" }
+
+# Global hotkeys
+jnativehook = { module = "com.github.kwhat:jnativehook", version.ref = "jnativehook" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
