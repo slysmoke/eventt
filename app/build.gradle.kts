@@ -91,6 +91,9 @@ dependencies {
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.swing)
+
+    // Suppress SLF4J "Failed to load StaticLoggerBinder" warning at startup
+    runtimeOnly(libs.slf4j.nop)
 }
 
 compose.desktop {

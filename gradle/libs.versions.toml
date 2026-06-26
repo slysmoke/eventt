@@ -10,6 +10,7 @@ ktor = "2.3.8"
 koin = "3.5.3"
 vico = "2.0.0-alpha.14"
 commons-compress = "1.27.1"
+slf4j = "1.7.36"
 
 [libraries]
 # Compose
@@ -47,6 +48,9 @@ vico-compose = { module = "com.patrykandpatrick.vico:compose-m3", version.ref = 
 
 # Compression
 commons-compress = { module = "org.apache.commons:commons-compress", version.ref = "commons-compress" }
+
+# Logging
+slf4j-nop = { module = "org.slf4j:slf4j-nop", version.ref = "slf4j" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
