@@ -40,6 +40,16 @@ object CostBasisService {
     ) {
         val totalRealizedPnl: Double = realizedSells.sumOf { it.profit }
         val realizedByType: Map<Int, List<RealizedSellTx>> = realizedSells.groupBy { it.typeId }
+
+        // Best available FIFO cost basis for a type: current inventory first,
+        // then weighted average from historical realized sells.
+        fun avgCostBasisForType(typeId: Int): Double? {
+            inventory[typeId]?.avgCostBasis?.let { return it }
+            val sells = realizedByType[typeId] ?: return null
+            if (sells.isEmpty()) return null
+            val totalQty = sells.sumOf { it.qty }.toDouble()
+            return if (totalQty > 0) sells.sumOf { it.costBasis * it.qty } / totalQty else null
+        }
     }
 
     fun compute(characterId: Int, taxConfig: TaxConfig = TaxConfig()): FifoResult {

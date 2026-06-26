@@ -375,11 +375,8 @@ private fun OrderHistoryTable(
         HorizontalDivider()
         LazyColumn {
             items(orders, key = { it.orderId }) { order ->
-                val pnl = if (!order.isBuyOrder && order.state == "fulfilled" && fifoResult != null) {
-                    val filled = order.volumeTotal - order.volumeRemaining
-                    CostBasisService.pnlForOrder(fifoResult, order.typeId, order.issued, filled)
-                } else null
-                OrderHistoryRow(order, pnl)
+                val (pnl, margin) = historyPnl(order, fifoResult)
+                OrderHistoryRow(order, pnl, margin)
                 HorizontalDivider(thickness = 0.5.dp)
             }
         }
@@ -494,13 +491,17 @@ private fun BuyOrderRow(order: CharacterOrder) {
 }
 
 @Composable
-private fun OrderHistoryRow(order: OrderHistoryDao.OrderHistoryRecord, realizedPnl: Double?) {
-    val stateColor = when (order.state) {
+private fun OrderHistoryRow(
+    order: OrderHistoryDao.OrderHistoryRecord,
+    pnl: Double?,
+    marginPct: Double?,
+) {
+    val stateColor  = when (order.state) {
         "fulfilled" -> Color(0xFF69DB7C)
         "cancelled" -> Color(0xFFFF6B6B)
         else        -> Color(0xFFFFD43B)
     }
-    val profitColor = realizedPnl?.let { if (it >= 0) PROFIT_COLOR else LOSS_COLOR }
+    val profitColor = pnl?.let { if (it >= 0) PROFIT_COLOR else LOSS_COLOR }
 
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
@@ -520,22 +521,19 @@ private fun OrderHistoryRow(order: OrderHistoryDao.OrderHistoryRecord, realizedP
             color = stateColor,
         )
         Text(formatIsk(order.price), modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodyMedium)
-        if (realizedPnl != null && profitColor != null) {
-            Text(
-                formatIsk(realizedPnl),
-                modifier = Modifier.weight(2f),
-                style = MaterialTheme.typography.bodySmall,
-                color = profitColor,
-                fontWeight = FontWeight.SemiBold,
-            )
-            val filled = order.volumeTotal - order.volumeRemaining
-            val cost   = filled * (order.price - realizedPnl / filled.toDouble().coerceAtLeast(1.0))
-            val margin = if (cost > 0) realizedPnl / cost * 100 else 0.0
-            Text("%.1f%%".format(margin), modifier = Modifier.weight(1.2f), style = MaterialTheme.typography.bodySmall, color = profitColor)
-        } else {
-            Text("—", modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("—", modifier = Modifier.weight(1.2f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        Text(
+            pnl?.let { formatIsk(it) } ?: "—",
+            modifier = Modifier.weight(2f),
+            style = MaterialTheme.typography.bodySmall,
+            color = profitColor ?: MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = if (pnl != null) FontWeight.SemiBold else FontWeight.Normal,
+        )
+        Text(
+            marginPct?.let { "%.1f%%".format(it) } ?: "—",
+            modifier = Modifier.weight(1.2f),
+            style = MaterialTheme.typography.bodySmall,
+            color = profitColor ?: MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Text(
             "${formatNumber(order.volumeRemaining)}/${formatNumber(order.volumeTotal)}",
             modifier = Modifier.weight(2f),
@@ -763,6 +761,36 @@ private fun SummaryItem(label: String, value: String, valueColor: Color = Color.
         Text(label + ":", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, color = valueColor)
     }
+}
+
+// ── History P&L helper ────────────────────────────────────────────────────
+
+// Computes (profit, marginPct) for a fulfilled sell order.
+// Tries FIFO date-matching first; falls back to best available cost basis.
+private fun historyPnl(
+    order: OrderHistoryDao.OrderHistoryRecord,
+    fifoResult: CostBasisService.FifoResult?,
+): Pair<Double?, Double?> {
+    if (order.isBuyOrder || order.state != "fulfilled" || fifoResult == null) return null to null
+    val filled = order.volumeTotal - order.volumeRemaining
+    if (filled <= 0) return null to null
+
+    val taxConfig    = fifoResult.taxConfig
+    val netSellPrice = order.price * taxConfig.sellMultiplier
+
+    // 1. FIFO date-matching (most accurate — uses actual wallet transactions)
+    val fifoProfit = CostBasisService.pnlForOrder(fifoResult, order.typeId, order.issued, filled)
+    if (fifoProfit != null) {
+        val cb     = netSellPrice - fifoProfit / filled
+        val margin = if (cb > 0) (netSellPrice - cb) / cb * 100 else 0.0
+        return fifoProfit to margin
+    }
+
+    // 2. Fallback: current inventory cost basis or historical average
+    val cb = fifoResult.avgCostBasisForType(order.typeId) ?: return null to null
+    val profit = (netSellPrice - cb) * filled
+    val margin = if (cb > 0) (netSellPrice - cb) / cb * 100 else 0.0
+    return profit to margin
 }
 
 // ── Formatters ────────────────────────────────────────────────────────────
