@@ -429,6 +429,21 @@ fun OrdersScreen(charId: Int?) {
         val buyOrders  = orders.filter {  it.isBuyOrder }
         val inventory  = fifoResult?.inventory ?: emptyMap()
 
+        // Fallback cost map from completed buy orders in history.
+        // Used when wallet transactions haven't been synced yet (ESI cooldown).
+        // Weighted average order price × buyMultiplier to match the FIFO cost convention.
+        val tax = fifoResult?.taxConfig ?: CostBasisService.TaxConfig()
+        val historyCostBasis: Map<Int, Double> = remember(historyOrders, tax) {
+            historyOrders
+                .filter { it.isBuyOrder && (it.volumeTotal - it.volumeRemaining) > 0 }
+                .groupBy { it.typeId }
+                .mapValues { (_, orders) ->
+                    val totalFilled = orders.sumOf { it.volumeTotal - it.volumeRemaining }.toDouble()
+                    val weightedAvg = orders.sumOf { (it.volumeTotal - it.volumeRemaining) * it.price } / totalFilled
+                    weightedAvg * tax.buyMultiplier
+                }
+        }
+
         TabRow(selectedTabIndex = activeTab, modifier = Modifier.fillMaxWidth()) {
             Tab(selected = activeTab == 0, onClick = { activeTab = 0 }) {
                 Text("Sell (${sellOrders.size})", modifier = Modifier.padding(8.dp))
@@ -483,7 +498,6 @@ fun OrdersScreen(charId: Int?) {
                             description = if (charId == null) "Add a character to view orders." else "No active orders.",
                         )
                     } else if (activeTab == 0) {
-                        val tax = fifoResult?.taxConfig ?: CostBasisService.TaxConfig()
                         SellOrdersTable(
                             orders = sorted,
                             sortCol = sortCol,
@@ -491,6 +505,7 @@ fun OrdersScreen(charId: Int?) {
                             onSort = ::onSort,
                             inventory = inventory,
                             taxConfig = tax,
+                            historyCostBasis = historyCostBasis,
                             comparisons = marketComparisons,
                             selectedOrderId = selectedOrderId,
                             activeOrderId = activeOrderId,
@@ -556,6 +571,7 @@ private fun SellOrdersTable(
     onSort: (SortCol) -> Unit,
     inventory: Map<Int, CostBasisService.InventoryItem>,
     taxConfig: CostBasisService.TaxConfig,
+    historyCostBasis: Map<Int, Double>,
     comparisons: Map<Pair<Int, Int>, MarketComparison>,
     selectedOrderId: Long?,
     activeOrderId: Long?,
@@ -586,6 +602,7 @@ private fun SellOrdersTable(
                     order = order,
                     inv = inventory[order.typeId],
                     taxConfig = taxConfig,
+                    fallbackCost = historyCostBasis[order.typeId],
                     comparison = comp,
                     isSelected = selectedOrderId == order.orderId,
                     isActiveInGame = activeOrderId == order.orderId,
@@ -720,15 +737,18 @@ private fun SellOrderRow(
     order: CharacterOrder,
     inv: CostBasisService.InventoryItem?,
     taxConfig: CostBasisService.TaxConfig,
+    fallbackCost: Double?,
     comparison: MarketComparison?,
     isSelected: Boolean,
     isActiveInGame: Boolean,
     onSelect: () -> Unit,
     onAction: () -> Unit,
 ) {
+    val costBasis     = inv?.avgCostBasis ?: fallbackCost
+    val isEstimated   = inv == null && costBasis != null
     val netSellPrice  = order.price * taxConfig.sellMultiplier
-    val profitPerUnit = inv?.let { netSellPrice - it.avgCostBasis }
-    val marginPct     = inv?.let { if (it.avgCostBasis > 0) (netSellPrice - it.avgCostBasis) / it.avgCostBasis * 100 else null }
+    val profitPerUnit = costBasis?.let { netSellPrice - it }
+    val marginPct     = costBasis?.let { if (it > 0) (netSellPrice - it) / it * 100 else null }
     val profitColor   = profitPerUnit?.let { if (it >= 0) PROFIT_COLOR else LOSS_COLOR } ?: MaterialTheme.colorScheme.onSurfaceVariant
 
     // Undercut: another sell order is cheaper than ours
@@ -770,23 +790,24 @@ private fun SellOrderRow(
         }
 
         Text(
-            inv?.let { formatIsk(it.avgCostBasis) } ?: "—",
+            costBasis?.let { if (isEstimated) "~${formatIsk(it)}" else formatIsk(it) } ?: "—",
             modifier = Modifier.weight(1.8f),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (isEstimated) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-            profitPerUnit?.let { formatIsk(it) } ?: "—",
+            profitPerUnit?.let { (if (isEstimated) "~" else "") + formatIsk(it) } ?: "—",
             modifier = Modifier.weight(1.8f),
             style = MaterialTheme.typography.bodySmall,
-            color = profitColor,
+            color = if (isEstimated) profitColor.copy(alpha = 0.7f) else profitColor,
             fontWeight = if (profitPerUnit != null) FontWeight.SemiBold else FontWeight.Normal,
         )
         Text(
-            marginPct?.let { "%.1f%%".format(it) } ?: "—",
+            marginPct?.let { (if (isEstimated) "~" else "") + "%.1f%%".format(it) } ?: "—",
             modifier = Modifier.weight(1.2f),
             style = MaterialTheme.typography.bodySmall,
-            color = profitColor,
+            color = if (isEstimated) profitColor.copy(alpha = 0.7f) else profitColor,
         )
         VolumeBar(order.volumeRemaining, order.volumeTotal, isSell = true, modifier = Modifier.weight(2.5f).padding(horizontal = 4.dp))
         Text(formatDuration(order.timeLeftSeconds), modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.bodySmall, color = timeLeftColor(order.timeLeftSeconds))
