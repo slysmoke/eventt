@@ -3,6 +3,7 @@ package org.eve.trader.features.dashboard
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -165,7 +166,7 @@ fun DashboardScreen(charId: Int?, refreshTrigger: Int = 0) {
                 )
                 KpiCard(
                     modifier    = Modifier.weight(1f),
-                    icon        = Icons.Default.TrendingUp,
+                    icon        = Icons.AutoMirrored.Filled.TrendingUp,
                     label       = "P&L 30d",
                     value       = formatIsk(month30PL, showSign = true),
                     color       = if (month30PL >= 0) POSITIVE else NEGATIVE,

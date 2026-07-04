@@ -23,6 +23,7 @@ import org.eve.trader.core.database.DatabaseManager
 import org.eve.trader.core.database.StaticDataDao
 import org.eve.trader.core.esi.EsiClient
 import org.eve.trader.core.model.AssetModel
+import org.eve.trader.core.model.StaticStationModel
 import org.eve.trader.ui.common.*
 
 @Composable
@@ -31,7 +32,6 @@ fun AssetViewerScreen(charId: Int?) {
     var assets by remember { mutableStateOf<List<AssetModel>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
-    var groupByLocation by remember { mutableStateOf(true) }
     var selectedCorporationId by remember { mutableStateOf<Int?>(null) }
     var showRefreshDialog by remember { mutableStateOf(false) }
 
@@ -68,20 +68,6 @@ fun AssetViewerScreen(charId: Int?) {
                 onClear = { searchQuery = "" },
                 placeholder = "Search assets...",
                 modifier = Modifier.weight(1f),
-            )
-
-            FilterChip(
-                selected = groupByLocation,
-                onClick = { groupByLocation = true },
-                label = { Text("By Location") },
-                leadingIcon = { Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(18.dp)) },
-            )
-
-            FilterChip(
-                selected = !groupByLocation,
-                onClick = { groupByLocation = false },
-                label = { Text("By Type") },
-                leadingIcon = { Icon(Icons.Default.Category, null, modifier = Modifier.size(18.dp)) },
             )
         }
 
@@ -129,11 +115,7 @@ fun AssetViewerScreen(charId: Int?) {
                 modifier = Modifier.fillMaxWidth().weight(1f),
             )
         } else {
-            if (groupByLocation) {
-                AssetByLocationView(filteredAssets)
-            } else {
-                AssetByTypeView(filteredAssets)
-            }
+            AssetByLocationView(filteredAssets)
         }
     }
 
@@ -153,6 +135,7 @@ fun AssetViewerScreen(charId: Int?) {
                             showRefreshDialog = false
                         }
                     } catch (e: Exception) {
+                        println("[Assets] Error fetching character assets: ${e.message}")
                         withContext(Dispatchers.Main) { isLoading = false }
                     }
                 }
@@ -161,13 +144,17 @@ fun AssetViewerScreen(charId: Int?) {
                 scope.launch(Dispatchers.IO) {
                     isLoading = true
                     try {
-                        fetchCorporationAssets(corpId)
+                        // Structure (citadel) name lookups need docking access, which ESI checks
+                        // against a character token — the currently selected character (a member
+                        // of this corp) stands in for that, since ESI doesn't require it to be a director.
+                        fetchCorporationAssets(corpId, charId)
                         withContext(Dispatchers.Main) {
                             loadAssets(null, corpId) { list -> assets = list }
                             isLoading = false
                             showRefreshDialog = false
                         }
                     } catch (e: Exception) {
+                        println("[Assets] Error fetching corporation assets: ${e.message}")
                         withContext(Dispatchers.Main) { isLoading = false }
                     }
                 }
@@ -185,53 +172,53 @@ private fun AssetByLocationView(assets: List<AssetModel>) {
         else if (it.systemName.isNotEmpty()) it.systemName
         else "Unknown Location"
         "${it.regionName} → $locationLabel"
-    }.toSortedMap()
+    }.entries.sortedByDescending { (_, items) -> items.sumOf { it.estimatedPrice * it.quantity } }
+
+    // Groups start collapsed — only entries explicitly toggled to `true` are expanded.
+    val expanded = remember { mutableStateMapOf<String, Boolean>() }
 
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         groupedByLocation.forEach { (location, locationAssets) ->
-            item {
-                AssetGroupHeader(location, locationAssets.size, locationAssets.sumOf { it.estimatedPrice * it.quantity })
+            val isExpanded = expanded[location] == true
+            val sortedAssets = locationAssets.sortedByDescending { it.estimatedPrice * it.quantity }
+            item(key = "header:$location") {
+                AssetGroupHeader(
+                    title = location,
+                    count = locationAssets.size,
+                    totalValue = locationAssets.sumOf { it.estimatedPrice * it.quantity },
+                    collapsed = !isExpanded,
+                    onClick = { expanded[location] = !isExpanded },
+                )
             }
-            items(locationAssets) { asset ->
-                AssetRow(asset)
-            }
-        }
-    }
-}
-
-@Composable
-private fun AssetByTypeView(assets: List<AssetModel>) {
-    val groupedByType = assets.groupBy { it.typeName }.toSortedMap()
-
-    LazyColumn(
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        groupedByType.forEach { (typeName, typeAssets) ->
-            item {
-                val totalQty = typeAssets.sumOf { it.quantity }
-                val totalValue = typeAssets.sumOf { it.estimatedPrice * it.quantity }
-                AssetGroupHeader(typeName, totalQty, totalValue)
-            }
-            items(typeAssets) { asset ->
-                AssetRow(asset)
+            if (isExpanded) {
+                items(sortedAssets, key = { it.itemId }) { asset ->
+                    AssetRow(asset)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun AssetGroupHeader(title: String, count: Int, totalValue: Double) {
+private fun AssetGroupHeader(title: String, count: Int, totalValue: Double, collapsed: Boolean, onClick: () -> Unit) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         color = MaterialTheme.colorScheme.surfaceVariant,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(
+                    if (collapsed) Icons.Default.ChevronRight else Icons.Default.ExpandMore,
+                    contentDescription = if (collapsed) "Expand" else "Collapse",
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                 Text("($count)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
             }
@@ -344,10 +331,83 @@ private fun loadAssets(
     }
 }
 
+// Character/corp asset lists are a tree, not a flat list: an item stowed in a ship, container,
+// or corp hangar division has location_type "item" and location_id pointing at that *parent's*
+// own item_id — not a physical place. To find where something actually sits, walk up the
+// location_id chain (item -> its container -> ... ) until reaching a real station/citadel/solar
+// system. byItemId indexes this same asset batch by item_id so each hop is a plain map lookup;
+// the hop cap guards against a malformed/cyclic chain.
+private fun resolveRootLocation(data: Map<String, Any?>, byItemId: Map<Long, Map<String, Any?>>): Pair<Long, String> {
+    var locationId = (data["location_id"] as? Number)?.toLong() ?: 0L
+    var locationType = (data["location_type"] as? String) ?: ""
+    var hops = 0
+    while (locationType == "item" && hops < 16) {
+        val parent = byItemId[locationId] ?: break
+        locationId = (parent["location_id"] as? Number)?.toLong() ?: break
+        locationType = (parent["location_type"] as? String) ?: ""
+        hops++
+    }
+    return locationId to locationType
+}
+
+// Resolves a location_id to a name/system/region — covers both NPC stations and player
+// structures/citadels, since CitadelService stores citadel names in the same static_stations
+// table (see core/staticdata/CitadelService.kt). Callers must pass the *root* location_type
+// (see resolveRootLocation above), not an item's raw one, or every nested item will just be "item".
+private fun resolveLocation(locationId: Long, locationType: String, characterId: Int?): StaticStationModel? {
+    StaticDataDao.getStationById(locationId)?.let { return it }
+
+    if (locationType != "station") {
+        println("[Assets] Not resolving $locationId — location_type is '$locationType', not 'station'")
+        return null
+    }
+    if (characterId == null) {
+        println("[Assets] Skipping ESI structure lookup for $locationId — no character token available")
+        return null
+    }
+
+    return try {
+        val info = EsiClient.getStructureInfo(locationId, characterId)
+        if (info == null) {
+            println("[Assets] getStructureInfo($locationId) returned null (no docking access or lookup failed)")
+            return null
+        }
+        val name = info["name"] as? String
+        if (name == null) {
+            println("[Assets] getStructureInfo($locationId) response had no name: $info")
+            return null
+        }
+        val systemId = (info["solar_system_id"] as? Number)?.toInt() ?: 0
+        val typeId = (info["type_id"] as? Number)?.toInt() ?: 0
+        val system = StaticDataDao.getSystemById(systemId)
+        val region = system?.regionId?.let { StaticDataDao.getRegionById(it) }
+
+        val station = StaticStationModel(
+            stationId = locationId,
+            name = name,
+            systemId = systemId,
+            systemName = system?.name ?: "",
+            regionId = region?.regionId ?: 0,
+            regionName = region?.name ?: "",
+            typeId = typeId,
+        )
+        StaticDataDao.bulkInsertStations(listOf(station))
+        println("[Assets] Resolved structure $locationId -> $name")
+        station
+    } catch (e: Exception) {
+        println("[Assets] resolveLocation($locationId) threw: ${e.message}")
+        null
+    }
+}
+
 private suspend fun fetchCharacterAssets(characterId: Int) {
     val accessToken = org.eve.trader.core.auth.SsoAuthManager.ensureTokenFresh(characterId)
     val rawAssets = EsiClient.getCharacterAssets(characterId, accessToken ?: "")
     val prices = EsiClient.getMarketPrices()
+    val byItemId = rawAssets.mapNotNull { d -> (d["item_id"] as? Number)?.toLong()?.let { it to d } }.toMap()
+    // Memoize per resolved root location_id within this fetch — many items typically share the
+    // same handful of stations/citadels, so this avoids repeating the DB (or ESI) lookup per item.
+    val locationCache = mutableMapOf<Long, StaticStationModel?>()
 
     val models = rawAssets.mapNotNull { data ->
         val typeId = (data["type_id"] as? Number)?.toInt() ?: return@mapNotNull null
@@ -359,6 +419,8 @@ private suspend fun fetchCharacterAssets(characterId: Int) {
 
         val staticType = StaticDataDao.getTypeById(typeId)
         val typeName = staticType?.name ?: ""
+        val (rootLocationId, rootLocationType) = resolveRootLocation(data, byItemId)
+        val location = locationCache.getOrPut(rootLocationId) { resolveLocation(rootLocationId, rootLocationType, characterId) }
 
         AssetModel(
             itemId = itemId,
@@ -366,6 +428,13 @@ private suspend fun fetchCharacterAssets(characterId: Int) {
             typeName = typeName,
             quantity = quantity,
             locationId = locationId,
+            locationName = location?.name ?: "",
+            regionId = location?.regionId ?: 0,
+            regionName = location?.regionName ?: "",
+            systemId = location?.systemId ?: 0,
+            systemName = location?.systemName ?: "",
+            stationId = if (location != null) rootLocationId else 0,
+            stationName = location?.name ?: "",
             locationFlag = locationFlag,
             isSingleton = isSingleton,
             estimatedPrice = prices[typeId] ?: 0.0,
@@ -377,9 +446,11 @@ private suspend fun fetchCharacterAssets(characterId: Int) {
     AssetDao.bulkUpsert(models)
 }
 
-private suspend fun fetchCorporationAssets(corporationId: Int) {
+private suspend fun fetchCorporationAssets(corporationId: Int, dockingCharacterId: Int? = null) {
     val rawAssets = EsiClient.getCorporationAssets(corporationId)
     val prices = EsiClient.getMarketPrices()
+    val byItemId = rawAssets.mapNotNull { d -> (d["item_id"] as? Number)?.toLong()?.let { it to d } }.toMap()
+    val locationCache = mutableMapOf<Long, StaticStationModel?>()
 
     val models = rawAssets.mapNotNull { data ->
         val typeId = (data["type_id"] as? Number)?.toInt() ?: return@mapNotNull null
@@ -391,6 +462,10 @@ private suspend fun fetchCorporationAssets(corporationId: Int) {
 
         val staticType = StaticDataDao.getTypeById(typeId)
         val typeName = staticType?.name ?: ""
+        // dockingCharacterId is any character with docking access to the corp's citadels — ESI's
+        // structure endpoint doesn't require them to be a director, just present in the structure.
+        val (rootLocationId, rootLocationType) = resolveRootLocation(data, byItemId)
+        val location = locationCache.getOrPut(rootLocationId) { resolveLocation(rootLocationId, rootLocationType, dockingCharacterId) }
 
         AssetModel(
             itemId = itemId,
@@ -398,6 +473,13 @@ private suspend fun fetchCorporationAssets(corporationId: Int) {
             typeName = typeName,
             quantity = quantity,
             locationId = locationId,
+            locationName = location?.name ?: "",
+            regionId = location?.regionId ?: 0,
+            regionName = location?.regionName ?: "",
+            systemId = location?.systemId ?: 0,
+            systemName = location?.systemName ?: "",
+            stationId = if (location != null) rootLocationId else 0,
+            stationName = location?.name ?: "",
             locationFlag = locationFlag,
             isSingleton = isSingleton,
             estimatedPrice = prices[typeId] ?: 0.0,

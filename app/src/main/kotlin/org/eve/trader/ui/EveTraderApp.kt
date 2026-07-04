@@ -20,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eve.trader.AppVersion
+import org.eve.trader.GlobalHotkeyService
 import org.eve.trader.core.database.AppState
 import org.eve.trader.core.database.CharacterDao
 import org.eve.trader.core.model.CharacterModel
@@ -115,6 +116,11 @@ fun EveTraderApp() {
     ) {
         var selectedScreen by remember { mutableStateOf(AppScreen.DASHBOARD) }
         var showProgressDialog by remember { mutableStateOf(false) }
+
+        // Tell the global hotkey which screen's queue (Orders vs Station Trading) Ctrl+Z should
+        // act on — every visited screen keeps running in the background, so this can't be inferred
+        // from which queue was updated most recently.
+        LaunchedEffect(selectedScreen) { GlobalHotkeyService.activeScreen = selectedScreen }
 
         Scaffold(
             topBar = {

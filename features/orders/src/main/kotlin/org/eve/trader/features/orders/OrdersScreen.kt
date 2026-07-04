@@ -49,6 +49,8 @@ private val LOSS_COLOR      = Color(0xFFFF6B6B)
 private val UNDERCUT_COLOR  = Color(0xFFFF9800)  // orange — order has been beaten
 private val ACTIVE_IN_GAME  = Color(0xFF4A90D9)  // blue — currently open in EVE client
 
+private const val DEFAULT_REGION_ID = 10000002  // The Forge (Jita) — fallback for inventory items with no active order/region context
+
 private data class CharacterOrder(
     val orderId: Long,
     val typeId: Int,
@@ -108,6 +110,10 @@ fun OrdersScreen(charId: Int?) {
     var marketComparisons  by remember { mutableStateOf<Map<Pair<Int, Int>, MarketComparison>>(emptyMap()) }
     var isLoadingMarket    by remember { mutableStateOf(false) }
 
+    // Best market sell price per type — used as an estimated Sell Price for inventory items
+    // that don't have a matching active sell order of their own.
+    var inventoryMarketPrices by remember { mutableStateOf<Map<Int, Double>>(emptyMap()) }
+
     // Selected order for hotkey action
     var selectedOrderId    by remember { mutableStateOf<Long?>(null) }
 
@@ -149,6 +155,20 @@ fun OrdersScreen(charId: Int?) {
             } finally {
                 withContext(Dispatchers.Main) { isLoadingMarket = false }
             }
+        }
+    }
+
+    fun fetchInventoryMarketPrices(inventory: Map<Int, CostBasisService.InventoryItem>) {
+        if (inventory.isEmpty()) return
+        scope.launch(Dispatchers.IO) {
+            val result = mutableMapOf<Int, Double>()
+            for (typeId in inventory.keys) {
+                try {
+                    val sellOrders = EsiClient.getMarketRegionOrders(DEFAULT_REGION_ID, "sell", typeId)
+                    sellOrders.mapNotNull { (it["price"] as? Number)?.toDouble() }.minOrNull()?.let { result[typeId] = it }
+                } catch (_: Exception) {}
+            }
+            withContext(Dispatchers.Main) { inventoryMarketPrices = result }
         }
     }
 
@@ -251,6 +271,7 @@ fun OrdersScreen(charId: Int?) {
 
                 // Load market comparison data after orders are parsed
                 fetchMarketComparisons(parsed)
+                fetchInventoryMarketPrices(fifo.inventory)
             } catch (_: Exception) {
             } finally {
                 withContext(Dispatchers.Main) { isLoading = false }
@@ -290,6 +311,7 @@ fun OrdersScreen(charId: Int?) {
             )
             val fifo = CostBasisService.compute(charId, taxConfig)
             withContext(Dispatchers.Main) { fifoResult = fifo }
+            fetchInventoryMarketPrices(fifo.inventory)
         }
     }
 
@@ -502,7 +524,7 @@ fun OrdersScreen(charId: Int?) {
                             description = if (charId == null) "Add a character to view inventory." else "No items in FIFO inventory.",
                         )
                     } else {
-                        InventoryTable(inventory, sellOrders, fifoResult)
+                        InventoryTable(inventory, sellOrders, fifoResult, inventoryMarketPrices)
                     }
                 }
                 else -> {
@@ -715,6 +737,7 @@ private fun InventoryTable(
     inventory: Map<Int, CostBasisService.InventoryItem>,
     sellOrders: List<CharacterOrder>,
     fifoResult: CostBasisService.FifoResult?,
+    marketPrices: Map<Int, Double>,
 ) {
     val sellByType = sellOrders.filter { !it.isBuyOrder && it.state == "active" }.groupBy { it.typeId }
     val realizedByType = fifoResult?.realizedByType ?: emptyMap()
@@ -738,9 +761,11 @@ private fun InventoryTable(
         val tax = fifoResult?.taxConfig ?: CostBasisService.TaxConfig()
         LazyColumn {
             items(items, key = { it.typeId }) { item ->
-                val activeOrder = sellByType[item.typeId]?.maxByOrNull { it.price }
-                val realized    = realizedByType[item.typeId]?.sumOf { it.profit }
-                InventoryRow(item, activeOrder, realized, tax)
+                val activeOrder  = sellByType[item.typeId]?.maxByOrNull { it.price }
+                val realized     = realizedByType[item.typeId]?.sumOf { it.profit }
+                val sellPrice    = activeOrder?.price ?: marketPrices[item.typeId]
+                val isOwnListing = activeOrder != null
+                InventoryRow(item, sellPrice, isOwnListing, realized, tax)
                 HorizontalDivider(thickness = 0.5.dp)
             }
         }
@@ -978,11 +1003,12 @@ private fun OrderHistoryRow(
 @Composable
 private fun InventoryRow(
     item: CostBasisService.InventoryItem,
-    activeOrder: CharacterOrder?,
+    sellPrice: Double?,
+    isOwnListing: Boolean,
     realizedPnl: Double?,
     taxConfig: CostBasisService.TaxConfig,
 ) {
-    val netSellPrice  = activeOrder?.let { it.price * taxConfig.sellMultiplier }
+    val netSellPrice  = sellPrice?.let { it * taxConfig.sellMultiplier }
     val profitPerUnit = netSellPrice?.let { it - item.avgCostBasis }
     val marginPct     = profitPerUnit?.let { if (item.avgCostBasis > 0) it / item.avgCostBasis * 100 else null }
     val profitColor   = profitPerUnit?.let { if (it >= 0) PROFIT_COLOR else LOSS_COLOR } ?: MaterialTheme.colorScheme.onSurfaceVariant
@@ -997,10 +1023,10 @@ private fun InventoryRow(
         Text(formatIsk(item.avgCostBasis), modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(formatIsk(item.totalCostBasis), modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodySmall)
         Text(
-            activeOrder?.let { formatIsk(it.price) } ?: "—",
+            sellPrice?.let { formatIsk(it) } ?: "—",
             modifier = Modifier.weight(2f),
             style = MaterialTheme.typography.bodySmall,
-            color = if (activeOrder != null) SELL_COLOR else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (isOwnListing) SELL_COLOR else MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
             profitPerUnit?.let { formatIsk(it) } ?: "—",

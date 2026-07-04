@@ -5,7 +5,11 @@ import com.github.kwhat.jnativehook.NativeHookException
 import com.github.kwhat.jnativehook.NativeInputEvent
 import com.github.kwhat.jnativehook.keyboard.NativeKeyEvent
 import com.github.kwhat.jnativehook.keyboard.NativeKeyListener
+import org.eve.trader.features.market.InterRegionQueue
+import org.eve.trader.features.market.MarketAnalysisRouter
+import org.eve.trader.features.market.StationTradingQueue
 import org.eve.trader.features.orders.PendingOrdersQueue
+import org.eve.trader.ui.AppScreen
 import java.util.logging.Level
 import java.util.logging.Logger
 
@@ -26,6 +30,13 @@ object GlobalHotkeyService : NativeKeyListener {
     var isRegistered: Boolean = false
         private set
 
+    // Every visited screen stays mounted in the background (see ScreenContent in EveTraderApp.kt),
+    // so both Orders and Analysis can be actively refreshing their own queues at once. This tracks
+    // which screen tab is actually on-screen right now, so Ctrl+Z acts on the one the user is
+    // looking at rather than whichever queue happened to update most recently in the background.
+    // EveTraderApp updates this whenever the selected tab changes.
+    @Volatile var activeScreen: AppScreen = AppScreen.ORDERS
+
     fun start() {
         try {
             // Use a string literal instead of GlobalScreen::class.java.package.name.
@@ -38,7 +49,7 @@ object GlobalHotkeyService : NativeKeyListener {
             GlobalScreen.registerNativeHook()
             GlobalScreen.addNativeKeyListener(this)
             isRegistered = true
-            println("[Hotkey] Global hotkey active: Ctrl+Z  (cycles orders: open market + copy price)")
+            println("[Hotkey] Global hotkey active: Ctrl+Z  (cycles orders or station trading opportunities: open market + copy price/volume)")
         } catch (e: NativeHookException) {
             println("[Hotkey] Could not register global hotkey: ${e.message}")
             println("[Hotkey] On Wayland: run under XWayland, or use libei/portal.")
@@ -61,7 +72,10 @@ object GlobalHotkeyService : NativeKeyListener {
 
     override fun nativeKeyPressed(e: NativeKeyEvent) {
         if (e.keyCode == HOTKEY_CODE && (e.modifiers and CTRL_MASK) != 0) {
-            PendingOrdersQueue.processNext()
+            when (activeScreen) {
+                AppScreen.ANALYSIS -> if (MarketAnalysisRouter.activeTab == 0) StationTradingQueue.processNext() else InterRegionQueue.processNext()
+                else -> PendingOrdersQueue.processNext()
+            }
         }
     }
 

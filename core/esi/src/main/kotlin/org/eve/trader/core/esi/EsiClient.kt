@@ -33,7 +33,11 @@ object EsiClient {
 
     private fun JsonElement.toKotlinValue(): Any? = when (this) {
         is JsonNull -> null
-        is JsonPrimitive -> longOrNull ?: doubleOrNull ?: booleanOrNull ?: content
+        // A genuine JSON string must stay a String even when its content looks numeric —
+        // e.g. a market order's `range` field is "1"/"5"/"40" (a jump count) as opposed to the
+        // keywords "station"/"solarsystem"/"region". longOrNull/doubleOrNull ignore whether the
+        // literal was quoted, so without the isString guard "1" silently became the Long 1.
+        is JsonPrimitive -> if (isString) content else (longOrNull ?: doubleOrNull ?: booleanOrNull ?: content)
         is JsonArray -> map { it.toKotlinValue() }
         is JsonObject -> mapValues { (_, v) -> v.toKotlinValue() }
     }
@@ -85,14 +89,24 @@ object EsiClient {
             // metadata.expires == 0L means the response was served from cache (EsiResponseMetadata() default).
             // In that case we can't rely on totalPages, so we keep going until we get an empty page.
             val fromCache = metadata.expires == 0L
-            if (metadata.expires > serverExpiry) serverExpiry = metadata.expires
+            // A cache hit doesn't carry its real expiry in metadata, so look it up directly —
+            // otherwise serverExpiry stays 0 for a page served entirely from cache, and an empty
+            // result (e.g. zero open orders) never gets a merged cache entry / refresh timer.
+            val pageExpiry = if (fromCache) {
+                val pageParams = params.toMutableMap().apply { put("datasource", ESI_DATASOURCE); put("page", page.toString()) }
+                EsiCacheManager.getExpiry(endpoint, pageParams) ?: 0L
+            } else metadata.expires
+            if (pageExpiry > serverExpiry) serverExpiry = pageExpiry
             if (list.isEmpty() || (!fromCache && metadata.totalPages <= page)) break
             page++
         }
 
         // Merge all page bodies into one JSON array and cache under the base params key.
         // This ensures subsequent calls (including after restart) serve the full result instantly.
-        if (allResults.isNotEmpty()) {
+        // Cache even an empty result as long as we got a real server response (serverExpiry > 0),
+        // otherwise endpoints that legitimately return zero items (e.g. no open orders) never get
+        // an expiry recorded and refresh-cooldown timers never show.
+        if (allResults.isNotEmpty() || serverExpiry > 0) {
             val merged = buildJsonArray {
                 rawBodies.forEach { body ->
                     json.parseToJsonElement(body).jsonArray.forEach { add(it) }
@@ -338,6 +352,26 @@ object EsiClient {
     fun getUniverseRegion(regionId: Int): Map<String, Any?> = getMap("/universe/regions/$regionId/")
     fun getUniverseSystem(systemId: Int): Map<String, Any?> = getMap("/universe/systems/$systemId/")
     fun getUniverseConstellation(constId: Int): Map<String, Any?> = getMap("/universe/constellations/$constId/")
+    // Public endpoint — stargate topology never changes, so ESI's own cache TTL is long and we
+    // additionally persist every edge locally (see core/staticdata/JumpGraphService.kt).
+    fun getUniverseStargate(stargateId: Int): Map<String, Any?> = getMap("/universe/stargates/$stargateId/")
+
+    // Player-owned structures (citadels) aren't public — this requires the docking character's
+    // token and returns null if they have no docking access (e.g. structure since abandoned/moved).
+    fun getStructureInfo(structureId: Long, characterId: Int): Map<String, Any?>? {
+        return try {
+            val token = SsoAuthManager.ensureTokenFresh(characterId)
+            if (token == null) {
+                println("[ESI] getStructureInfo($structureId): no valid token for character $characterId")
+                return null
+            }
+            val (body, _) = getRaw("/universe/structures/$structureId/", accessToken = token, characterId = characterId)
+            body.parseToMap()
+        } catch (e: Exception) {
+            println("[ESI] getStructureInfo($structureId) failed: ${e.message}")
+            null
+        }
+    }
 
     fun search(query: String, categories: List<String>, strict: Boolean = false): Map<String, List<Int>> {
         return get<Map<String, List<Int>>>("/search/", mapOf(

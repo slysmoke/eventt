@@ -442,6 +442,24 @@ object DatabaseManager {
             )
             """.trimIndent(),
 
+            // Stargate connectivity graph (undirected edges), used to compute jump distance
+            // between systems for order-range reachability in station trading analysis.
+            """
+            CREATE TABLE IF NOT EXISTS static_system_jumps (
+                system_id INTEGER NOT NULL,
+                neighbor_system_id INTEGER NOT NULL,
+                PRIMARY KEY (system_id, neighbor_system_id)
+            )
+            """.trimIndent(),
+
+            // Marks systems whose stargates have already been fetched from ESI, so the jump
+            // graph is only built once per system (topology never changes).
+            """
+            CREATE TABLE IF NOT EXISTS static_system_jumps_fetched (
+                system_id INTEGER PRIMARY KEY
+            )
+            """.trimIndent(),
+
             // Settings
             """
             CREATE TABLE IF NOT EXISTS settings (

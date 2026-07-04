@@ -524,6 +524,103 @@ object StaticDataDao {
         }
     }
 
+    fun getSystemById(systemId: Int): StaticSystemModel? {
+        return DatabaseManager.transaction {
+            prepareStatement("SELECT * FROM static_systems WHERE system_id = ?").use { stmt ->
+                stmt.setInt(1, systemId)
+                stmt.executeQuery().use { rs ->
+                    if (rs.next()) {
+                        StaticSystemModel(
+                            systemId = rs.getInt("system_id"),
+                            name     = rs.getString("name"),
+                            regionId = rs.getInt("region_id"),
+                        )
+                    } else null
+                }
+            }
+        }
+    }
+
+    fun getRegionById(regionId: Int): StaticRegionModel? {
+        return DatabaseManager.transaction {
+            prepareStatement("SELECT * FROM static_regions WHERE region_id = ?").use { stmt ->
+                stmt.setInt(1, regionId)
+                stmt.executeQuery().use { rs ->
+                    if (rs.next()) StaticRegionModel(regionId = rs.getInt("region_id"), name = rs.getString("name")) else null
+                }
+            }
+        }
+    }
+
+    fun getSystemIdsByRegion(regionId: Int): List<Int> {
+        return DatabaseManager.transaction {
+            prepareStatement("SELECT system_id FROM static_systems WHERE region_id = ?").use { stmt ->
+                stmt.setInt(1, regionId)
+                stmt.executeQuery().use { rs ->
+                    val list = mutableListOf<Int>()
+                    while (rs.next()) list.add(rs.getInt(1))
+                    list
+                }
+            }
+        }
+    }
+
+    // ─── Jump graph (stargate connectivity) ────────────────────────────────
+
+    fun isSystemJumpsFetched(systemId: Int): Boolean {
+        return DatabaseManager.transaction {
+            prepareStatement("SELECT 1 FROM static_system_jumps_fetched WHERE system_id = ?").use { stmt ->
+                stmt.setInt(1, systemId)
+                stmt.executeQuery().use { rs -> rs.next() }
+            }
+        }
+    }
+
+    fun markSystemJumpsFetched(systemId: Int) {
+        DatabaseManager.transaction {
+            prepareStatement("INSERT OR REPLACE INTO static_system_jumps_fetched (system_id) VALUES (?)").use { stmt ->
+                stmt.setInt(1, systemId)
+                stmt.executeUpdate()
+            }
+        }
+    }
+
+    /** Inserts an undirected edge (both directions) between two systems. */
+    fun insertSystemJumpEdges(edges: List<Pair<Int, Int>>) {
+        if (edges.isEmpty()) return
+        DatabaseManager.transaction {
+            prepareStatement(
+                "INSERT OR REPLACE INTO static_system_jumps (system_id, neighbor_system_id) VALUES (?, ?)"
+            ).use { stmt ->
+                edges.forEach { (a, b) ->
+                    stmt.setInt(1, a); stmt.setInt(2, b); stmt.addBatch()
+                    stmt.setInt(1, b); stmt.setInt(2, a); stmt.addBatch()
+                }
+                stmt.executeBatch()
+            }
+        }
+    }
+
+    /** Adjacency list restricted to the given set of systems (e.g. all systems in one region). */
+    fun getJumpGraph(systemIds: Collection<Int>): Map<Int, List<Int>> {
+        if (systemIds.isEmpty()) return emptyMap()
+        return DatabaseManager.transaction {
+            val placeholders = systemIds.joinToString(",") { "?" }
+            prepareStatement(
+                "SELECT system_id, neighbor_system_id FROM static_system_jumps WHERE system_id IN ($placeholders)"
+            ).use { stmt ->
+                systemIds.forEachIndexed { i, id -> stmt.setInt(i + 1, id) }
+                stmt.executeQuery().use { rs ->
+                    val graph = mutableMapOf<Int, MutableList<Int>>()
+                    while (rs.next()) {
+                        graph.getOrPut(rs.getInt("system_id")) { mutableListOf() }.add(rs.getInt("neighbor_system_id"))
+                    }
+                    graph
+                }
+            }
+        }
+    }
+
     // ─── Settings ─────────────────────────────────────────────────────────
 
     fun getSetting(key: String): String? {
