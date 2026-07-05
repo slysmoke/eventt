@@ -1,8 +1,11 @@
 package org.eve.trader.features.wallet
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.ShowChart
@@ -11,15 +14,27 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eve.trader.core.database.WalletDao
 import org.eve.trader.core.database.StaticDataDao
 import org.eve.trader.core.esi.EsiClient
+import org.eve.trader.core.model.DailyWalletEntry
 import org.eve.trader.ui.common.*
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -29,7 +44,7 @@ import androidx.compose.foundation.background
 fun WalletScreen(charId: Int?) {
     val scope = rememberCoroutineScope()
     var balance            by remember { mutableStateOf(0.0) }
-    var dailyBreakdown     by remember { mutableStateOf<List<org.eve.trader.core.model.DailyWalletEntry>>(emptyList()) }
+    var dailyBreakdown     by remember { mutableStateOf<List<DailyWalletEntry>>(emptyList()) }
     var transactions       by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
     var journal            by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
     var isLoading          by remember { mutableStateOf(false) }
@@ -360,46 +375,225 @@ private fun formatRefType(refType: String): String = when (refType) {
         .joinToString(" ") { it.replaceFirstChar(Char::uppercaseChar) }
 }
 
+private val PNL_POSITIVE = Color(0xFF69DB7C)
+private val PNL_NEGATIVE = Color(0xFFFF6B6B)
+
+private fun pnlSignedText(value: Double): String =
+    "${if (value >= 0) "+" else "-"}${formatIsk(abs(value))}"
+
 @Composable
-private fun PnlChart(dailyBreakdown: List<org.eve.trader.core.model.DailyWalletEntry>) {
+private fun pnlColor(value: Double): Color = when {
+    value > 0 -> PNL_POSITIVE
+    value < 0 -> PNL_NEGATIVE
+    else -> MaterialTheme.colorScheme.onSurface
+}
+
+@Composable
+private fun PnlChart(dailyBreakdown: List<DailyWalletEntry>) {
     if (dailyBreakdown.isEmpty()) {
         EmptyState(icon = Icons.AutoMirrored.Filled.ShowChart, title = "No P&L Data", description = "Need journal entries to calculate P&L.")
         return
     }
 
-    ContentCard("Daily Net P&L") {
-        val netValues = dailyBreakdown.reversed().map { it.net }
-        SparklineBarChart(
-            data = netValues,
-            modifier = Modifier.fillMaxWidth().height(200.dp),
-        )
+    // dailyBreakdown arrives newest-first; chronological order is needed for period sums & the chart.
+    val chronological = dailyBreakdown.reversed()
+    val last7 = chronological.takeLast(7)
+    val last30 = chronological.takeLast(30)
+
+    val todayNet = chronological.lastOrNull()?.net ?: 0.0
+    val net7 = last7.sumOf { it.net }
+    val net30 = last30.sumOf { it.net }
+    val netAll = chronological.sumOf { it.net }
+    val incomeAll = chronological.sumOf { it.income }
+    val expensesAll = chronological.sumOf { it.expenses }
+    val profitableDays = chronological.count { it.net > 0 }
+    val margin = if (incomeAll > 0) netAll / incomeAll * 100 else 0.0
+
+    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            PnlStatCard("Today", pnlSignedText(todayNet), pnlColor(todayNet), Modifier.weight(1f))
+            PnlStatCard("7 Days", pnlSignedText(net7), pnlColor(net7), Modifier.weight(1f))
+            PnlStatCard("30 Days", pnlSignedText(net30), pnlColor(net30), Modifier.weight(1f))
+            PnlStatCard("${chronological.size}d Total", pnlSignedText(netAll), pnlColor(netAll), Modifier.weight(1f))
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            PnlStatCard("Income", "+${formatIsk(incomeAll)}", PNL_POSITIVE, Modifier.weight(1f))
+            PnlStatCard("Expenses", "-${formatIsk(expensesAll)}", PNL_NEGATIVE, Modifier.weight(1f))
+            PnlStatCard("Margin", "%.1f%%".format(margin), pnlColor(margin), Modifier.weight(1f))
+            PnlStatCard("Profitable Days", "$profitableDays / ${chronological.size}", MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        ContentCard("Daily Net P&L") {
+            PnlBarChart(
+                data = chronological.map { it.net },
+                dates = chronological.map { it.date },
+                modifier = Modifier.fillMaxWidth().height(220.dp),
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        ContentCard("Daily Breakdown") {
+            PnlTable(chronological.reversed())
+        }
     }
 }
 
 @Composable
-private fun SparklineBarChart(data: List<Double>, modifier: Modifier = Modifier) {
+private fun PnlStatCard(label: String, valueText: String, color: Color, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.08f)),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp).fillMaxWidth()) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+            Text(valueText, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = color)
+        }
+    }
+}
+
+@Composable
+private fun PnlTable(entries: List<DailyWalletEntry>) {
+    Column {
+        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            TxHeader("Date", Modifier.weight(2f))
+            TxHeader("Income", Modifier.weight(1.5f), rightAlign = true)
+            TxHeader("Expenses", Modifier.weight(1.5f), rightAlign = true)
+            TxHeader("Net", Modifier.weight(1.5f), rightAlign = true)
+        }
+        HorizontalDivider()
+        entries.forEach { entry ->
+            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(entry.date, modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodySmall)
+                Text(
+                    "+${formatIsk(entry.income)}",
+                    modifier = Modifier.weight(1.5f),
+                    textAlign = TextAlign.End,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = PNL_POSITIVE,
+                )
+                Text(
+                    "-${formatIsk(entry.expenses)}",
+                    modifier = Modifier.weight(1.5f),
+                    textAlign = TextAlign.End,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = PNL_NEGATIVE,
+                )
+                Text(
+                    pnlSignedText(entry.net),
+                    modifier = Modifier.weight(1.5f),
+                    textAlign = TextAlign.End,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = pnlColor(entry.net),
+                )
+            }
+            HorizontalDivider(thickness = 0.5.dp)
+        }
+    }
+}
+
+@Composable
+private fun PnlBarChart(data: List<Double>, dates: List<String>, modifier: Modifier = Modifier) {
     if (data.isEmpty()) return
 
-    val maxAbs = data.maxOfOrNull { kotlin.math.abs(it) } ?: 0.0
+    val textMeasurer = rememberTextMeasurer()
+    val gridColor = Color(0x14FFFFFF)
+    val labelColor = Color(0xFF777777)
+    val maxAbs = remember(data) { (data.maxOfOrNull { abs(it) } ?: 0.0).coerceAtLeast(1.0) }
+    var hoverIdx by remember { mutableStateOf<Int?>(null) }
 
-    androidx.compose.foundation.Canvas(modifier = modifier) {
-        val width = size.width
-        val height = size.height
-        val barWidth = (width / data.size.coerceAtLeast(1)) - 2f
-        val centerY = height / 2
+    Canvas(
+        modifier = modifier.pointerInput(data) {
+            awaitPointerEventScope {
+                while (true) {
+                    val event = awaitPointerEvent()
+                    if (event.type == PointerEventType.Exit) { hoverIdx = null; continue }
+                    if (event.type != PointerEventType.Move) continue
+                    val posX = event.changes.firstOrNull()?.position?.x ?: continue
+                    val lPad = 56.dp.toPx()
+                    val chartW = size.width - lPad - 8.dp.toPx()
+                    hoverIdx = if (posX >= lPad && data.isNotEmpty())
+                        ((posX - lPad) / chartW * data.size).toInt().coerceIn(0, data.size - 1)
+                    else null
+                }
+            }
+        },
+    ) {
+        val lPad = 56.dp.toPx()
+        val rPad = 8.dp.toPx()
+        val tPad = 10.dp.toPx()
+        val bPad = 18.dp.toPx()
+        val chartW = size.width - lPad - rPad
+        val chartH = size.height - tPad - bPad
+        if (chartW <= 0 || chartH <= 0) return@Canvas
+        val centerY = tPad + chartH / 2
+        val barW = (chartW / data.size - 1f).coerceAtLeast(1f)
 
-        data.forEachIndexed { index, value ->
-            val x = index * (barWidth + 2f)
-            val barHeight = if (maxAbs > 0) (kotlin.math.abs(value) / maxAbs * centerY).toFloat() else 0f
-            val isPositive = value >= 0
+        fun barX(i: Int) = lPad + i.toFloat() / data.size * chartW
+        fun barHeightOf(v: Double) = (abs(v) / maxAbs * (chartH / 2)).toFloat().coerceAtLeast(1f)
+
+        // Zero line
+        drawLine(gridColor.copy(alpha = 0.6f), Offset(lPad, centerY), Offset(lPad + chartW, centerY), 1f)
+
+        // Y labels: max, 0, -max
+        val lmMax = textMeasurer.measure(formatIsk(maxAbs), TextStyle(fontSize = 10.sp, color = labelColor))
+        drawText(lmMax, topLeft = Offset(lPad - lmMax.size.width - 5.dp.toPx(), tPad - lmMax.size.height / 2f))
+        val lmZero = textMeasurer.measure("0", TextStyle(fontSize = 10.sp, color = labelColor))
+        drawText(lmZero, topLeft = Offset(lPad - lmZero.size.width - 5.dp.toPx(), centerY - lmZero.size.height / 2f))
+        val lmMin = textMeasurer.measure("-${formatIsk(maxAbs)}", TextStyle(fontSize = 10.sp, color = labelColor))
+        drawText(lmMin, topLeft = Offset(lPad - lmMin.size.width - 5.dp.toPx(), tPad + chartH - lmMin.size.height / 2f))
+
+        // Bars
+        data.forEachIndexed { i, v ->
+            val barHeight = barHeightOf(v)
+            val isPositive = v >= 0
             val y = if (isPositive) centerY - barHeight else centerY
-            val color = if (isPositive) Color(0xFF69DB7C) else Color(0xFFFF6B6B)
-
+            val color = if (isPositive) PNL_POSITIVE else PNL_NEGATIVE
             drawRect(
-                color = color,
-                topLeft = androidx.compose.ui.geometry.Offset(x, y),
-                size = androidx.compose.ui.geometry.Size(barWidth, barHeight),
+                if (i == hoverIdx) color else color.copy(alpha = 0.75f),
+                Offset(barX(i) + 0.5f, y),
+                Size(barW, barHeight),
             )
+        }
+
+        // X-axis date labels (up to 6)
+        val xN = minOf(6, data.size)
+        repeat(xN) { t ->
+            val i = if (xN == 1) 0 else (t.toFloat() / (xN - 1) * (data.size - 1)).roundToInt().coerceIn(0, data.size - 1)
+            val x = barX(i) + barW / 2
+            val lm = textMeasurer.measure(dates.getOrElse(i) { "" }, TextStyle(fontSize = 9.sp, color = labelColor))
+            drawText(lm, topLeft = Offset(
+                (x - lm.size.width / 2f).coerceIn(lPad, maxOf(lPad, lPad + chartW - lm.size.width)),
+                size.height - bPad + 4.dp.toPx(),
+            ))
+        }
+
+        // Hover tooltip
+        hoverIdx?.let { idx ->
+            val cx = barX(idx) + barW / 2
+            val v = data[idx]
+            val isPositive = v >= 0
+            val color = if (isPositive) PNL_POSITIVE else PNL_NEGATIVE
+            val barHeight = barHeightOf(v)
+            val y = if (isPositive) centerY - barHeight else centerY + barHeight
+
+            val lm1 = textMeasurer.measure(dates.getOrElse(idx) { "" }, TextStyle(fontSize = 10.sp, color = Color(0xFF999999)))
+            val lm2 = textMeasurer.measure(pnlSignedText(v), TextStyle(fontSize = 12.sp, color = color, fontWeight = FontWeight.SemiBold))
+            val pad = 7.dp.toPx(); val gap2 = 2.dp.toPx()
+            val ttW = maxOf(lm1.size.width, lm2.size.width) + pad * 2
+            val ttH = lm1.size.height + lm2.size.height + pad * 2 + gap2
+
+            var ttX = cx + 8.dp.toPx()
+            if (ttX + ttW > lPad + chartW) ttX = cx - ttW - 8.dp.toPx()
+            val ttY = (y - ttH - 8.dp.toPx()).coerceIn(tPad, maxOf(tPad, tPad + chartH - ttH))
+
+            drawRoundRect(Color(0xEE0D1117), Offset(ttX, ttY), Size(ttW, ttH), CornerRadius(4.dp.toPx()))
+            drawText(lm1, topLeft = Offset(ttX + pad, ttY + pad))
+            drawText(lm2, topLeft = Offset(ttX + pad, ttY + pad + lm1.size.height + gap2))
         }
     }
 }
@@ -407,7 +601,7 @@ private fun SparklineBarChart(data: List<Double>, modifier: Modifier = Modifier)
 private suspend fun loadWalletData(
     characterId: Int,
     balanceCallback: (Double) -> Unit,
-    dailyCallback: (List<org.eve.trader.core.model.DailyWalletEntry>) -> Unit,
+    dailyCallback: (List<DailyWalletEntry>) -> Unit,
     transactionsCallback: (List<Map<String, Any?>>) -> Unit,
     journalCallback: (List<Map<String, Any?>>) -> Unit,
     expiryCallback: (Long?) -> Unit = {},
