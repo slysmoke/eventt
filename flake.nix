@@ -33,8 +33,6 @@
                 libGL
                 libGLU
                 libxkbcommon
-                libXtst
-                libXt
                 libXi
                 libX11
                 fontconfig
@@ -54,9 +52,6 @@
 
             # лаунчер ищет конфиг по имени бинарника; makeWrapper переименовывает его в .eve-trader-wrapped
             ln -s $out/lib/app/eve-trader.cfg $out/lib/app/.eve-trader-wrapped.cfg
-
-            # JNativeHook пытается распаковать .so в директорию приложения (read-only в Nix store)
-            echo "java-options=-Djnativehook.lib.path=/tmp" >> $out/lib/app/eve-trader.cfg
           '';
         };
 
@@ -70,10 +65,8 @@
             libGLU
             libxkbcommon
             fontconfig
-            libXtst   # required by JNativeHook for global keyboard hooks
-            libXt     # X Toolkit, transitive dep of libXtst
-            libXi     # X Input Extension, also needed by JNativeHook
-            libX11
+            libXi     # X Input Extension, needed by Skia/AWT for input handling
+            libX11    # needed by Skia/AWT and by the X11 global-hotkey backend (XGrabKey)
           ];
 
           shellHook = ''
@@ -82,7 +75,7 @@
             echo "Kotlin: $(kotlin -version 2>&1)"
             echo "Gradle: $(gradle --version 2>&1 | head -n 3)"
 
-            export LD_LIBRARY_PATH=${pkgs.libGL}/lib:${pkgs.libGLU}/lib:${pkgs.libxkbcommon}/lib:${pkgs.libxtst}/lib:${pkgs.libxt}/lib:${pkgs.libxi}/lib:${pkgs.libx11}/lib:$LD_LIBRARY_PATH
+            export LD_LIBRARY_PATH=${pkgs.libGL}/lib:${pkgs.libGLU}/lib:${pkgs.libxkbcommon}/lib:${pkgs.libxi}/lib:${pkgs.libx11}/lib:$LD_LIBRARY_PATH
           '';
         };
       });

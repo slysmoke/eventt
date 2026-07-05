@@ -96,8 +96,12 @@ dependencies {
     // Suppress SLF4J "Failed to load StaticLoggerBinder" warning at startup
     runtimeOnly(libs.slf4j.nop)
 
-    // Global keyboard hooks (X11/Linux, macOS, Windows; graceful fail on Wayland)
-    implementation(libs.jnativehook)
+    // Global hotkey backends: JNA for direct native calls (X11/Win32/Carbon),
+    // dbus-java for the Wayland xdg-desktop-portal GlobalShortcuts fallback.
+    implementation(libs.jna)
+    implementation(libs.jna.platform)
+    implementation(libs.dbus.java.core)
+    implementation(libs.dbus.java.transport.junixsocket)
 }
 
 compose.desktop {
