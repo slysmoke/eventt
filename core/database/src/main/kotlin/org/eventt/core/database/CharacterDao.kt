@@ -15,8 +15,8 @@ object CharacterDao {
             ).use { stmt ->
                 stmt.setInt(1, character.id)
                 stmt.setString(2, character.name)
-                stmt.setString(3, character.refreshToken)
-                stmt.setString(4, character.accessToken)
+                stmt.setString(3, TokenCrypto.encrypt(character.refreshToken))
+                stmt.setString(4, TokenCrypto.encrypt(character.accessToken))
                 stmt.setLong(5, character.tokenExpiry)
                 character.corporationId?.let { stmt.setInt(6, it) } ?: stmt.setNull(6, java.sql.Types.INTEGER)
                 stmt.setString(7, character.corporationName)
@@ -45,7 +45,7 @@ object CharacterDao {
     fun updateToken(id: Int, accessToken: String, tokenExpiry: Long) {
         DatabaseManager.transaction {
             prepareStatement("UPDATE characters SET access_token = ?, token_expiry = ? WHERE id = ?").use { stmt ->
-                stmt.setString(1, accessToken)
+                stmt.setString(1, TokenCrypto.encrypt(accessToken))
                 stmt.setLong(2, tokenExpiry)
                 stmt.setInt(3, id)
                 stmt.executeUpdate()
@@ -56,7 +56,7 @@ object CharacterDao {
     fun updateRefreshToken(id: Int, refreshToken: String) {
         DatabaseManager.transaction {
             prepareStatement("UPDATE characters SET refresh_token = ? WHERE id = ?").use { stmt ->
-                stmt.setString(1, refreshToken)
+                stmt.setString(1, TokenCrypto.encrypt(refreshToken))
                 stmt.setInt(2, id)
                 stmt.executeUpdate()
             }
@@ -88,7 +88,7 @@ object CharacterDao {
             prepareStatement("SELECT access_token FROM characters WHERE id = ?").use { stmt ->
                 stmt.setInt(1, id)
                 stmt.executeQuery().use { rs ->
-                    if (rs.next()) rs.getString("access_token") else null
+                    if (rs.next()) rs.getString("access_token")?.let { TokenCrypto.decrypt(it) } else null
                 }
             }
         }
@@ -101,8 +101,10 @@ object CharacterDao {
                 CharacterModel(
                     id = getInt("id"),
                     name = getString("name"),
-                    refreshToken = getString("refresh_token"),
-                    accessToken = getString("access_token") ?: "",
+                    // Empty/undecryptable tokens (lost key, pre-encryption data) fail the next
+                    // ESI call and fall through to the normal re-auth path rather than crashing.
+                    refreshToken = getString("refresh_token")?.let { TokenCrypto.decrypt(it) } ?: "",
+                    accessToken = getString("access_token")?.let { TokenCrypto.decrypt(it) } ?: "",
                     tokenExpiry = getLong("token_expiry"),
                     corporationId = getInt("corporation_id").takeIf { it != 0 },
                     corporationName = getString("corporation_name"),

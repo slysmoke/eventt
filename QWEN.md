@@ -17,12 +17,12 @@ Desktop trading application for **EVE Online** built with **Kotlin** and **Jetpa
 ## EVE Online ESI Details
 
 ### Client Credentials
+PKCE (public/native client) — no client secret. See `SsoAuthManager.CLIENT_ID` for the current value.
 ```json
 {
   "name": "eventt",
   "description": "Eve Night Trade Tools",
   "clientId": "9bacf8234c4b41888f00b084413868c0",
-  "clientSecret": "eat_1NcbJbALfafoObI921w8HMpbUPKjEosp9_4NSjgX",
   "callbackUrl": "http://localhost:8000/callback",
   "scopes": [ /* see scopes in project */ ]
 }

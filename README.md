@@ -26,6 +26,10 @@ A global hotkey (Ctrl+Z) cycles through your queued orders, opens the in-game ma
 
 No API keys or configuration needed — the ESI OAuth client ID is bundled; you just log in with your EVE account on first launch.
 
+## Auth & data storage
+
+Login uses EVE SSO's OAuth2 Authorization Code flow with PKCE — no client secret is embedded in the app. Character access/refresh tokens are encrypted at rest (AES-256-GCM) with a local, per-machine key, both stored under `~/.eve-trader/`.
+
 ## Building & running
 
 ```bash
