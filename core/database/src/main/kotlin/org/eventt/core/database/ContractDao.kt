@@ -1,10 +1,9 @@
 package org.eventt.core.database
 
-import org.eventt.core.model.ContractModel
 import org.eventt.core.model.ContractItemModel
+import org.eventt.core.model.ContractModel
 
 object ContractDao {
-
     // ─── Contracts ────────────────────────────────────────────────────────
 
     fun upsert(contract: ContractModel) {
@@ -16,7 +15,7 @@ object ContractDao {
                     date_accepted, date_completed, num_days, price, reward, collateral, buyout, for_corp, is_corp,
                     character_id, corporation_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """.trimIndent()
+                """.trimIndent(),
             ).use { stmt ->
                 stmt.setInt(1, contract.contractId)
                 stmt.setInt(2, contract.issuerId)
@@ -51,37 +50,50 @@ object ContractDao {
         contracts.forEach { upsert(it) }
     }
 
-    fun getAll(characterId: Int? = null, corporationId: Int? = null): List<ContractModel> {
-        return DatabaseManager.transaction {
-            val where = when {
-                characterId != null -> "WHERE character_id = ?"
-                corporationId != null -> "WHERE corporation_id = ?"
-                else -> ""
-            }
+    fun getAll(
+        characterId: Int? = null,
+        corporationId: Int? = null,
+    ): List<ContractModel> =
+        DatabaseManager.transaction {
+            val where =
+                when {
+                    characterId != null -> "WHERE character_id = ?"
+                    corporationId != null -> "WHERE corporation_id = ?"
+                    else -> ""
+                }
             prepareStatement("SELECT * FROM contracts $where ORDER BY date_issued DESC").use { stmt ->
-                if (characterId != null) stmt.setInt(1, characterId)
-                else if (corporationId != null) stmt.setInt(1, corporationId)
+                if (characterId != null) {
+                    stmt.setInt(1, characterId)
+                } else if (corporationId != null) {
+                    stmt.setInt(1, corporationId)
+                }
                 stmt.executeQuery().mapResultSetToContracts()
             }
         }
-    }
 
-    fun getByStatus(status: String, characterId: Int? = null, corporationId: Int? = null): List<ContractModel> {
-        return DatabaseManager.transaction {
-            val baseWhere = when {
-                characterId != null -> "WHERE character_id = ?"
-                corporationId != null -> "WHERE corporation_id = ?"
-                else -> "WHERE 1=1"
-            }
+    fun getByStatus(
+        status: String,
+        characterId: Int? = null,
+        corporationId: Int? = null,
+    ): List<ContractModel> =
+        DatabaseManager.transaction {
+            val baseWhere =
+                when {
+                    characterId != null -> "WHERE character_id = ?"
+                    corporationId != null -> "WHERE corporation_id = ?"
+                    else -> "WHERE 1=1"
+                }
             prepareStatement("SELECT * FROM contracts $baseWhere AND status = ? ORDER BY date_issued DESC").use { stmt ->
                 var i = 1
-                if (characterId != null) stmt.setInt(i++, characterId)
-                else if (corporationId != null) stmt.setInt(i++, corporationId)
+                if (characterId != null) {
+                    stmt.setInt(i++, characterId)
+                } else if (corporationId != null) {
+                    stmt.setInt(i++, corporationId)
+                }
                 stmt.setString(i, status)
                 stmt.executeQuery().mapResultSetToContracts()
             }
         }
-    }
 
     // ─── Contract Items ───────────────────────────────────────────────────
 
@@ -91,7 +103,7 @@ object ContractDao {
                 """
                 INSERT OR REPLACE INTO contract_items (contract_id, record_id, type_id, type_name, quantity, raw_quantity, is_included, is_singleton, estimated_price)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """.trimIndent()
+                """.trimIndent(),
             ).use { stmt ->
                 stmt.setInt(1, item.contractId)
                 stmt.setInt(2, item.recordId)
@@ -107,8 +119,8 @@ object ContractDao {
         }
     }
 
-    fun getItemsForContract(contractId: Int): List<ContractItemModel> {
-        return DatabaseManager.transaction {
+    fun getItemsForContract(contractId: Int): List<ContractItemModel> =
+        DatabaseManager.transaction {
             prepareStatement("SELECT * FROM contract_items WHERE contract_id = ?").use { stmt ->
                 stmt.setInt(1, contractId)
                 stmt.executeQuery().use { rs ->
@@ -125,14 +137,13 @@ object ContractDao {
                                 isIncluded = rs.getInt("is_included") == 1,
                                 isSingleton = rs.getInt("is_singleton") == 1,
                                 estimatedPrice = rs.getDouble("estimated_price"),
-                            )
+                            ),
                         )
                     }
                     list
                 }
             }
         }
-    }
 
     // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -165,7 +176,7 @@ object ContractDao {
                     isCorp = getInt("is_corp") == 1,
                     characterId = getInt("character_id").takeIf { it != 0 },
                     corporationId = getInt("corporation_id").takeIf { it != 0 },
-                )
+                ),
             )
         }
         return list

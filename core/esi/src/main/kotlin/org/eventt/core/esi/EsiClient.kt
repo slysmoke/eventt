@@ -2,48 +2,47 @@ package org.eventt.core.esi
 
 import kotlinx.serialization.json.*
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.eventt.core.auth.SsoAuthManager
-import org.eventt.core.cache.EsiCacheManager
 import org.eventt.core.cache.CacheState
+import org.eventt.core.cache.EsiCacheManager
 import org.eventt.core.http.EveHttpClient
 import org.eventt.core.model.EsiResponseMetadata
 import org.eventt.core.model.QueuedRequest
 import org.eventt.core.model.RequestSource
 import org.eventt.core.model.RequestStatus
 import org.eventt.core.queue.RequestQueueManager
-import okhttp3.Request
 import java.io.IOException
-import java.time.format.DateTimeFormatter
 
 /**
  * Main ESI API client.
  * Handles caching, request queuing, auth token management, and response parsing.
  */
 object EsiClient {
-
     private const val ESI_BASE_URL = "https://esi.evetech.net/latest"
     private const val ESI_DATASOURCE = "tranquility"
 
-    val json = Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-        allowSpecialFloatingPointValues = true
-    }
+    val json =
+        Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+            allowSpecialFloatingPointValues = true
+        }
 
-    private fun JsonElement.toKotlinValue(): Any? = when (this) {
-        is JsonNull -> null
-        // A genuine JSON string must stay a String even when its content looks numeric —
-        // e.g. a market order's `range` field is "1"/"5"/"40" (a jump count) as opposed to the
-        // keywords "station"/"solarsystem"/"region". longOrNull/doubleOrNull ignore whether the
-        // literal was quoted, so without the isString guard "1" silently became the Long 1.
-        is JsonPrimitive -> if (isString) content else (longOrNull ?: doubleOrNull ?: booleanOrNull ?: content)
-        is JsonArray -> map { it.toKotlinValue() }
-        is JsonObject -> mapValues { (_, v) -> v.toKotlinValue() }
-    }
+    private fun JsonElement.toKotlinValue(): Any? =
+        when (this) {
+            is JsonNull -> null
+            // A genuine JSON string must stay a String even when its content looks numeric —
+            // e.g. a market order's `range` field is "1"/"5"/"40" (a jump count) as opposed to the
+            // keywords "station"/"solarsystem"/"region". longOrNull/doubleOrNull ignore whether the
+            // literal was quoted, so without the isString guard "1" silently became the Long 1.
+            is JsonPrimitive -> if (isString) content else (longOrNull ?: doubleOrNull ?: booleanOrNull ?: content)
+            is JsonArray -> map { it.toKotlinValue() }
+            is JsonObject -> mapValues { (_, v) -> v.toKotlinValue() }
+        }
 
-    private fun String.parseToMap(): Map<String, Any?> =
-        json.parseToJsonElement(this).jsonObject.mapValues { (_, v) -> v.toKotlinValue() }
+    private fun String.parseToMap(): Map<String, Any?> = json.parseToJsonElement(this).jsonObject.mapValues { (_, v) -> v.toKotlinValue() }
 
     private fun String.parseToListOfMaps(): List<Map<String, Any?>> =
         json.parseToJsonElement(this).jsonArray.map { it.jsonObject.mapValues { (_, v) -> v.toKotlinValue() } }
@@ -70,19 +69,20 @@ object EsiClient {
             return mergedCache.data!!.parseToListOfMaps()
         }
 
-        val allResults  = mutableListOf<Map<String, Any?>>()
-        val rawBodies   = mutableListOf<String>()
+        val allResults = mutableListOf<Map<String, Any?>>()
+        val rawBodies = mutableListOf<String>()
         var serverExpiry = 0L
         var firstPageLastModified: String? = null
         var page = 1
 
         while (true) {
-            val (body, metadata) = if (characterId != null) {
-                val token = SsoAuthManager.ensureTokenFresh(characterId) ?: break
-                getRaw(endpoint, params, token, page, characterId)
-            } else {
-                getRaw(endpoint, params, null, page)
-            }
+            val (body, metadata) =
+                if (characterId != null) {
+                    val token = SsoAuthManager.ensureTokenFresh(characterId) ?: break
+                    getRaw(endpoint, params, token, page, characterId)
+                } else {
+                    getRaw(endpoint, params, null, page)
+                }
             val list = body.parseToListOfMaps()
             allResults.addAll(list)
             rawBodies.add(body)
@@ -99,17 +99,26 @@ object EsiClient {
                 if (firstPageLastModified == null) {
                     firstPageLastModified = metadata.lastModified
                 } else if (metadata.lastModified != firstPageLastModified) {
-                    println("[EsiClient] $endpoint: Last-Modified changed mid-pagination (page $page) — " +
-                        "results may mix data from different snapshots")
+                    println(
+                        "[EsiClient] $endpoint: Last-Modified changed mid-pagination (page $page) — " +
+                            "results may mix data from different snapshots",
+                    )
                 }
             }
             // A cache hit doesn't carry its real expiry in metadata, so look it up directly —
             // otherwise serverExpiry stays 0 for a page served entirely from cache, and an empty
             // result (e.g. zero open orders) never gets a merged cache entry / refresh timer.
-            val pageExpiry = if (fromCache) {
-                val pageParams = params.toMutableMap().apply { put("datasource", ESI_DATASOURCE); put("page", page.toString()) }
-                EsiCacheManager.getExpiry(endpoint, pageParams) ?: 0L
-            } else metadata.expires
+            val pageExpiry =
+                if (fromCache) {
+                    val pageParams =
+                        params.toMutableMap().apply {
+                            put("datasource", ESI_DATASOURCE)
+                            put("page", page.toString())
+                        }
+                    EsiCacheManager.getExpiry(endpoint, pageParams) ?: 0L
+                } else {
+                    metadata.expires
+                }
             if (pageExpiry > serverExpiry) serverExpiry = pageExpiry
             if (list.isEmpty() || (!fromCache && metadata.totalPages <= page)) break
             page++
@@ -121,11 +130,12 @@ object EsiClient {
         // otherwise endpoints that legitimately return zero items (e.g. no open orders) never get
         // an expiry recorded and refresh-cooldown timers never show.
         if (allResults.isNotEmpty() || serverExpiry > 0) {
-            val merged = buildJsonArray {
-                rawBodies.forEach { body ->
-                    json.parseToJsonElement(body).jsonArray.forEach { add(it) }
+            val merged =
+                buildJsonArray {
+                    rawBodies.forEach { body ->
+                        json.parseToJsonElement(body).jsonArray.forEach { add(it) }
+                    }
                 }
-            }
             val expiry = if (serverExpiry > 0) serverExpiry else System.currentTimeMillis() + 5 * 60 * 1000L
             EsiCacheManager.save(endpoint, baseParams, merged.toString(), expiry)
         }
@@ -145,10 +155,11 @@ object EsiClient {
         page: Int? = null,
         characterId: Int? = null,
     ): Pair<String, EsiResponseMetadata> {
-        val fullParams = params.toMutableMap().apply {
-            put("datasource", ESI_DATASOURCE)
-            page?.let { put("page", it.toString()) }
-        }
+        val fullParams =
+            params.toMutableMap().apply {
+                put("datasource", ESI_DATASOURCE)
+                page?.let { put("page", it.toString()) }
+            }
 
         val cacheResult = EsiCacheManager.get(endpoint, fullParams)
 
@@ -159,12 +170,13 @@ object EsiClient {
         val queryString = fullParams.entries.joinToString("&") { "${it.key}=${it.value}" }
         val url = "$ESI_BASE_URL$endpoint${if (queryString.isNotEmpty()) "?$queryString" else ""}"
 
-        val queuedRequest = QueuedRequest(
-            endpoint = url,
-            description = endpoint,
-            source = RequestSource.SERVER,
-            status = RequestStatus.QUEUED,
-        )
+        val queuedRequest =
+            QueuedRequest(
+                endpoint = url,
+                description = endpoint,
+                source = RequestSource.SERVER,
+                status = RequestStatus.QUEUED,
+            )
         RequestQueueManager.enqueue(queuedRequest)
         RequestQueueManager.markInProgress(queuedRequest.id)
 
@@ -195,19 +207,21 @@ object EsiClient {
 
             // 304 Not Modified — ESI confirmed our cached copy is still current.
             if (response.code == 304) {
-                val cachedBody = cacheResult.data
-                    ?: throw IOException("Got 304 but no cached body for $endpoint")
+                val cachedBody =
+                    cacheResult.data
+                        ?: throw IOException("Got 304 but no cached body for $endpoint")
                 val newExpiry = parseExpiry(response)
                 val newEtag = response.header("ETag") ?: cacheResult.etag
                 val newLastModified = response.header("Last-Modified") ?: cacheResult.lastModified
                 EsiCacheManager.refreshExpiry(endpoint, fullParams, newExpiry, newEtag, newLastModified)
                 RequestQueueManager.completeRequest(queuedRequest.id)
-                return cachedBody to EsiResponseMetadata(
-                    expires = newExpiry,
-                    etag = newEtag,
-                    lastModified = newLastModified,
-                    totalPages = response.header("X-Pages")?.toIntOrNull() ?: 1,
-                )
+                return cachedBody to
+                    EsiResponseMetadata(
+                        expires = newExpiry,
+                        etag = newEtag,
+                        lastModified = newLastModified,
+                        totalPages = response.header("X-Pages")?.toIntOrNull() ?: 1,
+                    )
             }
 
             if (!response.isSuccessful) {
@@ -233,14 +247,14 @@ object EsiClient {
 
             RequestQueueManager.completeRequest(queuedRequest.id)
 
-            return body to EsiResponseMetadata(
-                expires = expiresAt,
-                cacheControl = cacheControl ?: "",
-                etag = etag,
-                lastModified = lastModified,
-                totalPages = xPages,
-            )
-
+            return body to
+                EsiResponseMetadata(
+                    expires = expiresAt,
+                    cacheControl = cacheControl ?: "",
+                    etag = etag,
+                    lastModified = lastModified,
+                    totalPages = xPages,
+                )
         } catch (e: IOException) {
             RequestQueueManager.completeRequest(queuedRequest.id, error = e.message)
             if (cacheResult.state == CacheState.STALE && cacheResult.data != null) {
@@ -255,8 +269,9 @@ object EsiClient {
         val cacheControl = response.header("Cache-Control")
         return when {
             expiresHeader != null -> EsiCacheManager.parseExpiresHeader(expiresHeader)
-            cacheControl != null -> EsiCacheManager.parseCacheControl(cacheControl)
-                ?: (System.currentTimeMillis() + 5 * 60 * 1000L)
+            cacheControl != null ->
+                EsiCacheManager.parseCacheControl(cacheControl)
+                    ?: (System.currentTimeMillis() + 5 * 60 * 1000L)
             else -> System.currentTimeMillis() + 5 * 60 * 1000L
         }
     }
@@ -283,8 +298,9 @@ object EsiClient {
         params: Map<String, String> = emptyMap(),
         page: Int? = null,
     ): T {
-        val accessToken = SsoAuthManager.ensureTokenFresh(characterId)
-            ?: throw IOException("Could not refresh access token for character $characterId")
+        val accessToken =
+            SsoAuthManager.ensureTokenFresh(characterId)
+                ?: throw IOException("Could not refresh access token for character $characterId")
         return get(endpoint, params, accessToken, page)
     }
 
@@ -300,13 +316,15 @@ object EsiClient {
         var page = 1
 
         while (true) {
-            val (body, metadata) = if (characterId != null) {
-                val token = SsoAuthManager.ensureTokenFresh(characterId)
-                    ?: break
-                getRaw(endpoint, params, token, page, characterId)
-            } else {
-                getRaw(endpoint, params, null, page)
-            }
+            val (body, metadata) =
+                if (characterId != null) {
+                    val token =
+                        SsoAuthManager.ensureTokenFresh(characterId)
+                            ?: break
+                    getRaw(endpoint, params, token, page, characterId)
+                } else {
+                    getRaw(endpoint, params, null, page)
+                }
 
             val list = json.decodeFromString<List<T>>(body)
             allResults.addAll(list)
@@ -325,10 +343,18 @@ object EsiClient {
     // ─── Bulk / POST ──────────────────────────────────────────────────────
 
     /** POST to an ESI endpoint and return the raw response body. */
-    fun postRaw(endpoint: String, jsonBody: String): String {
+    fun postRaw(
+        endpoint: String,
+        jsonBody: String,
+    ): String {
         val url = "$ESI_BASE_URL$endpoint?datasource=$ESI_DATASOURCE"
         val requestBody = jsonBody.toRequestBody("application/json; charset=utf-8".toMediaType())
-        val request = okhttp3.Request.Builder().url(url).post(requestBody).build()
+        val request =
+            okhttp3.Request
+                .Builder()
+                .url(url)
+                .post(requestBody)
+                .build()
         val response = EveHttpClient.getClient().newCall(request).execute()
         if (!response.isSuccessful) throw java.io.IOException("ESI POST $endpoint: HTTP ${response.code}")
         return response.body?.string() ?: "[]"
@@ -361,18 +387,27 @@ object EsiClient {
     // ─── Universe ─────────────────────────────────────────────────────────
 
     fun getUniverseType(typeId: Int): Map<String, Any?> = getMap("/universe/types/$typeId/")
+
     fun getUniverseGroup(groupId: Int): Map<String, Any?> = getMap("/universe/groups/$groupId/")
+
     fun getUniverseStation(stationId: Long): Map<String, Any?> = getMap("/universe/stations/$stationId/")
+
     fun getUniverseRegion(regionId: Int): Map<String, Any?> = getMap("/universe/regions/$regionId/")
+
     fun getUniverseSystem(systemId: Int): Map<String, Any?> = getMap("/universe/systems/$systemId/")
+
     fun getUniverseConstellation(constId: Int): Map<String, Any?> = getMap("/universe/constellations/$constId/")
+
     // Public endpoint — stargate topology never changes, so ESI's own cache TTL is long and we
     // additionally persist every edge locally (see core/staticdata/JumpGraphService.kt).
     fun getUniverseStargate(stargateId: Int): Map<String, Any?> = getMap("/universe/stargates/$stargateId/")
 
     // Player-owned structures (citadels) aren't public — this requires the docking character's
     // token and returns null if they have no docking access (e.g. structure since abandoned/moved).
-    fun getStructureInfo(structureId: Long, characterId: Int): Map<String, Any?>? {
+    fun getStructureInfo(
+        structureId: Long,
+        characterId: Int,
+    ): Map<String, Any?>? {
         return try {
             val token = SsoAuthManager.ensureTokenFresh(characterId)
             if (token == null) {
@@ -387,24 +422,31 @@ object EsiClient {
         }
     }
 
-    fun search(query: String, categories: List<String>, strict: Boolean = false): Map<String, List<Int>> {
-        return get<Map<String, List<Int>>>("/search/", mapOf(
-            "search" to query,
-            "categories" to categories.joinToString(","),
-            "strict" to strict.toString(),
-        ))
-    }
+    fun search(
+        query: String,
+        categories: List<String>,
+        strict: Boolean = false,
+    ): Map<String, List<Int>> =
+        get<Map<String, List<Int>>>(
+            "/search/",
+            mapOf(
+                "search" to query,
+                "categories" to categories.joinToString(","),
+                "strict" to strict.toString(),
+            ),
+        )
 
     // --- Market Group Endpoints ---
 
     fun getMarketGroupIds(): List<Int> = get("/markets/groups/")
 
-    fun getMarketGroupTypeIds(groupId: Int): List<Int> {
-        return try {
+    fun getMarketGroupTypeIds(groupId: Int): List<Int> =
+        try {
             val data = getMap("/markets/groups/$groupId/")
             (data["types"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() } ?: emptyList()
-        } catch (e: Exception) { emptyList() }
-    }
+        } catch (e: Exception) {
+            emptyList()
+        }
 
     // --- Market Endpoints ---
 
@@ -412,14 +454,18 @@ object EsiClient {
     fun getMarketPrices(): Map<Int, Double> {
         return try {
             val (body, _) = getRaw("/markets/prices/")
-            json.parseToJsonElement(body).jsonArray.associate { elem ->
-                val obj = elem.jsonObject
-                val typeId = obj["type_id"]?.jsonPrimitive?.intOrNull ?: return@associate -1 to 0.0
-                val price = obj["adjusted_price"]?.jsonPrimitive?.doubleOrNull
-                    ?: obj["average_price"]?.jsonPrimitive?.doubleOrNull
-                    ?: 0.0
-                typeId to price
-            }.filterKeys { it >= 0 }
+            json
+                .parseToJsonElement(body)
+                .jsonArray
+                .associate { elem ->
+                    val obj = elem.jsonObject
+                    val typeId = obj["type_id"]?.jsonPrimitive?.intOrNull ?: return@associate -1 to 0.0
+                    val price =
+                        obj["adjusted_price"]?.jsonPrimitive?.doubleOrNull
+                            ?: obj["average_price"]?.jsonPrimitive?.doubleOrNull
+                            ?: 0.0
+                    typeId to price
+                }.filterKeys { it >= 0 }
         } catch (e: Exception) {
             println("[EsiClient] getMarketPrices failed: ${e.message}")
             emptyMap()
@@ -429,20 +475,27 @@ object EsiClient {
     fun getMarketStructureOrders(structureId: Long): List<Map<String, Any?>> =
         getAllMaps(endpoint = "/markets/structures/$structureId/orders/", params = mapOf("order_type" to "all"))
 
-    fun getMarketRegionOrders(regionId: Int, orderType: String = "all", typeId: Int? = null): List<Map<String, Any?>> {
+    fun getMarketRegionOrders(
+        regionId: Int,
+        orderType: String = "all",
+        typeId: Int? = null,
+    ): List<Map<String, Any?>> {
         val params = mutableMapOf("order_type" to orderType)
         typeId?.let { params["type_id"] = it.toString() }
         return getAllMaps(endpoint = "/markets/$regionId/orders/", params = params)
     }
 
-    fun getMarketRegionHistory(regionId: Int, typeId: Int): List<Map<String, Any?>> {
+    fun getMarketRegionHistory(
+        regionId: Int,
+        typeId: Int,
+    ): List<Map<String, Any?>> {
         val (body, _) = getRaw("/markets/$regionId/history/", mapOf("type_id" to typeId.toString()))
         return body.parseToListOfMaps()
     }
 
     // --- Character Endpoints ---
 
-    fun getCharacterAssets(characterId: Int, accessToken: String): List<Map<String, Any?>> =
+    fun getCharacterAssets(characterId: Int): List<Map<String, Any?>> =
         getAllMaps(characterId = characterId, endpoint = "/characters/$characterId/assets/")
 
     fun getCharacterOrders(characterId: Int): List<Map<String, Any?>> =
@@ -465,28 +518,36 @@ object EsiClient {
 
     // --- Corporation Endpoints ---
 
-    fun getCorporationAssets(corporationId: Int): List<Map<String, Any?>> =
-        getAllMaps(endpoint = "/corporations/$corporationId/assets/")
+    fun getCorporationAssets(corporationId: Int): List<Map<String, Any?>> = getAllMaps(endpoint = "/corporations/$corporationId/assets/")
 
-    fun getCorporationOrders(corporationId: Int): List<Map<String, Any?>> =
-        getAllMaps(endpoint = "/corporations/$corporationId/orders/")
+    fun getCorporationOrders(corporationId: Int): List<Map<String, Any?>> = getAllMaps(endpoint = "/corporations/$corporationId/orders/")
 
-    fun getCorporationWallet(corporationId: Int, division: Int = 1): Double {
+    fun getCorporationWallet(
+        corporationId: Int,
+        division: Int = 1,
+    ): Double {
         val (body, _) = getRaw("/corporations/$corporationId/wallets/$division/balance/")
         return body.trim().toDoubleOrNull() ?: 0.0
     }
 
-    fun getCorporationJournal(corporationId: Int, division: Int? = null): List<Map<String, Any?>> {
+    fun getCorporationJournal(
+        corporationId: Int,
+        division: Int? = null,
+    ): List<Map<String, Any?>> {
         val params = division?.let { mapOf("division" to it.toString()) } ?: emptyMap()
         return getAllMaps(endpoint = "/corporations/$corporationId/wallets/1/journal/", params = params)
     }
 
-    fun getCorporationTransactions(corporationId: Int, division: Int? = null): List<Map<String, Any?>> {
+    fun getCorporationTransactions(
+        corporationId: Int,
+        division: Int? = null,
+    ): List<Map<String, Any?>> {
         val params = division?.let { mapOf("division" to it.toString()) } ?: emptyMap()
         return getAllMaps(endpoint = "/corporations/$corporationId/wallets/1/transactions/", params = params)
     }
 
     fun getCorporationInfo(corporationId: Int): Map<String, Any?> = getMap("/corporations/$corporationId/")
+
     fun getCharacterInfo(characterId: Int): Map<String, Any?> = getMap("/characters/$characterId/")
 
     // --- Contract Endpoints ---
@@ -497,10 +558,12 @@ object EsiClient {
     fun getCorporationContracts(corporationId: Int): List<Map<String, Any?>> =
         getAllMaps(endpoint = "/corporations/$corporationId/contracts/")
 
-    fun getContractItems(contractId: Int): List<Map<String, Any?>> =
-        getAllMaps(endpoint = "/contracts/$contractId/items/")
+    fun getContractItems(contractId: Int): List<Map<String, Any?>> = getAllMaps(endpoint = "/contracts/$contractId/items/")
 
-    fun getEndpointExpiry(endpoint: String, params: Map<String, String>? = null): Long? {
+    fun getEndpointExpiry(
+        endpoint: String,
+        params: Map<String, String>? = null,
+    ): Long? {
         val fullParams = (params ?: emptyMap()).toMutableMap().apply { put("datasource", ESI_DATASOURCE) }
         return EsiCacheManager.getExpiry(endpoint, fullParams)
     }
@@ -508,14 +571,23 @@ object EsiClient {
     // ─── UI Endpoints (in-game window control) ────────────────────────────
 
     /** Opens the market details window in the running EVE client for the given type. */
-    fun openMarketWindow(characterId: Int, typeId: Int) {
+    fun openMarketWindow(
+        characterId: Int,
+        typeId: Int,
+    ) {
         val token = SsoAuthManager.ensureTokenFresh(characterId) ?: return
         val url = "$ESI_BASE_URL/ui/openwindow/marketdetails/?datasource=$ESI_DATASOURCE&type_id=$typeId"
-        val request = Request.Builder()
-            .url(url)
-            .addHeader("Authorization", "Bearer $token")
-            .post(ByteArray(0).toRequestBody(null))
-            .build()
-        EveHttpClient.getClient().newCall(request).execute().use { /* 204 No Content = success */ }
+        val request =
+            Request
+                .Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer $token")
+                .post(ByteArray(0).toRequestBody(null))
+                .build()
+        EveHttpClient
+            .getClient()
+            .newCall(request)
+            .execute()
+            .use { /* 204 No Content = success */ }
     }
 }

@@ -3,15 +3,14 @@ package org.eventt.core.database
 import org.eventt.core.model.PriceAlertModel
 
 object AlertDao {
-
-    fun insert(alert: PriceAlertModel): Int {
-        return DatabaseManager.transaction {
+    fun insert(alert: PriceAlertModel): Int =
+        DatabaseManager.transaction {
             prepareStatement(
                 """
                 INSERT INTO price_alerts (type_id, type_name, target_price, condition_type, station_id, region_id, order_type, enabled, triggered, triggered_at, character_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent(),
-                java.sql.Statement.RETURN_GENERATED_KEYS
+                java.sql.Statement.RETURN_GENERATED_KEYS,
             ).use { stmt ->
                 stmt.setInt(1, alert.typeId)
                 stmt.setString(2, alert.typeName)
@@ -30,7 +29,6 @@ object AlertDao {
                 }
             }
         }
-    }
 
     fun update(alert: PriceAlertModel) {
         DatabaseManager.transaction {
@@ -39,7 +37,7 @@ object AlertDao {
                 UPDATE price_alerts SET type_id = ?, type_name = ?, target_price = ?, condition_type = ?,
                     station_id = ?, region_id = ?, order_type = ?, enabled = ?, triggered = ?, triggered_at = ?
                 WHERE id = ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { stmt ->
                 stmt.setInt(1, alert.typeId)
                 stmt.setString(2, alert.typeName)
@@ -57,21 +55,19 @@ object AlertDao {
         }
     }
 
-    fun getAll(): List<PriceAlertModel> {
-        return DatabaseManager.transaction {
+    fun getAll(): List<PriceAlertModel> =
+        DatabaseManager.transaction {
             prepareStatement("SELECT * FROM price_alerts ORDER BY created_at DESC").use { stmt ->
                 stmt.executeQuery().mapResultSetToAlerts()
             }
         }
-    }
 
-    fun getEnabled(): List<PriceAlertModel> {
-        return DatabaseManager.transaction {
+    fun getEnabled(): List<PriceAlertModel> =
+        DatabaseManager.transaction {
             prepareStatement("SELECT * FROM price_alerts WHERE enabled = 1 ORDER BY created_at DESC").use { stmt ->
                 stmt.executeQuery().mapResultSetToAlerts()
             }
         }
-    }
 
     fun delete(id: Int) {
         DatabaseManager.transaction {
@@ -82,7 +78,10 @@ object AlertDao {
         }
     }
 
-    fun setEnabled(id: Int, enabled: Boolean) {
+    fun setEnabled(
+        id: Int,
+        enabled: Boolean,
+    ) {
         DatabaseManager.transaction {
             prepareStatement("UPDATE price_alerts SET enabled = ? WHERE id = ?").use { stmt ->
                 stmt.setInt(1, if (enabled) 1 else 0)
@@ -120,7 +119,7 @@ object AlertDao {
                     triggeredAt = getLong("triggered_at").takeIf { it != 0L },
                     createdAt = getLong("created_at"),
                     characterId = getInt("character_id").takeIf { it != 0 },
-                )
+                ),
             )
         }
         return list

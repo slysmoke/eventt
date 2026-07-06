@@ -20,48 +20,51 @@ import java.util.concurrent.TimeUnit
  * contract; needs manual verification on real Windows before shipping.
  */
 class Win32HotkeyBackend : HotkeyBackend {
-
     private var thread: Thread? = null
+
     @Volatile private var threadId: Int = 0
+
     @Volatile private var registered: Boolean = false
 
     override fun start(onTrigger: () -> Unit): Boolean {
-        val user32 = try {
-            User32.INSTANCE
-        } catch (e: Throwable) {
-            println("[Hotkey][Win32] user32 not available: ${e.message}")
-            return false
-        }
+        val user32 =
+            try {
+                User32.INSTANCE
+            } catch (e: Throwable) {
+                println("[Hotkey][Win32] user32 not available: ${e.message}")
+                return false
+            }
 
         val started = CountDownLatch(1)
 
-        thread = Thread({
-            try {
-                threadId = Kernel32.INSTANCE.GetCurrentThreadId()
-                registered = user32.RegisterHotKey(null, HOTKEY_ID, MOD_CONTROL, VK_Z)
-            } catch (e: Throwable) {
-                println("[Hotkey][Win32] Failed to register hotkey: ${e.message}")
-                registered = false
-            } finally {
-                started.countDown()
-            }
-            if (!registered) return@Thread
-
-            val msg = MSG()
-            while (true) {
-                val ret = user32.GetMessage(msg, null, 0, 0)
-                if (ret <= 0) break // WM_QUIT or error
-                if (msg.message == WM_HOTKEY && msg.wParam.toInt() == HOTKEY_ID) {
-                    onTrigger()
+        thread =
+            Thread({
+                try {
+                    threadId = Kernel32.INSTANCE.GetCurrentThreadId()
+                    registered = user32.RegisterHotKey(null, HOTKEY_ID, MOD_CONTROL, VK_Z)
+                } catch (e: Throwable) {
+                    println("[Hotkey][Win32] Failed to register hotkey: ${e.message}")
+                    registered = false
+                } finally {
+                    started.countDown()
                 }
-                user32.TranslateMessage(msg)
-                user32.DispatchMessage(msg)
+                if (!registered) return@Thread
+
+                val msg = MSG()
+                while (true) {
+                    val ret = user32.GetMessage(msg, null, 0, 0)
+                    if (ret <= 0) break // WM_QUIT or error
+                    if (msg.message == WM_HOTKEY && msg.wParam.toInt() == HOTKEY_ID) {
+                        onTrigger()
+                    }
+                    user32.TranslateMessage(msg)
+                    user32.DispatchMessage(msg)
+                }
+                user32.UnregisterHotKey(null, HOTKEY_ID)
+            }, "win32-hotkey").apply {
+                isDaemon = true
+                start()
             }
-            user32.UnregisterHotKey(null, HOTKEY_ID)
-        }, "win32-hotkey").apply {
-            isDaemon = true
-            start()
-        }
 
         val gotResponse = started.await(2, TimeUnit.SECONDS)
         if (!gotResponse || !registered) {

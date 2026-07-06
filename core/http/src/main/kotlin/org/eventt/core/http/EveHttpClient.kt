@@ -7,7 +7,6 @@ import okhttp3.logging.HttpLoggingInterceptor
 import java.util.concurrent.TimeUnit
 
 object EveHttpClient {
-
     private var instance: OkHttpClient? = null
 
     // ESI best practices require a User-Agent identifying the app (see
@@ -26,21 +25,24 @@ object EveHttpClient {
     fun getClient(enableLogging: Boolean = false): OkHttpClient {
         if (instance != null) return instance!!
 
-        val clientBuilder = OkHttpClient.Builder()
-            .protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
-            .callTimeout(60, TimeUnit.SECONDS)
-            .connectionSpecs(listOf(ConnectionSpec.MODERN_TLS, ConnectionSpec.CLEARTEXT))
-            .retryOnConnectionFailure(true)
-            .addInterceptor(UserAgentInterceptor { userAgent })
-            .addInterceptor(EsiThrottleInterceptor())
+        val clientBuilder =
+            OkHttpClient
+                .Builder()
+                .protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .writeTimeout(30, TimeUnit.SECONDS)
+                .callTimeout(60, TimeUnit.SECONDS)
+                .connectionSpecs(listOf(ConnectionSpec.MODERN_TLS, ConnectionSpec.CLEARTEXT))
+                .retryOnConnectionFailure(true)
+                .addInterceptor(UserAgentInterceptor { userAgent })
+                .addInterceptor(EsiThrottleInterceptor())
 
         if (enableLogging) {
-            val logging = HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BODY
-            }
+            val logging =
+                HttpLoggingInterceptor().apply {
+                    level = HttpLoggingInterceptor.Level.BODY
+                }
             clientBuilder.addInterceptor(logging)
         }
 

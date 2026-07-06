@@ -22,11 +22,11 @@ val EventtBlue = Color(0xFF4A90D9)
 fun RequestProgressDialog(onDismiss: () -> Unit) {
     val requests by RequestQueueManager.requests.collectAsState()
 
-    val active    = requests.filter { it.status == RequestStatus.QUEUED || it.status == RequestStatus.IN_PROGRESS }
-    val failed    = requests.filter { it.status == RequestStatus.FAILED }
-    val completed = requests.count  { it.status == RequestStatus.COMPLETED }
-    val total     = requests.size
-    val progress  = RequestQueueManager.overallProgress
+    val active = requests.filter { it.status == RequestStatus.QUEUED || it.status == RequestStatus.IN_PROGRESS }
+    val failed = requests.filter { it.status == RequestStatus.FAILED }
+    val completed = requests.count { it.status == RequestStatus.COMPLETED }
+    val total = requests.size
+    val progress = RequestQueueManager.overallProgress
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -48,8 +48,8 @@ fun RequestProgressDialog(onDismiss: () -> Unit) {
 
                 // Summary line
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    SummaryChip("${active.size} active",   if (active.isNotEmpty()) EventtBlue else Color.Gray)
-                    SummaryChip("$completed done",         Color(0xFF69DB7C))
+                    SummaryChip("${active.size} active", if (active.isNotEmpty()) EventtBlue else Color.Gray)
+                    SummaryChip("$completed done", Color(0xFF69DB7C))
                     if (failed.isNotEmpty()) {
                         SummaryChip("${failed.size} failed", Color(0xFFFF6B6B))
                     }
@@ -87,11 +87,11 @@ fun RequestProgressDialog(onDismiss: () -> Unit) {
                     ) {
                         items(visible, key = { it.id }) { request ->
                             RequestRow(
-                                status      = request.status,
+                                status = request.status,
                                 description = request.description,
-                                source      = request.source.name.lowercase(),
-                                progress    = request.progress,
-                                error       = request.error,
+                                source = request.source.name.lowercase(),
+                                progress = request.progress,
+                                error = request.error,
                             )
                         }
                     }
@@ -123,7 +123,10 @@ fun RequestProgressDialog(onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun SummaryChip(label: String, color: Color) {
+private fun SummaryChip(
+    label: String,
+    color: Color,
+) {
     Surface(
         color = color.copy(alpha = 0.12f),
         shape = MaterialTheme.shapes.extraSmall,
@@ -147,11 +150,12 @@ private fun RequestRow(
     error: String?,
 ) {
     Surface(
-        color = when (status) {
-            RequestStatus.FAILED      -> Color(0xFFFF6B6B).copy(alpha = 0.08f)
-            RequestStatus.IN_PROGRESS -> EventtBlue.copy(alpha = 0.06f)
-            else                      -> Color.Transparent
-        },
+        color =
+            when (status) {
+                RequestStatus.FAILED -> Color(0xFFFF6B6B).copy(alpha = 0.08f)
+                RequestStatus.IN_PROGRESS -> EventtBlue.copy(alpha = 0.06f)
+                else -> Color.Transparent
+            },
         shape = MaterialTheme.shapes.extraSmall,
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
@@ -160,10 +164,10 @@ private fun RequestRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 when (status) {
-                    RequestStatus.QUEUED      -> Icon(Icons.Default.Schedule, null, Modifier.size(13.dp), tint = Color.Gray)
-                    RequestStatus.IN_PROGRESS -> Icon(Icons.Default.Sync,     null, Modifier.size(13.dp), tint = EventtBlue)
-                    RequestStatus.FAILED      -> Icon(Icons.Default.Error,    null, Modifier.size(13.dp), tint = Color(0xFFFF6B6B))
-                    RequestStatus.COMPLETED   -> Icon(Icons.Default.Check,    null, Modifier.size(13.dp), tint = Color(0xFF69DB7C))
+                    RequestStatus.QUEUED -> Icon(Icons.Default.Schedule, null, Modifier.size(13.dp), tint = Color.Gray)
+                    RequestStatus.IN_PROGRESS -> Icon(Icons.Default.Sync, null, Modifier.size(13.dp), tint = EventtBlue)
+                    RequestStatus.FAILED -> Icon(Icons.Default.Error, null, Modifier.size(13.dp), tint = Color(0xFFFF6B6B))
+                    RequestStatus.COMPLETED -> Icon(Icons.Default.Check, null, Modifier.size(13.dp), tint = Color(0xFF69DB7C))
                 }
                 Text(
                     description,
@@ -188,7 +192,13 @@ private fun RequestRow(
                 )
             }
             error?.let {
-                Text(it, style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF6B6B), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFFFF6B6B),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }

@@ -3,7 +3,6 @@ package org.eventt.core.database
 import org.eventt.core.model.MarketHistoryModel
 
 object MarketDao {
-
     // ─── Market History ──────────────────────────────────────────────────
 
     fun insertHistory(entry: MarketHistoryModel) {
@@ -12,7 +11,7 @@ object MarketDao {
                 """
                 INSERT OR REPLACE INTO market_history (type_id, region_id, date, average, volume, order_count, highest, lowest)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """.trimIndent()
+                """.trimIndent(),
             ).use { stmt ->
                 stmt.setInt(1, entry.typeId)
                 stmt.setInt(2, entry.regionId)
@@ -27,14 +26,17 @@ object MarketDao {
         }
     }
 
-    fun insertHistoryBatch(entries: List<MarketHistoryModel>, source: String = "esi") {
+    fun insertHistoryBatch(
+        entries: List<MarketHistoryModel>,
+        source: String = "esi",
+    ) {
         if (entries.isEmpty()) return
         DatabaseManager.transaction {
             prepareStatement(
                 """
                 INSERT OR REPLACE INTO market_history (type_id, region_id, date, average, volume, order_count, highest, lowest, source)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """.trimIndent()
+                """.trimIndent(),
             ).use { stmt ->
                 var count = 0
                 for (entry in entries) {
@@ -64,16 +66,25 @@ object MarketDao {
         }
     }
 
-    fun getHistory(typeId: Int, regionId: Int, days: Int = 90): List<MarketHistoryModel> =
-        getHistoryBySource(typeId, regionId, days, source = null)
+    fun getHistory(
+        typeId: Int,
+        regionId: Int,
+        days: Int = 90,
+    ): List<MarketHistoryModel> = getHistoryBySource(typeId, regionId, days, source = null)
 
-    fun getHistoryBySource(typeId: Int, regionId: Int, days: Int = 90, source: String?): List<MarketHistoryModel> {
-        return DatabaseManager.transaction {
-            val sql = buildString {
-                append("SELECT * FROM market_history WHERE type_id = ? AND region_id = ?")
-                if (source != null) append(" AND source = ?")
-                append(" ORDER BY date DESC LIMIT ?")
-            }
+    fun getHistoryBySource(
+        typeId: Int,
+        regionId: Int,
+        days: Int = 90,
+        source: String?,
+    ): List<MarketHistoryModel> =
+        DatabaseManager.transaction {
+            val sql =
+                buildString {
+                    append("SELECT * FROM market_history WHERE type_id = ? AND region_id = ?")
+                    if (source != null) append(" AND source = ?")
+                    append(" ORDER BY date DESC LIMIT ?")
+                }
             prepareStatement(sql).use { stmt ->
                 stmt.setInt(1, typeId)
                 stmt.setInt(2, regionId)
@@ -96,12 +107,11 @@ object MarketDao {
                                 orderCount = rs.getLong("order_count"),
                                 highest = rs.getDouble("highest"),
                                 lowest = rs.getDouble("lowest"),
-                            )
+                            ),
                         )
                     }
                     list
                 }
             }
         }
-    }
 }

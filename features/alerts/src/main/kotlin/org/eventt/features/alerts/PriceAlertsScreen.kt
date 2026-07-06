@@ -1,7 +1,7 @@
 package org.eventt.features.alerts
 
-import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -21,13 +21,13 @@ import org.eventt.core.database.StaticDataDao
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.PriceAlertModel
 import org.eventt.ui.common.*
+import java.util.Locale
 
 private const val JITA_REGION_ID = 10000002
 private const val PLEX_REGION_ID = 19000001
-private const val PLEX_TYPE_ID   = 44992
+private const val PLEX_TYPE_ID = 44992
 
-private fun effectiveRegionId(typeId: Int) =
-    if (typeId == PLEX_TYPE_ID) PLEX_REGION_ID else JITA_REGION_ID
+private fun effectiveRegionId(typeId: Int) = if (typeId == PLEX_TYPE_ID) PLEX_REGION_ID else JITA_REGION_ID
 
 @Composable
 fun PriceAlertsScreen() {
@@ -37,9 +37,10 @@ fun PriceAlertsScreen() {
     var showOnlyEnabled by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        alerts = withContext(Dispatchers.IO) {
-            if (showOnlyEnabled) AlertDao.getEnabled() else AlertDao.getAll()
-        }
+        alerts =
+            withContext(Dispatchers.IO) {
+                if (showOnlyEnabled) AlertDao.getEnabled() else AlertDao.getAll()
+            }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -127,9 +128,10 @@ private fun AlertCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = if (!alert.enabled) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
-        ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = if (!alert.enabled) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
+            ),
     ) {
         Row(
             modifier = Modifier.padding(12.dp).fillMaxWidth(),
@@ -183,17 +185,27 @@ private fun AddAlertDialog(
         isPriceFetching = true
         currentBestSell = null
         currentBestBuy = null
-        val orders = withContext(Dispatchers.IO) {
-            runCatching { EsiClient.getMarketRegionOrders(effectiveRegionId(type.typeId), typeId = type.typeId) }.getOrDefault(emptyList())
-        }
-        currentBestSell = orders.filter { (it["is_buy_order"] as? Boolean) == false }
-            .minOfOrNull { (it["price"] as? Number)?.toDouble() ?: Double.MAX_VALUE }
-        currentBestBuy = orders.filter { (it["is_buy_order"] as? Boolean) == true }
-            .maxOfOrNull { (it["price"] as? Number)?.toDouble() ?: 0.0 }
+        val orders =
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    EsiClient.getMarketRegionOrders(
+                        effectiveRegionId(type.typeId),
+                        typeId = type.typeId,
+                    )
+                }.getOrDefault(emptyList())
+            }
+        currentBestSell =
+            orders
+                .filter { (it["is_buy_order"] as? Boolean) == false }
+                .minOfOrNull { (it["price"] as? Number)?.toDouble() ?: Double.MAX_VALUE }
+        currentBestBuy =
+            orders
+                .filter { (it["is_buy_order"] as? Boolean) == true }
+                .maxOfOrNull { (it["price"] as? Number)?.toDouble() ?: 0.0 }
         // Pre-fill target price with current price if not yet set
         if (targetPrice.isEmpty()) {
             val current = if (orderType == "sell") currentBestSell else currentBestBuy
-            current?.let { targetPrice = String.format("%.2f", it) }
+            current?.let { targetPrice = String.format(Locale.US, "%.2f", it) }
         }
         isPriceFetching = false
     }
@@ -222,12 +234,15 @@ private fun AddAlertDialog(
                     LazyColumn(modifier = Modifier.heightIn(max = 120.dp)) {
                         items(searchResults) { type ->
                             Row(
-                                modifier = Modifier.fillMaxWidth().clickable {
-                                    selectedType = type
-                                    searchQuery = type.name
-                                    searchResults = emptyList()
-                                    targetPrice = ""
-                                }.padding(8.dp),
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            selectedType = type
+                                            searchQuery = type.name
+                                            searchResults = emptyList()
+                                            targetPrice = ""
+                                        }.padding(8.dp),
                             ) {
                                 Text(type.name, style = MaterialTheme.typography.bodyMedium)
                             }
@@ -243,13 +258,19 @@ private fun AddAlertDialog(
                     Spacer(Modifier.width(8.dp))
                     FilterChip(
                         selected = orderType == "sell",
-                        onClick = { orderType = "sell"; targetPrice = "" },
+                        onClick = {
+                            orderType = "sell"
+                            targetPrice = ""
+                        },
                         label = { Text("Sell") },
                     )
                     Spacer(Modifier.width(4.dp))
                     FilterChip(
                         selected = orderType == "buy",
-                        onClick = { orderType = "buy"; targetPrice = "" },
+                        onClick = {
+                            orderType = "buy"
+                            targetPrice = ""
+                        },
                         label = { Text("Buy") },
                     )
                 }
@@ -268,12 +289,20 @@ private fun AddAlertDialog(
                         val bestSell = currentBestSell
                         val bestBuy = currentBestBuy
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            if (bestSell != null)
-                                Text("Sell: ${formatIsk(bestSell)}", style = MaterialTheme.typography.labelSmall,
-                                    color = if (orderType == "sell") MaterialTheme.colorScheme.primary else Color.Gray)
-                            if (bestBuy != null)
-                                Text("Buy: ${formatIsk(bestBuy)}", style = MaterialTheme.typography.labelSmall,
-                                    color = if (orderType == "buy") MaterialTheme.colorScheme.primary else Color.Gray)
+                            if (bestSell != null) {
+                                Text(
+                                    "Sell: ${formatIsk(bestSell)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (orderType == "sell") MaterialTheme.colorScheme.primary else Color.Gray,
+                                )
+                            }
+                            if (bestBuy != null) {
+                                Text(
+                                    "Buy: ${formatIsk(bestBuy)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (orderType == "buy") MaterialTheme.colorScheme.primary else Color.Gray,
+                                )
+                            }
                         }
                     }
                 }
@@ -293,7 +322,10 @@ private fun AddAlertDialog(
                     value = targetPrice,
                     onValueChange = { targetPrice = it },
                     label = { Text("Target Price (ISK)") },
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
+                    keyboardOptions =
+                        androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal,
+                        ),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -311,7 +343,7 @@ private fun AddAlertDialog(
                             condition = condition,
                             orderType = orderType,
                             regionId = effectiveRegionId(type.typeId),
-                        )
+                        ),
                     )
                 },
                 enabled = selectedType != null && targetPrice.toDoubleOrNull() != null,
@@ -325,11 +357,10 @@ private fun AddAlertDialog(
     )
 }
 
-private fun formatIsk(value: Double): String {
-    return when {
-        value >= 1_000_000_000_000 -> String.format("%.2fT", value / 1_000_000_000_000)
-        value >= 1_000_000_000 -> String.format("%.2fB", value / 1_000_000_000)
-        value >= 1_000_000 -> String.format("%.2fM", value / 1_000_000)
-        else -> String.format("%,.2f", value)
+private fun formatIsk(value: Double): String =
+    when {
+        value >= 1_000_000_000_000 -> String.format(Locale.US, "%.2fT", value / 1_000_000_000_000)
+        value >= 1_000_000_000 -> String.format(Locale.US, "%.2fB", value / 1_000_000_000)
+        value >= 1_000_000 -> String.format(Locale.US, "%.2fM", value / 1_000_000)
+        else -> String.format(Locale.US, "%,.2f", value)
     }
-}

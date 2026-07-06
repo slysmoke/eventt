@@ -14,7 +14,7 @@ fun main() {
     // any ESI/SSO call, which is why this runs before anything else in main().
     val repoUrl = AppVersion.GITHUB_REPO.takeIf { it.isNotBlank() }?.let { "https://github.com/$it" }
     EveHttpClient.configure(
-        "EventNightTradeTools/${AppVersion.NAME}" + (repoUrl?.let { " (+$it)" } ?: "")
+        "EventNightTradeTools/${AppVersion.NAME}" + (repoUrl?.let { " (+$it)" } ?: ""),
     )
 
     // Initialize database BEFORE UI starts — prevents race conditions
@@ -23,8 +23,7 @@ fun main() {
         DatabaseManager.initialize()
         println("[App] Database initialized successfully")
     } catch (e: Exception) {
-        println("[App] Database init failed: ${e.message}")
-        e.printStackTrace()
+        println("[App] Database init failed: ${e.stackTraceToString()}")
     }
 
     GlobalHotkeyService.start()

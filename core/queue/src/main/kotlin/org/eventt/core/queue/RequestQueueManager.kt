@@ -7,7 +7,6 @@ import org.eventt.core.model.QueuedRequest
 import org.eventt.core.model.RequestStatus
 
 object RequestQueueManager {
-
     private val _requests = MutableStateFlow<List<QueuedRequest>>(emptyList())
     val requests: StateFlow<List<QueuedRequest>> = _requests.asStateFlow()
 
@@ -23,36 +22,53 @@ object RequestQueueManager {
 
     @Synchronized
     fun markInProgress(requestId: String) {
-        _requests.value = _requests.value.map {
-            if (it.id == requestId) it.copy(status = RequestStatus.IN_PROGRESS, startTime = System.currentTimeMillis(), progress = 0.1f)
-            else it
-        }
+        _requests.value =
+            _requests.value.map {
+                if (it.id == requestId) {
+                    it.copy(status = RequestStatus.IN_PROGRESS, startTime = System.currentTimeMillis(), progress = 0.1f)
+                } else {
+                    it
+                }
+            }
     }
 
     @Synchronized
-    fun updateProgress(requestId: String, progress: Float) {
-        _requests.value = _requests.value.map {
-            if (it.id == requestId) it.copy(progress = progress) else it
-        }
+    fun updateProgress(
+        requestId: String,
+        progress: Float,
+    ) {
+        _requests.value =
+            _requests.value.map {
+                if (it.id == requestId) it.copy(progress = progress) else it
+            }
     }
 
     @Synchronized
-    fun completeRequest(requestId: String, error: String? = null) {
-        _requests.value = _requests.value.map {
-            if (it.id == requestId) it.copy(
-                status   = if (error != null) RequestStatus.FAILED else RequestStatus.COMPLETED,
-                progress = 1f,
-                endTime  = System.currentTimeMillis(),
-                error    = error,
-            ) else it
-        }
+    fun completeRequest(
+        requestId: String,
+        error: String? = null,
+    ) {
+        _requests.value =
+            _requests.value.map {
+                if (it.id == requestId) {
+                    it.copy(
+                        status = if (error != null) RequestStatus.FAILED else RequestStatus.COMPLETED,
+                        progress = 1f,
+                        endTime = System.currentTimeMillis(),
+                        error = error,
+                    )
+                } else {
+                    it
+                }
+            }
     }
 
     @Synchronized
     fun clearCompleted() {
-        _requests.value = _requests.value.filter {
-            it.status != RequestStatus.COMPLETED && it.status != RequestStatus.FAILED
-        }
+        _requests.value =
+            _requests.value.filter {
+                it.status != RequestStatus.COMPLETED && it.status != RequestStatus.FAILED
+            }
     }
 
     @Synchronized
@@ -60,9 +76,9 @@ object RequestQueueManager {
         _requests.value = emptyList()
     }
 
-    val totalRequests: Int     get() = _requests.value.size
+    val totalRequests: Int get() = _requests.value.size
     val completedRequests: Int get() = _requests.value.count { it.status == RequestStatus.COMPLETED }
-    val failedRequests: Int    get() = _requests.value.count { it.status == RequestStatus.FAILED }
+    val failedRequests: Int get() = _requests.value.count { it.status == RequestStatus.FAILED }
     val inProgressRequests: Int get() = _requests.value.count { it.status == RequestStatus.IN_PROGRESS }
     val overallProgress: Float
         get() {

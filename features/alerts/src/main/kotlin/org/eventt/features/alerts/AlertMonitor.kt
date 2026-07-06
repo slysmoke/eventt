@@ -12,7 +12,6 @@ import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.PriceAlertModel
 
 object AlertMonitor {
-
     private const val POLL_INTERVAL_MS = 5 * 60 * 1_000L
     private const val DEFAULT_REGION_ID = 10000002 // The Forge (Jita)
 
@@ -34,9 +33,12 @@ object AlertMonitor {
     }
 
     private suspend fun checkAlerts() {
-        val alerts = try {
-            AlertDao.getEnabled().filter { !it.triggered }
-        } catch (_: Exception) { return }
+        val alerts =
+            try {
+                AlertDao.getEnabled().filter { !it.triggered }
+            } catch (_: Exception) {
+                return
+            }
 
         if (alerts.isEmpty()) return
 
@@ -46,25 +48,29 @@ object AlertMonitor {
 
         for ((key, group) in groups) {
             val (typeId, regionId) = key
-            val orders = runCatching {
-                EsiClient.getMarketRegionOrders(regionId, typeId = typeId)
-            }.getOrDefault(emptyList())
+            val orders =
+                runCatching {
+                    EsiClient.getMarketRegionOrders(regionId, typeId = typeId)
+                }.getOrDefault(emptyList())
 
-            val bestSell = orders
-                .filter { (it["is_buy_order"] as? Boolean) == false }
-                .minOfOrNull { (it["price"] as? Number)?.toDouble() ?: Double.MAX_VALUE }
-            val bestBuy = orders
-                .filter { (it["is_buy_order"] as? Boolean) == true }
-                .maxOfOrNull { (it["price"] as? Number)?.toDouble() ?: 0.0 }
+            val bestSell =
+                orders
+                    .filter { (it["is_buy_order"] as? Boolean) == false }
+                    .minOfOrNull { (it["price"] as? Number)?.toDouble() ?: Double.MAX_VALUE }
+            val bestBuy =
+                orders
+                    .filter { (it["is_buy_order"] as? Boolean) == true }
+                    .maxOfOrNull { (it["price"] as? Number)?.toDouble() ?: 0.0 }
 
             for (alert in group) {
                 val current = if (alert.orderType == "buy") bestBuy else bestSell
                 if (current == null) continue
-                val fires = when (alert.condition) {
-                    "above" -> current >= alert.targetPrice
-                    "below" -> current <= alert.targetPrice
-                    else    -> false
-                }
+                val fires =
+                    when (alert.condition) {
+                        "above" -> current >= alert.targetPrice
+                        "below" -> current <= alert.targetPrice
+                        else -> false
+                    }
                 if (fires) {
                     runCatching { AlertDao.markTriggered(alert.id) }
                     newlyTriggered.add(alert.copy(triggered = true))
@@ -77,6 +83,5 @@ object AlertMonitor {
         }
     }
 
-    private fun effectiveRegion(alert: PriceAlertModel): Int =
-        if (alert.regionId > 0) alert.regionId else DEFAULT_REGION_ID
+    private fun effectiveRegion(alert: PriceAlertModel): Int = if (alert.regionId > 0) alert.regionId else DEFAULT_REGION_ID
 }

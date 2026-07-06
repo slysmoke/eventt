@@ -54,8 +54,8 @@ object TokenCrypto {
     }
 
     /** Returns null if [stored] isn't validly encrypted (e.g. pre-encryption plaintext, or a lost key) — callers should treat that as an invalid/expired token rather than crash. */
-    fun decrypt(stored: String): String? {
-        return runCatching {
+    fun decrypt(stored: String): String? =
+        runCatching {
             val raw = Base64.getDecoder().decode(stored)
             val iv = raw.copyOfRange(0, GCM_IV_BYTES)
             val ciphertext = raw.copyOfRange(GCM_IV_BYTES, raw.size)
@@ -63,5 +63,4 @@ object TokenCrypto {
             cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, iv))
             String(cipher.doFinal(ciphertext), Charsets.UTF_8)
         }.getOrNull()
-    }
 }

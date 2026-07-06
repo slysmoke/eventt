@@ -27,7 +27,13 @@ private const val SHORTCUT_ID = "cycle-queue"
 @DBusInterfaceName("org.freedesktop.portal.GlobalShortcuts")
 interface GlobalShortcuts : DBusInterface {
     fun CreateSession(options: Map<String, Variant<*>>): DBusPath
-    fun BindShortcuts(sessionHandle: DBusPath, shortcuts: List<ShortcutDescription>, parentWindow: String, options: Map<String, Variant<*>>): DBusPath
+
+    fun BindShortcuts(
+        sessionHandle: DBusPath,
+        shortcuts: List<ShortcutDescription>,
+        parentWindow: String,
+        options: Map<String, Variant<*>>,
+    ): DBusPath
 
     // Body args are matched to these constructor params positionally by dbus-java's signal
     // deserializer (same convention as org.freedesktop.dbus.interfaces.Properties$PropertiesChanged) -
@@ -74,17 +80,17 @@ interface PortalRequest : DBusInterface {
  * works via XWayland on any Wayland session).
  */
 class PortalHotkeyBackend : HotkeyBackend {
-
     private var connection: DBusConnection? = null
     private var sigHandlerCloser: AutoCloseable? = null
 
     override fun start(onTrigger: () -> Unit): Boolean {
-        val conn = try {
-            DBusConnectionBuilder.forSessionBus().build()
-        } catch (e: Throwable) {
-            println("[Hotkey][Portal] Could not connect to session bus: ${e.message}")
-            return false
-        }
+        val conn =
+            try {
+                DBusConnectionBuilder.forSessionBus().build()
+            } catch (e: Throwable) {
+                println("[Hotkey][Portal] Could not connect to session bus: ${e.message}")
+                return false
+            }
         connection = conn
 
         return try {
@@ -97,14 +103,15 @@ class PortalHotkeyBackend : HotkeyBackend {
 
             val globalShortcuts = conn.getRemoteObject(BUS_NAME, OBJECT_PATH, GlobalShortcuts::class.java)
 
-            val sessionHandle = callAndAwaitResponse(conn, "session") { token ->
-                globalShortcuts.CreateSession(
-                    mapOf(
-                        "handle_token" to Variant(token),
-                        "session_handle_token" to Variant(token),
-                    ),
-                )
-            }?.get("session_handle")?.value as? DBusPath
+            val sessionHandle =
+                callAndAwaitResponse(conn, "session") { token ->
+                    globalShortcuts.CreateSession(
+                        mapOf(
+                            "handle_token" to Variant(token),
+                            "session_handle_token" to Variant(token),
+                        ),
+                    )
+                }?.get("session_handle")?.value as? DBusPath
 
             if (sessionHandle == null) {
                 println("[Hotkey][Portal] CreateSession did not return a session handle")
@@ -112,21 +119,24 @@ class PortalHotkeyBackend : HotkeyBackend {
                 return false
             }
 
-            val shortcut = ShortcutDescription(SHORTCUT_ID, mapOf("description" to Variant("Cycle EVE Night Trade Tools order/trade queue")))
-            val bound = callAndAwaitResponse(conn, "bind") { token ->
-                globalShortcuts.BindShortcuts(sessionHandle, listOf(shortcut), "", mapOf("handle_token" to Variant(token)))
-            }
+            val shortcut =
+                ShortcutDescription(SHORTCUT_ID, mapOf("description" to Variant("Cycle EVE Night Trade Tools order/trade queue")))
+            val bound =
+                callAndAwaitResponse(conn, "bind") { token ->
+                    globalShortcuts.BindShortcuts(sessionHandle, listOf(shortcut), "", mapOf("handle_token" to Variant(token)))
+                }
             if (bound == null) {
                 println("[Hotkey][Portal] BindShortcuts did not complete")
                 disconnect()
                 return false
             }
 
-            val handler = DBusSigHandler<GlobalShortcuts.Activated> { signal ->
-                if (signal.sessionHandle == sessionHandle && signal.shortcutId == SHORTCUT_ID) {
-                    onTrigger()
+            val handler =
+                DBusSigHandler<GlobalShortcuts.Activated> { signal ->
+                    if (signal.sessionHandle == sessionHandle && signal.shortcutId == SHORTCUT_ID) {
+                        onTrigger()
+                    }
                 }
-            }
             sigHandlerCloser = conn.addSigHandler(GlobalShortcuts.Activated::class.java, BUS_NAME, handler)
 
             println("[Hotkey][Portal] Global shortcut session bound - assign a key combo via the system dialog if prompted")
@@ -161,15 +171,16 @@ class PortalHotkeyBackend : HotkeyBackend {
 
         val requestPath = invoke(token)
         val requestObj = conn.getRemoteObject(BUS_NAME, requestPath.path, PortalRequest::class.java)
-        val closer = conn.addSigHandler(
-            PortalRequest.Response::class.java,
-            BUS_NAME,
-            requestObj,
-            DBusSigHandler<PortalRequest.Response> { signal ->
-                if (signal.response.toInt() == 0) results = signal.results
-                latch.countDown()
-            },
-        )
+        val closer =
+            conn.addSigHandler(
+                PortalRequest.Response::class.java,
+                BUS_NAME,
+                requestObj,
+                DBusSigHandler<PortalRequest.Response> { signal ->
+                    if (signal.response.toInt() == 0) results = signal.results
+                    latch.countDown()
+                },
+            )
         try {
             latch.await(10, TimeUnit.SECONDS)
         } finally {

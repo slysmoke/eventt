@@ -3,7 +3,6 @@ package org.eventt.core.database
 import java.sql.Types
 
 object OrderHistoryDao {
-
     data class OrderHistoryRecord(
         val orderId: Long,
         val typeId: Int,
@@ -25,12 +24,13 @@ object OrderHistoryDao {
     fun upsertAll(records: List<OrderHistoryRecord>) {
         if (records.isEmpty()) return
         DatabaseManager.transaction {
-            val sql = """
+            val sql =
+                """
                 INSERT OR REPLACE INTO order_history
                 (order_id, type_id, type_name, location_id, station_name, price, volume_total,
                  volume_remaining, is_buy_order, duration, issued, range, min_volume, state, character_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """.trimIndent()
+                """.trimIndent()
             prepareStatement(sql).use { ps ->
                 records.forEach { r ->
                     ps.setLong(1, r.orderId)
@@ -55,12 +55,17 @@ object OrderHistoryDao {
         }
     }
 
-    fun getAll(charId: Int, isBuyOrder: Boolean? = null, limit: Int = 1000): List<OrderHistoryRecord> {
-        val sql = buildString {
-            append("SELECT * FROM order_history WHERE character_id = ?")
-            if (isBuyOrder != null) append(" AND is_buy_order = ${if (isBuyOrder) 1 else 0}")
-            append(" ORDER BY issued DESC LIMIT ?")
-        }
+    fun getAll(
+        charId: Int,
+        isBuyOrder: Boolean? = null,
+        limit: Int = 1000,
+    ): List<OrderHistoryRecord> {
+        val sql =
+            buildString {
+                append("SELECT * FROM order_history WHERE character_id = ?")
+                if (isBuyOrder != null) append(" AND is_buy_order = ${if (isBuyOrder) 1 else 0}")
+                append(" ORDER BY issued DESC LIMIT ?")
+            }
         return DatabaseManager.transaction {
             prepareStatement(sql).use { ps ->
                 ps.setInt(1, charId)
@@ -85,7 +90,7 @@ object OrderHistoryDao {
                             minVolume = rs.getInt("min_volume"),
                             state = rs.getString("state") ?: "expired",
                             characterId = rs.getInt("character_id").takeIf { !rs.wasNull() },
-                        )
+                        ),
                     )
                 }
                 result

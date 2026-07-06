@@ -9,7 +9,6 @@ import org.eventt.core.model.StaticSystemModel
 import org.eventt.core.model.StaticTypeModel
 
 object StaticDataDao {
-
     // ─── Types ────────────────────────────────────────────────────────────
 
     fun insertType(type: StaticTypeModel) {
@@ -19,7 +18,7 @@ object StaticDataDao {
                 INSERT OR REPLACE INTO static_types
                 (type_id, name, group_id, category_id, volume, packaged_volume, portion_size, description, icon_id, published, market_group_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """.trimIndent()
+                """.trimIndent(),
             ).use { stmt ->
                 stmt.setInt(1, type.typeId)
                 stmt.setString(2, type.name)
@@ -45,7 +44,7 @@ object StaticDataDao {
                 INSERT OR REPLACE INTO static_types
                 (type_id, name, group_id, category_id, volume, packaged_volume, portion_size, description, icon_id, published, market_group_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """.trimIndent()
+                """.trimIndent(),
             ).use { stmt ->
                 types.forEach { type ->
                     stmt.setInt(1, type.typeId)
@@ -66,8 +65,8 @@ object StaticDataDao {
         }
     }
 
-    fun getTypeById(typeId: Int): StaticTypeModel? {
-        return DatabaseManager.transaction {
+    fun getTypeById(typeId: Int): StaticTypeModel? =
+        DatabaseManager.transaction {
             prepareStatement("SELECT * FROM static_types WHERE type_id = ?").use { stmt ->
                 stmt.setInt(1, typeId)
                 stmt.executeQuery().use { rs ->
@@ -75,10 +74,9 @@ object StaticDataDao {
                 }
             }
         }
-    }
 
-    fun getTypeName(typeId: Int): String? {
-        return DatabaseManager.transaction {
+    fun getTypeName(typeId: Int): String? =
+        DatabaseManager.transaction {
             prepareStatement("SELECT name FROM static_types WHERE type_id = ?").use { stmt ->
                 stmt.setInt(1, typeId)
                 stmt.executeQuery().use { rs ->
@@ -86,16 +84,18 @@ object StaticDataDao {
                 }
             }
         }
-    }
 
     /** Search published types — includes non-market items (for assets, contracts). */
-    fun searchTypes(query: String, limit: Int = 50): List<StaticTypeModel> {
-        return DatabaseManager.transaction {
+    fun searchTypes(
+        query: String,
+        limit: Int = 50,
+    ): List<StaticTypeModel> =
+        DatabaseManager.transaction {
             prepareStatement(
                 """SELECT * FROM static_types WHERE published = 1 AND name LIKE ?
                    ORDER BY CASE WHEN lower(name) = lower(?) THEN 0
                                  WHEN lower(name) LIKE lower(?) || '%' THEN 1
-                                 ELSE 2 END, name LIMIT ?"""
+                                 ELSE 2 END, name LIMIT ?""",
             ).use { stmt ->
                 stmt.setString(1, "%$query%")
                 stmt.setString(2, query)
@@ -104,16 +104,18 @@ object StaticDataDao {
                 stmt.executeQuery().mapResultSetToTypes()
             }
         }
-    }
 
     /** Search only market-tradeable types (market_group_id IS NOT NULL). */
-    fun searchMarketTypes(query: String, limit: Int = 50): List<StaticTypeModel> {
-        return DatabaseManager.transaction {
+    fun searchMarketTypes(
+        query: String,
+        limit: Int = 50,
+    ): List<StaticTypeModel> =
+        DatabaseManager.transaction {
             prepareStatement(
                 """SELECT * FROM static_types WHERE market_group_id IS NOT NULL AND name LIKE ?
                    ORDER BY CASE WHEN lower(name) = lower(?) THEN 0
                                  WHEN lower(name) LIKE lower(?) || '%' THEN 1
-                                 ELSE 2 END, name LIMIT ?"""
+                                 ELSE 2 END, name LIMIT ?""",
             ).use { stmt ->
                 stmt.setString(1, "%$query%")
                 stmt.setString(2, query)
@@ -122,43 +124,39 @@ object StaticDataDao {
                 stmt.executeQuery().mapResultSetToTypes()
             }
         }
-    }
 
-    fun getTypesByGroup(groupId: Int): List<StaticTypeModel> {
-        return DatabaseManager.transaction {
+    fun getTypesByGroup(groupId: Int): List<StaticTypeModel> =
+        DatabaseManager.transaction {
             prepareStatement(
-                "SELECT * FROM static_types WHERE group_id = ? AND published = 1 ORDER BY name"
+                "SELECT * FROM static_types WHERE group_id = ? AND published = 1 ORDER BY name",
             ).use { stmt ->
                 stmt.setInt(1, groupId)
                 stmt.executeQuery().mapResultSetToTypes()
             }
         }
-    }
 
-    fun getCitadelCount(): Int {
-        return DatabaseManager.transaction {
+    fun getCitadelCount(): Int =
+        DatabaseManager.transaction {
             prepareStatement("SELECT COUNT(*) FROM static_stations WHERE station_id > 1000000000000").use { stmt ->
                 stmt.executeQuery().use { rs -> if (rs.next()) rs.getInt(1) else 0 }
             }
         }
-    }
 
-    fun countTypes(): Int {
-        return DatabaseManager.transaction {
+    fun countTypes(): Int =
+        DatabaseManager.transaction {
             prepareStatement("SELECT COUNT(*) FROM static_types").use { stmt ->
                 stmt.executeQuery().use { rs ->
                     if (rs.next()) rs.getInt(1) else 0
                 }
             }
         }
-    }
 
     // ─── Groups ───────────────────────────────────────────────────────────
 
     fun insertGroup(group: StaticGroupModel) {
         DatabaseManager.transaction {
             prepareStatement(
-                "INSERT OR REPLACE INTO static_groups (group_id, name, category_id) VALUES (?, ?, ?)"
+                "INSERT OR REPLACE INTO static_groups (group_id, name, category_id) VALUES (?, ?, ?)",
             ).use { stmt ->
                 stmt.setInt(1, group.groupId)
                 stmt.setString(2, group.name)
@@ -172,7 +170,7 @@ object StaticDataDao {
         if (groups.isEmpty()) return
         DatabaseManager.transaction {
             prepareStatement(
-                "INSERT OR REPLACE INTO static_groups (group_id, name, category_id) VALUES (?, ?, ?)"
+                "INSERT OR REPLACE INTO static_groups (group_id, name, category_id) VALUES (?, ?, ?)",
             ).use { stmt ->
                 groups.forEach { group ->
                     stmt.setInt(1, group.groupId)
@@ -185,8 +183,8 @@ object StaticDataDao {
         }
     }
 
-    fun getGroupById(groupId: Int): StaticGroupModel? {
-        return DatabaseManager.transaction {
+    fun getGroupById(groupId: Int): StaticGroupModel? =
+        DatabaseManager.transaction {
             prepareStatement("SELECT * FROM static_groups WHERE group_id = ?").use { stmt ->
                 stmt.setInt(1, groupId)
                 stmt.executeQuery().use { rs ->
@@ -196,29 +194,29 @@ object StaticDataDao {
                             name = rs.getString("name"),
                             categoryId = rs.getInt("category_id"),
                         )
-                    } else null
+                    } else {
+                        null
+                    }
                 }
             }
         }
-    }
 
-    fun getGroupNameForType(typeId: Int): String? {
-        return DatabaseManager.transaction {
+    fun getGroupNameForType(typeId: Int): String? =
+        DatabaseManager.transaction {
             prepareStatement(
-                "SELECT g.name FROM static_types t JOIN static_groups g ON t.group_id = g.group_id WHERE t.type_id = ?"
+                "SELECT g.name FROM static_types t JOIN static_groups g ON t.group_id = g.group_id WHERE t.type_id = ?",
             ).use { stmt ->
                 stmt.setInt(1, typeId)
                 stmt.executeQuery().use { rs -> if (rs.next()) rs.getString(1) else null }
             }
         }
-    }
 
     // ─── Market Groups ──────────────────────────────────────────────────
 
     fun insertMarketGroup(group: StaticMarketGroupModel) {
         DatabaseManager.transaction {
             prepareStatement(
-                "INSERT OR REPLACE INTO market_groups (market_group_id, name, parent_group_id) VALUES (?, ?, ?)"
+                "INSERT OR REPLACE INTO market_groups (market_group_id, name, parent_group_id) VALUES (?, ?, ?)",
             ).use { stmt ->
                 stmt.setInt(1, group.marketGroupId)
                 stmt.setString(2, group.name)
@@ -232,7 +230,7 @@ object StaticDataDao {
         if (groups.isEmpty()) return
         DatabaseManager.transaction {
             prepareStatement(
-                "INSERT OR REPLACE INTO market_groups (market_group_id, name, parent_group_id) VALUES (?, ?, ?)"
+                "INSERT OR REPLACE INTO market_groups (market_group_id, name, parent_group_id) VALUES (?, ?, ?)",
             ).use { stmt ->
                 groups.forEach { g ->
                     stmt.setInt(1, g.marketGroupId)
@@ -246,47 +244,47 @@ object StaticDataDao {
     }
 
     /** Get top-level market groups (no parent). */
-    fun getTopMarketGroups(): List<StaticMarketGroupModel> {
-        return DatabaseManager.transaction {
+    fun getTopMarketGroups(): List<StaticMarketGroupModel> =
+        DatabaseManager.transaction {
             prepareStatement(
-                "SELECT * FROM market_groups WHERE parent_group_id IS NULL ORDER BY name"
+                "SELECT * FROM market_groups WHERE parent_group_id IS NULL ORDER BY name",
             ).use { stmt ->
                 stmt.executeQuery().mapResultSetToMarketGroups()
             }
         }
-    }
 
     /** Get child market groups of a given parent. */
-    fun getChildMarketGroups(parentGroupId: Int): List<StaticMarketGroupModel> {
-        return DatabaseManager.transaction {
+    fun getChildMarketGroups(parentGroupId: Int): List<StaticMarketGroupModel> =
+        DatabaseManager.transaction {
             prepareStatement(
-                "SELECT * FROM market_groups WHERE parent_group_id = ? ORDER BY name"
+                "SELECT * FROM market_groups WHERE parent_group_id = ? ORDER BY name",
             ).use { stmt ->
                 stmt.setInt(1, parentGroupId)
                 stmt.executeQuery().mapResultSetToMarketGroups()
             }
         }
-    }
 
     /** Get types that belong to a specific market group. */
-    fun getTypesByMarketGroup(marketGroupId: Int, limit: Int = 200): List<StaticTypeModel> {
-        return DatabaseManager.transaction {
+    fun getTypesByMarketGroup(
+        marketGroupId: Int,
+        limit: Int = 200,
+    ): List<StaticTypeModel> =
+        DatabaseManager.transaction {
             prepareStatement(
-                "SELECT * FROM static_types WHERE market_group_id = ? AND published = 1 ORDER BY name LIMIT ?"
+                "SELECT * FROM static_types WHERE market_group_id = ? AND published = 1 ORDER BY name LIMIT ?",
             ).use { stmt ->
                 stmt.setInt(1, marketGroupId)
                 stmt.setInt(2, limit)
                 stmt.executeQuery().mapResultSetToTypes()
             }
         }
-    }
 
     fun getTypeIdsByMarketGroups(groupIds: Set<Int>): List<Int> {
         if (groupIds.isEmpty()) return emptyList()
         val placeholders = groupIds.joinToString(",") { "?" }
         return DatabaseManager.transaction {
             prepareStatement(
-                "SELECT type_id FROM static_types WHERE market_group_id IN ($placeholders) AND published = 1"
+                "SELECT type_id FROM static_types WHERE market_group_id IN ($placeholders) AND published = 1",
             ).use { stmt ->
                 groupIds.forEachIndexed { i, id -> stmt.setInt(i + 1, id) }
                 stmt.executeQuery().use { rs ->
@@ -298,10 +296,10 @@ object StaticDataDao {
         }
     }
 
-    fun getAllMarketTypeIds(): List<Int> {
-        return DatabaseManager.transaction {
+    fun getAllMarketTypeIds(): List<Int> =
+        DatabaseManager.transaction {
             prepareStatement(
-                "SELECT type_id FROM static_types WHERE market_group_id IS NOT NULL AND published = 1"
+                "SELECT type_id FROM static_types WHERE market_group_id IS NOT NULL AND published = 1",
             ).use { stmt ->
                 stmt.executeQuery().use { rs ->
                     val list = mutableListOf<Int>()
@@ -310,10 +308,9 @@ object StaticDataDao {
                 }
             }
         }
-    }
 
-    fun getMarketGroupById(marketGroupId: Int): StaticMarketGroupModel? {
-        return DatabaseManager.transaction {
+    fun getMarketGroupById(marketGroupId: Int): StaticMarketGroupModel? =
+        DatabaseManager.transaction {
             prepareStatement("SELECT * FROM market_groups WHERE market_group_id = ?").use { stmt ->
                 stmt.setInt(1, marketGroupId)
                 stmt.executeQuery().use { rs ->
@@ -323,11 +320,12 @@ object StaticDataDao {
                             name = rs.getString("name"),
                             parentGroupId = rs.getInt("parent_group_id").takeIf { !rs.wasNull() },
                         )
-                    } else null
+                    } else {
+                        null
+                    }
                 }
             }
         }
-    }
 
     private fun java.sql.ResultSet.mapResultSetToMarketGroups(): List<StaticMarketGroupModel> {
         val list = mutableListOf<StaticMarketGroupModel>()
@@ -337,7 +335,7 @@ object StaticDataDao {
                     marketGroupId = getInt("market_group_id"),
                     name = getString("name"),
                     parentGroupId = getInt("parent_group_id").takeIf { !wasNull() },
-                )
+                ),
             )
         }
         return list
@@ -349,7 +347,7 @@ object StaticDataDao {
         if (categories.isEmpty()) return
         DatabaseManager.transaction {
             prepareStatement(
-                "INSERT OR REPLACE INTO static_categories (category_id, name) VALUES (?, ?)"
+                "INSERT OR REPLACE INTO static_categories (category_id, name) VALUES (?, ?)",
             ).use { stmt ->
                 categories.forEach { cat ->
                     stmt.setInt(1, cat.categoryId)
@@ -369,7 +367,7 @@ object StaticDataDao {
                 """
                 INSERT OR REPLACE INTO static_stations (station_id, name, system_id, system_name, region_id, region_name, type_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-                """.trimIndent()
+                """.trimIndent(),
             ).use { stmt ->
                 stmt.setLong(1, station.stationId)
                 stmt.setString(2, station.name)
@@ -390,7 +388,7 @@ object StaticDataDao {
                 """
                 INSERT OR REPLACE INTO static_stations (station_id, name, system_id, system_name, region_id, region_name, type_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-                """.trimIndent()
+                """.trimIndent(),
             ).use { stmt ->
                 stations.forEach { station ->
                     stmt.setLong(1, station.stationId)
@@ -407,8 +405,8 @@ object StaticDataDao {
         }
     }
 
-    fun getStationById(stationId: Long): StaticStationModel? {
-        return DatabaseManager.transaction {
+    fun getStationById(stationId: Long): StaticStationModel? =
+        DatabaseManager.transaction {
             prepareStatement("SELECT * FROM static_stations WHERE station_id = ?").use { stmt ->
                 stmt.setLong(1, stationId)
                 stmt.executeQuery().use { rs ->
@@ -416,33 +414,33 @@ object StaticDataDao {
                 }
             }
         }
-    }
 
-    fun getStationsByRegion(regionId: Int): List<StaticStationModel> {
-        return DatabaseManager.transaction {
+    fun getStationsByRegion(regionId: Int): List<StaticStationModel> =
+        DatabaseManager.transaction {
             prepareStatement("SELECT * FROM static_stations WHERE region_id = ? ORDER BY name").use { stmt ->
                 stmt.setInt(1, regionId)
                 stmt.executeQuery().mapResultSetToStations()
             }
         }
-    }
 
-    fun searchStations(query: String, limit: Int = 20): List<StaticStationModel> {
-        return DatabaseManager.transaction {
+    fun searchStations(
+        query: String,
+        limit: Int = 20,
+    ): List<StaticStationModel> =
+        DatabaseManager.transaction {
             prepareStatement("SELECT * FROM static_stations WHERE name LIKE ? ORDER BY name LIMIT ?").use { stmt ->
                 stmt.setString(1, "%$query%")
                 stmt.setInt(2, limit)
                 stmt.executeQuery().mapResultSetToStations()
             }
         }
-    }
 
     // ─── Regions ──────────────────────────────────────────────────────────
 
     fun insertRegion(region: StaticRegionModel) {
         DatabaseManager.transaction {
             prepareStatement(
-                "INSERT OR REPLACE INTO static_regions (region_id, name) VALUES (?, ?)"
+                "INSERT OR REPLACE INTO static_regions (region_id, name) VALUES (?, ?)",
             ).use { stmt ->
                 stmt.setInt(1, region.regionId)
                 stmt.setString(2, region.name)
@@ -455,7 +453,7 @@ object StaticDataDao {
         if (regions.isEmpty()) return
         DatabaseManager.transaction {
             prepareStatement(
-                "INSERT OR REPLACE INTO static_regions (region_id, name) VALUES (?, ?)"
+                "INSERT OR REPLACE INTO static_regions (region_id, name) VALUES (?, ?)",
             ).use { stmt ->
                 regions.forEach { region ->
                     stmt.setInt(1, region.regionId)
@@ -467,8 +465,8 @@ object StaticDataDao {
         }
     }
 
-    fun getAllRegions(): List<StaticRegionModel> {
-        return DatabaseManager.transaction {
+    fun getAllRegions(): List<StaticRegionModel> =
+        DatabaseManager.transaction {
             prepareStatement("SELECT * FROM static_regions ORDER BY name").use { stmt ->
                 stmt.executeQuery().use { rs ->
                     val list = mutableListOf<StaticRegionModel>()
@@ -479,14 +477,13 @@ object StaticDataDao {
                 }
             }
         }
-    }
 
     // ─── Systems ──────────────────────────────────────────────────────────
 
     fun insertSystem(system: StaticSystemModel) {
         DatabaseManager.transaction {
             prepareStatement(
-                "INSERT OR REPLACE INTO static_systems (system_id, name, region_id) VALUES (?, ?, ?)"
+                "INSERT OR REPLACE INTO static_systems (system_id, name, region_id) VALUES (?, ?, ?)",
             ).use { stmt ->
                 stmt.setInt(1, system.systemId)
                 stmt.setString(2, system.name)
@@ -500,7 +497,7 @@ object StaticDataDao {
         if (systems.isEmpty()) return
         DatabaseManager.transaction {
             prepareStatement(
-                "INSERT OR REPLACE INTO static_systems (system_id, name, region_id) VALUES (?, ?, ?)"
+                "INSERT OR REPLACE INTO static_systems (system_id, name, region_id) VALUES (?, ?, ?)",
             ).use { stmt ->
                 systems.forEach { system ->
                     stmt.setInt(1, system.systemId)
@@ -513,8 +510,8 @@ object StaticDataDao {
         }
     }
 
-    fun getSystemRegionId(systemId: Int): Int? {
-        return DatabaseManager.transaction {
+    fun getSystemRegionId(systemId: Int): Int? =
+        DatabaseManager.transaction {
             prepareStatement("SELECT region_id FROM static_systems WHERE system_id = ?").use { stmt ->
                 stmt.setInt(1, systemId)
                 stmt.executeQuery().use { rs ->
@@ -522,27 +519,27 @@ object StaticDataDao {
                 }
             }
         }
-    }
 
-    fun getSystemById(systemId: Int): StaticSystemModel? {
-        return DatabaseManager.transaction {
+    fun getSystemById(systemId: Int): StaticSystemModel? =
+        DatabaseManager.transaction {
             prepareStatement("SELECT * FROM static_systems WHERE system_id = ?").use { stmt ->
                 stmt.setInt(1, systemId)
                 stmt.executeQuery().use { rs ->
                     if (rs.next()) {
                         StaticSystemModel(
                             systemId = rs.getInt("system_id"),
-                            name     = rs.getString("name"),
+                            name = rs.getString("name"),
                             regionId = rs.getInt("region_id"),
                         )
-                    } else null
+                    } else {
+                        null
+                    }
                 }
             }
         }
-    }
 
-    fun getRegionById(regionId: Int): StaticRegionModel? {
-        return DatabaseManager.transaction {
+    fun getRegionById(regionId: Int): StaticRegionModel? =
+        DatabaseManager.transaction {
             prepareStatement("SELECT * FROM static_regions WHERE region_id = ?").use { stmt ->
                 stmt.setInt(1, regionId)
                 stmt.executeQuery().use { rs ->
@@ -550,10 +547,9 @@ object StaticDataDao {
                 }
             }
         }
-    }
 
-    fun getSystemIdsByRegion(regionId: Int): List<Int> {
-        return DatabaseManager.transaction {
+    fun getSystemIdsByRegion(regionId: Int): List<Int> =
+        DatabaseManager.transaction {
             prepareStatement("SELECT system_id FROM static_systems WHERE region_id = ?").use { stmt ->
                 stmt.setInt(1, regionId)
                 stmt.executeQuery().use { rs ->
@@ -563,18 +559,16 @@ object StaticDataDao {
                 }
             }
         }
-    }
 
     // ─── Jump graph (stargate connectivity) ────────────────────────────────
 
-    fun isSystemJumpsFetched(systemId: Int): Boolean {
-        return DatabaseManager.transaction {
+    fun isSystemJumpsFetched(systemId: Int): Boolean =
+        DatabaseManager.transaction {
             prepareStatement("SELECT 1 FROM static_system_jumps_fetched WHERE system_id = ?").use { stmt ->
                 stmt.setInt(1, systemId)
                 stmt.executeQuery().use { rs -> rs.next() }
             }
         }
-    }
 
     fun markSystemJumpsFetched(systemId: Int) {
         DatabaseManager.transaction {
@@ -590,11 +584,15 @@ object StaticDataDao {
         if (edges.isEmpty()) return
         DatabaseManager.transaction {
             prepareStatement(
-                "INSERT OR REPLACE INTO static_system_jumps (system_id, neighbor_system_id) VALUES (?, ?)"
+                "INSERT OR REPLACE INTO static_system_jumps (system_id, neighbor_system_id) VALUES (?, ?)",
             ).use { stmt ->
                 edges.forEach { (a, b) ->
-                    stmt.setInt(1, a); stmt.setInt(2, b); stmt.addBatch()
-                    stmt.setInt(1, b); stmt.setInt(2, a); stmt.addBatch()
+                    stmt.setInt(1, a)
+                    stmt.setInt(2, b)
+                    stmt.addBatch()
+                    stmt.setInt(1, b)
+                    stmt.setInt(2, a)
+                    stmt.addBatch()
                 }
                 stmt.executeBatch()
             }
@@ -607,7 +605,7 @@ object StaticDataDao {
         return DatabaseManager.transaction {
             val placeholders = systemIds.joinToString(",") { "?" }
             prepareStatement(
-                "SELECT system_id, neighbor_system_id FROM static_system_jumps WHERE system_id IN ($placeholders)"
+                "SELECT system_id, neighbor_system_id FROM static_system_jumps WHERE system_id IN ($placeholders)",
             ).use { stmt ->
                 systemIds.forEachIndexed { i, id -> stmt.setInt(i + 1, id) }
                 stmt.executeQuery().use { rs ->
@@ -623,8 +621,8 @@ object StaticDataDao {
 
     // ─── Settings ─────────────────────────────────────────────────────────
 
-    fun getSetting(key: String): String? {
-        return DatabaseManager.transaction {
+    fun getSetting(key: String): String? =
+        DatabaseManager.transaction {
             prepareStatement("SELECT value FROM settings WHERE key = ?").use { stmt ->
                 stmt.setString(1, key)
                 stmt.executeQuery().use { rs ->
@@ -632,12 +630,14 @@ object StaticDataDao {
                 }
             }
         }
-    }
 
-    fun setSetting(key: String, value: String) {
+    fun setSetting(
+        key: String,
+        value: String,
+    ) {
         DatabaseManager.transaction {
             prepareStatement(
-                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)"
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
             ).use { stmt ->
                 stmt.setString(1, key)
                 stmt.setString(2, value)
@@ -648,15 +648,24 @@ object StaticDataDao {
 
     // ─── Character tax settings ───────────────────────────────────────────
 
-    fun getCharSalesTax(charId: Int): Double  = getSetting("char.$charId.sales_tax")?.toDoubleOrNull()  ?: 8.0
+    fun getCharSalesTax(charId: Int): Double = getSetting("char.$charId.sales_tax")?.toDoubleOrNull() ?: 8.0
+
     fun getCharBrokersFee(charId: Int): Double = getSetting("char.$charId.brokers_fee")?.toDoubleOrNull() ?: 3.0
-    fun setCharSalesTax(charId: Int, pct: Double)   = setSetting("char.$charId.sales_tax",   "%.4f".format(pct))
-    fun setCharBrokersFee(charId: Int, pct: Double) = setSetting("char.$charId.brokers_fee", "%.4f".format(pct))
+
+    fun setCharSalesTax(
+        charId: Int,
+        pct: Double,
+    ) = setSetting("char.$charId.sales_tax", "%.4f".format(pct))
+
+    fun setCharBrokersFee(
+        charId: Int,
+        pct: Double,
+    ) = setSetting("char.$charId.brokers_fee", "%.4f".format(pct))
 
     // ─── Helpers ──────────────────────────────────────────────────────────
 
-    private fun java.sql.ResultSet.mapResultSetToType(): StaticTypeModel {
-        return StaticTypeModel(
+    private fun java.sql.ResultSet.mapResultSetToType(): StaticTypeModel =
+        StaticTypeModel(
             typeId = getInt("type_id"),
             name = getString("name"),
             groupId = getInt("group_id"),
@@ -669,7 +678,6 @@ object StaticDataDao {
             published = getInt("published") == 1,
             marketGroupId = getInt("market_group_id").takeIf { !wasNull() },
         )
-    }
 
     private fun java.sql.ResultSet.mapResultSetToTypes(): List<StaticTypeModel> {
         val list = mutableListOf<StaticTypeModel>()
@@ -677,8 +685,8 @@ object StaticDataDao {
         return list
     }
 
-    private fun java.sql.ResultSet.mapResultSetToStation(): StaticStationModel {
-        return StaticStationModel(
+    private fun java.sql.ResultSet.mapResultSetToStation(): StaticStationModel =
+        StaticStationModel(
             stationId = getLong("station_id"),
             name = getString("name"),
             systemId = getInt("system_id"),
@@ -687,7 +695,6 @@ object StaticDataDao {
             regionName = getString("region_name") ?: "",
             typeId = getInt("type_id"),
         )
-    }
 
     private fun java.sql.ResultSet.mapResultSetToStations(): List<StaticStationModel> {
         val list = mutableListOf<StaticStationModel>()

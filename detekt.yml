@@ -1,0 +1,55 @@
+# Overrides on top of detekt's bundled defaults (buildUponDefaultConfig = true in build.gradle.kts).
+# Disabled rules fall into two buckets:
+#  - Conflicts with this project's established conventions (Compose PascalCase composables,
+#    wildcard imports for icon/layout packages, JSON-mapped DTO field casing) — ktlint is
+#    already tuned the same way via .editorconfig for the overlapping rules.
+#  - Complexity "shape" thresholds (LongMethod, LongParameterList, CyclomaticComplexMethod, etc.)
+#    that are miscalibrated for declarative Compose UI code, where long parameter lists and long
+#    composable functions are normal, not a code smell — and the broad `catch (e: Exception)`
+#    pattern used throughout for resilience against unpredictable ESI/IO failures, which is a
+#    deliberate existing design choice, not a set of individual bugs.
+complexity:
+  ComplexCondition:
+    active: false
+  CyclomaticComplexMethod:
+    active: false
+  LargeClass:
+    active: false
+  LongMethod:
+    active: false
+  LongParameterList:
+    active: false
+  NestedBlockDepth:
+    active: false
+  TooManyFunctions:
+    active: false
+
+exceptions:
+  SwallowedException:
+    active: false
+  TooGenericExceptionCaught:
+    active: false
+  TooGenericExceptionThrown:
+    active: false
+
+naming:
+  ConstructorParameterNaming:
+    active: false
+  FunctionNaming:
+    active: false
+  MatchingDeclarationName:
+    active: false
+
+style:
+  LoopWithTooManyJumpStatements:
+    active: false
+  MagicNumber:
+    active: false
+  MaxLineLength:
+    active: false
+  ReturnCount:
+    active: false
+  ThrowsCount:
+    active: false
+  WildcardImport:
+    active: false

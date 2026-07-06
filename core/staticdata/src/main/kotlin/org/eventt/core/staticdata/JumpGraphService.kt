@@ -22,15 +22,20 @@ import java.util.concurrent.atomic.AtomicInteger
  * ever and persisted locally afterward, since stargate topology never changes.
  */
 object JumpGraphService {
-
-    data class Progress(val fetched: Int, val total: Int)
+    data class Progress(
+        val fetched: Int,
+        val total: Int,
+    )
 
     /**
      * Ensures every system in [regionId] has its stargate edges cached locally, fetching any
      * missing ones from ESI (public endpoints, no auth needed). Safe to call at the start of
      * every analysis run — regions fetched in a previous run return almost immediately.
      */
-    suspend fun ensureRegionGraph(regionId: Int, onProgress: (Progress) -> Unit = {}) {
+    suspend fun ensureRegionGraph(
+        regionId: Int,
+        onProgress: (Progress) -> Unit = {},
+    ) {
         withContext(Dispatchers.IO) {
             val systemIds = StaticDataDao.getSystemIdsByRegion(regionId)
             val missing = systemIds.filterNot { StaticDataDao.isSystemJumpsFetched(it) }
@@ -39,14 +44,15 @@ object JumpGraphService {
             val fetched = AtomicInteger(0)
             val semaphore = Semaphore(10)
             coroutineScope {
-                missing.map { systemId ->
-                    async {
-                        semaphore.withPermit {
-                            runCatching { fetchSystemEdges(systemId) }
-                            onProgress(Progress(fetched.incrementAndGet(), missing.size))
+                missing
+                    .map { systemId ->
+                        async {
+                            semaphore.withPermit {
+                                runCatching { fetchSystemEdges(systemId) }
+                                onProgress(Progress(fetched.incrementAndGet(), missing.size))
+                            }
                         }
-                    }
-                }.awaitAll()
+                    }.awaitAll()
             }
         }
     }
@@ -54,13 +60,14 @@ object JumpGraphService {
     private fun fetchSystemEdges(systemId: Int) {
         val system = EsiClient.getUniverseSystem(systemId)
         val stargateIds = (system["stargates"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() } ?: emptyList()
-        val edges = stargateIds.mapNotNull { gateId ->
-            runCatching {
-                val gate = EsiClient.getUniverseStargate(gateId)
-                val destSystemId = ((gate["destination"] as? Map<*, *>)?.get("system_id") as? Number)?.toInt()
-                destSystemId?.let { systemId to it }
-            }.getOrNull()
-        }
+        val edges =
+            stargateIds.mapNotNull { gateId ->
+                runCatching {
+                    val gate = EsiClient.getUniverseStargate(gateId)
+                    val destSystemId = ((gate["destination"] as? Map<*, *>)?.get("system_id") as? Number)?.toInt()
+                    destSystemId?.let { systemId to it }
+                }.getOrNull()
+            }
         if (edges.isNotEmpty()) StaticDataDao.insertSystemJumpEdges(edges)
         StaticDataDao.markSystemJumpsFetched(systemId)
     }
@@ -69,7 +76,10 @@ object JumpGraphService {
      * BFS distances (in jumps) from [fromSystemId] to every system reachable within [regionId]'s
      * own cached subgraph. Call [ensureRegionGraph] first so the data actually exists.
      */
-    fun bfsDistances(fromSystemId: Int, regionId: Int): Map<Int, Int> {
+    fun bfsDistances(
+        fromSystemId: Int,
+        regionId: Int,
+    ): Map<Int, Int> {
         val systemIds = StaticDataDao.getSystemIdsByRegion(regionId)
         val graph = StaticDataDao.getJumpGraph(systemIds)
         val distances = mutableMapOf(fromSystemId to 0)

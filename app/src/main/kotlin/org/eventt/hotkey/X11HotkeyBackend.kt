@@ -13,18 +13,19 @@ import com.sun.jna.Structure
  * unlike JNativeHook, since XGrabKey is core Xlib rather than the XTest extension).
  */
 class X11HotkeyBackend : HotkeyBackend {
-
     private var display: Pointer? = null
     private var thread: Thread? = null
+
     @Volatile private var running = false
 
     override fun start(onTrigger: () -> Unit): Boolean {
-        val lib = try {
-            X11Lib.INSTANCE
-        } catch (e: Throwable) {
-            println("[Hotkey][X11] libX11 not available: ${e.message}")
-            return false
-        }
+        val lib =
+            try {
+                X11Lib.INSTANCE
+            } catch (e: Throwable) {
+                println("[Hotkey][X11] libX11 not available: ${e.message}")
+                return false
+            }
 
         val disp = lib.XOpenDisplay(null)
         if (disp == null) {
@@ -55,22 +56,23 @@ class X11HotkeyBackend : HotkeyBackend {
         display = disp
         val eventBuf = Memory(256)
         running = true
-        thread = Thread({
-            while (running) {
-                if (lib.XPending(disp) > 0) {
-                    lib.XNextEvent(disp, eventBuf)
-                    val event = XKeyEvent(eventBuf)
-                    if (event.type == KEY_PRESS && event.keycode == keycode) {
-                        onTrigger()
+        thread =
+            Thread({
+                while (running) {
+                    if (lib.XPending(disp) > 0) {
+                        lib.XNextEvent(disp, eventBuf)
+                        val event = XKeyEvent(eventBuf)
+                        if (event.type == KEY_PRESS && event.keycode == keycode) {
+                            onTrigger()
+                        }
+                    } else {
+                        Thread.sleep(30)
                     }
-                } else {
-                    Thread.sleep(30)
                 }
+            }, "x11-hotkey").apply {
+                isDaemon = true
+                start()
             }
-        }, "x11-hotkey").apply {
-            isDaemon = true
-            start()
-        }
 
         println("[Hotkey][X11] Global hotkey active: Ctrl+Z (X11/XWayland)")
         return true
@@ -95,14 +97,41 @@ class X11HotkeyBackend : HotkeyBackend {
 
 private interface X11Lib : Library {
     fun XOpenDisplay(displayName: String?): Pointer?
+
     fun XCloseDisplay(display: Pointer): Int
+
     fun XDefaultRootWindow(display: Pointer): NativeLong
+
     fun XStringToKeysym(string: String): NativeLong
-    fun XKeysymToKeycode(display: Pointer, keysym: NativeLong): Byte
-    fun XGrabKey(display: Pointer, keycode: Int, modifiers: Int, grabWindow: NativeLong, ownerEvents: Int, pointerMode: Int, keyboardMode: Int): Int
-    fun XUngrabKey(display: Pointer, keycode: Int, modifiers: Int, grabWindow: NativeLong): Int
+
+    fun XKeysymToKeycode(
+        display: Pointer,
+        keysym: NativeLong,
+    ): Byte
+
+    fun XGrabKey(
+        display: Pointer,
+        keycode: Int,
+        modifiers: Int,
+        grabWindow: NativeLong,
+        ownerEvents: Int,
+        pointerMode: Int,
+        keyboardMode: Int,
+    ): Int
+
+    fun XUngrabKey(
+        display: Pointer,
+        keycode: Int,
+        modifiers: Int,
+        grabWindow: NativeLong,
+    ): Int
+
     fun XPending(display: Pointer): Int
-    fun XNextEvent(display: Pointer, eventReturn: Pointer): Int
+
+    fun XNextEvent(
+        display: Pointer,
+        eventReturn: Pointer,
+    ): Int
 
     companion object {
         val INSTANCE: X11Lib = Native.load("X11", X11Lib::class.java)
@@ -112,29 +141,60 @@ private interface X11Lib : Library {
 // Mirrors Xlib's XKeyEvent (the union member XNextEvent fills in for KeyPress/KeyRelease).
 // Field types/order must match the native struct exactly for JNA's default (GNU C) alignment
 // to compute the same offsets the C compiler used.
-@Structure.FieldOrder(
-    "type", "serial", "sendEvent", "display", "window", "root", "subwindow",
-    "time", "x", "y", "xRoot", "yRoot", "state", "keycode", "sameScreen",
-)
 // Must be public (not Kotlin `private`/file-private, which compiles to package-private): JNA's
 // Structure.read() reflects into this class's fields from the com.sun.jna package and throws
 // IllegalAccessException if the class itself isn't accessible cross-package - confirmed live.
-class XKeyEvent(p: Pointer) : Structure(p) {
+@Structure.FieldOrder(
+    "type",
+    "serial",
+    "sendEvent",
+    "display",
+    "window",
+    "root",
+    "subwindow",
+    "time",
+    "x",
+    "y",
+    "xRoot",
+    "yRoot",
+    "state",
+    "keycode",
+    "sameScreen",
+)
+class XKeyEvent(
+    p: Pointer,
+) : Structure(p) {
     @JvmField var type: Int = 0
+
     @JvmField var serial: NativeLong = NativeLong()
+
     @JvmField var sendEvent: Int = 0
+
     @JvmField var display: Pointer? = null
+
     @JvmField var window: NativeLong = NativeLong()
+
     @JvmField var root: NativeLong = NativeLong()
+
     @JvmField var subwindow: NativeLong = NativeLong()
+
     @JvmField var time: NativeLong = NativeLong()
+
     @JvmField var x: Int = 0
+
     @JvmField var y: Int = 0
+
     @JvmField var xRoot: Int = 0
+
     @JvmField var yRoot: Int = 0
+
     @JvmField var state: Int = 0
+
     @JvmField var keycode: Int = 0
+
     @JvmField var sameScreen: Int = 0
 
-    init { read() }
+    init {
+        read()
+    }
 }

@@ -26,11 +26,12 @@ import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.WatchlistEntryModel
 import org.eventt.core.model.WatchlistPriceSnapshot
 import org.eventt.ui.common.*
+import java.util.Locale
 
 // The Forge (Jita) is the default trade hub for price lookups
 private const val DEFAULT_REGION_ID = 10000002
-private const val PLEX_REGION_ID    = 19000001
-private const val PLEX_TYPE_ID      = 44992
+private const val PLEX_REGION_ID = 19000001
+private const val PLEX_TYPE_ID = 44992
 
 @Composable
 fun WatchlistScreen() {
@@ -88,11 +89,14 @@ fun WatchlistScreen() {
                         val newName = "Watchlist ${watchlists.size + 1}"
                         scope.launch(Dispatchers.IO) {
                             // Insert a dummy entry to create the list, then remove it
-                            val dummyId = WatchlistDao.insert(
-                                org.eventt.core.model.WatchlistEntryModel(
-                                    typeId = 0, typeName = "", watchlistName = newName,
+                            val dummyId =
+                                WatchlistDao.insert(
+                                    org.eventt.core.model.WatchlistEntryModel(
+                                        typeId = 0,
+                                        typeName = "",
+                                        watchlistName = newName,
+                                    ),
                                 )
-                            )
                             WatchlistDao.delete(dummyId)
                             val loaded = WatchlistDao.getAllWatchlists()
                             withContext(Dispatchers.Main) {
@@ -130,23 +134,26 @@ fun WatchlistScreen() {
                 LazyColumn {
                     items(searchResults) { type ->
                         Row(
-                            modifier = Modifier.fillMaxWidth().clickable {
-                                scope.launch(Dispatchers.IO) {
-                                    WatchlistDao.insert(
-                                        WatchlistEntryModel(
-                                            typeId = type.typeId,
-                                            typeName = type.name,
-                                            watchlistName = selectedWatchlist,
-                                        )
-                                    )
-                                    val loaded = WatchlistDao.getAllWatchlists()
-                                    withContext(Dispatchers.Main) {
-                                        watchlists = loaded
-                                        searchQuery = ""
-                                        searchResults = emptyList()
-                                    }
-                                }
-                            }.padding(12.dp),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        scope.launch(Dispatchers.IO) {
+                                            WatchlistDao.insert(
+                                                WatchlistEntryModel(
+                                                    typeId = type.typeId,
+                                                    typeName = type.name,
+                                                    watchlistName = selectedWatchlist,
+                                                ),
+                                            )
+                                            val loaded = WatchlistDao.getAllWatchlists()
+                                            withContext(Dispatchers.Main) {
+                                                watchlists = loaded
+                                                searchQuery = ""
+                                                searchResults = emptyList()
+                                            }
+                                        }
+                                    }.padding(12.dp),
                         ) {
                             Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.width(8.dp))
@@ -226,7 +233,12 @@ private fun WatchlistTable(
                     Text("Item", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(2f))
                     Text("Buy", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                     Text("Sell", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                    Text("Spread", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text(
+                        "Spread",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                    )
                     Text("Trend", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                     Text("", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(0.5f))
                 }
@@ -280,7 +292,7 @@ private fun WatchlistRow(
 
         // Spread
         Text(
-            if (price != null) "${String.format("%.1f", spread)}%" else "—",
+            if (price != null) "${String.format(Locale.US, "%.1f", spread)}%" else "—",
             style = MaterialTheme.typography.bodySmall,
             color = if (spread > 5) Color(0xFFFF8C00) else Color.Gray,
             modifier = Modifier.weight(1f),
@@ -307,7 +319,10 @@ private fun WatchlistRow(
 }
 
 @Composable
-private fun MiniSparkline(data: List<Double>, modifier: Modifier = Modifier) {
+private fun MiniSparkline(
+    data: List<Double>,
+    modifier: Modifier = Modifier,
+) {
     if (data.size < 2) return
 
     val maxVal = data.maxOrNull() ?: 0.0
@@ -368,45 +383,54 @@ private suspend fun refreshEntryPrice(entry: WatchlistEntryModel) {
 
     // Fetch history for sparkline
     val rawHistory = EsiClient.getMarketRegionHistory(regionId, entry.typeId)
-    val sparklineData = rawHistory.takeLast(30).map { hist ->
-        (hist["date"] as? String ?: "") to ((hist["average"] as? Number)?.toDouble() ?: 0.0)
-    }
+    val sparklineData =
+        rawHistory.takeLast(30).map { hist ->
+            (hist["date"] as? String ?: "") to ((hist["average"] as? Number)?.toDouble() ?: 0.0)
+        }
 
     // Calculate changes using actual dates, not data-point offsets.
     // ESI omits days with no trades, so index-based offsets (e.g. size-8) are wrong
     // when there are gaps in the history.
-    val currentAvg  = sparklineData.lastOrNull()?.second ?: 0.0
-    val dayAgoDate  = java.time.LocalDate.now().minusDays(1).toString()
-    val weekAgoDate = java.time.LocalDate.now().minusDays(7).toString()
-    val dayAgo  = sparklineData.filter { it.first <= dayAgoDate  }.lastOrNull()?.second ?: 0.0
+    val currentAvg = sparklineData.lastOrNull()?.second ?: 0.0
+    val dayAgoDate =
+        java.time.LocalDate
+            .now()
+            .minusDays(1)
+            .toString()
+    val weekAgoDate =
+        java.time.LocalDate
+            .now()
+            .minusDays(7)
+            .toString()
+    val dayAgo = sparklineData.filter { it.first <= dayAgoDate }.lastOrNull()?.second ?: 0.0
     val weekAgo = sparklineData.filter { it.first <= weekAgoDate }.lastOrNull()?.second ?: 0.0
 
-    val change24h = if (dayAgo  > 0) ((currentAvg - dayAgo)  / dayAgo)  * 100 else 0.0
-    val change7d  = if (weekAgo > 0) ((currentAvg - weekAgo) / weekAgo) * 100 else 0.0
+    val change24h = if (dayAgo > 0) ((currentAvg - dayAgo) / dayAgo) * 100 else 0.0
+    val change7d = if (weekAgo > 0) ((currentAvg - weekAgo) / weekAgo) * 100 else 0.0
     val change30d = 0.0
 
-    val snapshot = WatchlistPriceSnapshot(
-        typeId = entry.typeId,
-        stationId = 0,
-        bestBuyPrice = bestBuy,
-        bestSellPrice = bestSell,
-        spread = spread,
-        spreadPercent = spreadPercent,
-        volume24h = totalVolume,
-        changePercent24h = change24h,
-        changePercent7d = change7d,
-        changePercent30d = change30d,
-        sparklineData = sparklineData,
-    )
+    val snapshot =
+        WatchlistPriceSnapshot(
+            typeId = entry.typeId,
+            stationId = 0,
+            bestBuyPrice = bestBuy,
+            bestSellPrice = bestSell,
+            spread = spread,
+            spreadPercent = spreadPercent,
+            volume24h = totalVolume,
+            changePercent24h = change24h,
+            changePercent7d = change7d,
+            changePercent30d = change30d,
+            sparklineData = sparklineData,
+        )
 
     WatchlistDao.insertPriceSnapshot(snapshot)
 }
 
-private fun formatPrice(price: Double): String {
-    return when {
-        price >= 1_000_000_000 -> String.format("%.1fB", price / 1_000_000_000)
-        price >= 1_000_000 -> String.format("%.1fM", price / 1_000_000)
-        price >= 1_000 -> String.format("%.1fK", price / 1_000)
-        else -> String.format("%,.2f", price)
+private fun formatPrice(price: Double): String =
+    when {
+        price >= 1_000_000_000 -> String.format(Locale.US, "%.1fB", price / 1_000_000_000)
+        price >= 1_000_000 -> String.format(Locale.US, "%.1fM", price / 1_000_000)
+        price >= 1_000 -> String.format(Locale.US, "%.1fK", price / 1_000)
+        else -> String.format(Locale.US, "%,.2f", price)
     }
-}

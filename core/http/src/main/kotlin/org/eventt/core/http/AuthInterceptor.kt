@@ -2,7 +2,6 @@ package org.eventt.core.http
 
 import okhttp3.Interceptor
 import okhttp3.Response
-import java.io.IOException
 
 /**
  * Interceptor that adds ESI auth token to requests.
@@ -20,10 +19,12 @@ class AuthInterceptor : Interceptor {
         // Get token from request header (set by ESI client)
         val token = request.header("X-ESI-Access-Token")
         if (token != null) {
-            val authenticatedRequest = request.newBuilder()
-                .header("Authorization", "Bearer $token")
-                .removeHeader("X-ESI-Access-Token")
-                .build()
+            val authenticatedRequest =
+                request
+                    .newBuilder()
+                    .header("Authorization", "Bearer $token")
+                    .removeHeader("X-ESI-Access-Token")
+                    .build()
             return chain.proceed(authenticatedRequest)
         }
 

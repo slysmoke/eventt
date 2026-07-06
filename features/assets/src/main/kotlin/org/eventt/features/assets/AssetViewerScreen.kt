@@ -4,8 +4,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -19,12 +17,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.AssetDao
-import org.eventt.core.database.DatabaseManager
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.AssetModel
 import org.eventt.core.model.StaticStationModel
 import org.eventt.ui.common.*
+import java.util.Locale
 
 @Composable
 fun AssetViewerScreen(charId: Int?) {
@@ -74,11 +72,12 @@ fun AssetViewerScreen(charId: Int?) {
         Spacer(modifier = Modifier.height(8.dp))
 
         // Summary bar
-        val filteredAssets = if (searchQuery.isBlank()) {
-            assets
-        } else {
-            assets.filter { it.typeName.contains(searchQuery, ignoreCase = true) }
-        }
+        val filteredAssets =
+            if (searchQuery.isBlank()) {
+                assets
+            } else {
+                assets.filter { it.typeName.contains(searchQuery, ignoreCase = true) }
+            }
         val totalValue = filteredAssets.sumOf { it.estimatedPrice * it.quantity }
 
         Surface(
@@ -167,12 +166,20 @@ fun AssetViewerScreen(charId: Int?) {
 
 @Composable
 private fun AssetByLocationView(assets: List<AssetModel>) {
-    val groupedByLocation = assets.groupBy {
-        val locationLabel = if (it.stationName.isNotEmpty()) it.stationName
-        else if (it.systemName.isNotEmpty()) it.systemName
-        else "Unknown Location"
-        "${it.regionName} → $locationLabel"
-    }.entries.sortedByDescending { (_, items) -> items.sumOf { it.estimatedPrice * it.quantity } }
+    val groupedByLocation =
+        assets
+            .groupBy {
+                val locationLabel =
+                    if (it.stationName.isNotEmpty()) {
+                        it.stationName
+                    } else if (it.systemName.isNotEmpty()) {
+                        it.systemName
+                    } else {
+                        "Unknown Location"
+                    }
+                "${it.regionName} → $locationLabel"
+            }.entries
+            .sortedByDescending { (_, items) -> items.sumOf { it.estimatedPrice * it.quantity } }
 
     // Groups start collapsed — only entries explicitly toggled to `true` are expanded.
     val expanded = remember { mutableStateMapOf<String, Boolean>() }
@@ -202,7 +209,13 @@ private fun AssetByLocationView(assets: List<AssetModel>) {
 }
 
 @Composable
-private fun AssetGroupHeader(title: String, count: Int, totalValue: Double, collapsed: Boolean, onClick: () -> Unit) {
+private fun AssetGroupHeader(
+    title: String,
+    count: Int,
+    totalValue: Double,
+    collapsed: Boolean,
+    onClick: () -> Unit,
+) {
     Surface(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         color = MaterialTheme.colorScheme.surfaceVariant,
@@ -220,7 +233,11 @@ private fun AssetGroupHeader(title: String, count: Int, totalValue: Double, coll
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                Text("($count)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                Text(
+                    "($count)",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                )
             }
             Text(formatIsk(totalValue), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
         }
@@ -261,7 +278,11 @@ private fun AssetRow(asset: AssetModel) {
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("×${asset.quantity}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
             if (asset.estimatedPrice > 0) {
-                Text(formatIsk(asset.estimatedPrice * asset.quantity), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                Text(
+                    formatIsk(asset.estimatedPrice * asset.quantity),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
             }
         }
     }
@@ -274,10 +295,19 @@ private fun RefreshAssetDialog(
     onRefreshCharacter: (Int) -> Unit,
     onRefreshCorporation: (Int) -> Unit,
 ) {
-    val character = remember(charId) {
-        if (charId == null) null
-        else try { org.eventt.core.database.CharacterDao.getById(charId) } catch (_: Exception) { null }
-    }
+    val character =
+        remember(charId) {
+            if (charId == null) {
+                null
+            } else {
+                try {
+                    org.eventt.core.database.CharacterDao
+                        .getById(charId)
+                } catch (_: Exception) {
+                    null
+                }
+            }
+        }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -320,11 +350,12 @@ private fun loadAssets(
     callback: (List<AssetModel>) -> Unit,
 ) {
     try {
-        val list = when {
-            characterId != null -> AssetDao.getByCharacter(characterId)
-            corporationId != null -> AssetDao.getByCorporation(corporationId)
-            else -> emptyList()
-        }
+        val list =
+            when {
+                characterId != null -> AssetDao.getByCharacter(characterId)
+                corporationId != null -> AssetDao.getByCorporation(corporationId)
+                else -> emptyList()
+            }
         callback(list)
     } catch (e: Exception) {
         println("Error loading assets: ${e.message}")
@@ -337,7 +368,10 @@ private fun loadAssets(
 // location_id chain (item -> its container -> ... ) until reaching a real station/citadel/solar
 // system. byItemId indexes this same asset batch by item_id so each hop is a plain map lookup;
 // the hop cap guards against a malformed/cyclic chain.
-private fun resolveRootLocation(data: Map<String, Any?>, byItemId: Map<Long, Map<String, Any?>>): Pair<Long, String> {
+private fun resolveRootLocation(
+    data: Map<String, Any?>,
+    byItemId: Map<Long, Map<String, Any?>>,
+): Pair<Long, String> {
     var locationId = (data["location_id"] as? Number)?.toLong() ?: 0L
     var locationType = (data["location_type"] as? String) ?: ""
     var hops = 0
@@ -354,7 +388,11 @@ private fun resolveRootLocation(data: Map<String, Any?>, byItemId: Map<Long, Map
 // structures/citadels, since CitadelService stores citadel names in the same static_stations
 // table (see core/staticdata/CitadelService.kt). Callers must pass the *root* location_type
 // (see resolveRootLocation above), not an item's raw one, or every nested item will just be "item".
-private fun resolveLocation(locationId: Long, locationType: String, characterId: Int?): StaticStationModel? {
+private fun resolveLocation(
+    locationId: Long,
+    locationType: String,
+    characterId: Int?,
+): StaticStationModel? {
     StaticDataDao.getStationById(locationId)?.let { return it }
 
     if (locationType != "station") {
@@ -382,15 +420,16 @@ private fun resolveLocation(locationId: Long, locationType: String, characterId:
         val system = StaticDataDao.getSystemById(systemId)
         val region = system?.regionId?.let { StaticDataDao.getRegionById(it) }
 
-        val station = StaticStationModel(
-            stationId = locationId,
-            name = name,
-            systemId = systemId,
-            systemName = system?.name ?: "",
-            regionId = region?.regionId ?: 0,
-            regionName = region?.name ?: "",
-            typeId = typeId,
-        )
+        val station =
+            StaticStationModel(
+                stationId = locationId,
+                name = name,
+                systemId = systemId,
+                systemName = system?.name ?: "",
+                regionId = region?.regionId ?: 0,
+                regionName = region?.name ?: "",
+                typeId = typeId,
+            )
         StaticDataDao.bulkInsertStations(listOf(station))
         println("[Assets] Resolved structure $locationId -> $name")
         station
@@ -401,102 +440,105 @@ private fun resolveLocation(locationId: Long, locationType: String, characterId:
 }
 
 private suspend fun fetchCharacterAssets(characterId: Int) {
-    val accessToken = org.eventt.core.auth.SsoAuthManager.ensureTokenFresh(characterId)
-    val rawAssets = EsiClient.getCharacterAssets(characterId, accessToken ?: "")
+    val rawAssets = EsiClient.getCharacterAssets(characterId)
     val prices = EsiClient.getMarketPrices()
     val byItemId = rawAssets.mapNotNull { d -> (d["item_id"] as? Number)?.toLong()?.let { it to d } }.toMap()
     // Memoize per resolved root location_id within this fetch — many items typically share the
     // same handful of stations/citadels, so this avoids repeating the DB (or ESI) lookup per item.
     val locationCache = mutableMapOf<Long, StaticStationModel?>()
 
-    val models = rawAssets.mapNotNull { data ->
-        val typeId = (data["type_id"] as? Number)?.toInt() ?: return@mapNotNull null
-        val itemId = (data["item_id"] as? Number)?.toLong() ?: return@mapNotNull null
-        val quantity = (data["quantity"] as? Number)?.toInt() ?: 0
-        val locationId = (data["location_id"] as? Number)?.toLong() ?: 0L
-        val locationFlag = (data["location_flag"] as? String) ?: ""
-        val isSingleton = (data["is_singleton"] as? Boolean) ?: true
+    val models =
+        rawAssets.mapNotNull { data ->
+            val typeId = (data["type_id"] as? Number)?.toInt() ?: return@mapNotNull null
+            val itemId = (data["item_id"] as? Number)?.toLong() ?: return@mapNotNull null
+            val quantity = (data["quantity"] as? Number)?.toInt() ?: 0
+            val locationId = (data["location_id"] as? Number)?.toLong() ?: 0L
+            val locationFlag = (data["location_flag"] as? String) ?: ""
+            val isSingleton = (data["is_singleton"] as? Boolean) ?: true
 
-        val staticType = StaticDataDao.getTypeById(typeId)
-        val typeName = staticType?.name ?: ""
-        val (rootLocationId, rootLocationType) = resolveRootLocation(data, byItemId)
-        val location = locationCache.getOrPut(rootLocationId) { resolveLocation(rootLocationId, rootLocationType, characterId) }
+            val staticType = StaticDataDao.getTypeById(typeId)
+            val typeName = staticType?.name ?: ""
+            val (rootLocationId, rootLocationType) = resolveRootLocation(data, byItemId)
+            val location = locationCache.getOrPut(rootLocationId) { resolveLocation(rootLocationId, rootLocationType, characterId) }
 
-        AssetModel(
-            itemId = itemId,
-            typeId = typeId,
-            typeName = typeName,
-            quantity = quantity,
-            locationId = locationId,
-            locationName = location?.name ?: "",
-            regionId = location?.regionId ?: 0,
-            regionName = location?.regionName ?: "",
-            systemId = location?.systemId ?: 0,
-            systemName = location?.systemName ?: "",
-            stationId = if (location != null) rootLocationId else 0,
-            stationName = location?.name ?: "",
-            locationFlag = locationFlag,
-            isSingleton = isSingleton,
-            estimatedPrice = prices[typeId] ?: 0.0,
-            isCorpAsset = false,
-            characterId = characterId,
-        )
-    }
+            AssetModel(
+                itemId = itemId,
+                typeId = typeId,
+                typeName = typeName,
+                quantity = quantity,
+                locationId = locationId,
+                locationName = location?.name ?: "",
+                regionId = location?.regionId ?: 0,
+                regionName = location?.regionName ?: "",
+                systemId = location?.systemId ?: 0,
+                systemName = location?.systemName ?: "",
+                stationId = if (location != null) rootLocationId else 0,
+                stationName = location?.name ?: "",
+                locationFlag = locationFlag,
+                isSingleton = isSingleton,
+                estimatedPrice = prices[typeId] ?: 0.0,
+                isCorpAsset = false,
+                characterId = characterId,
+            )
+        }
 
     AssetDao.bulkUpsert(models)
 }
 
-private suspend fun fetchCorporationAssets(corporationId: Int, dockingCharacterId: Int? = null) {
+private suspend fun fetchCorporationAssets(
+    corporationId: Int,
+    dockingCharacterId: Int? = null,
+) {
     val rawAssets = EsiClient.getCorporationAssets(corporationId)
     val prices = EsiClient.getMarketPrices()
     val byItemId = rawAssets.mapNotNull { d -> (d["item_id"] as? Number)?.toLong()?.let { it to d } }.toMap()
     val locationCache = mutableMapOf<Long, StaticStationModel?>()
 
-    val models = rawAssets.mapNotNull { data ->
-        val typeId = (data["type_id"] as? Number)?.toInt() ?: return@mapNotNull null
-        val itemId = (data["item_id"] as? Number)?.toLong() ?: return@mapNotNull null
-        val quantity = (data["quantity"] as? Number)?.toInt() ?: 0
-        val locationId = (data["location_id"] as? Number)?.toLong() ?: 0L
-        val locationFlag = (data["location_flag"] as? String) ?: ""
-        val isSingleton = (data["is_singleton"] as? Boolean) ?: true
+    val models =
+        rawAssets.mapNotNull { data ->
+            val typeId = (data["type_id"] as? Number)?.toInt() ?: return@mapNotNull null
+            val itemId = (data["item_id"] as? Number)?.toLong() ?: return@mapNotNull null
+            val quantity = (data["quantity"] as? Number)?.toInt() ?: 0
+            val locationId = (data["location_id"] as? Number)?.toLong() ?: 0L
+            val locationFlag = (data["location_flag"] as? String) ?: ""
+            val isSingleton = (data["is_singleton"] as? Boolean) ?: true
 
-        val staticType = StaticDataDao.getTypeById(typeId)
-        val typeName = staticType?.name ?: ""
-        // dockingCharacterId is any character with docking access to the corp's citadels — ESI's
-        // structure endpoint doesn't require them to be a director, just present in the structure.
-        val (rootLocationId, rootLocationType) = resolveRootLocation(data, byItemId)
-        val location = locationCache.getOrPut(rootLocationId) { resolveLocation(rootLocationId, rootLocationType, dockingCharacterId) }
+            val staticType = StaticDataDao.getTypeById(typeId)
+            val typeName = staticType?.name ?: ""
+            // dockingCharacterId is any character with docking access to the corp's citadels — ESI's
+            // structure endpoint doesn't require them to be a director, just present in the structure.
+            val (rootLocationId, rootLocationType) = resolveRootLocation(data, byItemId)
+            val location = locationCache.getOrPut(rootLocationId) { resolveLocation(rootLocationId, rootLocationType, dockingCharacterId) }
 
-        AssetModel(
-            itemId = itemId,
-            typeId = typeId,
-            typeName = typeName,
-            quantity = quantity,
-            locationId = locationId,
-            locationName = location?.name ?: "",
-            regionId = location?.regionId ?: 0,
-            regionName = location?.regionName ?: "",
-            systemId = location?.systemId ?: 0,
-            systemName = location?.systemName ?: "",
-            stationId = if (location != null) rootLocationId else 0,
-            stationName = location?.name ?: "",
-            locationFlag = locationFlag,
-            isSingleton = isSingleton,
-            estimatedPrice = prices[typeId] ?: 0.0,
-            isCorpAsset = true,
-            corporationId = corporationId,
-        )
-    }
+            AssetModel(
+                itemId = itemId,
+                typeId = typeId,
+                typeName = typeName,
+                quantity = quantity,
+                locationId = locationId,
+                locationName = location?.name ?: "",
+                regionId = location?.regionId ?: 0,
+                regionName = location?.regionName ?: "",
+                systemId = location?.systemId ?: 0,
+                systemName = location?.systemName ?: "",
+                stationId = if (location != null) rootLocationId else 0,
+                stationName = location?.name ?: "",
+                locationFlag = locationFlag,
+                isSingleton = isSingleton,
+                estimatedPrice = prices[typeId] ?: 0.0,
+                isCorpAsset = true,
+                corporationId = corporationId,
+            )
+        }
 
     AssetDao.bulkUpsert(models)
 }
 
-private fun formatIsk(value: Double): String {
-    return when {
-        value >= 1_000_000_000_000 -> String.format("%.2fT", value / 1_000_000_000_000)
-        value >= 1_000_000_000 -> String.format("%.2fB", value / 1_000_000_000)
-        value >= 1_000_000 -> String.format("%.2fM", value / 1_000_000)
-        value >= 1_000 -> String.format("%.2fK", value / 1_000)
-        else -> String.format("%.2f", value)
+private fun formatIsk(value: Double): String =
+    when {
+        value >= 1_000_000_000_000 -> String.format(Locale.US, "%.2fT", value / 1_000_000_000_000)
+        value >= 1_000_000_000 -> String.format(Locale.US, "%.2fB", value / 1_000_000_000)
+        value >= 1_000_000 -> String.format(Locale.US, "%.2fM", value / 1_000_000)
+        value >= 1_000 -> String.format(Locale.US, "%.2fK", value / 1_000)
+        else -> String.format(Locale.US, "%.2f", value)
     }
-}

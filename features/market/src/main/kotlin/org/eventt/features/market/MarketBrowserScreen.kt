@@ -3,12 +3,12 @@ package org.eventt.features.market
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShowChart
@@ -25,54 +25,61 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.math.floor
-import kotlin.math.log10
-import kotlin.math.pow
-import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.eventt.core.database.MarketDao
 import org.eventt.core.database.AlertDao
+import org.eventt.core.database.MarketDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.WatchlistDao
 import org.eventt.core.esi.EsiClient
-import org.eventt.core.image.EveImageServer
-import org.eventt.core.staticdata.StaticDataImporter
 import org.eventt.core.model.MarketHistoryModel
 import org.eventt.core.model.PriceAlertModel
 import org.eventt.core.model.StaticMarketGroupModel
 import org.eventt.core.model.StaticTypeModel
 import org.eventt.core.model.WatchlistEntryModel
+import org.eventt.core.staticdata.StaticDataImporter
 import org.eventt.ui.common.*
+import java.util.Locale
+import kotlin.math.floor
+import kotlin.math.log10
+import kotlin.math.pow
+import kotlin.math.roundToInt
 
 // Virtual region for PLEX — not in SDE, announced by CCP as ID 19000001
 const val PLEX_MARKET_REGION_ID = 19000001
 const val PLEX_TYPE_ID = 44992
 
 // Trade hub regions
-val TRADE_HUBS = listOf(
-    10000002 to "The Forge (Jita)",
-    10000043 to "Domain (Amarr)",
-    10000032 to "Sinq Laison (Dodixie)",
-    10000030 to "Metropolis (Hek)",
-    10000042 to "Heimatar (Rens)",
-)
+val TRADE_HUBS =
+    listOf(
+        10000002 to "The Forge (Jita)",
+        10000043 to "Domain (Amarr)",
+        10000032 to "Sinq Laison (Dodixie)",
+        10000030 to "Metropolis (Hek)",
+        10000042 to "Heimatar (Rens)",
+    )
 
 private sealed class TreeNode {
-    data class GroupNode(val group: StaticMarketGroupModel, val depth: Int) : TreeNode()
-    data class TypeNode(val type: StaticTypeModel, val depth: Int) : TreeNode()
+    data class GroupNode(
+        val group: StaticMarketGroupModel,
+        val depth: Int,
+    ) : TreeNode()
+
+    data class TypeNode(
+        val type: StaticTypeModel,
+        val depth: Int,
+    ) : TreeNode()
 }
 
 @Composable
@@ -131,10 +138,22 @@ fun MarketBrowserScreen() {
                                     onClick = {
                                         selectedRegionId = id
                                         selectedType?.let { type ->
-                                            scope.launch { loadMarketData(id, type.typeId, ordersCallback = { orderBook = it }, historyCallback = { history = it }) }
+                                            scope.launch {
+                                                loadMarketData(id, type.typeId, ordersCallback = { orderBook = it }, historyCallback = {
+                                                    history =
+                                                        it
+                                                })
+                                            }
                                         }
                                     },
-                                    label = { Text(name, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    label = {
+                                        Text(
+                                            name,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    },
                                 )
                             }
                         }
@@ -173,7 +192,14 @@ fun MarketBrowserScreen() {
                                         selectedType = type
                                         searchQuery = ""
                                         searchResults = emptyList()
-                                        scope.launch { loadMarketData(selectedRegionId, type.typeId, ordersCallback = { orderBook = it }, historyCallback = { history = it }) }
+                                        scope.launch {
+                                            loadMarketData(selectedRegionId, type.typeId, ordersCallback = {
+                                                orderBook = it
+                                            }, historyCallback = {
+                                                history =
+                                                    it
+                                            })
+                                        }
                                     },
                                 )
                             }
@@ -191,7 +217,11 @@ fun MarketBrowserScreen() {
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
             ) {
                 Column(modifier = Modifier.padding(4.dp)) {
-                    Text("Categories", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                    Text(
+                        "Categories",
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
                     MarketGroupTree(
                         topGroups = topGroups,
                         expandedGroups = expandedGroups,
@@ -201,7 +231,12 @@ fun MarketBrowserScreen() {
                         },
                         onTypeClick = { type ->
                             selectedType = type
-                            scope.launch { loadMarketData(selectedRegionId, type.typeId, ordersCallback = { orderBook = it }, historyCallback = { history = it }) }
+                            scope.launch {
+                                loadMarketData(selectedRegionId, type.typeId, ordersCallback = { orderBook = it }, historyCallback = {
+                                    history =
+                                        it
+                                })
+                            }
                         },
                     )
                 }
@@ -339,9 +374,10 @@ private fun MarketGroupTree(
     onToggleExpand: (Int) -> Unit,
     onTypeClick: (StaticTypeModel) -> Unit,
 ) {
-    val flatNodes = remember(topGroups, expandedGroups) {
-        buildFlatTree(topGroups, expandedGroups)
-    }
+    val flatNodes =
+        remember(topGroups, expandedGroups) {
+            buildFlatTree(topGroups, expandedGroups)
+        }
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         items(
             items = flatNodes,
@@ -353,18 +389,20 @@ private fun MarketGroupTree(
             },
         ) { node ->
             when (node) {
-                is TreeNode.GroupNode -> GroupTreeRow(
-                    group = node.group,
-                    depth = node.depth,
-                    isExpanded = node.group.marketGroupId in expandedGroups,
-                    onToggle = { onToggleExpand(node.group.marketGroupId) },
-                )
-                is TreeNode.TypeNode -> TypeTreeRow(
-                    type = node.type,
-                    depth = node.depth,
-                    isSelected = node.type.typeId == selectedTypeId,
-                    onClick = { onTypeClick(node.type) },
-                )
+                is TreeNode.GroupNode ->
+                    GroupTreeRow(
+                        group = node.group,
+                        depth = node.depth,
+                        isExpanded = node.group.marketGroupId in expandedGroups,
+                        onToggle = { onToggleExpand(node.group.marketGroupId) },
+                    )
+                is TreeNode.TypeNode ->
+                    TypeTreeRow(
+                        type = node.type,
+                        depth = node.depth,
+                        isSelected = node.type.typeId == selectedTypeId,
+                        onClick = { onTypeClick(node.type) },
+                    )
             }
         }
     }
@@ -378,10 +416,11 @@ private fun GroupTreeRow(
     onToggle: () -> Unit,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onToggle)
-            .padding(start = (8 + depth * 16).dp, top = 3.dp, bottom = 3.dp, end = 4.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggle)
+                .padding(start = (8 + depth * 16).dp, top = 3.dp, bottom = 3.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
@@ -416,11 +455,12 @@ private fun TypeTreeRow(
     onClick: () -> Unit,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else Color.Transparent)
-            .padding(start = (8 + depth * 16 + 20).dp, top = 2.dp, bottom = 2.dp, end = 4.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else Color.Transparent)
+                .padding(start = (8 + depth * 16 + 20).dp, top = 2.dp, bottom = 2.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -447,9 +487,12 @@ private fun TypeMarketHeader(
     val (sellOrders, buyOrders) = orderBook
     val bestSell = sellOrders.minOfOrNull { it.price }
     val bestBuy = buyOrders.maxOfOrNull { it.price }
-    val spread = if (bestSell != null && bestBuy != null && bestSell > 0) {
-        ((bestSell - bestBuy) / bestSell) * 100
-    } else null
+    val spread =
+        if (bestSell != null && bestBuy != null && bestSell > 0) {
+            ((bestSell - bestBuy) / bestSell) * 100
+        } else {
+            null
+        }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -464,7 +507,12 @@ private fun TypeMarketHeader(
                 color = MaterialTheme.colorScheme.primaryContainer,
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Extension, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Icon(
+                        Icons.Default.Extension,
+                        null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
                 }
             }
 
@@ -472,7 +520,11 @@ private fun TypeMarketHeader(
 
             Column {
                 Text(type.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("Region: ${TRADE_HUBS.find { it.first == 10000002 }?.second ?: "The Forge"}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                Text(
+                    "Region: ${TRADE_HUBS.find { it.first == 10000002 }?.second ?: "The Forge"}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray,
+                )
             }
         }
 
@@ -508,7 +560,7 @@ private fun TypeMarketHeader(
             ) {
                 SpreadItem("Best Sell", formatPrice(bestSell), Color(0xFFFF6B6B))
                 SpreadItem("Best Buy", formatPrice(bestBuy), Color(0xFF69DB7C))
-                SpreadItem("Spread", "${String.format("%.2f", spread ?: 0.0)}%", Color(0xFFFF8C00))
+                SpreadItem("Spread", "${String.format(Locale.US, "%.2f", spread ?: 0.0)}%", Color(0xFFFF8C00))
                 SpreadItem("Sell Orders", sellOrders.size.toString(), MaterialTheme.colorScheme.onSurface)
                 SpreadItem("Buy Orders", buyOrders.size.toString(), MaterialTheme.colorScheme.onSurface)
             }
@@ -519,7 +571,11 @@ private fun TypeMarketHeader(
 }
 
 @Composable
-private fun SpreadItem(label: String, value: String, color: Color) {
+private fun SpreadItem(
+    label: String,
+    value: String,
+    color: Color,
+) {
     Column {
         Text(label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
         Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = color)
@@ -529,23 +585,42 @@ private fun SpreadItem(label: String, value: String, color: Color) {
 // ─── Order Book ───────────────────────────────────────────────────────────
 
 private enum class OrderSortColumn {
-    PRICE, REMAIN, TOTAL_ISK, MIN_VOL, RANGE, LOCATION, ISSUED, EXPIRES
+    PRICE,
+    REMAIN,
+    TOTAL_ISK,
+    MIN_VOL,
+    RANGE,
+    LOCATION,
+    ISSUED,
+    EXPIRES,
 }
 
-private fun sortOrders(orders: List<MarketOrder>, col: OrderSortColumn, asc: Boolean): List<MarketOrder> {
-    val cmp: Comparator<MarketOrder> = when (col) {
-        OrderSortColumn.PRICE     -> compareBy { it.price }
-        OrderSortColumn.REMAIN    -> compareBy { it.volumeRemaining }
-        OrderSortColumn.TOTAL_ISK -> compareBy { it.price * it.volumeRemaining }
-        OrderSortColumn.MIN_VOL   -> compareBy { it.minVolume }
-        OrderSortColumn.RANGE     -> compareBy { it.range }
-        OrderSortColumn.LOCATION  -> compareBy { it.locationName }
-        OrderSortColumn.ISSUED    -> compareBy { it.issued }
-        OrderSortColumn.EXPIRES   -> compareBy {
-            try { java.time.Instant.parse(it.issued).plusSeconds(it.duration * 86400L).epochSecond }
-            catch (e: Exception) { 0L }
+private fun sortOrders(
+    orders: List<MarketOrder>,
+    col: OrderSortColumn,
+    asc: Boolean,
+): List<MarketOrder> {
+    val cmp: Comparator<MarketOrder> =
+        when (col) {
+            OrderSortColumn.PRICE -> compareBy { it.price }
+            OrderSortColumn.REMAIN -> compareBy { it.volumeRemaining }
+            OrderSortColumn.TOTAL_ISK -> compareBy { it.price * it.volumeRemaining }
+            OrderSortColumn.MIN_VOL -> compareBy { it.minVolume }
+            OrderSortColumn.RANGE -> compareBy { it.range }
+            OrderSortColumn.LOCATION -> compareBy { it.locationName }
+            OrderSortColumn.ISSUED -> compareBy { it.issued }
+            OrderSortColumn.EXPIRES ->
+                compareBy {
+                    try {
+                        java.time.Instant
+                            .parse(it.issued)
+                            .plusSeconds(it.duration * 86400L)
+                            .epochSecond
+                    } catch (e: Exception) {
+                        0L
+                    }
+                }
         }
-    }
     return if (asc) orders.sortedWith(cmp) else orders.sortedWith(cmp.reversed())
 }
 
@@ -557,31 +632,51 @@ private fun OrderBookView(
     val (rawSell, rawBuy) = orders
 
     var sellSort by remember { mutableStateOf(OrderSortColumn.PRICE) }
-    var sellAsc  by remember { mutableStateOf(true) }
-    var buySort  by remember { mutableStateOf(OrderSortColumn.PRICE) }
-    var buyAsc   by remember { mutableStateOf(false) }
+    var sellAsc by remember { mutableStateOf(true) }
+    var buySort by remember { mutableStateOf(OrderSortColumn.PRICE) }
+    var buyAsc by remember { mutableStateOf(false) }
 
     val sellOrders = remember(rawSell, sellSort, sellAsc) { sortOrders(rawSell, sellSort, sellAsc) }
-    val buyOrders  = remember(rawBuy,  buySort,  buyAsc)  { sortOrders(rawBuy,  buySort,  buyAsc)  }
+    val buyOrders = remember(rawBuy, buySort, buyAsc) { sortOrders(rawBuy, buySort, buyAsc) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         OrderTable(
-            title = "Sell Orders", count = sellOrders.size,
+            title = "Sell Orders",
+            count = sellOrders.size,
             titleColor = Color(0xFFFF6B6B),
-            orders = sellOrders, isBuy = false,
-            sortCol = sellSort, ascending = sellAsc,
+            orders = sellOrders,
+            isBuy = false,
+            sortCol = sellSort,
+            ascending = sellAsc,
             modifier = Modifier.weight(1f),
-            onSort = { col -> if (sellSort == col) sellAsc = !sellAsc else { sellSort = col; sellAsc = true } },
+            onSort = { col ->
+                if (sellSort == col) {
+                    sellAsc = !sellAsc
+                } else {
+                    sellSort = col
+                    sellAsc = true
+                }
+            },
             onCreateAlert = onCreateAlert,
         )
         HorizontalDivider(thickness = 2.dp)
         OrderTable(
-            title = "Buy Orders", count = buyOrders.size,
+            title = "Buy Orders",
+            count = buyOrders.size,
             titleColor = Color(0xFF69DB7C),
-            orders = buyOrders, isBuy = true,
-            sortCol = buySort, ascending = buyAsc,
+            orders = buyOrders,
+            isBuy = true,
+            sortCol = buySort,
+            ascending = buyAsc,
             modifier = Modifier.weight(1f),
-            onSort = { col -> if (buySort == col) buyAsc = !buyAsc else { buySort = col; buyAsc = false } },
+            onSort = { col ->
+                if (buySort == col) {
+                    buyAsc = !buyAsc
+                } else {
+                    buySort = col
+                    buyAsc = false
+                }
+            },
             onCreateAlert = onCreateAlert,
         )
     }
@@ -603,9 +698,11 @@ private fun OrderTable(
     Column(modifier = modifier) {
         // Section title bar
         Row(
-            modifier = Modifier.fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .padding(horizontal = 10.dp, vertical = 5.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -618,19 +715,21 @@ private fun OrderTable(
 
         // Sortable column header
         Row(
-            modifier = Modifier.fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                .padding(horizontal = 10.dp, vertical = 3.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                    .padding(horizontal = 10.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SortableCol("Price",          OrderSortColumn.PRICE,     sortCol, ascending, onSort, Modifier.width(90.dp))
-            SortableCol("Remain / Total", OrderSortColumn.REMAIN,    sortCol, ascending, onSort, Modifier.width(120.dp))
-            SortableCol("ISK Total",      OrderSortColumn.TOTAL_ISK, sortCol, ascending, onSort, Modifier.width(90.dp))
-            SortableCol("Min",            OrderSortColumn.MIN_VOL,   sortCol, ascending, onSort, Modifier.width(50.dp))
-            if (isBuy) SortableCol("Range", OrderSortColumn.RANGE,   sortCol, ascending, onSort, Modifier.width(80.dp))
-            SortableCol("Location",       OrderSortColumn.LOCATION,  sortCol, ascending, onSort, Modifier.weight(1f))
-            SortableCol("Issued",         OrderSortColumn.ISSUED,    sortCol, ascending, onSort, Modifier.width(82.dp))
-            SortableCol("Expires",        OrderSortColumn.EXPIRES,   sortCol, ascending, onSort, Modifier.width(56.dp))
+            SortableCol("Price", OrderSortColumn.PRICE, sortCol, ascending, onSort, Modifier.width(90.dp))
+            SortableCol("Remain / Total", OrderSortColumn.REMAIN, sortCol, ascending, onSort, Modifier.width(120.dp))
+            SortableCol("ISK Total", OrderSortColumn.TOTAL_ISK, sortCol, ascending, onSort, Modifier.width(90.dp))
+            SortableCol("Min", OrderSortColumn.MIN_VOL, sortCol, ascending, onSort, Modifier.width(50.dp))
+            if (isBuy) SortableCol("Range", OrderSortColumn.RANGE, sortCol, ascending, onSort, Modifier.width(80.dp))
+            SortableCol("Location", OrderSortColumn.LOCATION, sortCol, ascending, onSort, Modifier.weight(1f))
+            SortableCol("Issued", OrderSortColumn.ISSUED, sortCol, ascending, onSort, Modifier.width(82.dp))
+            SortableCol("Expires", OrderSortColumn.EXPIRES, sortCol, ascending, onSort, Modifier.width(56.dp))
         }
 
         // Rows
@@ -657,9 +756,10 @@ private fun SortableCol(
 ) {
     val active = col == current
     Row(
-        modifier = modifier
-            .clickable { onSort(col) }
-            .padding(end = 6.dp),
+        modifier =
+            modifier
+                .clickable { onSort(col) }
+                .padding(end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
@@ -667,8 +767,12 @@ private fun SortableCol(
             label,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-            color = if (active) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            color =
+                if (active) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                },
             maxLines = 1,
         )
         if (active) {
@@ -690,94 +794,99 @@ private fun OrderRow(
     onCreateAlert: ((MarketOrder) -> Unit)? = null,
 ) {
     val priceColor = if (!isBuy) Color(0xFFFF6B6B) else Color(0xFF69DB7C)
-    val expiry  = remember(order.issued, order.duration) { computeExpiry(order.issued, order.duration) }
+    val expiry = remember(order.issued, order.duration) { computeExpiry(order.issued, order.duration) }
     val expColor = remember(order.issued, order.duration) { expiryColor(order.issued, order.duration) }
-    val rowBg = if (index % 2 == 0) Color.Transparent
-                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.025f)
+    val rowBg =
+        if (index % 2 == 0) {
+            Color.Transparent
+        } else {
+            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.025f)
+        }
     var showContextMenu by remember { mutableStateOf(false) }
 
     Box {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(rowBg)
-            .padding(horizontal = 10.dp, vertical = 3.dp)
-            .pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
-                            showContextMenu = true
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .background(rowBg)
+                    .padding(horizontal = 10.dp, vertical = 3.dp)
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
+                                    showContextMenu = true
+                                }
+                            }
                         }
-                    }
-                }
-            },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            formatPrice(order.price),
-            style = MaterialTheme.typography.bodySmall,
-            color = priceColor,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.width(90.dp),
-        )
-        Text(
-            "${formatVolume(order.volumeRemaining.toLong())} / ${formatVolume(order.volumeTotal.toLong())}",
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.width(120.dp),
-        )
-        Text(
-            formatPrice(order.price * order.volumeRemaining),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
-            modifier = Modifier.width(90.dp),
-        )
-        Text(
-            formatVolume(order.minVolume.toLong()),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-            modifier = Modifier.width(50.dp),
-        )
-        if (isBuy) {
+                    },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(
-                order.range,
+                formatPrice(order.price),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.tertiary,
-                modifier = Modifier.width(80.dp),
+                color = priceColor,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.width(90.dp),
+            )
+            Text(
+                "${formatVolume(order.volumeRemaining.toLong())} / ${formatVolume(order.volumeTotal.toLong())}",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.width(120.dp),
+            )
+            Text(
+                formatPrice(order.price * order.volumeRemaining),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                modifier = Modifier.width(90.dp),
+            )
+            Text(
+                formatVolume(order.minVolume.toLong()),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                modifier = Modifier.width(50.dp),
+            )
+            if (isBuy) {
+                Text(
+                    order.range,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.width(80.dp),
+                )
+            }
+            Text(
+                order.locationName,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                order.issued.take(10),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                modifier = Modifier.width(82.dp),
+            )
+            Text(
+                expiry,
+                style = MaterialTheme.typography.labelSmall,
+                color = expColor,
+                fontWeight = if (expColor == Color(0xFFFF6B6B)) FontWeight.Medium else FontWeight.Normal,
+                modifier = Modifier.width(56.dp),
             )
         }
-        Text(
-            order.locationName,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            order.issued.take(10),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
-            modifier = Modifier.width(82.dp),
-        )
-        Text(
-            expiry,
-            style = MaterialTheme.typography.labelSmall,
-            color = expColor,
-            fontWeight = if (expColor == Color(0xFFFF6B6B)) FontWeight.Medium else FontWeight.Normal,
-            modifier = Modifier.width(56.dp),
-        )
-    }
-    DropdownMenu(expanded = showContextMenu, onDismissRequest = { showContextMenu = false }) {
-        DropdownMenuItem(
-            text = { Text("Create Price Alert") },
-            leadingIcon = { Icon(Icons.Default.Notifications, null, modifier = Modifier.size(16.dp)) },
-            onClick = {
-                showContextMenu = false
-                onCreateAlert?.invoke(order)
-            },
-        )
-    }
+        DropdownMenu(expanded = showContextMenu, onDismissRequest = { showContextMenu = false }) {
+            DropdownMenuItem(
+                text = { Text("Create Price Alert") },
+                leadingIcon = { Icon(Icons.Default.Notifications, null, modifier = Modifier.size(16.dp)) },
+                onClick = {
+                    showContextMenu = false
+                    onCreateAlert?.invoke(order)
+                },
+            )
+        }
     } // Box
     HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
 }
@@ -785,7 +894,10 @@ private fun OrderRow(
 // ─── History Chart ────────────────────────────────────────────────────────
 
 @Composable
-private fun HistoryChartView(history: List<MarketHistoryModel>, type: StaticTypeModel) {
+private fun HistoryChartView(
+    history: List<MarketHistoryModel>,
+    type: StaticTypeModel,
+) {
     var historyDays by remember { mutableStateOf(90) }
 
     if (history.isEmpty()) {
@@ -812,19 +924,25 @@ private fun HistoryChartView(history: List<MarketHistoryModel>, type: StaticType
         Spacer(modifier = Modifier.height(8.dp))
 
         // Filter by actual calendar date range (not by data-point count)
-        val cutoffDate = java.time.LocalDate.now().minusDays(historyDays.toLong()).toString()
+        val cutoffDate =
+            java.time.LocalDate
+                .now()
+                .minusDays(historyDays.toLong())
+                .toString()
         val filteredHistory = history.sortedBy { it.date }.filter { it.date.take(10) >= cutoffDate }
 
         // Full calendar grid: every date in [cutoff, today], zero-filled for missing days.
         // Used for volume chart so gaps are shown as 0 bars, not omitted.
-        val (paddedVolumes, paddedDates) = run {
-            val dataMap = filteredHistory.associate { it.date.take(10) to it.volume.toDouble() }
-            val today = java.time.LocalDate.now()
-            val allDates = (0 until historyDays).map {
-                today.minusDays((historyDays - 1 - it).toLong()).toString()
+        val (paddedVolumes, paddedDates) =
+            run {
+                val dataMap = filteredHistory.associate { it.date.take(10) to it.volume.toDouble() }
+                val today = java.time.LocalDate.now()
+                val allDates =
+                    (0 until historyDays).map {
+                        today.minusDays((historyDays - 1 - it).toLong()).toString()
+                    }
+                allDates.map { dataMap[it] ?: 0.0 } to allDates
             }
-            allDates.map { dataMap[it] ?: 0.0 } to allDates
-        }
 
         // Price chart — only trading days (zero price on no-trade day would distort the line)
         ContentCard("Average Price — ${type.name}") {
@@ -851,35 +969,40 @@ private fun HistoryChartView(history: List<MarketHistoryModel>, type: StaticType
         Spacer(modifier = Modifier.height(8.dp))
 
         // Stats — vol/day uses calendar days as denominator, not trading-day count
-        val avgPrice    = filteredHistory.averageOf { it.average }
+        val avgPrice = filteredHistory.averageOf { it.average }
         val highestPrice = filteredHistory.maxOfOrNull { it.highest } ?: 0.0
-        val lowestPrice  = filteredHistory.minOfOrNull { it.lowest }  ?: 0.0
-        val totalVolume  = filteredHistory.sumOf { it.volume }
-        val orderCount   = filteredHistory.sumOf { it.orderCount }
+        val lowestPrice = filteredHistory.minOfOrNull { it.lowest } ?: 0.0
+        val totalVolume = filteredHistory.sumOf { it.volume }
+        val orderCount = filteredHistory.sumOf { it.orderCount }
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard("Avg Price",   formatPrice(avgPrice),                          Modifier.weight(1f))
-            StatCard("Highest",     formatPrice(highestPrice),                      Modifier.weight(1f))
-            StatCard("Lowest",      formatPrice(lowestPrice),                       Modifier.weight(1f))
-            StatCard("Total Vol",   formatVolume(totalVolume),                      Modifier.weight(1f))
-            StatCard("Vol/Day",     formatVolPerDay(totalVolume, historyDays),      Modifier.weight(1f))
-            StatCard("Orders",      formatVolume(orderCount),                       Modifier.weight(1f))
+            StatCard("Avg Price", formatPrice(avgPrice), Modifier.weight(1f))
+            StatCard("Highest", formatPrice(highestPrice), Modifier.weight(1f))
+            StatCard("Lowest", formatPrice(lowestPrice), Modifier.weight(1f))
+            StatCard("Total Vol", formatVolume(totalVolume), Modifier.weight(1f))
+            StatCard("Vol/Day", formatVolPerDay(totalVolume, historyDays), Modifier.weight(1f))
+            StatCard("Orders", formatVolume(orderCount), Modifier.weight(1f))
         }
     }
 }
 
 // ─── Charts ───────────────────────────────────────────────────────────────
 
-private fun niceYTicks(minVal: Double, maxVal: Double, count: Int = 5): List<Double> {
+private fun niceYTicks(
+    minVal: Double,
+    maxVal: Double,
+    count: Int = 5,
+): List<Double> {
     if (minVal >= maxVal) return listOf(minVal)
     val rough = (maxVal - minVal) / count
     val mag = 10.0.pow(Math.floor(Math.log10(rough)))
-    val step = when {
-        rough / mag < 1.5 -> mag
-        rough / mag < 3.5 -> 2.0 * mag
-        rough / mag < 7.5 -> 5.0 * mag
-        else -> 10.0 * mag
-    }
+    val step =
+        when {
+            rough / mag < 1.5 -> mag
+            rough / mag < 3.5 -> 2.0 * mag
+            rough / mag < 7.5 -> 5.0 * mag
+            else -> 10.0 * mag
+        }
     val start = Math.floor(minVal / step) * step
     return generateSequence(start) { it + step }
         .takeWhile { it <= maxVal + step * 0.01 }
@@ -902,21 +1025,32 @@ private fun PriceLineChart(
     var hoverIdx by remember { mutableStateOf<Int?>(null) }
 
     Canvas(
-        modifier = modifier.pointerInput(data) {
-            awaitPointerEventScope {
-                while (true) {
-                    val event = awaitPointerEvent()
-                    if (event.type == PointerEventType.Exit) { hoverIdx = null; continue }
-                    if (event.type != PointerEventType.Move) continue
-                    val posX = event.changes.firstOrNull()?.position?.x ?: continue
-                    val lPad = 68.dp.toPx()
-                    val chartW = size.width - lPad - 8.dp.toPx()
-                    hoverIdx = if (posX >= lPad && data.size > 1)
-                        ((posX - lPad) / chartW * (data.size - 1)).roundToInt().coerceIn(0, data.size - 1)
-                    else null
+        modifier =
+            modifier.pointerInput(data) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.type == PointerEventType.Exit) {
+                            hoverIdx = null
+                            continue
+                        }
+                        if (event.type != PointerEventType.Move) continue
+                        val posX =
+                            event.changes
+                                .firstOrNull()
+                                ?.position
+                                ?.x ?: continue
+                        val lPad = 68.dp.toPx()
+                        val chartW = size.width - lPad - 8.dp.toPx()
+                        hoverIdx =
+                            if (posX >= lPad && data.size > 1) {
+                                ((posX - lPad) / chartW * (data.size - 1)).roundToInt().coerceIn(0, data.size - 1)
+                            } else {
+                                null
+                            }
+                    }
                 }
-            }
-        },
+            },
     ) {
         val lPad = 68.dp.toPx()
         val rPad = 8.dp.toPx()
@@ -930,6 +1064,7 @@ private fun PriceLineChart(
         val valRange = (maxVal - minVal).coerceAtLeast(1e-10)
 
         fun valY(v: Double) = (tPad + (1.0 - (v - minVal) / valRange) * chartH).toFloat()
+
         fun idxX(i: Int) = lPad + i.toFloat() / (data.size - 1).coerceAtLeast(1) * chartW
 
         // ── Grid + Y labels ──
@@ -944,16 +1079,20 @@ private fun PriceLineChart(
         // ── Line + fill ──
         val path = Path()
         data.forEachIndexed { i, v ->
-            val x = idxX(i); val y = valY(v)
+            val x = idxX(i)
+            val y = valY(v)
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
         drawPath(path, color, style = Stroke(2f, cap = StrokeCap.Round))
-        drawPath(Path().apply {
-            addPath(path)
-            lineTo(idxX(data.size - 1), tPad + chartH)
-            lineTo(lPad, tPad + chartH)
-            close()
-        }, color.copy(alpha = 0.12f))
+        drawPath(
+            Path().apply {
+                addPath(path)
+                lineTo(idxX(data.size - 1), tPad + chartH)
+                lineTo(lPad, tPad + chartH)
+                close()
+            },
+            color.copy(alpha = 0.12f),
+        )
 
         // ── X-axis date labels (up to 6) ──
         val xN = minOf(6, data.size)
@@ -961,10 +1100,14 @@ private fun PriceLineChart(
             val i = if (xN == 1) 0 else (t.toFloat() / (xN - 1) * (data.size - 1)).roundToInt().coerceIn(0, data.size - 1)
             val x = idxX(i)
             val lm = textMeasurer.measure(dates.getOrElse(i) { "" }, TextStyle(fontSize = 9.sp, color = labelColor))
-            drawText(lm, topLeft = Offset(
-                (x - lm.size.width / 2f).coerceIn(lPad, maxOf(lPad, lPad + chartW - lm.size.width)),
-                size.height - bPad + 4.dp.toPx(),
-            ))
+            drawText(
+                lm,
+                topLeft =
+                    Offset(
+                        (x - lm.size.width / 2f).coerceIn(lPad, maxOf(lPad, lPad + chartW - lm.size.width)),
+                        size.height - bPad + 4.dp.toPx(),
+                    ),
+            )
         }
 
         // ── Hover ──
@@ -979,7 +1122,8 @@ private fun PriceLineChart(
 
             val lm1 = textMeasurer.measure(dates.getOrElse(idx) { "" }, TextStyle(fontSize = 10.sp, color = Color(0xFF999999)))
             val lm2 = textMeasurer.measure(formatPrice(v), TextStyle(fontSize = 12.sp, color = color, fontWeight = FontWeight.SemiBold))
-            val pad = 7.dp.toPx(); val gap2 = 2.dp.toPx()
+            val pad = 7.dp.toPx()
+            val gap2 = 2.dp.toPx()
             val ttW = maxOf(lm1.size.width, lm2.size.width) + pad * 2
             val ttH = lm1.size.height + lm2.size.height + pad * 2 + gap2
 
@@ -1011,21 +1155,32 @@ private fun VolumeBarChart(
     var hoverIdx by remember { mutableStateOf<Int?>(null) }
 
     Canvas(
-        modifier = modifier.pointerInput(data) {
-            awaitPointerEventScope {
-                while (true) {
-                    val event = awaitPointerEvent()
-                    if (event.type == PointerEventType.Exit) { hoverIdx = null; continue }
-                    if (event.type != PointerEventType.Move) continue
-                    val posX = event.changes.firstOrNull()?.position?.x ?: continue
-                    val lPad = 56.dp.toPx()
-                    val chartW = size.width - lPad - 8.dp.toPx()
-                    hoverIdx = if (posX >= lPad && data.isNotEmpty())
-                        ((posX - lPad) / chartW * data.size).toInt().coerceIn(0, data.size - 1)
-                    else null
+        modifier =
+            modifier.pointerInput(data) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.type == PointerEventType.Exit) {
+                            hoverIdx = null
+                            continue
+                        }
+                        if (event.type != PointerEventType.Move) continue
+                        val posX =
+                            event.changes
+                                .firstOrNull()
+                                ?.position
+                                ?.x ?: continue
+                        val lPad = 56.dp.toPx()
+                        val chartW = size.width - lPad - 8.dp.toPx()
+                        hoverIdx =
+                            if (posX >= lPad && data.isNotEmpty()) {
+                                ((posX - lPad) / chartW * data.size).toInt().coerceIn(0, data.size - 1)
+                            } else {
+                                null
+                            }
+                    }
                 }
-            }
-        },
+            },
     ) {
         val lPad = 56.dp.toPx()
         val rPad = 8.dp.toPx()
@@ -1037,6 +1192,7 @@ private fun VolumeBarChart(
         val barW = (chartW / data.size - 1f).coerceAtLeast(1f)
 
         fun barX(i: Int) = lPad + i.toFloat() / data.size * chartW
+
         fun valY(v: Double) = (tPad + (1.0 - v / maxVal) * chartH).toFloat()
 
         // ── Grid + Y labels ──
@@ -1065,8 +1221,13 @@ private fun VolumeBarChart(
             val y = valY(v)
 
             val lm1 = textMeasurer.measure(dates.getOrElse(idx) { "" }, TextStyle(fontSize = 10.sp, color = Color(0xFF999999)))
-            val lm2 = textMeasurer.measure(formatVolume(v.toLong()), TextStyle(fontSize = 12.sp, color = color, fontWeight = FontWeight.SemiBold))
-            val pad = 7.dp.toPx(); val gap2 = 2.dp.toPx()
+            val lm2 =
+                textMeasurer.measure(
+                    formatVolume(v.toLong()),
+                    TextStyle(fontSize = 12.sp, color = color, fontWeight = FontWeight.SemiBold),
+                )
+            val pad = 7.dp.toPx()
+            val gap2 = 2.dp.toPx()
             val ttW = maxOf(lm1.size.width, lm2.size.width) + pad * 2
             val ttH = lm1.size.height + lm2.size.height + pad * 2 + gap2
 
@@ -1082,7 +1243,11 @@ private fun VolumeBarChart(
 }
 
 @Composable
-private fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
+private fun StatCard(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -1097,7 +1262,10 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
 // ─── Helper Composables ───────────────────────────────────────────────────
 
 @Composable
-private fun SearchRow(type: StaticTypeModel, onClick: () -> Unit) {
+private fun SearchRow(
+    type: StaticTypeModel,
+    onClick: () -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1147,7 +1315,10 @@ private suspend fun loadMarketData(
         val locationIds = rawOrders.mapNotNull { (it["location_id"] as? Number)?.toLong() }.toSet()
         val locationNames = resolveLocationNames(locationIds)
 
-        fun parseOrder(raw: Map<String, Any?>, isBuy: Boolean): MarketOrder? {
+        fun parseOrder(
+            raw: Map<String, Any?>,
+            isBuy: Boolean,
+        ): MarketOrder? {
             val locationId = (raw["location_id"] as? Number)?.toLong() ?: return null
             return MarketOrder(
                 orderId = (raw["order_id"] as? Number)?.toLong() ?: 0,
@@ -1165,12 +1336,16 @@ private suspend fun loadMarketData(
             )
         }
 
-        val sellOrders = rawOrders.filter { (it["is_buy_order"] as? Boolean) == false }
-            .sortedBy { (it["price"] as? Number)?.toDouble() ?: 0.0 }
-            .mapNotNull { parseOrder(it, false) }
-        val buyOrders = rawOrders.filter { (it["is_buy_order"] as? Boolean) == true }
-            .sortedByDescending { (it["price"] as? Number)?.toDouble() ?: 0.0 }
-            .mapNotNull { parseOrder(it, true) }
+        val sellOrders =
+            rawOrders
+                .filter { (it["is_buy_order"] as? Boolean) == false }
+                .sortedBy { (it["price"] as? Number)?.toDouble() ?: 0.0 }
+                .mapNotNull { parseOrder(it, false) }
+        val buyOrders =
+            rawOrders
+                .filter { (it["is_buy_order"] as? Boolean) == true }
+                .sortedByDescending { (it["price"] as? Number)?.toDouble() ?: 0.0 }
+                .mapNotNull { parseOrder(it, true) }
         ordersCallback(sellOrders to buyOrders)
     } catch (e: Exception) {
         println("[Market] Error loading orders: ${e.message}")
@@ -1179,20 +1354,21 @@ private suspend fun loadMarketData(
     // Fetch and save history
     try {
         val rawHistory = EsiClient.getMarketRegionHistory(effectiveRegionId, typeId)
-        val models = rawHistory.mapNotNull { raw ->
-            val date = raw["date"] as? String ?: return@mapNotNull null
-            val avg = (raw["average"] as? Number)?.toDouble() ?: 0.0
-            MarketHistoryModel(
-                typeId = typeId,
-                regionId = effectiveRegionId,
-                date = date,
-                average = avg,
-                volume = (raw["volume"] as? Number)?.toLong() ?: 0,
-                orderCount = (raw["order_count"] as? Number)?.toLong() ?: 0,
-                highest = (raw["highest"] as? Number)?.toDouble() ?: 0.0,
-                lowest = (raw["lowest"] as? Number)?.toDouble() ?: 0.0,
-            )
-        }
+        val models =
+            rawHistory.mapNotNull { raw ->
+                val date = raw["date"] as? String ?: return@mapNotNull null
+                val avg = (raw["average"] as? Number)?.toDouble() ?: 0.0
+                MarketHistoryModel(
+                    typeId = typeId,
+                    regionId = effectiveRegionId,
+                    date = date,
+                    average = avg,
+                    volume = (raw["volume"] as? Number)?.toLong() ?: 0,
+                    orderCount = (raw["order_count"] as? Number)?.toLong() ?: 0,
+                    highest = (raw["highest"] as? Number)?.toDouble() ?: 0.0,
+                    lowest = (raw["lowest"] as? Number)?.toDouble() ?: 0.0,
+                )
+            }
         models.forEach { MarketDao.insertHistory(it) }
         historyCallback(models)
     } catch (e: Exception) {
@@ -1206,7 +1382,8 @@ private suspend fun resolveLocationNames(locationIds: Set<Long>): Map<Long, Stri
         val npcIds = locationIds.filter { it <= Int.MAX_VALUE }
         if (npcIds.isNotEmpty()) {
             try {
-                EsiClient.resolveNames(npcIds.map { it.toInt() })
+                EsiClient
+                    .resolveNames(npcIds.map { it.toInt() })
                     .forEach { (id, name) -> result[id.toLong()] = name }
             } catch (e: Exception) {
                 println("[Market] resolveNames failed: ${e.message}")
@@ -1219,11 +1396,18 @@ private suspend fun resolveLocationNames(locationIds: Set<Long>): Map<Long, Stri
         result
     }
 
-private fun computeExpiry(issued: String, durationDays: Int): String {
-    return try {
+private fun computeExpiry(
+    issued: String,
+    durationDays: Int,
+): String =
+    try {
         val issuedInstant = java.time.Instant.parse(issued)
         val expiryInstant = issuedInstant.plusSeconds(durationDays * 86400L)
-        val secondsLeft = expiryInstant.epochSecond - java.time.Instant.now().epochSecond
+        val secondsLeft =
+            expiryInstant.epochSecond -
+                java.time.Instant
+                    .now()
+                    .epochSecond
         when {
             secondsLeft <= 0 -> "Expired"
             secondsLeft < 3600 -> "${secondsLeft / 60}m"
@@ -1233,13 +1417,21 @@ private fun computeExpiry(issued: String, durationDays: Int): String {
     } catch (e: Exception) {
         "${durationDays}d"
     }
-}
 
-private fun expiryColor(issued: String, durationDays: Int): Color {
-    return try {
+private fun expiryColor(
+    issued: String,
+    durationDays: Int,
+): Color =
+    try {
         val issuedInstant = java.time.Instant.parse(issued)
         val expiryInstant = issuedInstant.plusSeconds(durationDays * 86400L)
-        val daysLeft = (expiryInstant.epochSecond - java.time.Instant.now().epochSecond) / 86400
+        val daysLeft =
+            (
+                expiryInstant.epochSecond -
+                    java.time.Instant
+                        .now()
+                        .epochSecond
+            ) / 86400
         when {
             daysLeft <= 1 -> Color(0xFFFF6B6B)
             daysLeft <= 7 -> Color(0xFFFF8C00)
@@ -1248,39 +1440,39 @@ private fun expiryColor(issued: String, durationDays: Int): Color {
     } catch (e: Exception) {
         Color.Gray
     }
-}
 
-private fun formatPrice(price: Double): String {
-    return when {
-        price >= 1_000_000_000 -> String.format("%.2fB", price / 1_000_000_000)
-        price >= 1_000_000 -> String.format("%.2fM", price / 1_000_000)
-        price >= 1_000 -> String.format("%,.2f", price)
-        else -> String.format("%.4f", price)
+private fun formatPrice(price: Double): String =
+    when {
+        price >= 1_000_000_000 -> String.format(Locale.US, "%.2fB", price / 1_000_000_000)
+        price >= 1_000_000 -> String.format(Locale.US, "%.2fM", price / 1_000_000)
+        price >= 1_000 -> String.format(Locale.US, "%,.2f", price)
+        else -> String.format(Locale.US, "%.4f", price)
     }
-}
 
-private fun formatVolume(vol: Long): String {
-    return when {
-        vol >= 1_000_000_000 -> String.format("%.1fB", vol / 1_000_000_000.0)
-        vol >= 1_000_000 -> String.format("%.1fM", vol / 1_000_000.0)
-        vol >= 1_000 -> String.format("%.1fK", vol / 1_000.0)
+private fun formatVolume(vol: Long): String =
+    when {
+        vol >= 1_000_000_000 -> String.format(Locale.US, "%.1fB", vol / 1_000_000_000.0)
+        vol >= 1_000_000 -> String.format(Locale.US, "%.1fM", vol / 1_000_000.0)
+        vol >= 1_000 -> String.format(Locale.US, "%.1fK", vol / 1_000.0)
         else -> vol.toString()
     }
-}
 
 private fun <T> List<T>.averageOf(selector: (T) -> Double): Double {
     if (isEmpty()) return 0.0
     return sumOf(selector) / size
 }
 
-private fun formatVolPerDay(totalVol: Long, calendarDays: Int): String {
+private fun formatVolPerDay(
+    totalVol: Long,
+    calendarDays: Int,
+): String {
     val perDay = totalVol.toDouble() / calendarDays.coerceAtLeast(1)
     return when {
-        perDay >= 1_000_000 -> String.format("%.1fM", perDay / 1_000_000)
-        perDay >= 1_000     -> String.format("%.1fK", perDay / 1_000)
-        perDay >= 10        -> String.format("%.0f",  perDay)
-        perDay >= 1         -> String.format("%.1f",  perDay)
-        else                -> String.format("%.2f",  perDay)
+        perDay >= 1_000_000 -> String.format(Locale.US, "%.1fM", perDay / 1_000_000)
+        perDay >= 1_000 -> String.format(Locale.US, "%.1fK", perDay / 1_000)
+        perDay >= 10 -> String.format(Locale.US, "%.0f", perDay)
+        perDay >= 1 -> String.format(Locale.US, "%.1f", perDay)
+        else -> String.format(Locale.US, "%.2f", perDay)
     }
 }
 
@@ -1294,10 +1486,14 @@ private fun AddToWatchlistDialog(
 ) {
     val scope = rememberCoroutineScope()
     var watchlistName by remember { mutableStateOf("Default") }
-    val watchlists = remember {
-        try { WatchlistDao.getAllWatchlists().keys.toList() }
-        catch (e: Exception) { listOf("Default") }
-    }
+    val watchlists =
+        remember {
+            try {
+                WatchlistDao.getAllWatchlists().keys.toList()
+            } catch (e: Exception) {
+                listOf("Default")
+            }
+        }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1322,9 +1518,13 @@ private fun AddToWatchlistDialog(
         confirmButton = {
             Button(onClick = {
                 scope.launch(Dispatchers.IO) {
-                    WatchlistDao.insert(WatchlistEntryModel(
-                        typeId = type.typeId, typeName = type.name, watchlistName = watchlistName,
-                    ))
+                    WatchlistDao.insert(
+                        WatchlistEntryModel(
+                            typeId = type.typeId,
+                            typeName = type.name,
+                            watchlistName = watchlistName,
+                        ),
+                    )
                     withContext(Dispatchers.Main) { onAdded() }
                 }
             }) { Text("Add") }
@@ -1344,7 +1544,7 @@ private fun AddToAlertDialog(
     onAdded: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    var targetPrice by remember { mutableStateOf(prefilledPrice?.let { String.format("%.2f", it) } ?: "") }
+    var targetPrice by remember { mutableStateOf(prefilledPrice?.let { String.format(Locale.US, "%.2f", it) } ?: "") }
     var condition by remember { mutableStateOf("below") }
 
     val (sellOrders, buyOrders) = orderBook
@@ -1361,8 +1561,24 @@ private fun AddToAlertDialog(
 
                 if (bestSell != null || bestBuy != null) {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        if (bestSell != null) Text("Best Sell: ${formatPrice(bestSell)}", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF6B6B))
-                        if (bestBuy != null) Text("Best Buy: ${formatPrice(bestBuy)}", style = MaterialTheme.typography.labelSmall, color = Color(0xFF69DB7C))
+                        if (bestSell !=
+                            null
+                        ) {
+                            Text(
+                                "Best Sell: ${formatPrice(bestSell)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFFF6B6B),
+                            )
+                        }
+                        if (bestBuy !=
+                            null
+                        ) {
+                            Text(
+                                "Best Buy: ${formatPrice(bestBuy)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF69DB7C),
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                 }
@@ -1387,11 +1603,15 @@ private fun AddToAlertDialog(
                 onClick = {
                     val price = targetPrice.toDoubleOrNull() ?: return@Button
                     scope.launch(Dispatchers.IO) {
-                        AlertDao.insert(PriceAlertModel(
-                            typeId = type.typeId, typeName = type.name,
-                            targetPrice = price, condition = condition,
-                            regionId = if (type.typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else 10000002,
-                        ))
+                        AlertDao.insert(
+                            PriceAlertModel(
+                                typeId = type.typeId,
+                                typeName = type.name,
+                                targetPrice = price,
+                                condition = condition,
+                                regionId = if (type.typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else 10000002,
+                            ),
+                        )
                         withContext(Dispatchers.Main) { onAdded() }
                     }
                 },

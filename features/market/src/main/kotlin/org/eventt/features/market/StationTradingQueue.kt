@@ -27,7 +27,7 @@ private fun eveSigFigStep(price: Double): Double {
 
 private fun formatEveSigFigPrice(price: Double): String {
     if (price <= 0) return "0.01"
-    val step     = eveSigFigStep(price)
+    val step = eveSigFigStep(price)
     val decimals = maxOf(0, -floor(log10(step)).toInt())
     return String.format(Locale.US, "%.${decimals}f", price)
 }
@@ -36,8 +36,8 @@ data class PendingStationItem(
     val charId: Int,
     val typeId: Int,
     val typeName: String,
-    val bestBuy: Double,  // current best competing buy order — we step one tick above it to lead
-    val volume: Long,     // suggested buy quantity (after any volume modifier applied by the caller)
+    val bestBuy: Double, // current best competing buy order — we step one tick above it to lead
+    val volume: Long, // suggested buy quantity (after any volume modifier applied by the caller)
 ) {
     // Price to paste into the EVE buy-order dialog to become the new top buyer.
     val priceToSet: Double get() {
@@ -56,13 +56,13 @@ data class PendingStationItem(
  * When `copyVolume` is turned off, phase 2 is skipped entirely (every press is price + advance).
  */
 object StationTradingQueue {
-
     private enum class Phase { PRICE, VOLUME }
 
-    private val scope  = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val cursor = AtomicInteger(0)
 
     @Volatile private var queue: List<PendingStationItem> = emptyList()
+
     @Volatile private var phase: Phase = Phase.PRICE
 
     /** Whether the second hotkey press copies the suggested volume. Toggled from the UI. */

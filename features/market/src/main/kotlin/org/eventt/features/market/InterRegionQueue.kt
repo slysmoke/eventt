@@ -27,7 +27,7 @@ private fun eveSigFigStep(price: Double): Double {
 
 private fun formatEveSigFigPrice(price: Double): String {
     if (price <= 0) return "0.01"
-    val step     = eveSigFigStep(price)
+    val step = eveSigFigStep(price)
     val decimals = maxOf(0, -floor(log10(step)).toInt())
     return String.format(Locale.US, "%.${decimals}f", price)
 }
@@ -44,10 +44,13 @@ data class PendingRegionItem(
     val isCompetitiveBid: Boolean,
     val volume: Long,
 ) {
-    val priceToSet: Double get() = if (isCompetitiveBid) {
-        val step = eveSigFigStep(price)
-        round(price / step) * step + step
-    } else price
+    val priceToSet: Double get() =
+        if (isCompetitiveBid) {
+            val step = eveSigFigStep(price)
+            round(price / step) * step + step
+        } else {
+            price
+        }
 }
 
 private enum class RegionPhase { PRICE, VOLUME }
@@ -61,11 +64,11 @@ private enum class RegionPhase { PRICE, VOLUME }
  * isn't part of this immediate cycle.
  */
 object InterRegionQueue {
-
-    private val scope  = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val cursor = AtomicInteger(0)
 
     @Volatile private var queue: List<PendingRegionItem> = emptyList()
+
     @Volatile private var phase: RegionPhase = RegionPhase.PRICE
 
     /** Whether the second hotkey press copies the suggested volume. Toggled from the UI. */

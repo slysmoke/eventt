@@ -1,17 +1,17 @@
 package org.eventt.core.auth
 
+import com.sun.net.httpserver.HttpServer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import org.eventt.core.database.CharacterDao
-import org.eventt.core.http.EveHttpClient
-import org.eventt.core.model.CharacterModel
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.eventt.core.database.CharacterDao
+import org.eventt.core.http.EveHttpClient
+import org.eventt.core.model.CharacterModel
 import java.awt.Desktop
-import java.net.URI
 import java.net.InetSocketAddress
-import com.sun.net.httpserver.HttpServer
+import java.net.URI
 
 private const val ESI_SSO_URL = "https://login.eveonline.com/v2/oauth"
 private const val ESI_VERIFY_URL = "https://login.eveonline.com/oauth/verify"
@@ -25,16 +25,88 @@ data class TokenResponse(
 )
 
 object SsoAuthManager {
-
     // Public/native client (PKCE) — no client secret. An app registered as a "confidential"
     // client on developers.eveonline.com must be switched to PKCE/native for this to work.
     private const val CLIENT_ID = "9bacf8234c4b41888f00b084413868c0"
     private const val CALLBACK_URL = "http://localhost:8000/callback"
-    private const val SCOPES = "esi-calendar.respond_calendar_events.v1 esi-calendar.read_calendar_events.v1 esi-location.read_location.v1 esi-location.read_ship_type.v1 esi-mail.organize_mail.v1 esi-mail.read_mail.v1 esi-mail.send_mail.v1 esi-skills.read_skills.v1 esi-skills.read_skillqueue.v1 esi-wallet.read_character_wallet.v1 esi-wallet.read_corporation_wallet.v1 esi-search.search_structures.v1 esi-clones.read_clones.v1 esi-characters.read_contacts.v1 esi-universe.read_structures.v1 esi-killmails.read_killmails.v1 esi-corporations.read_corporation_membership.v1 esi-assets.read_assets.v1 esi-planets.manage_planets.v1 esi-fleets.read_fleet.v1 esi-fleets.write_fleet.v1 esi-ui.open_window.v1 esi-ui.write_waypoint.v1 esi-characters.write_contacts.v1 esi-markets.structure_markets.v1 esi-corporations.read_structures.v1 esi-characters.read_loyalty.v1 esi-characters.read_chat_channels.v1 esi-characters.read_medals.v1 esi-characters.read_standings.v1 esi-characters.read_agents_research.v1 esi-industry.read_character_jobs.v1 esi-markets.read_character_orders.v1 esi-characters.read_blueprints.v1 esi-characters.read_corporation_roles.v1 esi-location.read_online.v1 esi-contracts.read_character_contracts.v1 esi-clones.read_implants.v1 esi-characters.read_fatigue.v1 esi-killmails.read_corporation_killmails.v1 esi-corporations.track_members.v1 esi-wallet.read_corporation_wallets.v1 esi-characters.read_notifications.v1 esi-corporations.read_divisions.v1 esi-corporations.read_contacts.v1 esi-assets.read_corporation_assets.v1 esi-corporations.read_titles.v1 esi-corporations.read_blueprints.v1 esi-contracts.read_corporation_contracts.v1 esi-corporations.read_standings.v1 esi-corporations.read_starbases.v1 esi-industry.read_corporation_jobs.v1 esi-markets.read_corporation_orders.v1 esi-corporations.read_container_logs.v1 esi-industry.read_character_mining.v1 esi-industry.read_corporation_mining.v1 esi-planets.read_customs_offices.v1 esi-corporations.read_facilities.v1 esi-corporations.read_medals.v1 esi-characters.read_titles.v1 esi-alliances.read_contacts.v1 esi-characters.read_fw_stats.v1 esi-corporations.read_fw_stats.v1 esi-corporations.read_projects.v1 esi-corporations.read_freelance_jobs.v1 esi-characters.read_freelance_jobs.v1 publicData esi-fittings.read_fittings.v1 esi-fittings.write_fittings.v1"
+    private val SCOPES =
+        listOf(
+            "esi-calendar.respond_calendar_events.v1",
+            "esi-calendar.read_calendar_events.v1",
+            "esi-location.read_location.v1",
+            "esi-location.read_ship_type.v1",
+            "esi-mail.organize_mail.v1",
+            "esi-mail.read_mail.v1",
+            "esi-mail.send_mail.v1",
+            "esi-skills.read_skills.v1",
+            "esi-skills.read_skillqueue.v1",
+            "esi-wallet.read_character_wallet.v1",
+            "esi-wallet.read_corporation_wallet.v1",
+            "esi-search.search_structures.v1",
+            "esi-clones.read_clones.v1",
+            "esi-characters.read_contacts.v1",
+            "esi-universe.read_structures.v1",
+            "esi-killmails.read_killmails.v1",
+            "esi-corporations.read_corporation_membership.v1",
+            "esi-assets.read_assets.v1",
+            "esi-planets.manage_planets.v1",
+            "esi-fleets.read_fleet.v1",
+            "esi-fleets.write_fleet.v1",
+            "esi-ui.open_window.v1",
+            "esi-ui.write_waypoint.v1",
+            "esi-characters.write_contacts.v1",
+            "esi-markets.structure_markets.v1",
+            "esi-corporations.read_structures.v1",
+            "esi-characters.read_loyalty.v1",
+            "esi-characters.read_chat_channels.v1",
+            "esi-characters.read_medals.v1",
+            "esi-characters.read_standings.v1",
+            "esi-characters.read_agents_research.v1",
+            "esi-industry.read_character_jobs.v1",
+            "esi-markets.read_character_orders.v1",
+            "esi-characters.read_blueprints.v1",
+            "esi-characters.read_corporation_roles.v1",
+            "esi-location.read_online.v1",
+            "esi-contracts.read_character_contracts.v1",
+            "esi-clones.read_implants.v1",
+            "esi-characters.read_fatigue.v1",
+            "esi-killmails.read_corporation_killmails.v1",
+            "esi-corporations.track_members.v1",
+            "esi-wallet.read_corporation_wallets.v1",
+            "esi-characters.read_notifications.v1",
+            "esi-corporations.read_divisions.v1",
+            "esi-corporations.read_contacts.v1",
+            "esi-assets.read_corporation_assets.v1",
+            "esi-corporations.read_titles.v1",
+            "esi-corporations.read_blueprints.v1",
+            "esi-contracts.read_corporation_contracts.v1",
+            "esi-corporations.read_standings.v1",
+            "esi-corporations.read_starbases.v1",
+            "esi-industry.read_corporation_jobs.v1",
+            "esi-markets.read_corporation_orders.v1",
+            "esi-corporations.read_container_logs.v1",
+            "esi-industry.read_character_mining.v1",
+            "esi-industry.read_corporation_mining.v1",
+            "esi-planets.read_customs_offices.v1",
+            "esi-corporations.read_facilities.v1",
+            "esi-corporations.read_medals.v1",
+            "esi-characters.read_titles.v1",
+            "esi-alliances.read_contacts.v1",
+            "esi-characters.read_fw_stats.v1",
+            "esi-corporations.read_fw_stats.v1",
+            "esi-corporations.read_projects.v1",
+            "esi-corporations.read_freelance_jobs.v1",
+            "esi-characters.read_freelance_jobs.v1",
+            "publicData",
+            "esi-fittings.read_fittings.v1",
+            "esi-fittings.write_fittings.v1",
+        ).joinToString(" ")
 
     private var server: HttpServer? = null
+
     @Volatile
     private var authResult: AuthResult? = null
+
     @Volatile
     private var codeVerifier: String? = null
     private val lock = Object()
@@ -46,7 +118,10 @@ object SsoAuthManager {
     )
 
     fun startAuth(): AuthResult {
-        val state = java.util.UUID.randomUUID().toString()
+        val state =
+            java.util.UUID
+                .randomUUID()
+                .toString()
         val verifier = generateCodeVerifier()
         codeVerifier = verifier
         authResult = null
@@ -55,8 +130,9 @@ object SsoAuthManager {
         val encodedScopes = java.net.URLEncoder.encode(SCOPES, "UTF-8")
         val encodedRedirect = java.net.URLEncoder.encode(CALLBACK_URL, "UTF-8")
         val challenge = codeChallenge(verifier)
-        val authUrl = "$ESI_SSO_URL/authorize?response_type=code&redirect_uri=$encodedRedirect&client_id=$CLIENT_ID" +
-            "&scope=$encodedScopes&state=$state&code_challenge=$challenge&code_challenge_method=S256"
+        val authUrl =
+            "$ESI_SSO_URL/authorize?response_type=code&redirect_uri=$encodedRedirect&client_id=$CLIENT_ID" +
+                "&scope=$encodedScopes&state=$state&code_challenge=$challenge&code_challenge_method=S256"
 
         println("[Auth] SSO URL: $ESI_SSO_URL/authorize")
         println("[Auth] Client ID: $CLIENT_ID")
@@ -105,11 +181,13 @@ object SsoAuthManager {
         val body = "grant_type=refresh_token&refresh_token=$refreshToken&client_id=$CLIENT_ID"
         val requestBody = body.toRequestBody("application/x-www-form-urlencoded".toMediaType())
 
-        val request = Request.Builder()
-            .url("$ESI_SSO_URL/token")
-            .post(requestBody)
-            .header("Host", "login.eveonline.com")
-            .build()
+        val request =
+            Request
+                .Builder()
+                .url("$ESI_SSO_URL/token")
+                .post(requestBody)
+                .header("Host", "login.eveonline.com")
+                .build()
 
         return client.newCall(request).execute().use { response ->
             if (response.isSuccessful) {
@@ -126,10 +204,12 @@ object SsoAuthManager {
     fun verifyToken(accessToken: String): CharacterInfo? {
         val client = EveHttpClient.getClient()
 
-        val request = Request.Builder()
-            .url(ESI_VERIFY_URL)
-            .header("Authorization", "Bearer $accessToken")
-            .build()
+        val request =
+            Request
+                .Builder()
+                .url(ESI_VERIFY_URL)
+                .header("Authorization", "Bearer $accessToken")
+                .build()
 
         return client.newCall(request).execute().use { response ->
             if (response.isSuccessful) {
@@ -153,10 +233,11 @@ object SsoAuthManager {
             return CharacterDao.getAccessToken(characterId)
         }
 
-        val refreshToken = runCatching {
-            val char = CharacterDao.getById(characterId)
-            char?.refreshToken
-        }.getOrNull() ?: return null
+        val refreshToken =
+            runCatching {
+                val char = CharacterDao.getById(characterId)
+                char?.refreshToken
+            }.getOrNull() ?: return null
 
         val tokenResponse = refreshToken(refreshToken) ?: return null
 
@@ -214,14 +295,18 @@ object SsoAuthManager {
                 val character = exchangeCodeForToken(code)
                 if (character != null) {
                     CharacterDao.insert(character)
-                    val html = "<html><body><h1>Authentication successful!</h1><p>Welcome, ${character.name}! You can close this window.</p></body></html>"
+                    val html =
+                        "<html><body><h1>Authentication successful!</h1><p>Welcome, ${character.name}! " +
+                            "You can close this window.</p></body></html>"
                     sendResponse(exchange, 200, html, responseHeaders)
                     synchronized(lock) {
                         authResult = AuthResult(success = true, character = character)
                     }
                     println("[Auth] Auth successful: ${character.name} (ID: ${character.id})")
                 } else {
-                    val html = "<html><body><h1>Authentication failed</h1><p>Could not exchange token. The code may have been used already or is invalid.</p><p>You can close this window.</p></body></html>"
+                    val html =
+                        "<html><body><h1>Authentication failed</h1><p>Could not exchange token. The code may have " +
+                            "been used already or is invalid.</p><p>You can close this window.</p></body></html>"
                     sendResponse(exchange, 200, html, responseHeaders)
                     synchronized(lock) {
                         authResult = AuthResult(success = false, error = "Token exchange failed — code invalid or expired")
@@ -229,7 +314,9 @@ object SsoAuthManager {
                     println("[Auth] Token exchange failed for code: ${code.take(10)}...")
                 }
             } else {
-                val html = "<html><body><h1>Authentication failed</h1><p>No authorization code received.</p><p>You can close this window.</p></body></html>"
+                val html =
+                    "<html><body><h1>Authentication failed</h1><p>No authorization code received.</p>" +
+                        "<p>You can close this window.</p></body></html>"
                 sendResponse(exchange, 200, html, responseHeaders)
                 synchronized(lock) {
                     authResult = AuthResult(success = false, error = "No authorization code in callback")
@@ -238,7 +325,10 @@ object SsoAuthManager {
             }
         }
 
-        srv.setExecutor(java.util.concurrent.Executors.newSingleThreadExecutor())
+        srv.setExecutor(
+            java.util.concurrent.Executors
+                .newSingleThreadExecutor(),
+        )
         srv.start()
     }
 
@@ -257,18 +347,21 @@ object SsoAuthManager {
         }
 
         val encodedRedirect = java.net.URLEncoder.encode(CALLBACK_URL, "UTF-8")
-        val body = "grant_type=authorization_code&code=$code&redirect_uri=$encodedRedirect" +
-            "&client_id=$CLIENT_ID&code_verifier=$verifier"
+        val body =
+            "grant_type=authorization_code&code=$code&redirect_uri=$encodedRedirect" +
+                "&client_id=$CLIENT_ID&code_verifier=$verifier"
 
         println("[Auth] Exchanging code for token...")
         println("[Auth] Redirect URI (encoded): $encodedRedirect")
 
-        val request = Request.Builder()
-            .url("$ESI_SSO_URL/token")
-            .post(body.toRequestBody("application/x-www-form-urlencoded".toMediaType()))
-            .header("Host", "login.eveonline.com")
-            .header("Content-Type", "application/x-www-form-urlencoded")
-            .build()
+        val request =
+            Request
+                .Builder()
+                .url("$ESI_SSO_URL/token")
+                .post(body.toRequestBody("application/x-www-form-urlencoded".toMediaType()))
+                .header("Host", "login.eveonline.com")
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .build()
 
         return client.newCall(request).execute().use { response ->
             val responseBody = response.body?.string() ?: ""
@@ -305,26 +398,42 @@ object SsoAuthManager {
     private fun generateCodeVerifier(): String {
         val bytes = ByteArray(32)
         java.security.SecureRandom().nextBytes(bytes)
-        return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+        return java.util.Base64
+            .getUrlEncoder()
+            .withoutPadding()
+            .encodeToString(bytes)
     }
 
     private fun codeChallenge(verifier: String): String {
-        val digest = java.security.MessageDigest.getInstance("SHA-256")
-            .digest(verifier.toByteArray(Charsets.US_ASCII))
-        return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(digest)
+        val digest =
+            java.security.MessageDigest
+                .getInstance("SHA-256")
+                .digest(verifier.toByteArray(Charsets.US_ASCII))
+        return java.util.Base64
+            .getUrlEncoder()
+            .withoutPadding()
+            .encodeToString(digest)
     }
 
-    private fun parseQueryString(query: String): Map<String, String> {
-        return query.split("&").mapNotNull { pair ->
-            val idx = pair.indexOf('=')
-            if (idx > 0) {
-                java.net.URLDecoder.decode(pair.substring(0, idx), "UTF-8") to
-                    java.net.URLDecoder.decode(pair.substring(idx + 1), "UTF-8")
-            } else null
-        }.toMap()
-    }
+    private fun parseQueryString(query: String): Map<String, String> =
+        query
+            .split("&")
+            .mapNotNull { pair ->
+                val idx = pair.indexOf('=')
+                if (idx > 0) {
+                    java.net.URLDecoder.decode(pair.substring(0, idx), "UTF-8") to
+                        java.net.URLDecoder.decode(pair.substring(idx + 1), "UTF-8")
+                } else {
+                    null
+                }
+            }.toMap()
 
-    private fun sendResponse(exchange: com.sun.net.httpserver.HttpExchange, code: Int, body: String, headers: Map<String, String>) {
+    private fun sendResponse(
+        exchange: com.sun.net.httpserver.HttpExchange,
+        code: Int,
+        body: String,
+        headers: Map<String, String>,
+    ) {
         val bytes = body.toByteArray()
         headers.forEach { (key, value) -> exchange.responseHeaders.add(key, value) }
         exchange.sendResponseHeaders(code, bytes.size.toLong())

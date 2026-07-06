@@ -1,24 +1,34 @@
 package org.eventt.core.database
 
-import org.eventt.core.model.WalletSummary
 import org.eventt.core.model.DailyWalletEntry
+import org.eventt.core.model.WalletSummary
 
 object WalletDao {
-
     // ─── Transactions ─────────────────────────────────────────────────────
 
     fun insertTransaction(
-        transactionId: Long, date: String, typeId: Int, typeName: String,
-        quantity: Int, unitPrice: Double, total: Double, isBuy: Boolean,
-        clientId: Int, clientName: String, locationId: Long, locationName: String,
-        isCorp: Boolean, characterId: Int?, corporationId: Int?
+        transactionId: Long,
+        date: String,
+        typeId: Int,
+        typeName: String,
+        quantity: Int,
+        unitPrice: Double,
+        total: Double,
+        isBuy: Boolean,
+        clientId: Int,
+        clientName: String,
+        locationId: Long,
+        locationName: String,
+        isCorp: Boolean,
+        characterId: Int?,
+        corporationId: Int?,
     ) {
         DatabaseManager.transaction {
             prepareStatement(
                 """
                 INSERT OR REPLACE INTO transactions (transaction_id, date, type_id, type_name, quantity, unit_price, total, is_buy, client_id, client_name, location_id, location_name, is_corp, character_id, corporation_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """.trimIndent()
+                """.trimIndent(),
             ).use { stmt ->
                 stmt.setLong(1, transactionId)
                 stmt.setString(2, date)
@@ -40,16 +50,21 @@ object WalletDao {
         }
     }
 
-    fun updateTransactionNames(transactionId: Long, clientName: String? = null, locationName: String? = null) {
-        val parts = buildList {
-            if (clientName != null)  add("client_name = ?")
-            if (locationName != null) add("location_name = ?")
-        }
+    fun updateTransactionNames(
+        transactionId: Long,
+        clientName: String? = null,
+        locationName: String? = null,
+    ) {
+        val parts =
+            buildList {
+                if (clientName != null) add("client_name = ?")
+                if (locationName != null) add("location_name = ?")
+            }
         if (parts.isEmpty()) return
         DatabaseManager.transaction {
             prepareStatement("UPDATE transactions SET ${parts.joinToString(", ")} WHERE transaction_id = ?").use { stmt ->
                 var i = 1
-                if (clientName != null)  stmt.setString(i++, clientName)
+                if (clientName != null) stmt.setString(i++, clientName)
                 if (locationName != null) stmt.setString(i++, locationName)
                 stmt.setLong(i, transactionId)
                 stmt.executeUpdate()
@@ -66,40 +81,41 @@ object WalletDao {
         val isBuy: Boolean,
     )
 
-    fun getAllTransactions(characterId: Int): List<RawTxRecord> {
-        return DatabaseManager.transaction {
+    fun getAllTransactions(characterId: Int): List<RawTxRecord> =
+        DatabaseManager.transaction {
             prepareStatement(
-                "SELECT date, type_id, type_name, quantity, unit_price, is_buy FROM transactions WHERE character_id = ? ORDER BY date ASC"
+                "SELECT date, type_id, type_name, quantity, unit_price, is_buy FROM transactions WHERE character_id = ? ORDER BY date ASC",
             ).use { stmt ->
                 stmt.setInt(1, characterId)
                 stmt.executeQuery().use { rs ->
                     val result = mutableListOf<RawTxRecord>()
                     while (rs.next()) {
-                        result.add(RawTxRecord(
-                            date      = rs.getString("date"),
-                            typeId    = rs.getInt("type_id"),
-                            typeName  = rs.getString("type_name"),
-                            quantity  = rs.getInt("quantity"),
-                            unitPrice = rs.getDouble("unit_price"),
-                            isBuy     = rs.getInt("is_buy") == 1,
-                        ))
+                        result.add(
+                            RawTxRecord(
+                                date = rs.getString("date"),
+                                typeId = rs.getInt("type_id"),
+                                typeName = rs.getString("type_name"),
+                                quantity = rs.getInt("quantity"),
+                                unitPrice = rs.getDouble("unit_price"),
+                                isBuy = rs.getInt("is_buy") == 1,
+                            ),
+                        )
                     }
                     result
                 }
             }
         }
-    }
 
     fun getTransactions(
         characterId: Int? = null,
         corporationId: Int? = null,
         limit: Int = 100,
         offset: Int = 0,
-    ): List<Map<String, Any?>> {
-        return DatabaseManager.transaction {
+    ): List<Map<String, Any?>> =
+        DatabaseManager.transaction {
             val where = buildWhereClause(characterId, corporationId)
             prepareStatement(
-                "SELECT * FROM transactions ${where.sql} ORDER BY date DESC LIMIT ? OFFSET ?"
+                "SELECT * FROM transactions ${where.sql} ORDER BY date DESC LIMIT ? OFFSET ?",
             ).use { stmt ->
                 var i = 1
                 where.params.forEach { stmt.setObject(i++, it) }
@@ -125,29 +141,39 @@ object WalletDao {
                                 "is_corp" to (rs.getInt("is_corp") == 1),
                                 "character_id" to rs.getInt("character_id").takeIf { it != 0 },
                                 "corporation_id" to rs.getInt("corporation_id").takeIf { it != 0 },
-                            )
+                            ),
                         )
                     }
                     result
                 }
             }
         }
-    }
 
     // ─── Journal ──────────────────────────────────────────────────────────
 
     fun insertJournalEntry(
-        entryId: Long, date: String, amount: Double, balance: Double,
-        reason: String, refType: String, firstPartyId: Int, firstPartyName: String,
-        secondPartyId: Int, secondPartyName: String, taxAmount: Double?,
-        isCorp: Boolean, characterId: Int?, corporationId: Int?, divisionId: Int?
+        entryId: Long,
+        date: String,
+        amount: Double,
+        balance: Double,
+        reason: String,
+        refType: String,
+        firstPartyId: Int,
+        firstPartyName: String,
+        secondPartyId: Int,
+        secondPartyName: String,
+        taxAmount: Double?,
+        isCorp: Boolean,
+        characterId: Int?,
+        corporationId: Int?,
+        divisionId: Int?,
     ) {
         DatabaseManager.transaction {
             prepareStatement(
                 """
                 INSERT OR REPLACE INTO journal (entry_id, date, amount, balance, reason, ref_type, first_party_id, first_party_name, second_party_id, second_party_name, tax_amount, is_corp, character_id, corporation_id, division_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """.trimIndent()
+                """.trimIndent(),
             ).use { stmt ->
                 stmt.setLong(1, entryId)
                 stmt.setString(2, date)
@@ -174,12 +200,12 @@ object WalletDao {
         corporationId: Int? = null,
         limit: Int? = null,
         offset: Int = 0,
-    ): List<Map<String, Any?>> {
-        return DatabaseManager.transaction {
+    ): List<Map<String, Any?>> =
+        DatabaseManager.transaction {
             val where = buildWhereClause(characterId, corporationId)
             val limitClause = if (limit != null) " LIMIT ? OFFSET ?" else ""
             prepareStatement(
-                "SELECT * FROM journal ${where.sql} ORDER BY date DESC$limitClause"
+                "SELECT * FROM journal ${where.sql} ORDER BY date DESC$limitClause",
             ).use { stmt ->
                 var i = 1
                 where.params.forEach { stmt.setObject(i++, it) }
@@ -207,28 +233,32 @@ object WalletDao {
                                 "character_id" to rs.getInt("character_id").takeIf { it != 0 },
                                 "corporation_id" to rs.getInt("corporation_id").takeIf { it != 0 },
                                 "division_id" to rs.getInt("division_id").takeIf { it != 0 },
-                            )
+                            ),
                         )
                     }
                     result
                 }
             }
         }
-    }
 
     // ─── Summary ──────────────────────────────────────────────────────────
 
-    fun getWalletSummary(characterId: Int? = null, corporationId: Int? = null): WalletSummary {
-        return DatabaseManager.transaction {
+    fun getWalletSummary(
+        characterId: Int? = null,
+        corporationId: Int? = null,
+    ): WalletSummary =
+        DatabaseManager.transaction {
             val where = buildWhereClause(characterId, corporationId)
 
             // Get latest balance from journal
-            val balanceQuery = """
+            val balanceQuery =
+                """
                 SELECT COALESCE(balance, 0) FROM journal ${where.sql} ORDER BY date DESC, entry_id DESC LIMIT 1
-            """.trimIndent()
+                """.trimIndent()
 
             // Get daily breakdown
-            val dailyQuery = """
+            val dailyQuery =
+                """
                 SELECT 
                     substr(date, 1, 10) as day,
                     SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income,
@@ -238,34 +268,36 @@ object WalletDao {
                 GROUP BY substr(date, 1, 10)
                 ORDER BY day DESC
                 LIMIT 90
-            """.trimIndent()
+                """.trimIndent()
 
-            val balance = prepareStatement(balanceQuery).use { stmt ->
-                var i = 1
-                where.params.forEach { stmt.setObject(i++, it) }
-                stmt.executeQuery().use { rs ->
-                    if (rs.next()) rs.getDouble(1) else 0.0
-                }
-            }
-
-            val dailyBreakdown = prepareStatement(dailyQuery).use { stmt ->
-                var i = 1
-                where.params.forEach { stmt.setObject(i++, it) }
-                stmt.executeQuery().use { rs ->
-                    val list = mutableListOf<DailyWalletEntry>()
-                    while (rs.next()) {
-                        list.add(
-                            DailyWalletEntry(
-                                date = rs.getString("day"),
-                                income = rs.getDouble("income"),
-                                expenses = rs.getDouble("expenses"),
-                                net = rs.getDouble("net"),
-                            )
-                        )
+            val balance =
+                prepareStatement(balanceQuery).use { stmt ->
+                    var i = 1
+                    where.params.forEach { stmt.setObject(i++, it) }
+                    stmt.executeQuery().use { rs ->
+                        if (rs.next()) rs.getDouble(1) else 0.0
                     }
-                    list
                 }
-            }
+
+            val dailyBreakdown =
+                prepareStatement(dailyQuery).use { stmt ->
+                    var i = 1
+                    where.params.forEach { stmt.setObject(i++, it) }
+                    stmt.executeQuery().use { rs ->
+                        val list = mutableListOf<DailyWalletEntry>()
+                        while (rs.next()) {
+                            list.add(
+                                DailyWalletEntry(
+                                    date = rs.getString("day"),
+                                    income = rs.getDouble("income"),
+                                    expenses = rs.getDouble("expenses"),
+                                    net = rs.getDouble("net"),
+                                ),
+                            )
+                        }
+                        list
+                    }
+                }
 
             val totalEarned = dailyBreakdown.sumOf { it.income }
             val totalSpent = dailyBreakdown.sumOf { it.expenses }
@@ -279,17 +311,17 @@ object WalletDao {
                 dailyBreakdown = dailyBreakdown,
             )
         }
-    }
 
     fun getTransactionBreakdown(
         characterId: Int? = null,
         corporationId: Int? = null,
         since: String = "1970-01-01",
-    ): List<DailyWalletEntry> {
-        return DatabaseManager.transaction {
+    ): List<DailyWalletEntry> =
+        DatabaseManager.transaction {
             val where = buildWhereClause(characterId, corporationId)
             val whereSql = if (where.sql.isEmpty()) "WHERE date >= ?" else "${where.sql} AND date >= ?"
-            prepareStatement("""
+            prepareStatement(
+                """
                 SELECT
                     substr(date, 1, 10) as day,
                     SUM(CASE WHEN is_buy = 0 THEN total ELSE 0 END) as income,
@@ -300,35 +332,42 @@ object WalletDao {
                 GROUP BY substr(date, 1, 10)
                 ORDER BY day DESC
                 LIMIT 90
-            """.trimIndent()).use { stmt ->
+                """.trimIndent(),
+            ).use { stmt ->
                 var i = 1
                 where.params.forEach { stmt.setObject(i++, it) }
                 stmt.setString(i, since)
                 stmt.executeQuery().use { rs ->
                     val list = mutableListOf<DailyWalletEntry>()
                     while (rs.next()) {
-                        list.add(DailyWalletEntry(
-                            date     = rs.getString("day"),
-                            income   = rs.getDouble("income"),
-                            expenses = rs.getDouble("expenses"),
-                            net      = rs.getDouble("net"),
-                        ))
+                        list.add(
+                            DailyWalletEntry(
+                                date = rs.getString("day"),
+                                income = rs.getDouble("income"),
+                                expenses = rs.getDouble("expenses"),
+                                net = rs.getDouble("net"),
+                            ),
+                        )
                     }
                     list
                 }
             }
         }
-    }
 
     // ─── Helper ───────────────────────────────────────────────────────────
 
-    private data class WhereClause(val sql: String, val params: List<Any?>)
+    private data class WhereClause(
+        val sql: String,
+        val params: List<Any?>,
+    )
 
-    private fun buildWhereClause(characterId: Int?, corporationId: Int?): WhereClause {
-        return when {
+    private fun buildWhereClause(
+        characterId: Int?,
+        corporationId: Int?,
+    ): WhereClause =
+        when {
             characterId != null -> WhereClause("WHERE character_id = ?", listOf(characterId))
             corporationId != null -> WhereClause("WHERE corporation_id = ?", listOf(corporationId))
             else -> WhereClause("", emptyList())
         }
-    }
 }

@@ -28,13 +28,15 @@ private data class MemEntry(
 )
 
 object EsiCacheManager {
-
     private const val DEFAULT_TTL_MS = 5 * 60 * 1000L
 
     // L1 in-memory cache — survives within a single app session. Keys are "$endpoint|$hash".
     private val mem = ConcurrentHashMap<String, MemEntry>()
 
-    fun get(endpoint: String, params: Map<String, String>? = null): CacheResult {
+    fun get(
+        endpoint: String,
+        params: Map<String, String>? = null,
+    ): CacheResult {
         val hash = computeHash(params)
         val key = "$endpoint|$hash"
 
@@ -48,7 +50,13 @@ object EsiCacheManager {
         val entry = EsiCacheDao.get(endpoint, params) ?: return CacheResult(CacheState.MISS)
         val state = if (System.currentTimeMillis() < entry.expiresAt) CacheState.FRESH else CacheState.STALE
         mem[key] = MemEntry(entry.data, entry.expiresAt, entry.etag, entry.lastModified)
-        return CacheResult(state = state, data = entry.data, source = RequestSource.CACHE, etag = entry.etag, lastModified = entry.lastModified)
+        return CacheResult(
+            state = state,
+            data = entry.data,
+            source = RequestSource.CACHE,
+            etag = entry.etag,
+            lastModified = entry.lastModified,
+        )
     }
 
     fun save(
@@ -62,14 +70,16 @@ object EsiCacheManager {
         val effectiveExpiry = if (expiresAtMs > 0) expiresAtMs else System.currentTimeMillis() + DEFAULT_TTL_MS
         val hash = computeHash(params)
 
-        EsiCacheDao.save(EsiCacheEntry(
-            endpoint = endpoint,
-            paramsHash = hash,
-            data = data,
-            expiresAt = effectiveExpiry,
-            etag = etag,
-            lastModified = lastModified,
-        ))
+        EsiCacheDao.save(
+            EsiCacheEntry(
+                endpoint = endpoint,
+                paramsHash = hash,
+                data = data,
+                expiresAt = effectiveExpiry,
+                etag = etag,
+                lastModified = lastModified,
+            ),
+        )
 
         mem["$endpoint|$hash"] = MemEntry(data, effectiveExpiry, etag, lastModified)
     }
@@ -88,41 +98,55 @@ object EsiCacheManager {
         val key = "$endpoint|$hash"
         val existing = mem[key]
         if (existing != null) {
-            mem[key] = existing.copy(
-                expiresAt = newExpiresAt,
-                etag = etag ?: existing.etag,
-                lastModified = lastModified ?: existing.lastModified,
-            )
+            mem[key] =
+                existing.copy(
+                    expiresAt = newExpiresAt,
+                    etag = etag ?: existing.etag,
+                    lastModified = lastModified ?: existing.lastModified,
+                )
         }
     }
 
-    fun checkState(endpoint: String, params: Map<String, String>? = null): CacheState =
-        get(endpoint, params).state
+    fun checkState(
+        endpoint: String,
+        params: Map<String, String>? = null,
+    ): CacheState = get(endpoint, params).state
 
-    fun getExpiry(endpoint: String, params: Map<String, String>? = null): Long? {
+    fun getExpiry(
+        endpoint: String,
+        params: Map<String, String>? = null,
+    ): Long? {
         val key = "$endpoint|${computeHash(params)}"
         mem[key]?.expiresAt?.let { return it }
         return EsiCacheDao.get(endpoint, params)?.expiresAt
     }
 
-    fun parseExpiresHeader(expiresHeader: String): Long {
-        return try {
-            val formats = listOf(
-                java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME,
-                java.time.format.DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss zzz"),
-            )
-            val temporalAccessor = formats.firstNotNullOfOrNull { fmt ->
-                try { fmt.parse(expiresHeader) } catch (_: Exception) { null }
-            }
+    fun parseExpiresHeader(expiresHeader: String): Long =
+        try {
+            val formats =
+                listOf(
+                    java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME,
+                    java.time.format.DateTimeFormatter
+                        .ofPattern("EEE, dd MMM yyyy HH:mm:ss zzz"),
+                )
+            val temporalAccessor =
+                formats.firstNotNullOfOrNull { fmt ->
+                    try {
+                        fmt.parse(expiresHeader)
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
             if (temporalAccessor != null) {
-                java.time.Instant.from(temporalAccessor).toEpochMilli()
+                java.time.Instant
+                    .from(temporalAccessor)
+                    .toEpochMilli()
             } else {
                 System.currentTimeMillis() + DEFAULT_TTL_MS
             }
         } catch (_: Exception) {
             System.currentTimeMillis() + DEFAULT_TTL_MS
         }
-    }
 
     fun parseCacheControl(cacheControl: String): Long? {
         val match = "max-age=(\\d+)".toRegex().find(cacheControl)

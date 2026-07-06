@@ -367,18 +367,21 @@ data class EsiResponseMetadata(
 
 enum class RequestSource {
     CACHE,
-    SERVER
+    SERVER,
 }
 
 enum class RequestStatus {
     QUEUED,
     IN_PROGRESS,
     COMPLETED,
-    FAILED
+    FAILED,
 }
 
 data class QueuedRequest(
-    val id: String = java.util.UUID.randomUUID().toString(),
+    val id: String =
+        java.util.UUID
+            .randomUUID()
+            .toString(),
     val endpoint: String,
     val description: String,
     val source: RequestSource = RequestSource.CACHE,

@@ -4,7 +4,6 @@ package org.eventt.hotkey
  * Picks which [HotkeyBackend] to try, and in what order, based on OS and (on Linux) session type.
  */
 object HotkeySupport {
-
     /** Ordered candidates - the first one whose `start()` succeeds wins. */
     fun candidates(): List<HotkeyBackend> {
         val osName = System.getProperty("os.name", "").lowercase()

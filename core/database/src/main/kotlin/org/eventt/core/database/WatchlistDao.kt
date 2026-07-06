@@ -4,17 +4,16 @@ import org.eventt.core.model.WatchlistEntryModel
 import org.eventt.core.model.WatchlistPriceSnapshot
 
 object WatchlistDao {
-
     // ─── Watchlist Entries ────────────────────────────────────────────────
 
-    fun insert(entry: WatchlistEntryModel): Int {
-        return DatabaseManager.transaction {
+    fun insert(entry: WatchlistEntryModel): Int =
+        DatabaseManager.transaction {
             prepareStatement(
                 """
                 INSERT INTO watchlist (type_id, type_name, watchlist_name, station_id, region_id, sort_order)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """.trimIndent(),
-                java.sql.Statement.RETURN_GENERATED_KEYS
+                java.sql.Statement.RETURN_GENERATED_KEYS,
             ).use { stmt ->
                 stmt.setInt(1, entry.typeId)
                 stmt.setString(2, entry.typeName)
@@ -28,7 +27,6 @@ object WatchlistDao {
                 }
             }
         }
-    }
 
     fun delete(id: Int) {
         DatabaseManager.transaction {
@@ -39,17 +37,16 @@ object WatchlistDao {
         }
     }
 
-    fun getByWatchlistName(name: String): List<WatchlistEntryModel> {
-        return DatabaseManager.transaction {
+    fun getByWatchlistName(name: String): List<WatchlistEntryModel> =
+        DatabaseManager.transaction {
             prepareStatement("SELECT * FROM watchlist WHERE watchlist_name = ? ORDER BY sort_order").use { stmt ->
                 stmt.setString(1, name)
                 stmt.executeQuery().mapResultSetToEntries()
             }
         }
-    }
 
-    fun getAllWatchlists(): Map<String, List<WatchlistEntryModel>> {
-        return DatabaseManager.transaction {
+    fun getAllWatchlists(): Map<String, List<WatchlistEntryModel>> =
+        DatabaseManager.transaction {
             prepareStatement("SELECT * FROM watchlist ORDER BY watchlist_name, sort_order").use { stmt ->
                 stmt.executeQuery().use { rs ->
                     val map = mutableMapOf<String, MutableList<WatchlistEntryModel>>()
@@ -61,7 +58,6 @@ object WatchlistDao {
                 }
             }
         }
-    }
 
     // ─── Price Snapshots ──────────────────────────────────────────────────
 
@@ -71,7 +67,7 @@ object WatchlistDao {
                 """
                 INSERT INTO watchlist_prices (type_id, station_id, best_buy_price, best_sell_price, spread, spread_percent, volume_24h, change_percent_24h, change_percent_7d, change_percent_30d, sparkline_data)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """.trimIndent()
+                """.trimIndent(),
             ).use { stmt ->
                 stmt.setInt(1, snapshot.typeId)
                 stmt.setLong(2, snapshot.stationId)
@@ -91,10 +87,10 @@ object WatchlistDao {
         }
     }
 
-    fun getLatestPrice(typeId: Int): WatchlistPriceSnapshot? {
-        return DatabaseManager.transaction {
+    fun getLatestPrice(typeId: Int): WatchlistPriceSnapshot? =
+        DatabaseManager.transaction {
             prepareStatement(
-                "SELECT * FROM watchlist_prices WHERE type_id = ? ORDER BY captured_at DESC LIMIT 1"
+                "SELECT * FROM watchlist_prices WHERE type_id = ? ORDER BY captured_at DESC LIMIT 1",
             ).use { stmt ->
                 stmt.setInt(1, typeId)
                 stmt.executeQuery().use { rs ->
@@ -113,11 +109,12 @@ object WatchlistDao {
                             changePercent30d = rs.getDouble("change_percent_30d"),
                             sparklineData = parseSparklineJson(sparklineJson),
                         )
-                    } else null
+                    } else {
+                        null
+                    }
                 }
             }
         }
-    }
 
     private fun parseSparklineJson(json: String): List<Pair<String, Double>> {
         // Format stored: [["2024-01-01",1234.5],...]
@@ -133,13 +130,17 @@ object WatchlistDao {
         }.getOrDefault(emptyList())
     }
 
-    fun getPriceHistory(typeId: Int, stationId: Long, days: Int = 30): List<WatchlistPriceSnapshot> {
-        return DatabaseManager.transaction {
+    fun getPriceHistory(
+        typeId: Int,
+        stationId: Long,
+        days: Int = 30,
+    ): List<WatchlistPriceSnapshot> =
+        DatabaseManager.transaction {
             prepareStatement(
                 """
                 SELECT * FROM watchlist_prices WHERE type_id = ? AND station_id = ?
                 ORDER BY captured_at DESC LIMIT ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { stmt ->
                 stmt.setInt(1, typeId)
                 stmt.setLong(2, stationId)
@@ -159,19 +160,18 @@ object WatchlistDao {
                                 changePercent24h = rs.getDouble("change_percent_24h"),
                                 changePercent7d = rs.getDouble("change_percent_7d"),
                                 changePercent30d = rs.getDouble("change_percent_30d"),
-                            )
+                            ),
                         )
                     }
                     list
                 }
             }
         }
-    }
 
     // ─── Helpers ──────────────────────────────────────────────────────────
 
-    private fun java.sql.ResultSet.mapResultSetToEntry(): WatchlistEntryModel {
-        return WatchlistEntryModel(
+    private fun java.sql.ResultSet.mapResultSetToEntry(): WatchlistEntryModel =
+        WatchlistEntryModel(
             id = getInt("id"),
             typeId = getInt("type_id"),
             typeName = getString("type_name") ?: "",
@@ -180,7 +180,6 @@ object WatchlistDao {
             regionId = getInt("region_id"),
             sortOrder = getInt("sort_order"),
         )
-    }
 
     private fun java.sql.ResultSet.mapResultSetToEntries(): List<WatchlistEntryModel> {
         val list = mutableListOf<WatchlistEntryModel>()

@@ -1,0 +1,9 @@
+root = true
+
+[*.{kt,kts}]
+# Wildcard imports (androidx.compose.material.icons.filled.*, .layout.*, etc.) are standard
+# practice in Compose code — expanding them isn't practical or idiomatic here.
+ktlint_standard_no-wildcard-imports = disabled
+# @Composable functions are PascalCase by Compose convention (they read as components), which
+# conflicts with ktlint's plain-Kotlin function-naming rule.
+ktlint_standard_function-naming = disabled

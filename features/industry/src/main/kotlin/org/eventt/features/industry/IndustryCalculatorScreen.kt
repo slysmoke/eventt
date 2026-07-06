@@ -1,7 +1,7 @@
 package org.eventt.features.industry
 
-import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -17,10 +17,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import org.eventt.core.database.DatabaseManager
 import org.eventt.core.database.StaticDataDao
 import org.eventt.ui.common.*
+import java.util.Locale
 
 @Composable
 fun IndustryCalculatorScreen() {
@@ -63,11 +62,14 @@ fun IndustryCalculatorScreen() {
                 LazyColumn {
                     items(searchResults) { type ->
                         Row(
-                            modifier = Modifier.fillMaxWidth().clickable {
-                                selectedType = type
-                                searchQuery = type.name
-                                searchResults = emptyList()
-                            }.padding(12.dp),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selectedType = type
+                                        searchQuery = type.name
+                                        searchResults = emptyList()
+                                    }.padding(12.dp),
                         ) {
                             Icon(Icons.Default.Extension, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.width(8.dp))
@@ -140,16 +142,17 @@ fun IndustryCalculatorScreen() {
                     Spacer(modifier = Modifier.height(8.dp))
 
                     // Example mock materials
-                    val mockMaterials = listOf(
-                        "Tritanium" to 50000.0 * quantity,
-                        "Pyerite" to 15000.0 * quantity,
-                        "Mexallon" to 5000.0 * quantity,
-                        "Isogen" to 2000.0 * quantity,
-                        "Nocxium" to 500.0 * quantity,
-                        "Zydrine" to 100.0 * quantity,
-                        "Megacyte" to 50.0 * quantity,
-                        "Morphite" to 25.0 * quantity,
-                    )
+                    val mockMaterials =
+                        listOf(
+                            "Tritanium" to 50000.0 * quantity,
+                            "Pyerite" to 15000.0 * quantity,
+                            "Mexallon" to 5000.0 * quantity,
+                            "Isogen" to 2000.0 * quantity,
+                            "Nocxium" to 500.0 * quantity,
+                            "Zydrine" to 100.0 * quantity,
+                            "Megacyte" to 50.0 * quantity,
+                            "Morphite" to 25.0 * quantity,
+                        )
 
                     mockMaterials.forEach { (name, qty) ->
                         Row(
@@ -164,7 +167,7 @@ fun IndustryCalculatorScreen() {
 
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "ME ${meLevel}% reduction applied. Fetch real prices from market to calculate total cost.",
+                        "ME $meLevel% reduction applied. Fetch real prices from market to calculate total cost.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -200,12 +203,11 @@ fun IndustryCalculatorScreen() {
     }
 }
 
-private fun formatNumber(value: Double): String {
-    return when {
-        value >= 1_000_000_000 -> String.format("%.1fB", value / 1_000_000_000)
-        value >= 1_000_000 -> String.format("%.1fM", value / 1_000_000)
-        value >= 1_000 -> String.format("%.1fK", value / 1_000)
+private fun formatNumber(value: Double): String =
+    when {
+        value >= 1_000_000_000 -> String.format(Locale.US, "%.1fB", value / 1_000_000_000)
+        value >= 1_000_000 -> String.format(Locale.US, "%.1fM", value / 1_000_000)
+        value >= 1_000 -> String.format(Locale.US, "%.1fK", value / 1_000)
         value % 1 == 0.0 -> value.toLong().toString()
-        else -> String.format("%.2f", value)
+        else -> String.format(Locale.US, "%.2f", value)
     }
-}

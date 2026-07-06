@@ -4,7 +4,6 @@ import okhttp3.Request
 import org.eventt.core.http.EveHttpClient
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
-import java.util.concurrent.ConcurrentHashMap
 import javax.imageio.ImageIO
 
 /**
@@ -12,20 +11,22 @@ import javax.imageio.ImageIO
  * Fetches renders, icons, portraits, etc. from images.evetech.net.
  */
 object EveImageServer {
-
     private const val BASE_URL = "https://images.evetech.net"
 
     // Memory LRU cache
-    private val memoryCache = object : LinkedHashMap<String, BufferedImage>(100, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, BufferedImage>?): Boolean {
-            return size > 200 // Keep last 200 images in memory
+    private val memoryCache =
+        object : LinkedHashMap<String, BufferedImage>(100, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, BufferedImage>?): Boolean {
+                return size > 200 // Keep last 200 images in memory
+            }
         }
-    }
 
     // Disk cache: store raw bytes in a simple file-based cache
     private val diskCacheDir = java.io.File("${System.getProperty("user.home")}/.eventt/image-cache")
 
-    enum class ImageCategory(val path: String) {
+    enum class ImageCategory(
+        val path: String,
+    ) {
         TYPES("types"),
         CHARACTERS("characters"),
         CORPORATIONS("corporations"),
@@ -33,7 +34,9 @@ object EveImageServer {
         FACTIONS("factions"),
     }
 
-    enum class ImageVariation(val path: String) {
+    enum class ImageVariation(
+        val path: String,
+    ) {
         RENDER("render"),
         ICON("icon"),
         PORTRAIT("portrait"),
@@ -49,9 +52,7 @@ object EveImageServer {
         id: Int,
         variation: ImageVariation = ImageVariation.ICON,
         size: Int = 64,
-    ): String {
-        return "$BASE_URL/${category.path}/$id/${variation.path}?size=$size"
-    }
+    ): String = "$BASE_URL/${category.path}/$id/${variation.path}?size=$size"
 
     /**
      * Load an image (with memory + disk caching).
@@ -89,34 +90,41 @@ object EveImageServer {
     /**
      * Get type icon (most common use case).
      */
-    fun getTypeIcon(typeId: Int, size: Int = 32): BufferedImage? {
-        return loadImage(ImageCategory.TYPES, typeId, ImageVariation.ICON, size)
-    }
+    fun getTypeIcon(
+        typeId: Int,
+        size: Int = 32,
+    ): BufferedImage? = loadImage(ImageCategory.TYPES, typeId, ImageVariation.ICON, size)
 
     /**
      * Get type render (for display).
      */
-    fun getTypeRender(typeId: Int, size: Int = 256): BufferedImage? {
-        return loadImage(ImageCategory.TYPES, typeId, ImageVariation.RENDER, size)
-    }
+    fun getTypeRender(
+        typeId: Int,
+        size: Int = 256,
+    ): BufferedImage? = loadImage(ImageCategory.TYPES, typeId, ImageVariation.RENDER, size)
 
     /**
      * Get character portrait.
      */
-    fun getCharacterPortrait(characterId: Int, size: Int = 128): BufferedImage? {
-        return loadImage(ImageCategory.CHARACTERS, characterId, ImageVariation.PORTRAIT, size)
-    }
+    fun getCharacterPortrait(
+        characterId: Int,
+        size: Int = 128,
+    ): BufferedImage? = loadImage(ImageCategory.CHARACTERS, characterId, ImageVariation.PORTRAIT, size)
 
     /**
      * Get corporation logo.
      */
-    fun getCorporationLogo(corporationId: Int, size: Int = 128): BufferedImage? {
-        return loadImage(ImageCategory.CORPORATIONS, corporationId, ImageVariation.LOGO, size)
-    }
+    fun getCorporationLogo(
+        corporationId: Int,
+        size: Int = 128,
+    ): BufferedImage? = loadImage(ImageCategory.CORPORATIONS, corporationId, ImageVariation.LOGO, size)
 
     // ─── Internal ───────────────────────────────────────────────────────
 
-    private fun fetchAndCache(url: String, cacheKey: String): BufferedImage? {
+    private fun fetchAndCache(
+        url: String,
+        cacheKey: String,
+    ): BufferedImage? {
         return try {
             val client = EveHttpClient.getClient()
             val request = Request.Builder().url(url).build()
@@ -146,7 +154,10 @@ object EveImageServer {
         return if (file.exists()) file else null
     }
 
-    private fun saveToDiskCache(cacheKey: String, bytes: ByteArray) {
+    private fun saveToDiskCache(
+        cacheKey: String,
+        bytes: ByteArray,
+    ) {
         if (!diskCacheDir.exists()) diskCacheDir.mkdirs()
         val safeName = cacheKey.replace(Regex("[^a-zA-Z0-9_-]"), "_")
         val file = java.io.File(diskCacheDir, "$safeName.png")

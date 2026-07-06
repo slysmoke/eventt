@@ -4,7 +4,6 @@ import org.eventt.core.model.EsiCacheEntry
 import java.security.MessageDigest
 
 object EsiCacheDao {
-
     fun save(entry: EsiCacheEntry) {
         DatabaseManager.transaction {
             prepareStatement(
@@ -12,7 +11,7 @@ object EsiCacheDao {
                 INSERT OR REPLACE INTO esi_cache
                     (endpoint, params_hash, data, expires_at, source, last_fetched, etag, last_modified)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """.trimIndent()
+                """.trimIndent(),
             ).use { stmt ->
                 stmt.setString(1, entry.endpoint)
                 stmt.setString(2, entry.paramsHash)
@@ -27,11 +26,14 @@ object EsiCacheDao {
         }
     }
 
-    fun get(endpoint: String, params: Map<String, String>? = null): EsiCacheEntry? {
+    fun get(
+        endpoint: String,
+        params: Map<String, String>? = null,
+    ): EsiCacheEntry? {
         val hash = computeHash(params)
         return DatabaseManager.transaction {
             prepareStatement(
-                "SELECT * FROM esi_cache WHERE endpoint = ? AND params_hash = ?"
+                "SELECT * FROM esi_cache WHERE endpoint = ? AND params_hash = ?",
             ).use { stmt ->
                 stmt.setString(1, endpoint)
                 stmt.setString(2, hash)
@@ -47,14 +49,22 @@ object EsiCacheDao {
                             etag = rs.getString("etag"),
                             lastModified = rs.getString("last_modified"),
                         )
-                    } else null
+                    } else {
+                        null
+                    }
                 }
             }
         }
     }
 
     // Called on 304 Not Modified: bump expiry and update etag/last_modified without touching data.
-    fun refreshExpiry(endpoint: String, paramsHash: String, newExpiresAt: Long, etag: String? = null, lastModified: String? = null) {
+    fun refreshExpiry(
+        endpoint: String,
+        paramsHash: String,
+        newExpiresAt: Long,
+        etag: String? = null,
+        lastModified: String? = null,
+    ) {
         DatabaseManager.transaction {
             prepareStatement(
                 """
@@ -63,7 +73,7 @@ object EsiCacheDao {
                     etag = COALESCE(?, etag),
                     last_modified = COALESCE(?, last_modified)
                 WHERE endpoint = ? AND params_hash = ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { stmt ->
                 stmt.setLong(1, newExpiresAt)
                 stmt.setLong(2, System.currentTimeMillis())
@@ -76,7 +86,10 @@ object EsiCacheDao {
         }
     }
 
-    fun isFresh(endpoint: String, params: Map<String, String>? = null): Boolean {
+    fun isFresh(
+        endpoint: String,
+        params: Map<String, String>? = null,
+    ): Boolean {
         val entry = get(endpoint, params) ?: return false
         return System.currentTimeMillis() < entry.expiresAt
     }

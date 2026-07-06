@@ -3,15 +3,14 @@ package org.eventt.core.database
 import org.eventt.core.model.TrackedOrderModel
 
 object TrackedOrderDao {
-
-    fun insert(order: TrackedOrderModel): Int {
-        return DatabaseManager.transaction {
+    fun insert(order: TrackedOrderModel): Int =
+        DatabaseManager.transaction {
             prepareStatement(
                 """
                 INSERT INTO tracked_orders (type_id, type_name, buy_price, quantity, current_sell_price, station_id, station_name, notes, character_id, corporation_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent(),
-                java.sql.Statement.RETURN_GENERATED_KEYS
+                java.sql.Statement.RETURN_GENERATED_KEYS,
             ).use { stmt ->
                 stmt.setInt(1, order.typeId)
                 stmt.setString(2, order.typeName)
@@ -29,7 +28,6 @@ object TrackedOrderDao {
                 }
             }
         }
-    }
 
     fun update(order: TrackedOrderModel) {
         DatabaseManager.transaction {
@@ -38,7 +36,7 @@ object TrackedOrderDao {
                 UPDATE tracked_orders SET type_id = ?, type_name = ?, buy_price = ?, quantity = ?,
                 current_sell_price = ?, station_id = ?, station_name = ?, notes = ?, updated_at = ?,
                 character_id = ?, corporation_id = ? WHERE id = ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { stmt ->
                 stmt.setInt(1, order.typeId)
                 stmt.setString(2, order.typeName)
@@ -57,10 +55,13 @@ object TrackedOrderDao {
         }
     }
 
-    fun updateSellPrice(id: Int, sellPrice: Double) {
+    fun updateSellPrice(
+        id: Int,
+        sellPrice: Double,
+    ) {
         DatabaseManager.transaction {
             prepareStatement(
-                "UPDATE tracked_orders SET current_sell_price = ?, updated_at = ? WHERE id = ?"
+                "UPDATE tracked_orders SET current_sell_price = ?, updated_at = ? WHERE id = ?",
             ).use { stmt ->
                 stmt.setDouble(1, sellPrice)
                 stmt.setLong(2, System.currentTimeMillis())
@@ -70,40 +71,36 @@ object TrackedOrderDao {
         }
     }
 
-    fun getById(id: Int): TrackedOrderModel? {
-        return DatabaseManager.transaction {
+    fun getById(id: Int): TrackedOrderModel? =
+        DatabaseManager.transaction {
             prepareStatement("SELECT * FROM tracked_orders WHERE id = ?").use { stmt ->
                 stmt.setInt(1, id)
                 stmt.executeQuery().mapResultSetToOrders().firstOrNull()
             }
         }
-    }
 
-    fun getAll(): List<TrackedOrderModel> {
-        return DatabaseManager.transaction {
+    fun getAll(): List<TrackedOrderModel> =
+        DatabaseManager.transaction {
             prepareStatement("SELECT * FROM tracked_orders ORDER BY updated_at DESC").use { stmt ->
                 stmt.executeQuery().mapResultSetToOrders()
             }
         }
-    }
 
-    fun getByCharacter(characterId: Int): List<TrackedOrderModel> {
-        return DatabaseManager.transaction {
+    fun getByCharacter(characterId: Int): List<TrackedOrderModel> =
+        DatabaseManager.transaction {
             prepareStatement("SELECT * FROM tracked_orders WHERE character_id = ? ORDER BY updated_at DESC").use { stmt ->
                 stmt.setInt(1, characterId)
                 stmt.executeQuery().mapResultSetToOrders()
             }
         }
-    }
 
-    fun getByCorporation(corporationId: Int): List<TrackedOrderModel> {
-        return DatabaseManager.transaction {
+    fun getByCorporation(corporationId: Int): List<TrackedOrderModel> =
+        DatabaseManager.transaction {
             prepareStatement("SELECT * FROM tracked_orders WHERE corporation_id = ? ORDER BY updated_at DESC").use { stmt ->
                 stmt.setInt(1, corporationId)
                 stmt.executeQuery().mapResultSetToOrders()
             }
         }
-    }
 
     fun delete(id: Int) {
         DatabaseManager.transaction {
@@ -132,7 +129,7 @@ object TrackedOrderDao {
                     updatedAt = getLong("updated_at"),
                     characterId = getInt("character_id").takeIf { it != 0 },
                     corporationId = getInt("corporation_id").takeIf { it != 0 },
-                )
+                ),
             )
         }
         return list

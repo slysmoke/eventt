@@ -27,7 +27,7 @@ import java.util.*
 fun SettingsScreen() {
     val scope = rememberCoroutineScope()
     val syncState by EveRefService.state.collectAsState()
-    val sdeState  by StaticDataImporter.state.collectAsState()
+    val sdeState by StaticDataImporter.state.collectAsState()
 
     var selectedSource by remember { mutableStateOf("esi") }
     var periodMonths by remember { mutableStateOf(12) }
@@ -41,25 +41,25 @@ fun SettingsScreen() {
     var citadelLastSync by remember { mutableStateOf<Long?>(null) }
 
     var sdeBuildNumber by remember { mutableStateOf<String?>(null) }
-    var sdeImportDate  by remember { mutableStateOf<Long?>(null) }
-    var sdeTypeCount   by remember { mutableStateOf(0) }
+    var sdeImportDate by remember { mutableStateOf<Long?>(null) }
+    var sdeTypeCount by remember { mutableStateOf(0) }
 
     fun reloadStats() {
         downloadCount = EveRefDao.getDownloadCount()
-        earliestDate  = EveRefDao.getEarliestDate()
-        latestDate    = EveRefDao.getLatestDate()
+        earliestDate = EveRefDao.getEarliestDate()
+        latestDate = EveRefDao.getLatestDate()
         lastSyncMillis = EveRefService.getLastSyncMillis()
-        citadelCount   = CitadelService.getCitadelCount()
+        citadelCount = CitadelService.getCitadelCount()
         citadelLastSync = CitadelService.getLastSyncMillis()
         sdeBuildNumber = StaticDataDao.getSetting("sde_build_number")
-        sdeImportDate  = StaticDataDao.getSetting("sde_import_date")?.toLongOrNull()
-        sdeTypeCount   = StaticDataDao.countTypes()
+        sdeImportDate = StaticDataDao.getSetting("sde_import_date")?.toLongOrNull()
+        sdeTypeCount = StaticDataDao.countTypes()
     }
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             selectedSource = EveRefService.getSelectedSource()
-            periodMonths   = EveRefService.getHistoryPeriodMonths()
+            periodMonths = EveRefService.getHistoryPeriodMonths()
             reloadStats()
         }
     }
@@ -82,10 +82,11 @@ fun SettingsScreen() {
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(24.dp),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         Text("Settings", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
@@ -164,7 +165,9 @@ private fun MarketHistorySourceCard(
             SourceOption(
                 selected = selectedSource == "everef",
                 title = "EveRef Bulk Data",
-                description = "Downloads complete daily market history files from data.everef.net. Covers all items and regions. Data is ~3 days behind.",
+                description =
+                    "Downloads complete daily market history files from data.everef.net. " +
+                        "Covers all items and regions. Data is ~3 days behind.",
                 onClick = { onSourceSelected("everef") },
             )
 
@@ -230,7 +233,6 @@ private fun EveRefSettings(
     onSync: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-
         // Period selector
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
@@ -341,7 +343,7 @@ private fun SdeCard(
 
             Text(
                 "Universe data: types, market groups, regions, NPC stations. " +
-                "Downloaded from the official EVE Online SDE. Re-import to pick up NPC stations or new content.",
+                    "Downloaded from the official EVE Online SDE. Re-import to pick up NPC stations or new content.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -361,17 +363,33 @@ private fun SdeCard(
                     } else {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Warning, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error)
-                            Text("No SDE data — import required", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                            Text(
+                                "No SDE data — import required",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
                         }
                     }
                     if (buildNumber != null) {
-                        Text("Build: $buildNumber", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "Build: $buildNumber",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                     if (importDate != null) {
-                        Text("Imported: ${formatTimestamp(importDate)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "Imported: ${formatTimestamp(importDate)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                     if (sdeState.error != null) {
-                        Text("Error: ${sdeState.error}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        Text(
+                            "Error: ${sdeState.error}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
                     }
                 }
             }
@@ -385,7 +403,15 @@ private fun SdeCard(
                         Icon(Icons.Default.Download, null, Modifier.size(16.dp))
                         Spacer(Modifier.width(8.dp))
                     }
-                    Text(if (sdeState.isRunning) "Importing…" else if (typeCount > 0) "Re-import SDE" else "Import SDE")
+                    Text(
+                        if (sdeState.isRunning) {
+                            "Importing…"
+                        } else if (typeCount > 0) {
+                            "Re-import SDE"
+                        } else {
+                            "Import SDE"
+                        },
+                    )
                 }
                 if (sdeState.isRunning) {
                     Text(sdeState.status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -425,7 +451,7 @@ private fun CitadelCard(
 
             Text(
                 "Downloads the community citadel database from slysmoke/evernus-db. " +
-                "Enables name and system resolution for player-owned structures in orders, assets, and wallet.",
+                    "Enables name and system resolution for player-owned structures in orders, assets, and wallet.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -446,17 +472,29 @@ private fun CitadelCard(
                     } else {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Info, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("No citadel data. Structures will show ID instead of name.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                "No citadel data. Structures will show ID instead of name.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
                     if (lastSyncMillis != null) {
-                        Text("Last sync: ${formatTimestamp(lastSyncMillis)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "Last sync: ${formatTimestamp(lastSyncMillis)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                     if (!syncState.isRunning && syncState.status.isNotEmpty() && syncState.error == null) {
                         Text(syncState.status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     }
                     if (syncState.error != null) {
-                        Text("Error: ${syncState.error}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        Text(
+                            "Error: ${syncState.error}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
                     }
                 }
             }
@@ -488,25 +526,34 @@ private fun formatTimestamp(millis: Long): String {
 @Composable
 private fun CharacterFeesCard() {
     val scope = rememberCoroutineScope()
-    val characters = remember { try { CharacterDao.getAll() } catch (_: Exception) { emptyList() } }
+    val characters =
+        remember {
+            try {
+                CharacterDao.getAll()
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
 
     if (characters.isEmpty()) return
 
     // Load current tax values for all characters
-    val salesTaxValues = remember {
-        mutableStateMapOf<Int, String>().also { map ->
-            characters.forEach { char ->
-                map[char.id] = "%.2f".format(StaticDataDao.getCharSalesTax(char.id))
+    val salesTaxValues =
+        remember {
+            mutableStateMapOf<Int, String>().also { map ->
+                characters.forEach { char ->
+                    map[char.id] = "%.2f".format(StaticDataDao.getCharSalesTax(char.id))
+                }
             }
         }
-    }
-    val brokersFeeValues = remember {
-        mutableStateMapOf<Int, String>().also { map ->
-            characters.forEach { char ->
-                map[char.id] = "%.2f".format(StaticDataDao.getCharBrokersFee(char.id))
+    val brokersFeeValues =
+        remember {
+            mutableStateMapOf<Int, String>().also { map ->
+                characters.forEach { char ->
+                    map[char.id] = "%.2f".format(StaticDataDao.getCharBrokersFee(char.id))
+                }
             }
         }
-    }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {

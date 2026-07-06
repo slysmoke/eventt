@@ -17,7 +17,6 @@ import kotlinx.coroutines.withContext
 import org.eventt.core.auth.SsoAuthManager
 import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.CorporationDao
-import org.eventt.core.database.DatabaseManager
 import org.eventt.core.esi.EsiClient
 import org.eventt.ui.common.ConfirmDialog
 import org.eventt.ui.common.EmptyState

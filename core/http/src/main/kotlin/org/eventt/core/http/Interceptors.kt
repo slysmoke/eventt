@@ -4,11 +4,16 @@ import okhttp3.Interceptor
 import okhttp3.Response
 
 /** Sets the User-Agent ESI requires on every request (mandatory per CCP's best-practices docs). */
-class UserAgentInterceptor(private val userAgent: () -> String) : Interceptor {
+class UserAgentInterceptor(
+    private val userAgent: () -> String,
+) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
-        val request = chain.request().newBuilder()
-            .header("User-Agent", userAgent())
-            .build()
+        val request =
+            chain
+                .request()
+                .newBuilder()
+                .header("User-Agent", userAgent())
+                .build()
         return chain.proceed(request)
     }
 }
@@ -30,8 +35,9 @@ class UserAgentInterceptor(private val userAgent: () -> String) : Interceptor {
  * legacy error limit is global to the application regardless of which route triggered it.
  * Retries are bounded; other 4xx responses (real client errors) are returned as-is.
  */
-class EsiThrottleInterceptor(private val maxRetries: Int = 3) : Interceptor {
-
+class EsiThrottleInterceptor(
+    private val maxRetries: Int = 3,
+) : Interceptor {
     private companion object {
         @Volatile var cooldownUntilMs: Long = 0L
         const val LOW_ERROR_BUDGET = 5
@@ -50,19 +56,21 @@ class EsiThrottleInterceptor(private val maxRetries: Int = 3) : Interceptor {
             val response = chain.proceed(request)
             applyServerSignals(response)
 
-            val shouldRetry = attempt < maxRetries && when {
-                response.code == 429 -> {
-                    val retryAfterS = response.header("Retry-After")?.toLongOrNull() ?: DEFAULT_RETRY_AFTER_S
-                    cooldownUntilMs = System.currentTimeMillis() + retryAfterS * 1000
-                    true
-                }
-                response.code == 420 -> {
-                    cooldownUntilMs = System.currentTimeMillis() + LEGACY_420_BACKOFF_MS
-                    true
-                }
-                response.code >= 500 -> true
-                else -> false
-            }
+            val shouldRetry =
+                attempt < maxRetries &&
+                    when {
+                        response.code == 429 -> {
+                            val retryAfterS = response.header("Retry-After")?.toLongOrNull() ?: DEFAULT_RETRY_AFTER_S
+                            cooldownUntilMs = System.currentTimeMillis() + retryAfterS * 1000
+                            true
+                        }
+                        response.code == 420 -> {
+                            cooldownUntilMs = System.currentTimeMillis() + LEGACY_420_BACKOFF_MS
+                            true
+                        }
+                        response.code >= 500 -> true
+                        else -> false
+                    }
 
             if (shouldRetry) {
                 response.close()
@@ -96,7 +104,9 @@ class EsiThrottleInterceptor(private val maxRetries: Int = 3) : Interceptor {
         val rlRemaining = response.header("X-Ratelimit-Remaining")?.toIntOrNull()
         // "X-Ratelimit-Limit" is formatted like "150/15m" — only the token count is needed here.
         val rlLimit = response.header("X-Ratelimit-Limit")?.substringBefore("/")?.toIntOrNull()
-        if (rlRemaining != null && rlLimit != null && rlLimit > 0 &&
+        if (rlRemaining != null &&
+            rlLimit != null &&
+            rlLimit > 0 &&
             rlRemaining.toDouble() / rlLimit <= LOW_RATE_LIMIT_MARGIN
         ) {
             cooldownUntilMs = maxOf(cooldownUntilMs, System.currentTimeMillis() + RATE_LIMIT_COOLDOWN_MS)

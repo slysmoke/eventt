@@ -17,7 +17,6 @@ import org.eventt.ui.AppScreen
  * grabs the hotkey successfully.
  */
 object GlobalHotkeyService {
-
     var isRegistered: Boolean = false
         private set
 
@@ -33,18 +32,26 @@ object GlobalHotkeyService {
     fun start() {
         val onTrigger: () -> Unit = {
             when (activeScreen) {
-                AppScreen.ANALYSIS -> if (MarketAnalysisRouter.activeTab == 0) StationTradingQueue.processNext() else InterRegionQueue.processNext()
+                AppScreen.ANALYSIS ->
+                    if (MarketAnalysisRouter.activeTab ==
+                        0
+                    ) {
+                        StationTradingQueue.processNext()
+                    } else {
+                        InterRegionQueue.processNext()
+                    }
                 else -> PendingOrdersQueue.processNext()
             }
         }
 
         for (candidate in HotkeySupport.candidates()) {
-            val ok = try {
-                candidate.start(onTrigger)
-            } catch (e: Throwable) {
-                println("[Hotkey] ${candidate::class.simpleName} failed: ${e::class.simpleName}: ${e.message}")
-                false
-            }
+            val ok =
+                try {
+                    candidate.start(onTrigger)
+                } catch (e: Throwable) {
+                    println("[Hotkey] ${candidate::class.simpleName} failed: ${e::class.simpleName}: ${e.message}")
+                    false
+                }
             if (ok) {
                 backend = candidate
                 isRegistered = true

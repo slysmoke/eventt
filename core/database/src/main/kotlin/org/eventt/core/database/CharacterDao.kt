@@ -1,17 +1,15 @@
 package org.eventt.core.database
 
 import org.eventt.core.model.CharacterModel
-import java.sql.PreparedStatement
 
 object CharacterDao {
-
     fun insert(character: CharacterModel) {
         DatabaseManager.transaction {
             prepareStatement(
                 """
                 INSERT OR REPLACE INTO characters (id, name, refresh_token, access_token, token_expiry, corporation_id, corporation_name)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-                """.trimIndent()
+                """.trimIndent(),
             ).use { stmt ->
                 stmt.setInt(1, character.id)
                 stmt.setString(2, character.name)
@@ -25,24 +23,26 @@ object CharacterDao {
         }
     }
 
-    fun getAll(): List<CharacterModel> {
-        return DatabaseManager.transaction {
+    fun getAll(): List<CharacterModel> =
+        DatabaseManager.transaction {
             prepareStatement("SELECT * FROM characters ORDER BY name").use { stmt ->
                 stmt.executeQuery().mapResultSetToCharacters()
             }
         }
-    }
 
-    fun getById(id: Int): CharacterModel? {
-        return DatabaseManager.transaction {
+    fun getById(id: Int): CharacterModel? =
+        DatabaseManager.transaction {
             prepareStatement("SELECT * FROM characters WHERE id = ?").use { stmt ->
                 stmt.setInt(1, id)
                 stmt.executeQuery().mapResultSetToCharacters().firstOrNull()
             }
         }
-    }
 
-    fun updateToken(id: Int, accessToken: String, tokenExpiry: Long) {
+    fun updateToken(
+        id: Int,
+        accessToken: String,
+        tokenExpiry: Long,
+    ) {
         DatabaseManager.transaction {
             prepareStatement("UPDATE characters SET access_token = ?, token_expiry = ? WHERE id = ?").use { stmt ->
                 stmt.setString(1, TokenCrypto.encrypt(accessToken))
@@ -53,7 +53,10 @@ object CharacterDao {
         }
     }
 
-    fun updateRefreshToken(id: Int, refreshToken: String) {
+    fun updateRefreshToken(
+        id: Int,
+        refreshToken: String,
+    ) {
         DatabaseManager.transaction {
             prepareStatement("UPDATE characters SET refresh_token = ? WHERE id = ?").use { stmt ->
                 stmt.setString(1, TokenCrypto.encrypt(refreshToken))
@@ -72,8 +75,8 @@ object CharacterDao {
         }
     }
 
-    fun getTokenExpiry(id: Int): Long {
-        return DatabaseManager.transaction {
+    fun getTokenExpiry(id: Int): Long =
+        DatabaseManager.transaction {
             prepareStatement("SELECT token_expiry FROM characters WHERE id = ?").use { stmt ->
                 stmt.setInt(1, id)
                 stmt.executeQuery().use { rs ->
@@ -81,10 +84,9 @@ object CharacterDao {
                 }
             }
         }
-    }
 
-    fun getAccessToken(id: Int): String? {
-        return DatabaseManager.transaction {
+    fun getAccessToken(id: Int): String? =
+        DatabaseManager.transaction {
             prepareStatement("SELECT access_token FROM characters WHERE id = ?").use { stmt ->
                 stmt.setInt(1, id)
                 stmt.executeQuery().use { rs ->
@@ -92,7 +94,6 @@ object CharacterDao {
                 }
             }
         }
-    }
 
     private fun java.sql.ResultSet.mapResultSetToCharacters(): List<CharacterModel> {
         val list = mutableListOf<CharacterModel>()
@@ -108,7 +109,7 @@ object CharacterDao {
                     tokenExpiry = getLong("token_expiry"),
                     corporationId = getInt("corporation_id").takeIf { it != 0 },
                     corporationName = getString("corporation_name"),
-                )
+                ),
             )
         }
         return list
@@ -116,14 +117,18 @@ object CharacterDao {
 }
 
 object CorporationDao {
-
-    fun insert(id: Int, name: String, ticker: String, allianceId: Int?) {
+    fun insert(
+        id: Int,
+        name: String,
+        ticker: String,
+        allianceId: Int?,
+    ) {
         DatabaseManager.transaction {
             prepareStatement(
                 """
                 INSERT OR REPLACE INTO corporations (id, name, ticker, alliance_id)
                 VALUES (?, ?, ?, ?)
-                """.trimIndent()
+                """.trimIndent(),
             ).use { stmt ->
                 stmt.setInt(1, id)
                 stmt.setString(2, name)
@@ -134,8 +139,8 @@ object CorporationDao {
         }
     }
 
-    fun getAll(): List<Map<String, Any?>> {
-        return DatabaseManager.transaction {
+    fun getAll(): List<Map<String, Any?>> =
+        DatabaseManager.transaction {
             prepareStatement("SELECT * FROM corporations ORDER BY name").use { stmt ->
                 val result = mutableListOf<Map<String, Any?>>()
                 stmt.executeQuery().use { rs ->
@@ -146,14 +151,13 @@ object CorporationDao {
                                 "name" to rs.getString("name"),
                                 "ticker" to rs.getString("ticker"),
                                 "alliance_id" to rs.getInt("alliance_id").takeIf { it != 0 },
-                            )
+                            ),
                         )
                     }
                 }
                 result
             }
         }
-    }
 
     fun delete(id: Int) {
         DatabaseManager.transaction {

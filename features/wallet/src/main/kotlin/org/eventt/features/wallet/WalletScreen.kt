@@ -1,6 +1,7 @@
 package org.eventt.features.wallet
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -24,37 +25,38 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.math.abs
-import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.eventt.core.database.WalletDao
 import org.eventt.core.database.StaticDataDao
+import org.eventt.core.database.WalletDao
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.DailyWalletEntry
 import org.eventt.ui.common.*
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.foundation.background
+import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 @Composable
 fun WalletScreen(charId: Int?) {
     val scope = rememberCoroutineScope()
-    var balance            by remember { mutableStateOf(0.0) }
-    var dailyBreakdown     by remember { mutableStateOf<List<DailyWalletEntry>>(emptyList()) }
-    var transactions       by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
-    var journal            by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
-    var isLoading          by remember { mutableStateOf(false) }
+    var balance by remember { mutableStateOf(0.0) }
+    var dailyBreakdown by remember { mutableStateOf<List<DailyWalletEntry>>(emptyList()) }
+    var transactions by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
+    var journal by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(false) }
     var refreshAvailableAt by remember { mutableStateOf<Long?>(null) }
-    var activeTab          by remember { mutableStateOf(0) }
+    var activeTab by remember { mutableStateOf(0) }
 
     LaunchedEffect(charId) {
         if (charId != null) {
             isLoading = true
-            loadWalletData(charId,
+            loadWalletData(
+                charId,
                 balanceCallback = { balance = it },
                 dailyCallback = { dailyBreakdown = it },
                 transactionsCallback = { transactions = it },
@@ -79,7 +81,8 @@ fun WalletScreen(charId: Int?) {
                     onClick = {
                         scope.launch {
                             isLoading = true
-                            loadWalletData(id,
+                            loadWalletData(
+                                id,
                                 balanceCallback = { balance = it },
                                 dailyCallback = { dailyBreakdown = it },
                                 transactionsCallback = { transactions = it },
@@ -151,20 +154,21 @@ private fun TransactionList(transactions: List<Map<String, Any?>>) {
     Column {
         // Header
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .padding(horizontal = 8.dp, vertical = 6.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TxHeader("Date",       Modifier.weight(1.8f))
-            TxHeader("B/S",        Modifier.weight(0.6f))
-            TxHeader("Item",       Modifier.weight(3f))
-            TxHeader("Qty",        Modifier.weight(1f), rightAlign = true)
+            TxHeader("Date", Modifier.weight(1.8f))
+            TxHeader("B/S", Modifier.weight(0.6f))
+            TxHeader("Item", Modifier.weight(3f))
+            TxHeader("Qty", Modifier.weight(1f), rightAlign = true)
             TxHeader("Unit Price", Modifier.weight(2f), rightAlign = true)
-            TxHeader("Total",      Modifier.weight(2f), rightAlign = true)
-            TxHeader("Client",     Modifier.weight(2f))
-            TxHeader("Station",    Modifier.weight(2.5f))
+            TxHeader("Total", Modifier.weight(2f), rightAlign = true)
+            TxHeader("Client", Modifier.weight(2f))
+            TxHeader("Station", Modifier.weight(2.5f))
         }
         HorizontalDivider()
         LazyColumn(modifier = Modifier.fillMaxWidth()) {
@@ -172,14 +176,19 @@ private fun TransactionList(transactions: List<Map<String, Any?>>) {
                 val isBuy = tx["is_buy"] as? Boolean ?: false
                 val unitPrice = (tx["unit_price"] as? Number)?.toDouble() ?: 0.0
                 val quantity = (tx["quantity"] as? Number)?.toInt() ?: 0
-                val total = (tx["total"] as? Number)?.toDouble()
-                    ?.takeIf { it > 0 } ?: (unitPrice * quantity)
-                val typeName = tx["type_name"]?.toString()?.ifEmpty { null }
-                    ?: "Unknown (${tx["type_id"]})"
-                val clientName = tx["client_name"]?.toString()?.ifEmpty { null }
-                    ?: tx["client_id"]?.let { "#$it" } ?: ""
-                val locationName = tx["location_name"]?.toString()?.ifEmpty { null }
-                    ?: tx["location_id"]?.toString() ?: ""
+                val total =
+                    (tx["total"] as? Number)
+                        ?.toDouble()
+                        ?.takeIf { it > 0 } ?: (unitPrice * quantity)
+                val typeName =
+                    tx["type_name"]?.toString()?.ifEmpty { null }
+                        ?: "Unknown (${tx["type_id"]})"
+                val clientName =
+                    tx["client_name"]?.toString()?.ifEmpty { null }
+                        ?: tx["client_id"]?.let { "#$it" } ?: ""
+                val locationName =
+                    tx["location_name"]?.toString()?.ifEmpty { null }
+                        ?: tx["location_id"]?.toString() ?: ""
                 val dateStr = tx["date"]?.toString()?.take(16)?.replace("T", " ") ?: ""
                 val buyColor = Color(0xFF69DB7C)
                 val sellColor = Color(0xFFFF6B6B)
@@ -188,7 +197,12 @@ private fun TransactionList(transactions: List<Map<String, Any?>>) {
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(dateStr, modifier = Modifier.weight(1.8f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        dateStr,
+                        modifier = Modifier.weight(1.8f),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     Surface(
                         modifier = Modifier.weight(0.6f),
                         color = (if (isBuy) buyColor else sellColor).copy(alpha = 0.15f),
@@ -202,9 +216,25 @@ private fun TransactionList(transactions: List<Map<String, Any?>>) {
                             fontWeight = FontWeight.Bold,
                         )
                     }
-                    Text(typeName, modifier = Modifier.weight(3f).padding(start = 4.dp), style = MaterialTheme.typography.bodyMedium, overflow = TextOverflow.Ellipsis, maxLines = 1)
-                    Text("%,d".format(quantity), modifier = Modifier.weight(1f), textAlign = TextAlign.End, style = MaterialTheme.typography.bodySmall)
-                    Text(formatIsk(unitPrice), modifier = Modifier.weight(2f), textAlign = TextAlign.End, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        typeName,
+                        modifier = Modifier.weight(3f).padding(start = 4.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                        overflow = TextOverflow.Ellipsis,
+                        maxLines = 1,
+                    )
+                    Text(
+                        "%,d".format(quantity),
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.End,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        formatIsk(unitPrice),
+                        modifier = Modifier.weight(2f),
+                        textAlign = TextAlign.End,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                     Text(
                         formatIsk(total),
                         modifier = Modifier.weight(2f),
@@ -213,8 +243,22 @@ private fun TransactionList(transactions: List<Map<String, Any?>>) {
                         fontWeight = FontWeight.Medium,
                         color = if (isBuy) sellColor else buyColor,
                     )
-                    Text(clientName, modifier = Modifier.weight(2f).padding(start = 8.dp), style = MaterialTheme.typography.bodySmall, overflow = TextOverflow.Ellipsis, maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(locationName, modifier = Modifier.weight(2.5f).padding(start = 8.dp), style = MaterialTheme.typography.bodySmall, overflow = TextOverflow.Ellipsis, maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        clientName,
+                        modifier = Modifier.weight(2f).padding(start = 8.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        overflow = TextOverflow.Ellipsis,
+                        maxLines = 1,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        locationName,
+                        modifier = Modifier.weight(2.5f).padding(start = 8.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        overflow = TextOverflow.Ellipsis,
+                        maxLines = 1,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 HorizontalDivider(thickness = 0.5.dp)
             }
@@ -223,7 +267,11 @@ private fun TransactionList(transactions: List<Map<String, Any?>>) {
 }
 
 @Composable
-private fun TxHeader(label: String, modifier: Modifier, rightAlign: Boolean = false) {
+private fun TxHeader(
+    label: String,
+    modifier: Modifier,
+    rightAlign: Boolean = false,
+) {
     Text(
         label,
         modifier = modifier,
@@ -241,8 +289,8 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
         return
     }
 
-    val totalTax    = journal.filter { it["ref_type"] == "transaction_tax" }.sumOf { (it["amount"] as? Number)?.toDouble() ?: 0.0 }
-    val totalBroker = journal.filter { it["ref_type"] == "brokers_fee"     }.sumOf { (it["amount"] as? Number)?.toDouble() ?: 0.0 }
+    val totalTax = journal.filter { it["ref_type"] == "transaction_tax" }.sumOf { (it["amount"] as? Number)?.toDouble() ?: 0.0 }
+    val totalBroker = journal.filter { it["ref_type"] == "brokers_fee" }.sumOf { (it["amount"] as? Number)?.toDouble() ?: 0.0 }
 
     Column {
         // Tax summary
@@ -257,24 +305,56 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
                     horizontalArrangement = Arrangement.spacedBy(24.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onErrorContainer)
-                    Text("Taxes paid (shown entries):", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+                    Icon(
+                        Icons.Default.Info,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                    Text(
+                        "Taxes paid (shown entries):",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                    )
                     if (totalTax != 0.0) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Sales Tax", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onErrorContainer)
-                            Text(formatIsk(totalTax), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Color(0xFFFF6B6B))
+                            Text(
+                                "Sales Tax",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                            Text(
+                                formatIsk(totalTax),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFFF6B6B),
+                            )
                         }
                     }
                     if (totalBroker != 0.0) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Broker's Fee", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onErrorContainer)
-                            Text(formatIsk(totalBroker), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Color(0xFFFF6B6B))
+                            Text(
+                                "Broker's Fee",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                            Text(
+                                formatIsk(totalBroker),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFFF6B6B),
+                            )
                         }
                     }
                     if (totalTax != 0.0 && totalBroker != 0.0) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("Total", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onErrorContainer)
-                            Text(formatIsk(totalTax + totalBroker), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Color(0xFFFF6B6B))
+                            Text(
+                                formatIsk(totalTax + totalBroker),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFFF6B6B),
+                            )
                         }
                     }
                 }
@@ -284,38 +364,57 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
 
         // Table header
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .padding(horizontal = 8.dp, vertical = 6.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TxHeader("Date",        Modifier.weight(1.8f))
-            TxHeader("Type",        Modifier.weight(2.5f))
+            TxHeader("Date", Modifier.weight(1.8f))
+            TxHeader("Type", Modifier.weight(2.5f))
             TxHeader("Description", Modifier.weight(3f))
-            TxHeader("Amount",      Modifier.weight(2f), rightAlign = true)
-            TxHeader("Tax",         Modifier.weight(1.5f), rightAlign = true)
-            TxHeader("Balance",     Modifier.weight(2f), rightAlign = true)
+            TxHeader("Amount", Modifier.weight(2f), rightAlign = true)
+            TxHeader("Tax", Modifier.weight(1.5f), rightAlign = true)
+            TxHeader("Balance", Modifier.weight(2f), rightAlign = true)
         }
         HorizontalDivider()
 
         LazyColumn(modifier = Modifier.fillMaxWidth()) {
             items(journal) { entry ->
-                val amount    = (entry["amount"]     as? Number)?.toDouble() ?: 0.0
+                val amount = (entry["amount"] as? Number)?.toDouble() ?: 0.0
                 val taxAmount = (entry["tax_amount"] as? Number)?.toDouble()
-                val balance   = (entry["balance"]    as? Number)?.toDouble() ?: 0.0
-                val refType   = entry["ref_type"]?.toString() ?: ""
-                val reason    = entry["reason"]?.toString()?.trim() ?: ""
-                val dateStr   = entry["date"]?.toString()?.take(16)?.replace("T", " ") ?: ""
+                val balance = (entry["balance"] as? Number)?.toDouble() ?: 0.0
+                val refType = entry["ref_type"]?.toString() ?: ""
+                val reason = entry["reason"]?.toString()?.trim() ?: ""
+                val dateStr = entry["date"]?.toString()?.take(16)?.replace("T", " ") ?: ""
                 val amountColor = if (amount >= 0) Color(0xFF69DB7C) else Color(0xFFFF6B6B)
 
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(dateStr,                 modifier = Modifier.weight(1.8f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(formatRefType(refType),  modifier = Modifier.weight(2.5f), style = MaterialTheme.typography.bodySmall, overflow = TextOverflow.Ellipsis, maxLines = 1)
-                    Text(reason,                  modifier = Modifier.weight(3f).padding(start = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, overflow = TextOverflow.Ellipsis, maxLines = 1)
+                    Text(
+                        dateStr,
+                        modifier = Modifier.weight(1.8f),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        formatRefType(refType),
+                        modifier = Modifier.weight(2.5f),
+                        style = MaterialTheme.typography.bodySmall,
+                        overflow = TextOverflow.Ellipsis,
+                        maxLines = 1,
+                    )
+                    Text(
+                        reason,
+                        modifier = Modifier.weight(3f).padding(start = 4.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        overflow = TextOverflow.Ellipsis,
+                        maxLines = 1,
+                    )
                     Text(
                         "${if (amount >= 0) "+" else ""}${formatIsk(amount)}",
                         modifier = Modifier.weight(2f),
@@ -329,7 +428,14 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
                         modifier = Modifier.weight(1.5f),
                         textAlign = TextAlign.End,
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (taxAmount != null && taxAmount != 0.0) Color(0xFFFF6B6B) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        color =
+                            if (taxAmount != null &&
+                                taxAmount != 0.0
+                            ) {
+                                Color(0xFFFF6B6B)
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
                     )
                     Text(
                         formatIsk(balance),
@@ -345,53 +451,61 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
     }
 }
 
-private fun formatRefType(refType: String): String = when (refType) {
-    "transaction_tax"                  -> "Sales Tax"
-    "brokers_fee"                      -> "Broker's Fee"
-    "market_transaction"               -> "Market Transaction"
-    "market_escrow"                    -> "Buy Order Escrow"
-    "market_escrow_refund"             -> "Escrow Refund"
-    "player_trading"                   -> "Trade"
-    "contract_price"                   -> "Contract"
-    "contract_reward"                  -> "Contract Reward"
-    "contract_deposit"                 -> "Contract Deposit"
-    "contract_deposit_refund"          -> "Contract Deposit Refund"
-    "contract_price_payment_corp"      -> "Corp Contract"
-    "bounty_prizes"                    -> "Bounty"
-    "industry_job_tax"                 -> "Industry Tax"
-    "manufacturing"                    -> "Manufacturing"
-    "reprocessing_tax"                 -> "Reprocessing Tax"
-    "jump_clone_installation_fee"      -> "Clone Jump Fee"
-    "planetary_import_tax"             -> "PI Import Tax"
-    "planetary_export_tax"             -> "PI Export Tax"
-    "corporation_account_withdrawal"   -> "Corp Withdrawal"
-    "corporation_dividend_payment"     -> "Dividend"
-    "structure_gate_jump"              -> "Jump Gate"
-    "asset_safety_recovery_tax"        -> "Asset Safety Tax"
-    "skill_purchase"                   -> "Skill Purchase"
-    "agent_mission_reward"             -> "Mission Reward"
-    "agent_mission_time_bonus_reward"  -> "Mission Bonus"
-    else -> refType.replace('_', ' ').split(' ')
-        .joinToString(" ") { it.replaceFirstChar(Char::uppercaseChar) }
-}
+private fun formatRefType(refType: String): String =
+    when (refType) {
+        "transaction_tax" -> "Sales Tax"
+        "brokers_fee" -> "Broker's Fee"
+        "market_transaction" -> "Market Transaction"
+        "market_escrow" -> "Buy Order Escrow"
+        "market_escrow_refund" -> "Escrow Refund"
+        "player_trading" -> "Trade"
+        "contract_price" -> "Contract"
+        "contract_reward" -> "Contract Reward"
+        "contract_deposit" -> "Contract Deposit"
+        "contract_deposit_refund" -> "Contract Deposit Refund"
+        "contract_price_payment_corp" -> "Corp Contract"
+        "bounty_prizes" -> "Bounty"
+        "industry_job_tax" -> "Industry Tax"
+        "manufacturing" -> "Manufacturing"
+        "reprocessing_tax" -> "Reprocessing Tax"
+        "jump_clone_installation_fee" -> "Clone Jump Fee"
+        "planetary_import_tax" -> "PI Import Tax"
+        "planetary_export_tax" -> "PI Export Tax"
+        "corporation_account_withdrawal" -> "Corp Withdrawal"
+        "corporation_dividend_payment" -> "Dividend"
+        "structure_gate_jump" -> "Jump Gate"
+        "asset_safety_recovery_tax" -> "Asset Safety Tax"
+        "skill_purchase" -> "Skill Purchase"
+        "agent_mission_reward" -> "Mission Reward"
+        "agent_mission_time_bonus_reward" -> "Mission Bonus"
+        else ->
+            refType
+                .replace('_', ' ')
+                .split(' ')
+                .joinToString(" ") { it.replaceFirstChar(Char::uppercaseChar) }
+    }
 
 private val PNL_POSITIVE = Color(0xFF69DB7C)
 private val PNL_NEGATIVE = Color(0xFFFF6B6B)
 
-private fun pnlSignedText(value: Double): String =
-    "${if (value >= 0) "+" else "-"}${formatIsk(abs(value))}"
+private fun pnlSignedText(value: Double): String = "${if (value >= 0) "+" else "-"}${formatIsk(abs(value))}"
 
 @Composable
-private fun pnlColor(value: Double): Color = when {
-    value > 0 -> PNL_POSITIVE
-    value < 0 -> PNL_NEGATIVE
-    else -> MaterialTheme.colorScheme.onSurface
-}
+private fun pnlColor(value: Double): Color =
+    when {
+        value > 0 -> PNL_POSITIVE
+        value < 0 -> PNL_NEGATIVE
+        else -> MaterialTheme.colorScheme.onSurface
+    }
 
 @Composable
 private fun PnlChart(dailyBreakdown: List<DailyWalletEntry>) {
     if (dailyBreakdown.isEmpty()) {
-        EmptyState(icon = Icons.AutoMirrored.Filled.ShowChart, title = "No P&L Data", description = "Need journal entries to calculate P&L.")
+        EmptyState(
+            icon = Icons.AutoMirrored.Filled.ShowChart,
+            title = "No P&L Data",
+            description = "Need journal entries to calculate P&L.",
+        )
         return
     }
 
@@ -421,7 +535,12 @@ private fun PnlChart(dailyBreakdown: List<DailyWalletEntry>) {
             PnlStatCard("Income", "+${formatIsk(incomeAll)}", PNL_POSITIVE, Modifier.weight(1f))
             PnlStatCard("Expenses", "-${formatIsk(expensesAll)}", PNL_NEGATIVE, Modifier.weight(1f))
             PnlStatCard("Margin", "%.1f%%".format(margin), pnlColor(margin), Modifier.weight(1f))
-            PnlStatCard("Profitable Days", "$profitableDays / ${chronological.size}", MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
+            PnlStatCard(
+                "Profitable Days",
+                "$profitableDays / ${chronological.size}",
+                MaterialTheme.colorScheme.onSurface,
+                Modifier.weight(1f),
+            )
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -443,7 +562,12 @@ private fun PnlChart(dailyBreakdown: List<DailyWalletEntry>) {
 }
 
 @Composable
-private fun PnlStatCard(label: String, valueText: String, color: Color, modifier: Modifier = Modifier) {
+private fun PnlStatCard(
+    label: String,
+    valueText: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.08f)),
@@ -497,7 +621,11 @@ private fun PnlTable(entries: List<DailyWalletEntry>) {
 }
 
 @Composable
-private fun PnlBarChart(data: List<Double>, dates: List<String>, modifier: Modifier = Modifier) {
+private fun PnlBarChart(
+    data: List<Double>,
+    dates: List<String>,
+    modifier: Modifier = Modifier,
+) {
     if (data.isEmpty()) return
 
     val textMeasurer = rememberTextMeasurer()
@@ -507,21 +635,32 @@ private fun PnlBarChart(data: List<Double>, dates: List<String>, modifier: Modif
     var hoverIdx by remember { mutableStateOf<Int?>(null) }
 
     Canvas(
-        modifier = modifier.pointerInput(data) {
-            awaitPointerEventScope {
-                while (true) {
-                    val event = awaitPointerEvent()
-                    if (event.type == PointerEventType.Exit) { hoverIdx = null; continue }
-                    if (event.type != PointerEventType.Move) continue
-                    val posX = event.changes.firstOrNull()?.position?.x ?: continue
-                    val lPad = 56.dp.toPx()
-                    val chartW = size.width - lPad - 8.dp.toPx()
-                    hoverIdx = if (posX >= lPad && data.isNotEmpty())
-                        ((posX - lPad) / chartW * data.size).toInt().coerceIn(0, data.size - 1)
-                    else null
+        modifier =
+            modifier.pointerInput(data) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.type == PointerEventType.Exit) {
+                            hoverIdx = null
+                            continue
+                        }
+                        if (event.type != PointerEventType.Move) continue
+                        val posX =
+                            event.changes
+                                .firstOrNull()
+                                ?.position
+                                ?.x ?: continue
+                        val lPad = 56.dp.toPx()
+                        val chartW = size.width - lPad - 8.dp.toPx()
+                        hoverIdx =
+                            if (posX >= lPad && data.isNotEmpty()) {
+                                ((posX - lPad) / chartW * data.size).toInt().coerceIn(0, data.size - 1)
+                            } else {
+                                null
+                            }
+                    }
                 }
-            }
-        },
+            },
     ) {
         val lPad = 56.dp.toPx()
         val rPad = 8.dp.toPx()
@@ -534,6 +673,7 @@ private fun PnlBarChart(data: List<Double>, dates: List<String>, modifier: Modif
         val barW = (chartW / data.size - 1f).coerceAtLeast(1f)
 
         fun barX(i: Int) = lPad + i.toFloat() / data.size * chartW
+
         fun barHeightOf(v: Double) = (abs(v) / maxAbs * (chartH / 2)).toFloat().coerceAtLeast(1f)
 
         // Zero line
@@ -566,10 +706,14 @@ private fun PnlBarChart(data: List<Double>, dates: List<String>, modifier: Modif
             val i = if (xN == 1) 0 else (t.toFloat() / (xN - 1) * (data.size - 1)).roundToInt().coerceIn(0, data.size - 1)
             val x = barX(i) + barW / 2
             val lm = textMeasurer.measure(dates.getOrElse(i) { "" }, TextStyle(fontSize = 9.sp, color = labelColor))
-            drawText(lm, topLeft = Offset(
-                (x - lm.size.width / 2f).coerceIn(lPad, maxOf(lPad, lPad + chartW - lm.size.width)),
-                size.height - bPad + 4.dp.toPx(),
-            ))
+            drawText(
+                lm,
+                topLeft =
+                    Offset(
+                        (x - lm.size.width / 2f).coerceIn(lPad, maxOf(lPad, lPad + chartW - lm.size.width)),
+                        size.height - bPad + 4.dp.toPx(),
+                    ),
+            )
         }
 
         // Hover tooltip
@@ -583,7 +727,8 @@ private fun PnlBarChart(data: List<Double>, dates: List<String>, modifier: Modif
 
             val lm1 = textMeasurer.measure(dates.getOrElse(idx) { "" }, TextStyle(fontSize = 10.sp, color = Color(0xFF999999)))
             val lm2 = textMeasurer.measure(pnlSignedText(v), TextStyle(fontSize = 12.sp, color = color, fontWeight = FontWeight.SemiBold))
-            val pad = 7.dp.toPx(); val gap2 = 2.dp.toPx()
+            val pad = 7.dp.toPx()
+            val gap2 = 2.dp.toPx()
             val ttW = maxOf(lm1.size.width, lm2.size.width) + pad * 2
             val ttH = lm1.size.height + lm2.size.height + pad * 2 + gap2
 
@@ -643,7 +788,9 @@ private suspend fun loadWalletData(
                         corporationId = null,
                         divisionId = null,
                     )
-                } catch (e: Exception) { /* skip duplicates or bad entries */ }
+                } catch (e: Exception) {
+                    // skip duplicates or bad entries
+                }
             }
             journalCallback(WalletDao.getJournalEntries(characterId = characterId))
         } catch (e: Exception) {
@@ -687,14 +834,15 @@ private suspend fun loadWalletData(
                         characterId = characterId,
                         corporationId = null,
                     )
-                } catch (_: Exception) {}
+                } catch (_: Exception) {
+                }
             }
             transactionsCallback(resolveAllNames(WalletDao.getTransactions(characterId = characterId, limit = 200)))
         } catch (e: Exception) {
             println("Error fetching transactions: ${e.message}")
         }
 
-        val txExpiry      = EsiClient.getEndpointExpiry("/characters/$characterId/wallet/transactions/")
+        val txExpiry = EsiClient.getEndpointExpiry("/characters/$characterId/wallet/transactions/")
         val journalExpiry = EsiClient.getEndpointExpiry("/characters/$characterId/wallet/journal/")
         val expiry = listOfNotNull(txExpiry, journalExpiry).maxOrNull()
         expiryCallback(expiry)
@@ -708,41 +856,55 @@ private fun resolveAllNames(rows: List<Map<String, Any?>>): List<Map<String, Any
     val afterLocal = resolveLocalNames(rows)
 
     // Collect IDs that are still unresolved
-    val missingClientIds = afterLocal
-        .filter { (it["client_name"] as? String).isNullOrEmpty() }
-        .mapNotNull { (it["client_id"] as? Number)?.toInt() }
-        .filter { it > 0 }.distinct()
+    val missingClientIds =
+        afterLocal
+            .filter { (it["client_name"] as? String).isNullOrEmpty() }
+            .mapNotNull { (it["client_id"] as? Number)?.toInt() }
+            .filter { it > 0 }
+            .distinct()
 
     // Only NPC station IDs fit in Int; citadels (> 10^12) must come from static_stations
-    val missingLocationIds = afterLocal
-        .filter { (it["location_name"] as? String).isNullOrEmpty() }
-        .mapNotNull { tx ->
-            val id = (tx["location_id"] as? Number)?.toLong() ?: return@mapNotNull null
-            if (id > Int.MAX_VALUE.toLong()) null else id.toInt()
-        }
-        .filter { it > 0 }.distinct()
+    val missingLocationIds =
+        afterLocal
+            .filter { (it["location_name"] as? String).isNullOrEmpty() }
+            .mapNotNull { tx ->
+                val id = (tx["location_id"] as? Number)?.toLong() ?: return@mapNotNull null
+                if (id > Int.MAX_VALUE.toLong()) null else id.toInt()
+            }.filter { it > 0 }
+            .distinct()
 
     val toResolve = (missingClientIds + missingLocationIds).distinct()
     if (toResolve.isEmpty()) return afterLocal
 
-    val esiNames = try { EsiClient.resolveNames(toResolve) } catch (_: Exception) { emptyMap() }
+    val esiNames =
+        try {
+            EsiClient.resolveNames(toResolve)
+        } catch (_: Exception) {
+            emptyMap()
+        }
     if (esiNames.isEmpty()) return afterLocal
 
-    val clientSet   = missingClientIds.toSet()
+    val clientSet = missingClientIds.toSet()
     val locationSet = missingLocationIds.toSet()
 
     return afterLocal.map { tx ->
         val txId = (tx["transaction_id"] as? Number)?.toLong() ?: return@map tx
 
-        val newClient = if ((tx["client_name"] as? String).isNullOrEmpty()) {
-            val id = (tx["client_id"] as? Number)?.toInt() ?: 0
-            if (id in clientSet) esiNames[id] else null
-        } else null
+        val newClient =
+            if ((tx["client_name"] as? String).isNullOrEmpty()) {
+                val id = (tx["client_id"] as? Number)?.toInt() ?: 0
+                if (id in clientSet) esiNames[id] else null
+            } else {
+                null
+            }
 
-        val newLocation = if ((tx["location_name"] as? String).isNullOrEmpty()) {
-            val lid = (tx["location_id"] as? Number)?.toLong() ?: 0L
-            if (lid <= Int.MAX_VALUE && lid.toInt() in locationSet) esiNames[lid.toInt()] else null
-        } else null
+        val newLocation =
+            if ((tx["location_name"] as? String).isNullOrEmpty()) {
+                val lid = (tx["location_id"] as? Number)?.toLong() ?: 0L
+                if (lid <= Int.MAX_VALUE && lid.toInt() in locationSet) esiNames[lid.toInt()] else null
+            } else {
+                null
+            }
 
         if (newClient == null && newLocation == null) return@map tx
 
@@ -750,7 +912,7 @@ private fun resolveAllNames(rows: List<Map<String, Any?>>): List<Map<String, Any
         WalletDao.updateTransactionNames(txId, clientName = newClient, locationName = newLocation)
 
         tx.toMutableMap().apply {
-            newClient?.let   { put("client_name",   it) }
+            newClient?.let { put("client_name", it) }
             newLocation?.let { put("location_name", it) }
         }
     }
@@ -774,12 +936,11 @@ private fun resolveLocalNames(rows: List<Map<String, Any?>>): List<Map<String, A
     }
 }
 
-private fun formatIsk(value: Double): String {
-    return when {
-        kotlin.math.abs(value) >= 1_000_000_000_000 -> String.format("%.2fT", value / 1_000_000_000_000)
-        kotlin.math.abs(value) >= 1_000_000_000 -> String.format("%.2fB", value / 1_000_000_000)
-        kotlin.math.abs(value) >= 1_000_000 -> String.format("%.2fM", value / 1_000_000)
-        kotlin.math.abs(value) >= 1_000 -> String.format("%.2fK", value / 1_000)
-        else -> String.format("%,.2f", value)
+private fun formatIsk(value: Double): String =
+    when {
+        kotlin.math.abs(value) >= 1_000_000_000_000 -> String.format(Locale.US, "%.2fT", value / 1_000_000_000_000)
+        kotlin.math.abs(value) >= 1_000_000_000 -> String.format(Locale.US, "%.2fB", value / 1_000_000_000)
+        kotlin.math.abs(value) >= 1_000_000 -> String.format(Locale.US, "%.2fM", value / 1_000_000)
+        kotlin.math.abs(value) >= 1_000 -> String.format(Locale.US, "%.2fK", value / 1_000)
+        else -> String.format(Locale.US, "%,.2f", value)
     }
-}

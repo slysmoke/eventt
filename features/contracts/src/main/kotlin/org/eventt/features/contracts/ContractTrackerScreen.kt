@@ -17,10 +17,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.ContractDao
-import org.eventt.core.database.DatabaseManager
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.ContractModel
 import org.eventt.ui.common.*
+import java.util.Locale
 
 @Composable
 fun ContractTrackerScreen(charId: Int?) {
@@ -47,34 +47,35 @@ fun ContractTrackerScreen(charId: Int?) {
                         scope.launch(Dispatchers.IO) {
                             try {
                                 val rawContracts = EsiClient.getCharacterContracts(id)
-                                val models = rawContracts.mapNotNull { raw ->
-                                    val contractId = (raw["contract_id"] as? Number)?.toInt() ?: return@mapNotNull null
-                                    ContractModel(
-                                        contractId = contractId,
-                                        issuerId = (raw["issuer_id"] as? Number)?.toInt() ?: 0,
-                                        issuerCorpId = (raw["issuer_corporation_id"] as? Number)?.toInt() ?: 0,
-                                        assigneeId = (raw["assignee_id"] as? Number)?.toInt() ?: 0,
-                                        acceptorId = (raw["acceptor_id"] as? Number)?.toInt() ?: 0,
-                                        startStationId = (raw["start_location_id"] as? Number)?.toLong() ?: 0,
-                                        endStationId = (raw["end_location_id"] as? Number)?.toLong() ?: 0,
-                                        type = raw["type"] as? String ?: "unknown",
-                                        status = raw["status"] as? String ?: "outstanding",
-                                        title = raw["title"] as? String ?: "",
-                                        description = raw["description"] as? String ?: "",
-                                        dateIssued = raw["date_issued"] as? String ?: "",
-                                        dateExpired = raw["date_expired"] as? String ?: "",
-                                        dateAccepted = raw["date_accepted"] as? String,
-                                        dateCompleted = raw["date_completed"] as? String,
-                                        numDays = (raw["num_days"] as? Number)?.toInt() ?: 0,
-                                        price = (raw["price"] as? Number)?.toDouble() ?: 0.0,
-                                        reward = (raw["reward"] as? Number)?.toDouble() ?: 0.0,
-                                        collateral = (raw["collateral"] as? Number)?.toDouble() ?: 0.0,
-                                        buyout = (raw["buyout"] as? Number)?.toDouble() ?: 0.0,
-                                        forCorp = (raw["for_corporation"] as? Boolean) ?: false,
-                                        isCorp = false,
-                                        characterId = id,
-                                    )
-                                }
+                                val models =
+                                    rawContracts.mapNotNull { raw ->
+                                        val contractId = (raw["contract_id"] as? Number)?.toInt() ?: return@mapNotNull null
+                                        ContractModel(
+                                            contractId = contractId,
+                                            issuerId = (raw["issuer_id"] as? Number)?.toInt() ?: 0,
+                                            issuerCorpId = (raw["issuer_corporation_id"] as? Number)?.toInt() ?: 0,
+                                            assigneeId = (raw["assignee_id"] as? Number)?.toInt() ?: 0,
+                                            acceptorId = (raw["acceptor_id"] as? Number)?.toInt() ?: 0,
+                                            startStationId = (raw["start_location_id"] as? Number)?.toLong() ?: 0,
+                                            endStationId = (raw["end_location_id"] as? Number)?.toLong() ?: 0,
+                                            type = raw["type"] as? String ?: "unknown",
+                                            status = raw["status"] as? String ?: "outstanding",
+                                            title = raw["title"] as? String ?: "",
+                                            description = raw["description"] as? String ?: "",
+                                            dateIssued = raw["date_issued"] as? String ?: "",
+                                            dateExpired = raw["date_expired"] as? String ?: "",
+                                            dateAccepted = raw["date_accepted"] as? String,
+                                            dateCompleted = raw["date_completed"] as? String,
+                                            numDays = (raw["num_days"] as? Number)?.toInt() ?: 0,
+                                            price = (raw["price"] as? Number)?.toDouble() ?: 0.0,
+                                            reward = (raw["reward"] as? Number)?.toDouble() ?: 0.0,
+                                            collateral = (raw["collateral"] as? Number)?.toDouble() ?: 0.0,
+                                            buyout = (raw["buyout"] as? Number)?.toDouble() ?: 0.0,
+                                            forCorp = (raw["for_corporation"] as? Boolean) ?: false,
+                                            isCorp = false,
+                                            characterId = id,
+                                        )
+                                    }
                                 models.forEach { ContractDao.upsert(it) }
                                 withContext(Dispatchers.Main) {
                                     loadContracts { contracts = it }
@@ -98,7 +99,15 @@ fun ContractTrackerScreen(charId: Int?) {
 
         // Status filters
         LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            items(listOf("all" to "All", "outstanding" to "Outstanding", "in_progress" to "In Progress", "finished" to "Finished", "cancelled" to "Cancelled")) { (key, label) ->
+            items(
+                listOf(
+                    "all" to "All",
+                    "outstanding" to "Outstanding",
+                    "in_progress" to "In Progress",
+                    "finished" to "Finished",
+                    "cancelled" to "Cancelled",
+                ),
+            ) { (key, label) ->
                 FilterChip(
                     selected = statusFilter == key,
                     onClick = {
@@ -137,13 +146,14 @@ fun ContractTrackerScreen(charId: Int?) {
 
 @Composable
 private fun ContractCard(contract: ContractModel) {
-    val statusColor = when (contract.status) {
-        "outstanding" -> Color(0xFFB197FC)
-        "in_progress" -> Color(0xFFFF8C00)
-        "finished" -> Color(0xFF69DB7C)
-        "cancelled" -> Color(0xFFFF6B6B)
-        else -> Color.Gray
-    }
+    val statusColor =
+        when (contract.status) {
+            "outstanding" -> Color(0xFFB197FC)
+            "in_progress" -> Color(0xFFFF8C00)
+            "finished" -> Color(0xFF69DB7C)
+            "cancelled" -> Color(0xFFFF6B6B)
+            else -> Color.Gray
+        }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -208,7 +218,10 @@ private fun ContractCard(contract: ContractModel) {
 }
 
 @Composable
-private fun InfoItem(label: String, value: String) {
+private fun InfoItem(
+    label: String,
+    value: String,
+) {
     Column {
         Text(label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
         Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
@@ -223,7 +236,10 @@ private fun loadContracts(callback: (List<ContractModel>) -> Unit) {
     }
 }
 
-private fun loadContractsByStatus(status: String, callback: (List<ContractModel>) -> Unit) {
+private fun loadContractsByStatus(
+    status: String,
+    callback: (List<ContractModel>) -> Unit,
+) {
     try {
         callback(ContractDao.getByStatus(status))
     } catch (e: Exception) {
@@ -231,15 +247,12 @@ private fun loadContractsByStatus(status: String, callback: (List<ContractModel>
     }
 }
 
-private fun String.capitalize(): String {
-    return replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
-}
+private fun String.capitalize(): String = replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
 
-private fun formatIsk(value: Double): String {
-    return when {
-        value >= 1_000_000_000_000 -> String.format("%.2fT", value / 1_000_000_000_000)
-        value >= 1_000_000_000 -> String.format("%.2fB", value / 1_000_000_000)
-        value >= 1_000_000 -> String.format("%.2fM", value / 1_000_000)
-        else -> String.format("%,.2f", value)
+private fun formatIsk(value: Double): String =
+    when {
+        value >= 1_000_000_000_000 -> String.format(Locale.US, "%.2fT", value / 1_000_000_000_000)
+        value >= 1_000_000_000 -> String.format(Locale.US, "%.2fB", value / 1_000_000_000)
+        value >= 1_000_000 -> String.format(Locale.US, "%.2fM", value / 1_000_000)
+        else -> String.format(Locale.US, "%,.2f", value)
     }
-}

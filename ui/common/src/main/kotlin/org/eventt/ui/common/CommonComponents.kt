@@ -1,7 +1,6 @@
 package org.eventt.ui.common
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -12,7 +11,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.delay
 
 /**
@@ -36,13 +34,16 @@ fun SearchField(
         singleLine = true,
         shape = MaterialTheme.shapes.medium,
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        trailingIcon = if (query.isNotEmpty()) {
-            {
-                IconButton(onClick = { onClear?.invoke() ?: onQueryChange("") }) {
-                    Icon(Icons.Default.Close, contentDescription = "Clear")
+        trailingIcon =
+            if (query.isNotEmpty()) {
+                {
+                    IconButton(onClick = { onClear?.invoke() ?: onQueryChange("") }) {
+                        Icon(Icons.Default.Close, contentDescription = "Clear")
+                    }
                 }
-            }
-        } else null,
+            } else {
+                null
+            },
     )
 }
 
@@ -148,7 +149,10 @@ fun ConfirmDialog(
         title = { Text(title) },
         text = { Text(message) },
         confirmButton = {
-            TextButton(onClick = { onConfirm(); onDismiss() }) { Text(confirmText) }
+            TextButton(onClick = {
+                onConfirm()
+                onDismiss()
+            }) { Text(confirmText) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(dismissText) }
@@ -175,7 +179,7 @@ fun EsiRefreshButton(
     }
 
     val remainingSec = expiresAtMs?.let { ((it - nowMs) / 1000).coerceAtLeast(0) } ?: 0L
-    val coolingDown  = remainingSec > 0
+    val coolingDown = remainingSec > 0
 
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         if (coolingDown) {
@@ -195,8 +199,12 @@ fun EsiRefreshButton(
                 Icon(
                     Icons.Default.Refresh,
                     contentDescription = "Refresh",
-                    tint = if (coolingDown) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                           else MaterialTheme.colorScheme.onSurface,
+                    tint =
+                        if (coolingDown) {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
                 )
             }
         }

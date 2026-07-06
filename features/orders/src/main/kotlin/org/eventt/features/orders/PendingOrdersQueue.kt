@@ -32,7 +32,7 @@ internal fun eveSigFigStep(price: Double): Double {
  */
 internal fun formatEveSigFigPrice(price: Double): String {
     if (price <= 0) return "0.01"
-    val step     = eveSigFigStep(price)
+    val step = eveSigFigStep(price)
     val decimals = maxOf(0, -floor(log10(step)).toInt())
     return String.format(Locale.US, "%.${decimals}f", price)
 }
@@ -49,14 +49,15 @@ data class PendingOrder(
     val isBeaten: Boolean,
 ) {
     // Price to paste into the EVE modify-order dialog to beat the competition by one sigfig step.
-    val priceToSet: Double get() = when {
-        isBeaten && bestCompetingPrice != null -> {
-            val step    = eveSigFigStep(bestCompetingPrice)
-            val rounded = round(bestCompetingPrice / step) * step
-            if (isBuyOrder) rounded + step else rounded - step
+    val priceToSet: Double get() =
+        when {
+            isBeaten && bestCompetingPrice != null -> {
+                val step = eveSigFigStep(bestCompetingPrice)
+                val rounded = round(bestCompetingPrice / step) * step
+                if (isBuyOrder) rounded + step else rounded - step
+            }
+            else -> ownPrice
         }
-        else -> ownPrice
-    }
 }
 
 /**
@@ -65,8 +66,7 @@ data class PendingOrder(
  * Beaten orders are sorted first so the most urgent ones get cycled first.
  */
 object PendingOrdersQueue {
-
-    private val scope  = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val cursor = AtomicInteger(0)
 
     @Volatile private var queue: List<PendingOrder> = emptyList()
@@ -85,9 +85,10 @@ object PendingOrdersQueue {
 
     /** Replace the queue. Beaten orders sort first, then alphabetically by name. */
     fun update(orders: List<PendingOrder>) {
-        queue = orders.sortedWith(
-            compareByDescending<PendingOrder> { it.isBeaten }.thenBy { it.typeName }
-        )
+        queue =
+            orders.sortedWith(
+                compareByDescending<PendingOrder> { it.isBeaten }.thenBy { it.typeName },
+            )
         cursor.set(0)
     }
 
@@ -110,7 +111,7 @@ object PendingOrdersQueue {
         scope.launch {
             runCatching { EsiClient.openMarketWindow(order.charId, order.typeId) }
             val text = formatEveSigFigPrice(order.priceToSet)
-            val sel  = StringSelection(text)
+            val sel = StringSelection(text)
             Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, sel)
         }
     }

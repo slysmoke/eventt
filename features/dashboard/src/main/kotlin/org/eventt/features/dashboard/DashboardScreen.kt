@@ -20,95 +20,111 @@ import org.eventt.core.database.*
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.PriceAlertModel
 import java.time.LocalDate
+import java.util.Locale
 
 private val POSITIVE = Color(0xFF69DB7C)
 private val NEGATIVE = Color(0xFFFF6B6B)
-private val ACCENT   = Color(0xFF4A90D9)
+private val ACCENT = Color(0xFF4A90D9)
 
 @Composable
-fun DashboardScreen(charId: Int?, refreshTrigger: Int = 0) {
-    var walletBalance   by remember { mutableStateOf(0.0) }
-    var txBreakdown     by remember { mutableStateOf<List<org.eventt.core.model.DailyWalletEntry>>(emptyList()) }
-    var assetValue      by remember { mutableStateOf(0.0) }
-    var recentTx        by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
+fun DashboardScreen(
+    charId: Int?,
+    refreshTrigger: Int = 0,
+) {
+    var walletBalance by remember { mutableStateOf(0.0) }
+    var txBreakdown by remember { mutableStateOf<List<org.eventt.core.model.DailyWalletEntry>>(emptyList()) }
+    var assetValue by remember { mutableStateOf(0.0) }
+    var recentTx by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
     var triggeredAlerts by remember { mutableStateOf<List<PriceAlertModel>>(emptyList()) }
-    var isLoading       by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
 
     LaunchedEffect(charId, refreshTrigger) {
         isLoading = true
         withContext(Dispatchers.IO) {
             val since90 = LocalDate.now().minusDays(90).toString()
             try {
-                walletBalance   = WalletDao.getWalletSummary(characterId = charId).balance
-                txBreakdown     = WalletDao.getTransactionBreakdown(characterId = charId, since = since90)
-                assetValue      = if (charId != null) AssetDao.getTotalValue(characterId = charId) else 0.0
-                recentTx        = WalletDao.getTransactions(characterId = charId, limit = 12)
+                walletBalance = WalletDao.getWalletSummary(characterId = charId).balance
+                txBreakdown = WalletDao.getTransactionBreakdown(characterId = charId, since = since90)
+                assetValue = if (charId != null) AssetDao.getTotalValue(characterId = charId) else 0.0
+                recentTx = WalletDao.getTransactions(characterId = charId, limit = 12)
                 triggeredAlerts = AlertDao.getEnabled().filter { it.triggered }
-            } catch (_: Exception) { }
+            } catch (_: Exception) {
+            }
 
             if (charId != null) {
                 try {
                     walletBalance = EsiClient.getCharacterWallet(charId)
-                } catch (e: Exception) { println("Dashboard: wallet ESI error: ${e.message}") }
+                } catch (e: Exception) {
+                    println("Dashboard: wallet ESI error: ${e.message}")
+                }
 
                 try {
                     val journalEntries = EsiClient.getCharacterJournal(charId)
                     journalEntries.forEach { entry ->
                         try {
                             WalletDao.insertJournalEntry(
-                                entryId       = (entry["id"]             as? Number)?.toLong()  ?: 0,
-                                date          = entry["date"]            as? String              ?: "",
-                                amount        = (entry["amount"]         as? Number)?.toDouble() ?: 0.0,
-                                balance       = (entry["balance"]        as? Number)?.toDouble() ?: 0.0,
-                                reason        = entry["reason"]          as? String              ?: "",
-                                refType       = entry["ref_type"]        as? String              ?: "",
-                                firstPartyId  = (entry["first_party_id"] as? Number)?.toInt()  ?: 0,
-                                firstPartyName  = "",
+                                entryId = (entry["id"] as? Number)?.toLong() ?: 0,
+                                date = entry["date"] as? String ?: "",
+                                amount = (entry["amount"] as? Number)?.toDouble() ?: 0.0,
+                                balance = (entry["balance"] as? Number)?.toDouble() ?: 0.0,
+                                reason = entry["reason"] as? String ?: "",
+                                refType = entry["ref_type"] as? String ?: "",
+                                firstPartyId = (entry["first_party_id"] as? Number)?.toInt() ?: 0,
+                                firstPartyName = "",
                                 secondPartyId = (entry["second_party_id"] as? Number)?.toInt() ?: 0,
                                 secondPartyName = "",
-                                taxAmount     = (entry["tax"]            as? Number)?.toDouble(),
-                                isCorp        = false,
-                                characterId   = charId,
+                                taxAmount = (entry["tax"] as? Number)?.toDouble(),
+                                isCorp = false,
+                                characterId = charId,
                                 corporationId = null,
-                                divisionId    = null,
+                                divisionId = null,
                             )
-                        } catch (_: Exception) {}
+                        } catch (_: Exception) {
+                        }
                     }
                     walletBalance = WalletDao.getWalletSummary(characterId = charId).balance
-                    txBreakdown   = WalletDao.getTransactionBreakdown(characterId = charId, since = since90)
-                } catch (e: Exception) { println("Dashboard: journal ESI error: ${e.message}") }
+                    txBreakdown = WalletDao.getTransactionBreakdown(characterId = charId, since = since90)
+                } catch (e: Exception) {
+                    println("Dashboard: journal ESI error: ${e.message}")
+                }
 
                 try {
                     val txList = EsiClient.getCharacterTransactions(charId)
-                    val typeNames = txList.mapNotNull { (it["type_id"] as? Number)?.toInt() }.toSet()
-                        .associateWith { id -> StaticDataDao.getTypeName(id) ?: "" }
+                    val typeNames =
+                        txList
+                            .mapNotNull { (it["type_id"] as? Number)?.toInt() }
+                            .toSet()
+                            .associateWith { id -> StaticDataDao.getTypeName(id) ?: "" }
                     txList.forEach { tx ->
-                        val typeId    = (tx["type_id"]   as? Number)?.toInt()    ?: 0
+                        val typeId = (tx["type_id"] as? Number)?.toInt() ?: 0
                         val unitPrice = (tx["unit_price"] as? Number)?.toDouble() ?: 0.0
-                        val quantity  = (tx["quantity"]   as? Number)?.toInt()    ?: 0
+                        val quantity = (tx["quantity"] as? Number)?.toInt() ?: 0
                         try {
                             WalletDao.insertTransaction(
                                 transactionId = (tx["transaction_id"] as? Number)?.toLong() ?: 0,
-                                date          = tx["date"] as? String ?: "",
-                                typeId        = typeId,
-                                typeName      = typeNames[typeId] ?: "",
-                                quantity      = quantity,
-                                unitPrice     = unitPrice,
-                                total         = unitPrice * quantity,
-                                isBuy         = (tx["is_buy"] as? Boolean) ?: false,
-                                clientId      = (tx["client_id"]   as? Number)?.toInt()  ?: 0,
-                                clientName    = "",
-                                locationId    = (tx["location_id"] as? Number)?.toLong() ?: 0L,
-                                locationName  = "",
-                                isCorp        = false,
-                                characterId   = charId,
+                                date = tx["date"] as? String ?: "",
+                                typeId = typeId,
+                                typeName = typeNames[typeId] ?: "",
+                                quantity = quantity,
+                                unitPrice = unitPrice,
+                                total = unitPrice * quantity,
+                                isBuy = (tx["is_buy"] as? Boolean) ?: false,
+                                clientId = (tx["client_id"] as? Number)?.toInt() ?: 0,
+                                clientName = "",
+                                locationId = (tx["location_id"] as? Number)?.toLong() ?: 0L,
+                                locationName = "",
+                                isCorp = false,
+                                characterId = charId,
                                 corporationId = null,
                             )
-                        } catch (_: Exception) {}
+                        } catch (_: Exception) {
+                        }
                     }
-                    recentTx    = WalletDao.getTransactions(characterId = charId, limit = 12)
+                    recentTx = WalletDao.getTransactions(characterId = charId, limit = 12)
                     txBreakdown = WalletDao.getTransactionBreakdown(characterId = charId, since = since90)
-                } catch (e: Exception) { println("Dashboard: transactions ESI error: ${e.message}") }
+                } catch (e: Exception) {
+                    println("Dashboard: transactions ESI error: ${e.message}")
+                }
             }
         }
         isLoading = false
@@ -121,15 +137,15 @@ fun DashboardScreen(charId: Int?, refreshTrigger: Int = 0) {
         return
     }
 
-    val today        = LocalDate.now().toString()
-    val week7Start   = LocalDate.now().minusDays(7).toString()
+    val today = LocalDate.now().toString()
+    val week7Start = LocalDate.now().minusDays(7).toString()
     val month30Start = LocalDate.now().minusDays(30).toString()
 
-    val todayPL   = txBreakdown.firstOrNull { it.date == today }?.net ?: 0.0
-    val week7PL   = txBreakdown.filter { it.date >= week7Start }.sumOf { it.net }
+    val todayPL = txBreakdown.firstOrNull { it.date == today }?.net ?: 0.0
+    val week7PL = txBreakdown.filter { it.date >= week7Start }.sumOf { it.net }
     val month30PL = txBreakdown.filter { it.date >= month30Start }.sumOf { it.net }
     val income30d = txBreakdown.filter { it.date >= month30Start }.sumOf { it.income }
-    val spend30d  = txBreakdown.filter { it.date >= month30Start }.sumOf { it.expenses }
+    val spend30d = txBreakdown.filter { it.date >= month30Start }.sumOf { it.expenses }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
@@ -151,26 +167,26 @@ fun DashboardScreen(charId: Int?, refreshTrigger: Int = 0) {
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 KpiCard(
-                    modifier    = Modifier.weight(1f),
-                    icon        = Icons.Default.AccountBalance,
-                    label       = "Wallet Balance",
-                    value       = formatIsk(walletBalance),
-                    color       = ACCENT,
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.AccountBalance,
+                    label = "Wallet Balance",
+                    value = formatIsk(walletBalance),
+                    color = ACCENT,
                 )
                 KpiCard(
-                    modifier    = Modifier.weight(1f),
-                    icon        = Icons.Default.Storage,
-                    label       = "Asset Value",
-                    value       = formatIsk(assetValue),
-                    color       = Color(0xFF66D9E8),
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.Storage,
+                    label = "Asset Value",
+                    value = formatIsk(assetValue),
+                    color = Color(0xFF66D9E8),
                 )
                 KpiCard(
-                    modifier    = Modifier.weight(1f),
-                    icon        = Icons.AutoMirrored.Filled.TrendingUp,
-                    label       = "P&L 30d",
-                    value       = formatIsk(month30PL, showSign = true),
-                    color       = if (month30PL >= 0) POSITIVE else NEGATIVE,
-                    valueColor  = if (month30PL >= 0) POSITIVE else NEGATIVE,
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.AutoMirrored.Filled.TrendingUp,
+                    label = "P&L 30d",
+                    value = formatIsk(month30PL, showSign = true),
+                    color = if (month30PL >= 0) POSITIVE else NEGATIVE,
+                    valueColor = if (month30PL >= 0) POSITIVE else NEGATIVE,
                 )
             }
         }
@@ -178,10 +194,10 @@ fun DashboardScreen(charId: Int?, refreshTrigger: Int = 0) {
         // P&L mini cards
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                PnlMiniCard(modifier = Modifier.weight(1f), label = "P&L Today",    value = todayPL,  showSign = true)
-                PnlMiniCard(modifier = Modifier.weight(1f), label = "P&L 7 days",   value = week7PL,  showSign = true)
-                PnlMiniCard(modifier = Modifier.weight(1f), label = "Income 30d",   value = income30d, forceColor = POSITIVE)
-                PnlMiniCard(modifier = Modifier.weight(1f), label = "Expenses 30d", value = spend30d,  forceColor = NEGATIVE)
+                PnlMiniCard(modifier = Modifier.weight(1f), label = "P&L Today", value = todayPL, showSign = true)
+                PnlMiniCard(modifier = Modifier.weight(1f), label = "P&L 7 days", value = week7PL, showSign = true)
+                PnlMiniCard(modifier = Modifier.weight(1f), label = "Income 30d", value = income30d, forceColor = POSITIVE)
+                PnlMiniCard(modifier = Modifier.weight(1f), label = "Expenses 30d", value = spend30d, forceColor = NEGATIVE)
             }
         }
 
@@ -255,7 +271,11 @@ fun DashboardScreen(charId: Int?, refreshTrigger: Int = 0) {
 // ─── Sub-composables ──────────────────────────────────────────────────────
 
 @Composable
-private fun SectionHeader(title: String, count: Int? = null, badge: Int? = null) {
+private fun SectionHeader(
+    title: String,
+    count: Int? = null,
+    badge: Int? = null,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -264,11 +284,12 @@ private fun SectionHeader(title: String, count: Int? = null, badge: Int? = null)
         Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
         when {
             badge != null -> Badge { Text("$badge") }
-            count != null -> Text(
-                "$count",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-            )
+            count != null ->
+                Text(
+                    "$count",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                )
         }
     }
 }
@@ -333,11 +354,12 @@ private fun PnlMiniCard(
     showSign: Boolean = false,
     forceColor: Color? = null,
 ) {
-    val color = forceColor ?: when {
-        value > 0 -> POSITIVE
-        value < 0 -> NEGATIVE
-        else      -> Color.Gray
-    }
+    val color =
+        forceColor ?: when {
+            value > 0 -> POSITIVE
+            value < 0 -> NEGATIVE
+            else -> Color.Gray
+        }
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.08f)),
@@ -360,13 +382,13 @@ private fun PnlMiniCard(
 
 @Composable
 private fun TransactionRow(tx: Map<String, Any?>) {
-    val isBuy     = tx["is_buy"] as? Boolean ?: false
-    val typeName  = tx["type_name"] as? String ?: "Unknown"
-    val qty       = (tx["quantity"] as? Number)?.toInt() ?: 0
+    val isBuy = tx["is_buy"] as? Boolean ?: false
+    val typeName = tx["type_name"] as? String ?: "Unknown"
+    val qty = (tx["quantity"] as? Number)?.toInt() ?: 0
     val unitPrice = (tx["unit_price"] as? Number)?.toDouble() ?: 0.0
-    val total     = (tx["total"] as? Number)?.toDouble() ?: 0.0
-    val date      = (tx["date"] as? String)?.take(10) ?: ""
-    val color     = if (isBuy) NEGATIVE else POSITIVE
+    val total = (tx["total"] as? Number)?.toDouble() ?: 0.0
+    val date = (tx["date"] as? String)?.take(10) ?: ""
+    val color = if (isBuy) NEGATIVE else POSITIVE
 
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
@@ -439,15 +461,26 @@ private fun AlertRow(alert: PriceAlertModel) {
 
 // ─── Formatting ───────────────────────────────────────────────────────────
 
-private fun formatIsk(value: Double, showSign: Boolean = false): String {
-    val abs  = kotlin.math.abs(value)
-    val sign = if (showSign && value > 0) "+" else if (value < 0) "-" else ""
-    val formatted = when {
-        abs >= 1_000_000_000_000.0 -> String.format("%.2fT", abs / 1_000_000_000_000.0)
-        abs >= 1_000_000_000.0     -> String.format("%.2fB", abs / 1_000_000_000.0)
-        abs >= 1_000_000.0         -> String.format("%.2fM", abs / 1_000_000.0)
-        abs >= 1_000.0             -> String.format("%.2fK", abs / 1_000.0)
-        else                       -> String.format("%,.2f", abs)
-    }
+private fun formatIsk(
+    value: Double,
+    showSign: Boolean = false,
+): String {
+    val abs = kotlin.math.abs(value)
+    val sign =
+        if (showSign && value > 0) {
+            "+"
+        } else if (value < 0) {
+            "-"
+        } else {
+            ""
+        }
+    val formatted =
+        when {
+            abs >= 1_000_000_000_000.0 -> String.format(Locale.US, "%.2fT", abs / 1_000_000_000_000.0)
+            abs >= 1_000_000_000.0 -> String.format(Locale.US, "%.2fB", abs / 1_000_000_000.0)
+            abs >= 1_000_000.0 -> String.format(Locale.US, "%.2fM", abs / 1_000_000.0)
+            abs >= 1_000.0 -> String.format(Locale.US, "%.2fK", abs / 1_000.0)
+            else -> String.format(Locale.US, "%,.2f", abs)
+        }
     return "$sign$formatted"
 }

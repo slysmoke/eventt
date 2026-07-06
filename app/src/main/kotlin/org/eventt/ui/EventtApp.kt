@@ -3,14 +3,13 @@ package org.eventt.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -23,31 +22,35 @@ import org.eventt.AppVersion
 import org.eventt.GlobalHotkeyService
 import org.eventt.core.database.AppState
 import org.eventt.core.database.CharacterDao
+import org.eventt.core.everef.EveRefService
 import org.eventt.core.model.CharacterModel
+import org.eventt.core.model.PriceAlertModel
 import org.eventt.core.staticdata.StaticDataImporter
+import org.eventt.features.alerts.AlertMonitor
+import org.eventt.features.alerts.PriceAlertsScreen
+import org.eventt.features.assets.AssetViewerScreen
+import org.eventt.features.characters.CharacterManagementScreen
+import org.eventt.features.contracts.ContractTrackerScreen
+import org.eventt.features.dashboard.DashboardScreen
+import org.eventt.features.industry.IndustryCalculatorScreen
+import org.eventt.features.market.MarketAnalysisScreen
+import org.eventt.features.market.MarketBrowserScreen
+import org.eventt.features.orders.OrdersScreen
+import org.eventt.features.overlay.OverlayWindow
+import org.eventt.features.settings.SettingsScreen
+import org.eventt.features.wallet.WalletScreen
+import org.eventt.features.watchlist.WatchlistScreen
+import org.eventt.ui.common.RequestProgressDialog
+import org.eventt.ui.theme.*
 import org.eventt.update.UpdateChecker
 import org.eventt.update.UpdateInfo
 import org.eventt.update.UpdateProgress
-import org.eventt.ui.theme.*
-import org.eventt.ui.common.RequestProgressDialog
-import org.eventt.features.characters.CharacterManagementScreen
-import org.eventt.features.market.MarketBrowserScreen
-import org.eventt.features.assets.AssetViewerScreen
-import org.eventt.features.wallet.WalletScreen
-import org.eventt.features.orders.OrdersScreen
-import org.eventt.features.dashboard.DashboardScreen
-import org.eventt.features.alerts.AlertMonitor
-import org.eventt.features.alerts.PriceAlertsScreen
-import org.eventt.core.model.PriceAlertModel
-import org.eventt.features.industry.IndustryCalculatorScreen
-import org.eventt.features.contracts.ContractTrackerScreen
-import org.eventt.features.watchlist.WatchlistScreen
-import org.eventt.features.market.MarketAnalysisScreen
-import org.eventt.features.settings.SettingsScreen
-import org.eventt.core.everef.EveRefService
-import org.eventt.features.overlay.OverlayWindow
+import java.util.Locale
 
-enum class AppScreen(val label: String, val icon: ImageVector) {
+enum class AppScreen(
+    val label: String,
+    val icon: ImageVector,
+) {
     DASHBOARD("Dashboard", Icons.Default.Dashboard),
     CHARACTERS("Characters", Icons.Default.Person),
     MARKET("Market", Icons.Default.Store),
@@ -88,7 +91,7 @@ fun EventtApp() {
     }
 
     // Update check — runs in background, never blocks startup
-    var updateInfo     by remember { mutableStateOf<UpdateInfo?>(null) }
+    var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
     var updateProgress by remember { mutableStateOf<UpdateProgress>(UpdateProgress.Idle) }
     val coroutineScope = rememberCoroutineScope()
 
@@ -112,7 +115,7 @@ fun EventtApp() {
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = EveTypography
+        typography = EveTypography,
     ) {
         var selectedScreen by remember { mutableStateOf(AppScreen.DASHBOARD) }
         var showProgressDialog by remember { mutableStateOf(false) }
@@ -249,9 +252,10 @@ private fun UpdateBanner(
                 if (!isWorking) {
                     Button(
                         onClick = onInstall,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.tertiary,
-                        ),
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.tertiary,
+                            ),
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                     ) {
                         Icon(Icons.Default.Download, null, Modifier.size(15.dp))
@@ -260,7 +264,9 @@ private fun UpdateBanner(
                     }
                     IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
                         Icon(
-                            Icons.Default.Close, null, Modifier.size(16.dp),
+                            Icons.Default.Close,
+                            null,
+                            Modifier.size(16.dp),
                             tint = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.6f),
                         )
                     }
@@ -336,9 +342,10 @@ private fun TopBar(
                 )
             }
         },
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = eveColors.headerColor,
-        ),
+        colors =
+            TopAppBarDefaults.topAppBarColors(
+                containerColor = eveColors.headerColor,
+            ),
     )
 }
 
@@ -349,7 +356,14 @@ private fun Sidebar(
     selectedCharId: Int?,
     onScreenSelected: (AppScreen) -> Unit,
 ) {
-    val characters = remember { try { CharacterDao.getAll() } catch (_: Exception) { emptyList<CharacterModel>() } }
+    val characters =
+        remember {
+            try {
+                CharacterDao.getAll()
+            } catch (_: Exception) {
+                emptyList<CharacterModel>()
+            }
+        }
     var charMenuExpanded by remember { mutableStateOf(false) }
     val selectedChar = characters.find { it.id == selectedCharId }
 
@@ -419,7 +433,10 @@ private fun Sidebar(
                         characters.forEach { char ->
                             DropdownMenuItem(
                                 text = {
-                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
                                         if (char.id == selectedCharId) {
                                             Icon(Icons.Default.Check, null, Modifier.size(14.dp), tint = eveColors.accentColor)
                                         } else {
@@ -478,9 +495,10 @@ private fun Sidebar(
 @Composable
 private fun SdeImportOverlay(state: StaticDataImporter.ImportState) {
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.75f)),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.75f)),
         contentAlignment = Alignment.Center,
     ) {
         Card(modifier = Modifier.width(480.dp)) {
@@ -554,8 +572,8 @@ private fun AlertNotificationBanner(
                 )
                 Text(
                     "${alert.orderType.replaceFirstChar { it.uppercase() }} price " +
-                    "${if (isAbove) "rose above" else "dropped below"} " +
-                    formatAlertPrice(alert.targetPrice),
+                        "${if (isAbove) "rose above" else "dropped below"} " +
+                        formatAlertPrice(alert.targetPrice),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White.copy(alpha = 0.75f),
                 )
@@ -567,12 +585,13 @@ private fun AlertNotificationBanner(
     }
 }
 
-private fun formatAlertPrice(v: Double): String = when {
-    v >= 1_000_000_000 -> String.format("%.2fB ISK", v / 1_000_000_000)
-    v >= 1_000_000     -> String.format("%.2fM ISK", v / 1_000_000)
-    v >= 1_000         -> String.format("%.1fK ISK", v / 1_000)
-    else               -> String.format("%,.2f ISK", v)
-}
+private fun formatAlertPrice(v: Double): String =
+    when {
+        v >= 1_000_000_000 -> String.format(Locale.US, "%.2fB ISK", v / 1_000_000_000)
+        v >= 1_000_000 -> String.format(Locale.US, "%.2fM ISK", v / 1_000_000)
+        v >= 1_000 -> String.format(Locale.US, "%.1fK ISK", v / 1_000)
+        else -> String.format(Locale.US, "%,.2f ISK", v)
+    }
 
 @Composable
 private fun EveRefSyncBanner(state: EveRefService.SyncState) {
@@ -629,7 +648,10 @@ private fun EveRefSyncBanner(state: EveRefService.SyncState) {
 }
 
 @Composable
-private fun ScreenContent(screen: AppScreen, selectedCharId: Int?) {
+private fun ScreenContent(
+    screen: AppScreen,
+    selectedCharId: Int?,
+) {
     // Track which screens have been visited so we only mount them on first visit,
     // but keep them in the composition afterwards to preserve their state.
     var visited by remember { mutableStateOf(setOf(screen)) }
@@ -649,23 +671,24 @@ private fun ScreenContent(screen: AppScreen, selectedCharId: Int?) {
                 key(s) {
                     val active = s == screen
                     Box(
-                        modifier = Modifier
-                            .then(if (active) Modifier.fillMaxSize() else Modifier.requiredSize(0.dp))
-                            .clipToBounds()
+                        modifier =
+                            Modifier
+                                .then(if (active) Modifier.fillMaxSize() else Modifier.requiredSize(0.dp))
+                                .clipToBounds(),
                     ) {
                         when (s) {
-                            AppScreen.DASHBOARD   -> DashboardScreen(charId = selectedCharId, refreshTrigger = dashboardRefreshTrigger)
-                            AppScreen.CHARACTERS  -> CharacterManagementScreen()
-                            AppScreen.MARKET      -> MarketBrowserScreen()
-                            AppScreen.ANALYSIS    -> MarketAnalysisScreen()
-                            AppScreen.ASSETS      -> AssetViewerScreen(charId = selectedCharId)
-                            AppScreen.WALLET      -> WalletScreen(charId = selectedCharId)
-                            AppScreen.ORDERS      -> OrdersScreen(charId = selectedCharId)
-                            AppScreen.WATCHLIST   -> WatchlistScreen()
-                            AppScreen.ALERTS      -> PriceAlertsScreen()
-                            AppScreen.CONTRACTS   -> ContractTrackerScreen(charId = selectedCharId)
-                            AppScreen.INDUSTRY    -> IndustryCalculatorScreen()
-                            AppScreen.SETTINGS    -> SettingsScreen()
+                            AppScreen.DASHBOARD -> DashboardScreen(charId = selectedCharId, refreshTrigger = dashboardRefreshTrigger)
+                            AppScreen.CHARACTERS -> CharacterManagementScreen()
+                            AppScreen.MARKET -> MarketBrowserScreen()
+                            AppScreen.ANALYSIS -> MarketAnalysisScreen()
+                            AppScreen.ASSETS -> AssetViewerScreen(charId = selectedCharId)
+                            AppScreen.WALLET -> WalletScreen(charId = selectedCharId)
+                            AppScreen.ORDERS -> OrdersScreen(charId = selectedCharId)
+                            AppScreen.WATCHLIST -> WatchlistScreen()
+                            AppScreen.ALERTS -> PriceAlertsScreen()
+                            AppScreen.CONTRACTS -> ContractTrackerScreen(charId = selectedCharId)
+                            AppScreen.INDUSTRY -> IndustryCalculatorScreen()
+                            AppScreen.SETTINGS -> SettingsScreen()
                         }
                     }
                 }

@@ -28,10 +28,16 @@ subprojects {
     // CI just also runs them as separate steps for clearer pass/fail output per stage.
     extensions.configure<KtlintExtension> {
         version.set("1.3.1")
+        // Several modules add generated sources (AppVersion.kt, Compose resource accessors,
+        // etc.) under build/ to their Kotlin source sets — those aren't ours to style-check.
+        filter {
+            exclude { entry -> entry.file.path.contains("${layout.buildDirectory.get()}") }
+        }
     }
 
     extensions.configure<DetektExtension> {
         buildUponDefaultConfig = true
         parallel = true
+        config.setFrom(files("$rootDir/detekt.yml"))
     }
 }

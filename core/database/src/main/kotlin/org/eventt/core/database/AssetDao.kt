@@ -3,7 +3,6 @@ package org.eventt.core.database
 import org.eventt.core.model.AssetModel
 
 object AssetDao {
-
     fun upsert(asset: AssetModel) {
         DatabaseManager.transaction {
             prepareStatement(
@@ -12,7 +11,7 @@ object AssetDao {
                     region_id, region_name, system_id, system_name, station_id, station_name,
                     is_singleton, location_flag, estimated_price, is_corp_asset, character_id, corporation_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """.trimIndent()
+                """.trimIndent(),
             ).use { stmt ->
                 stmt.setLong(1, asset.itemId)
                 stmt.setInt(2, asset.typeId)
@@ -47,7 +46,7 @@ object AssetDao {
                         region_id, region_name, system_id, system_name, station_id, station_name,
                         is_singleton, location_flag, estimated_price, is_corp_asset, character_id, corporation_id)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """.trimIndent()
+                    """.trimIndent(),
                 ).use { stmt ->
                     assets.forEach { asset ->
                         stmt.setLong(1, asset.itemId)
@@ -80,40 +79,44 @@ object AssetDao {
         }
     }
 
-    fun getByCharacter(characterId: Int): List<AssetModel> {
-        return DatabaseManager.transaction {
+    fun getByCharacter(characterId: Int): List<AssetModel> =
+        DatabaseManager.transaction {
             prepareStatement("SELECT * FROM assets WHERE character_id = ? ORDER BY location_id, type_name").use { stmt ->
                 stmt.setInt(1, characterId)
                 stmt.executeQuery().mapResultSetToAssets()
             }
         }
-    }
 
-    fun getByCorporation(corporationId: Int): List<AssetModel> {
-        return DatabaseManager.transaction {
+    fun getByCorporation(corporationId: Int): List<AssetModel> =
+        DatabaseManager.transaction {
             prepareStatement("SELECT * FROM assets WHERE corporation_id = ? ORDER BY location_id, type_name").use { stmt ->
                 stmt.setInt(1, corporationId)
                 stmt.executeQuery().mapResultSetToAssets()
             }
         }
-    }
 
-    fun getTotalValue(characterId: Int? = null, corporationId: Int? = null): Double {
-        return DatabaseManager.transaction {
-            val where = when {
-                characterId != null -> "WHERE character_id = ?"
-                corporationId != null -> "WHERE corporation_id = ?"
-                else -> ""
-            }
+    fun getTotalValue(
+        characterId: Int? = null,
+        corporationId: Int? = null,
+    ): Double =
+        DatabaseManager.transaction {
+            val where =
+                when {
+                    characterId != null -> "WHERE character_id = ?"
+                    corporationId != null -> "WHERE corporation_id = ?"
+                    else -> ""
+                }
             prepareStatement("SELECT SUM(estimated_price * quantity) FROM assets $where").use { stmt ->
-                if (characterId != null) stmt.setInt(1, characterId)
-                else if (corporationId != null) stmt.setInt(1, corporationId)
+                if (characterId != null) {
+                    stmt.setInt(1, characterId)
+                } else if (corporationId != null) {
+                    stmt.setInt(1, corporationId)
+                }
                 stmt.executeQuery().use { rs ->
                     if (rs.next()) rs.getDouble(1) else 0.0
                 }
             }
         }
-    }
 
     fun deleteByCharacter(characterId: Int) {
         DatabaseManager.transaction {
@@ -156,7 +159,7 @@ object AssetDao {
                     isCorpAsset = getInt("is_corp_asset") == 1,
                     characterId = getInt("character_id").takeIf { it != 0 },
                     corporationId = getInt("corporation_id").takeIf { it != 0 },
-                )
+                ),
             )
         }
         return list

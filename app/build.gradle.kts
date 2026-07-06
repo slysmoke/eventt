@@ -16,26 +16,27 @@ group = "org.eventt"
 version = appVersion
 
 // ── Generate AppVersion.kt from gradle.properties ─────────────────────────
-val generateAppVersion = tasks.register("generateAppVersion") {
-    val outputDir = layout.buildDirectory.dir("generated/appversion")
-    outputs.dir(outputDir)
-    inputs.property("appVersion", appVersion)
-    inputs.property("githubRepo", githubRepo)
-    doLast {
-        val dir = outputDir.get().asFile
-        dir.mkdirs()
-        File(dir, "AppVersion.kt").writeText(
-            """
-            package org.eventt
+val generateAppVersion =
+    tasks.register("generateAppVersion") {
+        val outputDir = layout.buildDirectory.dir("generated/appversion")
+        outputs.dir(outputDir)
+        inputs.property("appVersion", appVersion)
+        inputs.property("githubRepo", githubRepo)
+        doLast {
+            val dir = outputDir.get().asFile
+            dir.mkdirs()
+            File(dir, "AppVersion.kt").writeText(
+                """
+                package org.eventt
 
-            object AppVersion {
-                const val NAME        = "$appVersion"
-                const val GITHUB_REPO = "$githubRepo"
-            }
-            """.trimIndent()
-        )
+                object AppVersion {
+                    const val NAME        = "$appVersion"
+                    const val GITHUB_REPO = "$githubRepo"
+                }
+                """.trimIndent(),
+            )
+        }
     }
-}
 
 kotlin {
     sourceSets {
@@ -46,6 +47,12 @@ kotlin {
 }
 
 tasks.named("compileKotlin") { dependsOn(generateAppVersion) }
+
+// ktlint/detekt scan the whole Kotlin source set, which includes the generated appversion/
+// dir above — without this, Gradle flags an undeclared dependency on generateAppVersion's output.
+tasks.matching { it.name.startsWith("runKtlint") || it.name == "detekt" }.configureEach {
+    dependsOn(generateAppVersion)
+}
 
 // ─────────────────────────────────────────────────────────────────────────
 
