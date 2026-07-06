@@ -6,7 +6,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-group = "org.eve.trader"
+group = "org.eventt"
 version = "1.0.0"
 
 dependencies {

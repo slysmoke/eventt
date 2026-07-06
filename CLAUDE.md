@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-EVE Trader is a desktop trading application for EVE Online, built with Jetpack Compose for Desktop and Kotlin/JVM. It interfaces with the EVE Online ESI (REST) API, using OAuth2 SSO for authentication.
+EVE Night Trade Tools is a desktop trading application for EVE Online, built with Jetpack Compose for Desktop and Kotlin/JVM. It interfaces with the EVE Online ESI (REST) API, using OAuth2 SSO for authentication.
 
 ## Build & Run Commands
 
@@ -32,7 +32,7 @@ Two layers of modules under `core/` and `features/`, plus `ui/`:
 ### Dependency Flow
 
 ```
-Main.kt → DatabaseManager.initialize() → EveTraderApp (Compose)
+Main.kt → DatabaseManager.initialize() → EventtApp (Compose)
     ↓
 :features:* → :core:{model, database, auth, esi, cache, queue}
 :core:esi   → :core:{auth, cache, http, queue, database}
@@ -41,10 +41,10 @@ Main.kt → DatabaseManager.initialize() → EveTraderApp (Compose)
 
 ### Entry Point
 
-`Main.kt` (package `org.eve.trader`):
+`Main.kt` (package `org.eventt`):
 1. Initializes SQLite with WAL mode pragmas in a synchronized block — **this must happen before the UI starts**
 2. Opens a 1200×800 Compose desktop Window
-3. Renders `EveTraderApp`, which provides tab-based navigation to the 10 feature screens
+3. Renders `EventtApp`, which provides tab-based navigation to the 10 feature screens
 
 ### Key Patterns
 

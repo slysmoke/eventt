@@ -1,5 +1,5 @@
 {
-  description = "EVE Trader — Kotlin/Compose Desktop trading app for EVE Online";
+  description = "EVE Night Trade Tools — Kotlin/Compose Desktop trading app for EVE Online";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -12,14 +12,14 @@
         pkgs = nixpkgs.legacyPackages.${system};
       in {
         packages.default = pkgs.stdenv.mkDerivation {
-          pname = "eve-trader";
+          pname = "eventt";
           version = "1.0.0";
 
           # Требует предварительного запуска: ./gradlew createDistributable
           # Используем --impure и PWD чтобы обойти ограничение git-tracked файлов
           src = builtins.path {
-            name = "eve-trader-dist";
-            path = "${builtins.getEnv "PWD"}/app/build/compose/binaries/main/app/eve-trader";
+            name = "eventt-dist";
+            path = "${builtins.getEnv "PWD"}/app/build/compose/binaries/main/app/eventt";
           };
 
           nativeBuildInputs = [ pkgs.makeWrapper ];
@@ -28,7 +28,7 @@
             mkdir -p $out
             cp -r . $out/
 
-            wrapProgram $out/bin/eve-trader \
+            wrapProgram $out/bin/eventt \
               --set LD_LIBRARY_PATH ${pkgs.lib.makeLibraryPath (with pkgs; [
                 libGL
                 libGLU
@@ -50,8 +50,8 @@
                 gtk3
               ])}
 
-            # лаунчер ищет конфиг по имени бинарника; makeWrapper переименовывает его в .eve-trader-wrapped
-            ln -s $out/lib/app/eve-trader.cfg $out/lib/app/.eve-trader-wrapped.cfg
+            # лаунчер ищет конфиг по имени бинарника; makeWrapper переименовывает его в .eventt-wrapped
+            ln -s $out/lib/app/eventt.cfg $out/lib/app/.eventt-wrapped.cfg
           '';
         };
 

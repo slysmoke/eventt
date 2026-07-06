@@ -13,7 +13,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "eve-trader"
+rootProject.name = "eventt"
 
 // Core modules
 include(":core:model")

@@ -1,4 +1,4 @@
-# EVE Trader — Project Context
+# EVE Night Trade Tools — Project Context
 
 ## Project Overview
 Desktop trading application for **EVE Online** built with **Kotlin** and **Jetpack Compose for Desktop**.

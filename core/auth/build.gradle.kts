@@ -3,7 +3,7 @@ plugins {
     kotlin("plugin.serialization") version "2.0.21"
 }
 
-group = "org.eve.trader"
+group = "org.eventt"
 version = "1.0.0"
 
 dependencies {

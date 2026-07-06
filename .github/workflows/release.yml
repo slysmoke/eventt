@@ -14,15 +14,15 @@ jobs:
         include:
           - os: ubuntu-latest
             platform: linux
-            exe: app/build/compose/binaries/main/app/eve-trader/bin/eve-trader
+            exe: app/build/compose/binaries/main/app/eventt/bin/eventt
 
           - os: windows-latest
             platform: windows
-            exe: app/build/compose/binaries/main/app/eve-trader/bin/eve-trader.exe
+            exe: app/build/compose/binaries/main/app/eventt/bin/eventt.exe
 
           - os: macos-latest
             platform: macos
-            exe: app/build/compose/binaries/main/app/eve-trader.app/Contents/MacOS/eve-trader
+            exe: app/build/compose/binaries/main/app/eventt.app/Contents/MacOS/eventt
 
     runs-on: ${{ matrix.os }}
     name: Build (${{ matrix.platform }})
@@ -106,20 +106,20 @@ jobs:
         shell: bash
         run: |
           cd app/build/compose/binaries/main/app
-          zip -r "$GITHUB_WORKSPACE/eve-trader-${{ matrix.platform }}.zip" .
+          zip -r "$GITHUB_WORKSPACE/eventt-${{ matrix.platform }}.zip" .
 
       - name: Package zip (Windows)
         if: matrix.platform == 'windows'
         shell: pwsh
         run: |
           Compress-Archive -Path app/build/compose/binaries/main/app/* `
-            -DestinationPath eve-trader-windows.zip
+            -DestinationPath eventt-windows.zip
 
       - name: Upload zip artifact
         uses: actions/upload-artifact@v4
         with:
-          name: eve-trader-${{ matrix.platform }}
-          path: eve-trader-${{ matrix.platform }}.zip
+          name: eventt-${{ matrix.platform }}
+          path: eventt-${{ matrix.platform }}.zip
           retention-days: 1
 
   # ── Create GitHub Release ─────────────────────────────────────────────────
@@ -142,8 +142,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            --title "EVE Trader $GITHUB_REF_NAME" \
+            --title "EVE Night Trade Tools $GITHUB_REF_NAME" \
             --generate-notes \
-            artifacts/eve-trader-linux/eve-trader-linux.zip \
-            artifacts/eve-trader-windows/eve-trader-windows.zip \
-            artifacts/eve-trader-macos/eve-trader-macos.zip
+            artifacts/eventt-linux/eventt-linux.zip \
+            artifacts/eventt-windows/eventt-windows.zip \
+            artifacts/eventt-macos/eventt-macos.zip

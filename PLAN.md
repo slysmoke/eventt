@@ -1,4 +1,4 @@
-# EVE Trader — Development Plan
+# EVE Night Trade Tools — Development Plan
 
 ## Phase 1: Foundation (Core Infrastructure)
 

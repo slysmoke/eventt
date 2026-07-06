@@ -10,7 +10,7 @@ plugins {
 val appVersion: String = rootProject.properties["app.version"] as? String ?: "0.0.0"
 val githubRepo: String = rootProject.properties["github.repo"] as? String ?: ""
 
-group = "org.eve.trader"
+group = "org.eventt"
 version = appVersion
 
 // ── Generate AppVersion.kt from gradle.properties ─────────────────────────
@@ -24,7 +24,7 @@ val generateAppVersion = tasks.register("generateAppVersion") {
         dir.mkdirs()
         File(dir, "AppVersion.kt").writeText(
             """
-            package org.eve.trader
+            package org.eventt
 
             object AppVersion {
                 const val NAME        = "$appVersion"
@@ -106,11 +106,11 @@ dependencies {
 
 compose.desktop {
     application {
-        mainClass = "org.eve.trader.MainKt"
+        mainClass = "org.eventt.MainKt"
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "eve-trader"
+            packageName = "eventt"
             packageVersion = appVersion
 
             modules("java.sql", "java.naming")
