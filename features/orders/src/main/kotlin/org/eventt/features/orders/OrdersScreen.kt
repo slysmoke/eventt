@@ -55,7 +55,6 @@ private data class CharacterOrder(
     val orderId: Long,
     val typeId: Int,
     val typeName: String,
-    val groupName: String,
     val locationId: Long,
     val regionId: Int,
     val stationName: String,
@@ -65,8 +64,6 @@ private data class CharacterOrder(
     val isBuyOrder: Boolean,
     val duration: Int,
     val issued: String,
-    val range: String,
-    val minVolume: Int,
     val state: String,
 ) {
     val total: Double get() = price * volumeRemaining
@@ -91,7 +88,24 @@ private data class MarketComparison(
     val bestBuy: Double?,   // highest buy from others — null means no buy competition
 )
 
-private enum class SortCol { NAME, GROUP, PRICE, VOLUME, TOTAL, TIME_LEFT, ORDER_AGE, STATION }
+/** Net margin (%) of buying at [buyPrice] (cost includes buy broker fee) and reselling at [sellPrice] (revenue net of sales tax + sell broker fee). */
+private fun computeMarginPct(buyPrice: Double?, sellPrice: Double?, taxConfig: CostBasisService.TaxConfig): Double? {
+    val buy  = buyPrice ?: return null
+    val sell = sellPrice ?: return null
+    val cost = buy * taxConfig.buyMultiplier
+    if (cost <= 0) return null
+    val revenue = sell * taxConfig.sellMultiplier
+    return (revenue - cost) / cost * 100
+}
+
+/**
+ * Net margin (%) of flipping at the market's current best prices: acquire via a buy order at
+ * [MarketComparison.bestBuy], resell via a sell order at [MarketComparison.bestSell].
+ */
+private fun computeBestMarginPct(comparison: MarketComparison?, taxConfig: CostBasisService.TaxConfig): Double? =
+    computeMarginPct(comparison?.bestBuy, comparison?.bestSell, taxConfig)
+
+private enum class SortCol { NAME, PRICE, VOLUME, TOTAL, TIME_LEFT, ORDER_AGE, STATION }
 private enum class SortDir { ASC, DESC }
 
 @Composable
@@ -184,7 +198,6 @@ fun OrdersScreen(charId: Int?) {
                         orderId         = (m["order_id"]      as? Number)?.toLong()  ?: 0L,
                         typeId          = typeId,
                         typeName        = StaticDataDao.getTypeName(typeId)           ?: "Unknown ($typeId)",
-                        groupName       = StaticDataDao.getGroupNameForType(typeId)   ?: "",
                         locationId      = locationId,
                         regionId        = if (locationId < 1_000_000_000_000L) StaticDataDao.getStationById(locationId)?.regionId ?: 0 else 0,
                         stationName     = StaticDataDao.getStationById(locationId)?.name ?: locationId.toString(),
@@ -194,8 +207,6 @@ fun OrdersScreen(charId: Int?) {
                         isBuyOrder      = (m["is_buy_order"]   as? Boolean)           ?: false,
                         duration        = (m["duration"]       as? Number)?.toInt()   ?: 0,
                         issued          = (m["issued"]         as? String)            ?: "",
-                        range           = (m["range"]          as? String)            ?: "",
-                        minVolume       = (m["min_volume"]     as? Number)?.toInt()   ?: 1,
                         state           = (m["state"]          as? String)            ?: "active",
                     )
                 }
@@ -557,6 +568,7 @@ fun OrdersScreen(charId: Int?) {
                             sortCol = sortCol,
                             sortDir = sortDir,
                             onSort = ::onSort,
+                            taxConfig = tax,
                             comparisons = marketComparisons,
                             selectedOrderId = selectedOrderId,
                             activeOrderId = activeOrderId,
@@ -589,7 +601,6 @@ fun OrdersScreen(charId: Int?) {
 private fun applySort(list: List<CharacterOrder>, col: SortCol, dir: SortDir): List<CharacterOrder> {
     val sorted = when (col) {
         SortCol.NAME      -> list.sortedBy { it.typeName }
-        SortCol.GROUP     -> list.sortedBy { it.groupName }
         SortCol.PRICE     -> list.sortedBy { it.price }
         SortCol.VOLUME    -> list.sortedBy { it.volumeRemaining }
         SortCol.TOTAL     -> list.sortedBy { it.total }
@@ -623,11 +634,11 @@ private fun SellOrdersTable(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SortHeader("Name",      SortCol.NAME,      sortCol, sortDir, onSort, Modifier.weight(3f))
-            SortHeader("Group",     SortCol.GROUP,     sortCol, sortDir, onSort, Modifier.weight(1.5f))
             StaticHeader("Price / Best", Modifier.weight(2.4f))
             StaticHeader("Cost",    Modifier.weight(1.8f))
             StaticHeader("Profit",  Modifier.weight(1.8f))
             StaticHeader("Margin",  Modifier.weight(1.2f))
+            StaticHeader("Best Margin", Modifier.weight(1.4f))
             SortHeader("Volume",    SortCol.VOLUME,    sortCol, sortDir, onSort, Modifier.weight(2.5f))
             SortHeader("Time Left", SortCol.TIME_LEFT, sortCol, sortDir, onSort, Modifier.weight(1.5f))
             SortHeader("Station",   SortCol.STATION,   sortCol, sortDir, onSort, Modifier.weight(2.5f))
@@ -660,6 +671,7 @@ private fun BuyOrdersTable(
     sortCol: SortCol,
     sortDir: SortDir,
     onSort: (SortCol) -> Unit,
+    taxConfig: CostBasisService.TaxConfig,
     comparisons: Map<Pair<Int, Int>, MarketComparison>,
     selectedOrderId: Long?,
     activeOrderId: Long?,
@@ -672,12 +684,11 @@ private fun BuyOrdersTable(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SortHeader("Name",      SortCol.NAME,      sortCol, sortDir, onSort, Modifier.weight(3f))
-            SortHeader("Group",     SortCol.GROUP,     sortCol, sortDir, onSort, Modifier.weight(2f))
             StaticHeader("Price / Best", Modifier.weight(2.4f))
+            StaticHeader("Margin",      Modifier.weight(1.2f))
+            StaticHeader("Best Margin", Modifier.weight(1.4f))
             SortHeader("Volume",    SortCol.VOLUME,    sortCol, sortDir, onSort, Modifier.weight(2.5f))
             SortHeader("Total",     SortCol.TOTAL,     sortCol, sortDir, onSort, Modifier.weight(2f))
-            StaticHeader("Range",   Modifier.weight(1.5f))
-            StaticHeader("Min Qty", Modifier.weight(1f))
             SortHeader("Time Left", SortCol.TIME_LEFT, sortCol, sortDir, onSort, Modifier.weight(1.5f))
             SortHeader("Order Age", SortCol.ORDER_AGE, sortCol, sortDir, onSort, Modifier.weight(1.5f))
             SortHeader("Station",   SortCol.STATION,   sortCol, sortDir, onSort, Modifier.weight(3f))
@@ -689,6 +700,7 @@ private fun BuyOrdersTable(
                 val comp = comparisons[order.typeId to order.regionId]
                 BuyOrderRow(
                     order = order,
+                    taxConfig = taxConfig,
                     comparison = comp,
                     isSelected = selectedOrderId == order.orderId,
                     isActiveInGame = activeOrderId == order.orderId,
@@ -792,6 +804,8 @@ private fun SellOrderRow(
     val profitPerUnit = costBasis?.let { netSellPrice - it }
     val marginPct     = costBasis?.let { if (it > 0) (netSellPrice - it) / it * 100 else null }
     val profitColor   = profitPerUnit?.let { if (it >= 0) PROFIT_COLOR else LOSS_COLOR } ?: MaterialTheme.colorScheme.onSurfaceVariant
+    val bestMarginPct = computeBestMarginPct(comparison, taxConfig)
+    val bestMarginColor = bestMarginPct?.let { if (it >= 0) PROFIT_COLOR else LOSS_COLOR } ?: MaterialTheme.colorScheme.onSurfaceVariant
 
     // Undercut: another sell order is cheaper than ours
     val isUndercut    = comparison?.bestSell != null && comparison.bestSell < order.price
@@ -817,7 +831,6 @@ private fun SellOrderRow(
             }
             Text(order.typeName, style = MaterialTheme.typography.bodyMedium, overflow = TextOverflow.Ellipsis, maxLines = 1)
         }
-        Text(order.groupName, modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, overflow = TextOverflow.Ellipsis, maxLines = 1)
 
         // Price column: order price + competing price below if undercut
         Column(modifier = Modifier.weight(2.4f)) {
@@ -851,6 +864,12 @@ private fun SellOrderRow(
             style = MaterialTheme.typography.bodySmall,
             color = if (isEstimated) profitColor.copy(alpha = 0.7f) else profitColor,
         )
+        Text(
+            bestMarginPct?.let { "%.1f%%".format(it) } ?: "—",
+            modifier = Modifier.weight(1.4f),
+            style = MaterialTheme.typography.bodySmall,
+            color = bestMarginColor,
+        )
         VolumeBar(order.volumeRemaining, order.volumeTotal, isSell = true, modifier = Modifier.weight(2.5f).padding(horizontal = 4.dp))
         Text(formatDuration(order.timeLeftSeconds), modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.bodySmall, color = timeLeftColor(order.timeLeftSeconds))
         Text(order.stationName, modifier = Modifier.weight(2.5f).padding(start = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, overflow = TextOverflow.Ellipsis, maxLines = 1)
@@ -874,6 +893,7 @@ private fun SellOrderRow(
 @Composable
 private fun BuyOrderRow(
     order: CharacterOrder,
+    taxConfig: CostBasisService.TaxConfig,
     comparison: MarketComparison?,
     isSelected: Boolean,
     isActiveInGame: Boolean,
@@ -882,6 +902,11 @@ private fun BuyOrderRow(
 ) {
     // Overbid: another buy order pays more than ours
     val isOverbid = comparison?.bestBuy != null && comparison.bestBuy > order.price
+    // Margin if this order fills and the item is resold at the current best sell price.
+    val marginPct = computeMarginPct(order.price, comparison?.bestSell, taxConfig)
+    val marginColor = marginPct?.let { if (it >= 0) PROFIT_COLOR else LOSS_COLOR } ?: MaterialTheme.colorScheme.onSurfaceVariant
+    val bestMarginPct = computeBestMarginPct(comparison, taxConfig)
+    val bestMarginColor = bestMarginPct?.let { if (it >= 0) PROFIT_COLOR else LOSS_COLOR } ?: MaterialTheme.colorScheme.onSurfaceVariant
     val rowBg     = when {
         isActiveInGame -> ACTIVE_IN_GAME.copy(alpha = 0.15f)
         isSelected     -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
@@ -903,7 +928,6 @@ private fun BuyOrderRow(
             }
             Text(order.typeName, style = MaterialTheme.typography.bodyMedium, overflow = TextOverflow.Ellipsis, maxLines = 1)
         }
-        Text(order.groupName, modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, overflow = TextOverflow.Ellipsis, maxLines = 1)
 
         // Price column: order price + competing price below if overbid
         Column(modifier = Modifier.weight(2.4f)) {
@@ -916,11 +940,21 @@ private fun BuyOrderRow(
                 )
             }
         }
+        Text(
+            marginPct?.let { "%.1f%%".format(it) } ?: "—",
+            modifier = Modifier.weight(1.2f),
+            style = MaterialTheme.typography.bodySmall,
+            color = marginColor,
+        )
+        Text(
+            bestMarginPct?.let { "%.1f%%".format(it) } ?: "—",
+            modifier = Modifier.weight(1.4f),
+            style = MaterialTheme.typography.bodySmall,
+            color = bestMarginColor,
+        )
 
         VolumeBar(order.volumeRemaining, order.volumeTotal, isSell = false, modifier = Modifier.weight(2.5f).padding(horizontal = 4.dp))
         Text(formatIsk(order.total), modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodyMedium)
-        Text(formatRange(order.range), modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.bodySmall)
-        Text(formatNumber(order.minVolume), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
         Text(formatDuration(order.timeLeftSeconds), modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.bodySmall, color = timeLeftColor(order.timeLeftSeconds))
         Text(formatDuration(order.orderAgeSeconds), modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(order.stationName, modifier = Modifier.weight(3f).padding(start = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, overflow = TextOverflow.Ellipsis, maxLines = 1)
@@ -1241,13 +1275,6 @@ private fun historyPnl(
 }
 
 // ── Formatters ────────────────────────────────────────────────────────────
-
-private fun formatRange(range: String): String = when (range) {
-    "station"     -> "Station"
-    "solarsystem" -> "System"
-    "region"      -> "Region"
-    else          -> range.toIntOrNull()?.let { "$it jumps" } ?: range
-}
 
 private fun formatDuration(seconds: Long): String {
     if (seconds <= 0) return "—"
