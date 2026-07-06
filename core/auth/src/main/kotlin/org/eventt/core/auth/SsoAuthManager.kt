@@ -395,7 +395,7 @@ object SsoAuthManager {
 
     // PKCE (RFC 7636): a fresh, high-entropy verifier per auth attempt, sent to the token
     // endpoint in place of a client secret; only its SHA-256 hash is exposed in the browser URL.
-    private fun generateCodeVerifier(): String {
+    internal fun generateCodeVerifier(): String {
         val bytes = ByteArray(32)
         java.security.SecureRandom().nextBytes(bytes)
         return java.util.Base64
@@ -404,7 +404,7 @@ object SsoAuthManager {
             .encodeToString(bytes)
     }
 
-    private fun codeChallenge(verifier: String): String {
+    internal fun codeChallenge(verifier: String): String {
         val digest =
             java.security.MessageDigest
                 .getInstance("SHA-256")
@@ -415,7 +415,7 @@ object SsoAuthManager {
             .encodeToString(digest)
     }
 
-    private fun parseQueryString(query: String): Map<String, String> =
+    internal fun parseQueryString(query: String): Map<String, String> =
         query
             .split("&")
             .mapNotNull { pair ->

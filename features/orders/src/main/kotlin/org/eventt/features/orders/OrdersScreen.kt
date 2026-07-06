@@ -86,13 +86,13 @@ private data class CharacterOrder(
 }
 
 /** Best competing prices for a (typeId, regionId) pair, excluding the character's own orders. */
-private data class MarketComparison(
+internal data class MarketComparison(
     val bestSell: Double?, // lowest sell from others — null means no sell competition
     val bestBuy: Double?, // highest buy from others — null means no buy competition
 )
 
 /** Net margin (%) of buying at [buyPrice] (cost includes buy broker fee) and reselling at [sellPrice] (revenue net of sales tax + sell broker fee). */
-private fun computeMarginPct(
+internal fun computeMarginPct(
     buyPrice: Double?,
     sellPrice: Double?,
     taxConfig: CostBasisService.TaxConfig,
@@ -109,7 +109,7 @@ private fun computeMarginPct(
  * Net margin (%) of flipping at the market's current best prices: acquire via a buy order at
  * [MarketComparison.bestBuy], resell via a sell order at [MarketComparison.bestSell].
  */
-private fun computeBestMarginPct(
+internal fun computeBestMarginPct(
     comparison: MarketComparison?,
     taxConfig: CostBasisService.TaxConfig,
 ): Double? = computeMarginPct(comparison?.bestBuy, comparison?.bestSell, taxConfig)
@@ -1475,7 +1475,7 @@ private fun SummaryItem(
 
 // ── History P&L helper ────────────────────────────────────────────────────
 
-private fun historyPnl(
+internal fun historyPnl(
     order: OrderHistoryDao.OrderHistoryRecord,
     fifoResult: CostBasisService.FifoResult?,
 ): Pair<Double?, Double?> {

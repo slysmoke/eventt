@@ -360,7 +360,7 @@ object UpdateChecker {
     }
 
     // Semantic version comparison: returns true if a > b
-    private fun isNewer(
+    internal fun isNewer(
         a: String,
         b: String,
     ): Boolean {

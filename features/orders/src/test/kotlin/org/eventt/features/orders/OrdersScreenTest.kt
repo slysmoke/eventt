@@ -1,0 +1,153 @@
+package org.eventt.features.orders
+
+import io.kotest.matchers.doubles.plusOrMinus
+import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.nulls.shouldNotBeNull
+import io.kotest.matchers.should
+import org.eventt.core.database.OrderHistoryDao
+import org.eventt.features.orders.CostBasisService.FifoResult
+import org.eventt.features.orders.CostBasisService.InventoryItem
+import org.eventt.features.orders.CostBasisService.RealizedSellTx
+import org.eventt.features.orders.CostBasisService.TaxConfig
+import org.junit.jupiter.api.Test
+
+private const val TOLERANCE = 0.0001
+private const val TYPE_ID = 34
+
+class OrdersScreenTest {
+    private val tax = TaxConfig()
+
+    @Test
+    fun `computeMarginPct is net of buy broker fee and sell tax plus fee`() {
+        // buy cost = 100 * 1.03 = 103.0; sell revenue = 150 * 0.89 = 133.5
+        val margin = computeMarginPct(buyPrice = 100.0, sellPrice = 150.0, taxConfig = tax).shouldNotBeNull()
+
+        margin should ((133.5 - 103.0) / 103.0 * 100 plusOrMinus TOLERANCE)
+    }
+
+    @Test
+    fun `computeMarginPct is null when either price is missing`() {
+        computeMarginPct(null, 150.0, tax).shouldBeNull()
+        computeMarginPct(100.0, null, tax).shouldBeNull()
+    }
+
+    @Test
+    fun `computeMarginPct is null for a non-positive buy price`() {
+        computeMarginPct(buyPrice = 0.0, sellPrice = 150.0, taxConfig = tax).shouldBeNull()
+    }
+
+    @Test
+    fun `computeBestMarginPct reads bestBuy as acquisition price and bestSell as resale price`() {
+        val comparison = MarketComparison(bestSell = 150.0, bestBuy = 100.0)
+
+        val margin = computeBestMarginPct(comparison, tax).shouldNotBeNull()
+
+        margin should ((133.5 - 103.0) / 103.0 * 100 plusOrMinus TOLERANCE)
+    }
+
+    @Test
+    fun `computeBestMarginPct is null when there's no comparison or a one-sided market`() {
+        computeBestMarginPct(null, tax).shouldBeNull()
+        computeBestMarginPct(MarketComparison(bestSell = null, bestBuy = 100.0), tax).shouldBeNull()
+        computeBestMarginPct(MarketComparison(bestSell = 150.0, bestBuy = null), tax).shouldBeNull()
+    }
+
+    private fun sellOrder(
+        price: Double = 150.0,
+        volumeTotal: Int = 10,
+        volumeRemaining: Int = 0,
+        issued: String = "2024-01-05",
+        isBuyOrder: Boolean = false,
+    ) = OrderHistoryDao.OrderHistoryRecord(
+        orderId = 1L,
+        typeId = TYPE_ID,
+        typeName = "Tritanium",
+        locationId = 60003760L,
+        stationName = "Jita IV - Moon 4",
+        price = price,
+        volumeTotal = volumeTotal,
+        volumeRemaining = volumeRemaining,
+        isBuyOrder = isBuyOrder,
+        duration = 90,
+        issued = issued,
+        range = "region",
+        minVolume = 1,
+        state = "expired",
+        characterId = 1,
+    )
+
+    @Test
+    fun `historyPnl uses the FIFO-matched sell when one covers the order's fill date`() {
+        val fifoResult =
+            FifoResult(
+                inventory = emptyMap(),
+                realizedSells = listOf(RealizedSellTx("2024-01-05", TYPE_ID, 10, 150.0, 100.0, 300.0, 1.0)),
+                taxConfig = tax,
+            )
+
+        val (profit, margin) = historyPnl(sellOrder(), fifoResult)
+
+        // netSellPrice = 150*0.89 = 133.5; cb = 133.5 - 300.0/10 = 103.5
+        profit.shouldNotBeNull() should (300.0 plusOrMinus TOLERANCE)
+        margin.shouldNotBeNull() should ((133.5 - 103.5) / 103.5 * 100 plusOrMinus TOLERANCE)
+    }
+
+    @Test
+    fun `historyPnl falls back to avgCostBasisForType when no FIFO sell matches`() {
+        val fifoResult =
+            FifoResult(
+                inventory = mapOf(TYPE_ID to InventoryItem(TYPE_ID, "Tritanium", 5, 100.0, 500.0)),
+                realizedSells = emptyList(),
+                taxConfig = tax,
+            )
+
+        val (profit, margin) = historyPnl(sellOrder(), fifoResult)
+
+        // netSellPrice = 133.5; cb = 100.0 (from inventory); profit = (133.5-100.0)*10
+        profit.shouldNotBeNull() should ((133.5 - 100.0) * 10 plusOrMinus TOLERANCE)
+        margin.shouldNotBeNull() should ((133.5 - 100.0) / 100.0 * 100 plusOrMinus TOLERANCE)
+    }
+
+    @Test
+    fun `historyPnl is null-null when there's no cost basis data at all for the type`() {
+        val fifoResult = FifoResult(inventory = emptyMap(), realizedSells = emptyList(), taxConfig = tax)
+
+        val (profit, margin) = historyPnl(sellOrder(), fifoResult)
+
+        profit.shouldBeNull()
+        margin.shouldBeNull()
+    }
+
+    @Test
+    fun `historyPnl is null-null for a buy order regardless of FIFO data`() {
+        val fifoResult =
+            FifoResult(
+                inventory = mapOf(TYPE_ID to InventoryItem(TYPE_ID, "Tritanium", 5, 100.0, 500.0)),
+                realizedSells = emptyList(),
+                taxConfig = tax,
+            )
+
+        val (profit, margin) = historyPnl(sellOrder(isBuyOrder = true), fifoResult)
+
+        profit.shouldBeNull()
+        margin.shouldBeNull()
+    }
+
+    @Test
+    fun `historyPnl is null-null when there's no FIFO result yet`() {
+        val (profit, margin) = historyPnl(sellOrder(), fifoResult = null)
+
+        profit.shouldBeNull()
+        margin.shouldBeNull()
+    }
+
+    @Test
+    fun `historyPnl is null-null when nothing was actually filled`() {
+        val fifoResult = FifoResult(inventory = emptyMap(), realizedSells = emptyList(), taxConfig = tax)
+
+        val (profit, margin) = historyPnl(sellOrder(volumeTotal = 10, volumeRemaining = 10), fifoResult)
+
+        profit.shouldBeNull()
+        margin.shouldBeNull()
+    }
+}
