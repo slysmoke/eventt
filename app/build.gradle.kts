@@ -124,6 +124,13 @@ compose.desktop {
                 menu = true
                 shortcut = true
                 upgradeUuid = "8f2c1a6e-3b7d-4e9a-9c1f-2d6a7b4e5f10"
+                iconFile.set(project.file("icons/icon.ico"))
+            }
+            macOS {
+                iconFile.set(project.file("icons/icon.icns"))
+            }
+            linux {
+                iconFile.set(project.file("icons/icon.png"))
             }
         }
     }

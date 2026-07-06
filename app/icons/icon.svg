@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="85%">
+      <stop offset="0%" stop-color="#1B3A6B"/>
+      <stop offset="55%" stop-color="#12233F"/>
+      <stop offset="100%" stop-color="#050A14"/>
+    </radialGradient>
+    <linearGradient id="glyph" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#4A90D9"/>
+      <stop offset="100%" stop-color="#9FE0FF"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="16" y="16" width="992" height="992" rx="200" ry="200" fill="url(#bg)"/>
+  <rect x="16" y="16" width="992" height="992" rx="200" ry="200" fill="none" stroke="#4A90D9" stroke-width="10" opacity="0.5"/>
+
+  <!-- orbit ring -->
+  <circle cx="512" cy="512" r="360" fill="none" stroke="#4A90D9" stroke-width="6" opacity="0.4"/>
+  <circle cx="512" cy="512" r="360" fill="none" stroke="#7CE0FF" stroke-width="10"
+          stroke-dasharray="140 1600" stroke-linecap="round" transform="rotate(-40 512 512)"/>
+
+  <g transform="rotate(-8 512 512)">
+    <text x="512" y="600" font-family="Montserrat Black" font-size="290" letter-spacing="-6"
+          text-anchor="middle" fill="url(#glyph)">NTT</text>
+  </g>
+
+  <!-- motion slash -->
+  <g stroke="#9FE0FF" stroke-width="14" opacity="0.55" stroke-linecap="round">
+    <line x1="200" y1="760" x2="300" y2="700"/>
+    <line x1="230" y1="810" x2="360" y2="738"/>
+  </g>
+</svg>

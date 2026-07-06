@@ -1,5 +1,6 @@
 package org.eventt
 
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
@@ -32,6 +33,7 @@ fun main() {
         Window(
             title = "EVE Night Trade Tools",
             state = rememberWindowState(width = 1200.dp, height = 800.dp),
+            icon = painterResource("icon.png"),
             onCloseRequest = {
                 GlobalHotkeyService.stop()
                 exitApplication()
