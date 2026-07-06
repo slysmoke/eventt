@@ -240,6 +240,9 @@ object UpdateChecker {
             when (platform) {
                 // .app/Contents/MacOS/exe  →  .app/
                 "macos" -> exe.parentFile?.parentFile?.parentFile
+                // <packageName>/<packageName>.exe  →  <packageName>/ — unlike Linux/macOS,
+                // jpackage's Windows app-image has no bin/ subfolder.
+                "windows" -> exe.parentFile
                 // install/bin/exe  →  install/
                 else -> exe.parentFile?.parentFile
             }
@@ -252,11 +255,13 @@ object UpdateChecker {
             appendLine("sleep 2")
             if (newAppDir != null && installDir != null) {
                 appendLine("cp -r '${newAppDir.absolutePath}/.' '${installDir.absolutePath}/'")
-                appendLine("chmod +x '${installDir.absolutePath}/bin/'*")
-                val exe = if (platform == "macos")
+                val exe = if (platform == "macos") {
+                    appendLine("chmod +x '${installDir.absolutePath}/Contents/MacOS/'*")
                     "${installDir.absolutePath}/Contents/MacOS/eventt"
-                else
+                } else {
+                    appendLine("chmod +x '${installDir.absolutePath}/bin/'*")
                     "${installDir.absolutePath}/bin/eventt"
+                }
                 appendLine("exec '$exe'")
             } else {
                 appendLine("echo 'Update downloaded to: ${updateDir.absolutePath}/extracted'")
@@ -277,7 +282,8 @@ object UpdateChecker {
             appendLine("timeout /t 3 /nobreak > nul")
             if (newAppDir != null && installDir != null) {
                 appendLine("xcopy /e /y /i \"${newAppDir.absolutePath}\\*\" \"${installDir.absolutePath}\\\"")
-                appendLine("start \"\" \"${installDir.absolutePath}\\bin\\eventt.exe\"")
+                // No bin/ subfolder on Windows — the exe sits directly under installDir.
+                appendLine("start \"\" \"${installDir.absolutePath}\\eventt.exe\"")
             } else {
                 appendLine("echo Update downloaded to: ${updateDir.absolutePath}\\extracted")
                 appendLine("pause")

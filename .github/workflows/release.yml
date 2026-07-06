@@ -22,7 +22,9 @@ jobs:
 
           - os: windows-latest
             platform: windows
-            exe: app/build/compose/binaries/main/app/eventt/bin/eventt.exe
+            # No bin/ subfolder here, unlike Linux/macOS — jpackage's Windows app-image puts
+            # the exe directly at <packageName>/<packageName>.exe.
+            exe: app/build/compose/binaries/main/app/eventt/eventt.exe
             installerTask: packageMsi
             installerDir: app/build/compose/binaries/main/msi
             installerExt: msi
@@ -60,7 +62,11 @@ jobs:
         shell: bash
         run: |
           VERSION=${GITHUB_REF_NAME#v}
-          sed -i "s/^app\.version=.*/app.version=$VERSION/" gradle.properties
+          # -i.bak (suffix glued to -i, no space) is the one form both GNU sed (Linux/Windows
+          # git-bash) and BSD sed (macOS) accept — a bare `-i "script"` makes BSD sed treat the
+          # script as the backup suffix and fail.
+          sed -i.bak "s/^app\.version=.*/app.version=$VERSION/" gradle.properties
+          rm -f gradle.properties.bak
           echo "Building version $VERSION"
 
       - name: Build distributable
