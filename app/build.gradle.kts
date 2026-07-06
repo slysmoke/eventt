@@ -1,9 +1,11 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
     id("org.jetbrains.kotlin.jvm")
     id("org.jetbrains.compose")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.gradleup.shadow") version "8.3.5"
     kotlin("plugin.serialization") version "2.0.21"
 }
 
@@ -114,6 +116,30 @@ compose.desktop {
             packageVersion = appVersion
 
             modules("java.sql", "java.naming")
+
+            windows {
+                // Installs to %LOCALAPPDATA% instead of Program Files so the app can
+                // self-update (overwrite its own install dir) without admin rights.
+                perUserInstall = true
+                menu = true
+                shortcut = true
+                upgradeUuid = "8f2c1a6e-3b7d-4e9a-9c1f-2d6a7b4e5f10"
+            }
         }
+    }
+}
+
+// ── Fat jar for the "run anywhere with a JVM" release asset ────────────────
+// Skiko/Compose native libs resolved via compose.desktop.currentOs are
+// platform-specific, so this jar is only runnable on the OS it was built on —
+// CI builds one per platform (see .github/workflows/release.yml).
+tasks.named<ShadowJar>("shadowJar") {
+    archiveBaseName.set("eventt")
+    archiveVersion.set(appVersion)
+    archiveClassifier.set("")
+    mergeServiceFiles()
+    exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "module-info.class")
+    manifest {
+        attributes["Main-Class"] = "org.eventt.MainKt"
     }
 }

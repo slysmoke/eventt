@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
 
 jobs:
   # ── Build on each platform ────────────────────────────────────────────────
@@ -15,14 +16,23 @@ jobs:
           - os: ubuntu-latest
             platform: linux
             exe: app/build/compose/binaries/main/app/eventt/bin/eventt
+            installerTask: packageDeb
+            installerDir: app/build/compose/binaries/main/deb
+            installerExt: deb
 
           - os: windows-latest
             platform: windows
             exe: app/build/compose/binaries/main/app/eventt/bin/eventt.exe
+            installerTask: packageMsi
+            installerDir: app/build/compose/binaries/main/msi
+            installerExt: msi
 
           - os: macos-latest
             platform: macos
             exe: app/build/compose/binaries/main/app/eventt.app/Contents/MacOS/eventt
+            installerTask: packageDmg
+            installerDir: app/build/compose/binaries/main/dmg
+            installerExt: dmg
 
     runs-on: ${{ matrix.os }}
     name: Build (${{ matrix.platform }})
@@ -43,7 +53,10 @@ jobs:
           key: gradle-${{ matrix.platform }}-${{ hashFiles('**/*.gradle.kts', 'gradle/libs.versions.toml') }}
           restore-keys: gradle-${{ matrix.platform }}-
 
+      # Skipped on workflow_dispatch (manual test runs) — jpackage needs a numeric version,
+      # and a branch name like "main" isn't one, so those runs keep gradle.properties' default.
       - name: Set version from tag
+        if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         run: |
           VERSION=${GITHUB_REF_NAME#v}
@@ -122,9 +135,46 @@ jobs:
           path: eventt-${{ matrix.platform }}.zip
           retention-days: 1
 
+      # ── Native installer (.deb / .msi / .dmg) ───────────────────────────────
+      - name: Build native installer
+        shell: bash
+        run: ./gradlew ${{ matrix.installerTask }}
+
+      - name: Rename installer
+        shell: bash
+        run: |
+          src=$(find "${{ matrix.installerDir }}" -maxdepth 1 -name "*.${{ matrix.installerExt }}" | head -n1)
+          cp "$src" "eventt-${{ matrix.platform }}.${{ matrix.installerExt }}"
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: eventt-${{ matrix.platform }}-installer
+          path: eventt-${{ matrix.platform }}.${{ matrix.installerExt }}
+          retention-days: 1
+
+      # ── Fat jar (run anywhere with `java -jar`, one per OS — bundled native
+      #    Skiko libs are platform-specific) ───────────────────────────────────
+      - name: Build jar
+        shell: bash
+        run: ./gradlew :app:shadowJar
+
+      - name: Rename jar
+        shell: bash
+        run: cp app/build/libs/eventt-*.jar "eventt-${{ matrix.platform }}.jar"
+
+      - name: Upload jar artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: eventt-${{ matrix.platform }}-jar
+          path: eventt-${{ matrix.platform }}.jar
+          retention-days: 1
+
   # ── Create GitHub Release ─────────────────────────────────────────────────
+  # Skipped on workflow_dispatch (manual test runs) — only real tag pushes publish a release.
   release:
     needs: build
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -132,7 +182,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download all zip artifacts
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -146,4 +196,10 @@ jobs:
             --generate-notes \
             artifacts/eventt-linux/eventt-linux.zip \
             artifacts/eventt-windows/eventt-windows.zip \
-            artifacts/eventt-macos/eventt-macos.zip
+            artifacts/eventt-macos/eventt-macos.zip \
+            artifacts/eventt-linux-installer/eventt-linux.deb \
+            artifacts/eventt-windows-installer/eventt-windows.msi \
+            artifacts/eventt-macos-installer/eventt-macos.dmg \
+            artifacts/eventt-linux-jar/eventt-linux.jar \
+            artifacts/eventt-windows-jar/eventt-windows.jar \
+            artifacts/eventt-macos-jar/eventt-macos.jar
