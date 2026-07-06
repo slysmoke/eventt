@@ -51,6 +51,8 @@ Targets JVM 21 / Kotlin 1.9.22. No linter configured; code style is `kotlin.code
 ./gradlew shadowJar             # Runnable fat jar (java -jar app/build/libs/eventt-<version>.jar)
 ```
 
+The fat jar is **not** cross-platform despite the format — it bundles whichever OS's Skiko/Compose native rendering libs were present at build time (`compose.desktop.currentOs`). CI builds one per OS, released as `eventt-linux.jar` / `eventt-windows.jar` / `eventt-macos.jar`; grab the one matching your OS, same as the zip or installer.
+
 A NixOS package is also available via `flake.nix` (run `./gradlew createDistributable` first).
 
 ## Releases & auto-update
