@@ -155,7 +155,7 @@ class PortalHotkeyBackend : HotkeyBackend {
         label: String,
         invoke: (token: String) -> DBusPath,
     ): Map<String, Variant<*>>? {
-        val token = "eve_trader_${label}_${System.nanoTime()}"
+        val token = "eventt_${label}_${System.nanoTime()}"
         val latch = CountDownLatch(1)
         var results: Map<String, Variant<*>>? = null
 
