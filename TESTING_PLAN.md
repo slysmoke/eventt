@@ -61,8 +61,8 @@ new modules get them for free, no per-module setup needed except MockWebServer.
 | `app` | `UpdateChecker` (`isNewer`) | ⬜ Not started | Blocked: `private`; bump to `internal` first |
 | `features/orders` | `OrdersScreen` (`computeMarginPct`/`computeBestMarginPct`/`historyPnl`) | ⬜ Not started | Blocked: `private` top-level funs in a Compose file; bump to `internal` first |
 | `features/orders` | `CostBasisService` (FIFO cost basis) | ✅ Done | FIFO across lots, oversell handling, `avgCostBasisForType` fallback, `pnlForOrder` date/qty matching — `WalletDao` faked via `mockkObject` |
-| `features/overlay` | `ClipboardParser` | ⬜ Not started | Small (49 lines), likely pure — good first-timer task |
-| `core/staticdata` | `JumpGraphService` | ⬜ Not started | Graph/pathfinding logic (jump-distance BFS) — pure once the graph is loaded |
+| `features/overlay` | `ClipboardParser` | ✅ Done | `parse()` covered (sell/buy row shapes, malformed input, field fallbacks); `readClipboard()` is a thin AWT passthrough, not tested |
+| `core/staticdata` | `JumpGraphService` | 🟡 Partial | `bfsDistances` covered (chains, branching shortest-path, unreachable nodes, cycles) via `mockkObject(StaticDataDao)`; `ensureRegionGraph` (the ESI-fetching half) not tested — Tier 3 candidate, not pure |
 
 ### Tier 2 — coroutines / Flow state managers
 
@@ -114,7 +114,7 @@ Not started, not scheduled.
 ## Suggested order
 
 1. ~~`CostBasisService` (Tier 1) — highest value target in the app, no blockers~~ done
-2. `ClipboardParser` + `JumpGraphService` (Tier 1) — quick wins, no blockers
+2. ~~`ClipboardParser` + `JumpGraphService` (Tier 1) — quick wins, no blockers~~ done (`JumpGraphService` partially — see note above)
 3. Bump the four `private → internal` blockers (SsoAuthManager, UpdateChecker, OrdersScreen helpers) and test those
 4. `TokenCrypto` refactor + test
 5. `EsiClient` (Tier 3) — do this once Tier 1 is solid, since it exercises cache/auth/http together
