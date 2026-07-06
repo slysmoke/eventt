@@ -40,4 +40,21 @@ subprojects {
         parallel = true
         config.setFrom(files("$rootDir/detekt.yml"))
     }
+
+    tasks.withType<Test> {
+        useJUnitPlatform()
+    }
+
+    // The `testImplementation` configuration only exists once the Kotlin plugin (applied by
+    // each subproject's own build.gradle.kts) has run — which happens after this block, since
+    // the root project's script evaluates first. withPlugin() defers until that's actually true.
+    pluginManager.withPlugin("org.jetbrains.kotlin.jvm") {
+        dependencies {
+            "testImplementation"(rootProject.libs.junit.jupiter)
+            "testImplementation"(rootProject.libs.mockk)
+            "testImplementation"(rootProject.libs.kotest.assertions)
+            "testImplementation"(rootProject.libs.kotlinx.coroutines.test)
+            "testImplementation"(rootProject.libs.turbine)
+        }
+    }
 }

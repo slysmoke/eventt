@@ -31,21 +31,27 @@ class UserAgentInterceptor(
  *   response reports a route group is nearly exhausted, adds a short cooldown so the bucket
  *   gets a chance to refill instead of racing it down to zero.
  *
- * The cooldown is shared (object companion) across all calls through this client, since the
- * legacy error limit is global to the application regardless of which route triggered it.
+ * The cooldown is shared across all calls made through one interceptor instance (there's only
+ * ever one in production, via EveHttpClient), since the legacy error limit is global to the
+ * application regardless of which route triggered it — an instance field rather than a
+ * companion/static one, so separate instances (e.g. in tests) don't share cooldown state.
  * Retries are bounded; other 4xx responses (real client errors) are returned as-is.
  */
 class EsiThrottleInterceptor(
     private val maxRetries: Int = 3,
+    private val legacy420BackoffMs: Long = LEGACY_420_BACKOFF_MS,
+    private val rateLimitCooldownMs: Long = RATE_LIMIT_COOLDOWN_MS,
 ) : Interceptor {
     private companion object {
-        @Volatile var cooldownUntilMs: Long = 0L
         const val LOW_ERROR_BUDGET = 5
         const val LOW_RATE_LIMIT_MARGIN = 0.1
         const val RATE_LIMIT_COOLDOWN_MS = 2_000L
         const val LEGACY_420_BACKOFF_MS = 60_000L
         const val DEFAULT_RETRY_AFTER_S = 5L
     }
+
+    @Volatile
+    private var cooldownUntilMs: Long = 0L
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
@@ -65,7 +71,7 @@ class EsiThrottleInterceptor(
                             true
                         }
                         response.code == 420 -> {
-                            cooldownUntilMs = System.currentTimeMillis() + LEGACY_420_BACKOFF_MS
+                            cooldownUntilMs = System.currentTimeMillis() + legacy420BackoffMs
                             true
                         }
                         response.code >= 500 -> true
@@ -109,7 +115,7 @@ class EsiThrottleInterceptor(
             rlLimit > 0 &&
             rlRemaining.toDouble() / rlLimit <= LOW_RATE_LIMIT_MARGIN
         ) {
-            cooldownUntilMs = maxOf(cooldownUntilMs, System.currentTimeMillis() + RATE_LIMIT_COOLDOWN_MS)
+            cooldownUntilMs = maxOf(cooldownUntilMs, System.currentTimeMillis() + rateLimitCooldownMs)
         }
     }
 }
