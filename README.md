@@ -1,4 +1,4 @@
-# EVE Night Trade Tools
+# <img src="app/icons/icon.png" width="40" valign="middle" alt="App icon"> EVE Night Trade Tools
 
 A desktop trading toolkit for [EVE Online](https://www.eveonline.com/), built with Kotlin/JVM and Jetpack Compose for Desktop. It talks to CCP's ESI API (OAuth2 SSO) to pull your characters' orders, wallet, assets, and contracts, and layers market analysis, alerts, and a FIFO cost-basis/P&L engine on top.
 
