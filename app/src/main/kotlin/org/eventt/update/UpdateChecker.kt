@@ -50,11 +50,14 @@ object UpdateChecker {
 
     // Set when the app was launched via `java -jar <path>` (as opposed to the native
     // launcher from a zip/dmg/msi/deb install) — `sun.java.command` is the jar path in that case.
+    // .absoluteFile matters: launched as a bare "java -jar eventt.jar" (no directory component),
+    // File("eventt.jar").parentFile is null, not the actual cwd — breaking every write/parent
+    // check downstream (self-update showed "Can't write to null" instead of ever trying).
     private val jarPath: File? =
         System
             .getProperty("sun.java.command")
             ?.substringBefore(' ')
-            ?.let { File(it) }
+            ?.let { File(it).absoluteFile }
             ?.takeIf { it.name.endsWith(".jar") && it.isFile }
 
     fun checkLatestRelease(): UpdateInfo? {
