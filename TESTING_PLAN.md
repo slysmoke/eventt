@@ -60,7 +60,7 @@ new modules get them for free, no per-module setup needed except MockWebServer.
 | `core/auth` | `SsoAuthManager` (`generateCodeVerifier`/`codeChallenge`/`isNewer`) | ⬜ Not started | Blocked: these are `private`; bump to `internal` first |
 | `app` | `UpdateChecker` (`isNewer`) | ⬜ Not started | Blocked: `private`; bump to `internal` first |
 | `features/orders` | `OrdersScreen` (`computeMarginPct`/`computeBestMarginPct`/`historyPnl`) | ⬜ Not started | Blocked: `private` top-level funs in a Compose file; bump to `internal` first |
-| `features/orders` | `CostBasisService` (FIFO cost basis) | ⬜ Not started | Needs `WalletDao` faked via `mockkObject` — the single highest-value target in the app, this is the core financial logic |
+| `features/orders` | `CostBasisService` (FIFO cost basis) | ✅ Done | FIFO across lots, oversell handling, `avgCostBasisForType` fallback, `pnlForOrder` date/qty matching — `WalletDao` faked via `mockkObject` |
 | `features/overlay` | `ClipboardParser` | ⬜ Not started | Small (49 lines), likely pure — good first-timer task |
 | `core/staticdata` | `JumpGraphService` | ⬜ Not started | Graph/pathfinding logic (jump-distance BFS) — pure once the graph is loaded |
 
@@ -113,7 +113,7 @@ Not started, not scheduled.
 
 ## Suggested order
 
-1. `CostBasisService` (Tier 1) — highest value target in the app, no blockers
+1. ~~`CostBasisService` (Tier 1) — highest value target in the app, no blockers~~ done
 2. `ClipboardParser` + `JumpGraphService` (Tier 1) — quick wins, no blockers
 3. Bump the four `private → internal` blockers (SsoAuthManager, UpdateChecker, OrdersScreen helpers) and test those
 4. `TokenCrypto` refactor + test
