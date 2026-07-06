@@ -56,7 +56,7 @@ new modules get them for free, no per-module setup needed except MockWebServer.
 | `core/cache` | `EsiCacheManager` | ✅ Done | `parseExpiresHeader`/`parseCacheControl` + `get`/`save` FRESH/STALE/MISS round-trip via in-memory DB |
 | `core/http` | `EsiThrottleInterceptor` | ✅ Done | 429/420/5xx retry, error-limit cooldown, 4xx passthrough, exhausted-retries give-up, via MockWebServer |
 | `core/queue` | `RequestQueueManager` | ✅ Done | enqueue/markInProgress/complete/clearCompleted/overallProgress, via Turbine + StateFlow |
-| `core/database` | `TokenCrypto` | ⬜ Not started | Blocked on a small refactor: key file path is hardcoded to `~/.eve-trader/token.key`, needs to be injectable so tests don't touch the real key |
+| `core/database` | `TokenCrypto` | ✅ Done | `keyFile` changed from `by lazy` to an overridable `internal var` (key is now re-read per call instead of cached, so reassigning it can't leave a stale key). Covers round-trip, IV randomness, garbage/bogus ciphertext returning null instead of throwing, cross-key-file decrypt failure, and first-use key generation |
 | `core/auth` | `SsoAuthManager` (`generateCodeVerifier`/`codeChallenge`/`parseQueryString`) | ✅ Done | Bumped `private` → `internal`. `codeChallenge` verified against the RFC 7636 Appendix B worked example, not just round-tripped |
 | `app` | `UpdateChecker` (`isNewer`) | ✅ Done | Bumped `private` → `internal`. Covers major/minor/patch ordering, missing trailing segments, and non-numeric segments being dropped rather than failing |
 | `features/orders` | `OrdersScreen` (`computeMarginPct`/`computeBestMarginPct`/`historyPnl`) | ✅ Done | Bumped `private` → `internal` (`MarketComparison` too, to construct it in tests). Covers the tax/fee math and `historyPnl`'s FIFO-match vs. avg-cost-basis-fallback vs. null-null branches |
@@ -116,7 +116,7 @@ Not started, not scheduled.
 1. ~~`CostBasisService` (Tier 1) — highest value target in the app, no blockers~~ done
 2. ~~`ClipboardParser` + `JumpGraphService` (Tier 1) — quick wins, no blockers~~ done (`JumpGraphService` partially — see note above)
 3. ~~Bump the four `private → internal` blockers (SsoAuthManager, UpdateChecker, OrdersScreen helpers) and test those~~ done
-4. `TokenCrypto` refactor + test
+4. ~~`TokenCrypto` refactor + test~~ done
 5. `EsiClient` (Tier 3) — do this once Tier 1 is solid, since it exercises cache/auth/http together
 6. Tier 2 state managers
 7. Tier 4 DAOs

@@ -21,18 +21,19 @@ object TokenCrypto {
     private const val GCM_IV_BYTES = 12
     private const val GCM_TAG_BITS = 128
 
-    private val keyFile: File by lazy {
-        File(System.getProperty("user.home"), ".eve-trader/token.key")
-    }
+    // Overridable (not `by lazy`) so tests can point it at a temp file before the first
+    // encrypt/decrypt call — the key itself is re-read from this path on every call rather than
+    // cached, so reassigning it can never leave a stale key from an earlier value bound in memory.
+    internal var keyFile: File = File(System.getProperty("user.home"), ".eve-trader/token.key")
 
-    private val key: SecretKeySpec by lazy {
+    private fun key(): SecretKeySpec {
         if (!keyFile.exists()) {
             keyFile.parentFile?.mkdirs()
             val bytes = ByteArray(KEY_SIZE_BYTES).also { SecureRandom().nextBytes(it) }
             keyFile.writeBytes(bytes)
             restrictToOwner(keyFile)
         }
-        SecretKeySpec(keyFile.readBytes(), "AES")
+        return SecretKeySpec(keyFile.readBytes(), "AES")
     }
 
     private fun restrictToOwner(file: File) {
@@ -48,7 +49,7 @@ object TokenCrypto {
     fun encrypt(plaintext: String): String {
         val iv = ByteArray(GCM_IV_BYTES).also { SecureRandom().nextBytes(it) }
         val cipher = Cipher.getInstance(ALGO)
-        cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, iv))
+        cipher.init(Cipher.ENCRYPT_MODE, key(), GCMParameterSpec(GCM_TAG_BITS, iv))
         val ciphertext = cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8))
         return Base64.getEncoder().encodeToString(iv + ciphertext)
     }
@@ -60,7 +61,7 @@ object TokenCrypto {
             val iv = raw.copyOfRange(0, GCM_IV_BYTES)
             val ciphertext = raw.copyOfRange(GCM_IV_BYTES, raw.size)
             val cipher = Cipher.getInstance(ALGO)
-            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, iv))
+            cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(GCM_TAG_BITS, iv))
             String(cipher.doFinal(ciphertext), Charsets.UTF_8)
         }.getOrNull()
 }
