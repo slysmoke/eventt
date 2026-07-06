@@ -73,6 +73,7 @@ object EsiClient {
         val allResults  = mutableListOf<Map<String, Any?>>()
         val rawBodies   = mutableListOf<String>()
         var serverExpiry = 0L
+        var firstPageLastModified: String? = null
         var page = 1
 
         while (true) {
@@ -89,6 +90,19 @@ object EsiClient {
             // metadata.expires == 0L means the response was served from cache (EsiResponseMetadata() default).
             // In that case we can't rely on totalPages, so we keep going until we get an empty page.
             val fromCache = metadata.expires == 0L
+
+            // ESI best practice: a paginated resource's Last-Modified should be identical across
+            // all pages of one fetch. A mismatch means the data changed mid-fetch — the merged
+            // result below may mix an old and new snapshot. We don't retry the whole fetch (a
+            // rare case, and pages are already individually cached/valid), just surface it.
+            if (!fromCache && metadata.lastModified != null) {
+                if (firstPageLastModified == null) {
+                    firstPageLastModified = metadata.lastModified
+                } else if (metadata.lastModified != firstPageLastModified) {
+                    println("[EsiClient] $endpoint: Last-Modified changed mid-pagination (page $page) — " +
+                        "results may mix data from different snapshots")
+                }
+            }
             // A cache hit doesn't carry its real expiry in metadata, so look it up directly —
             // otherwise serverExpiry stays 0 for a page served entirely from cache, and an empty
             // result (e.g. zero open orders) never gets a merged cache entry / refresh timer.

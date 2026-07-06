@@ -5,9 +5,17 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import org.eventt.core.database.DatabaseManager
+import org.eventt.core.http.EveHttpClient
 import org.eventt.ui.EventtApp
 
 fun main() {
+    // ESI requires a User-Agent identifying the app on every request — must be set before
+    // any ESI/SSO call, which is why this runs before anything else in main().
+    val repoUrl = AppVersion.GITHUB_REPO.takeIf { it.isNotBlank() }?.let { "https://github.com/$it" }
+    EveHttpClient.configure(
+        "EventNightTradeTools/${AppVersion.NAME}" + (repoUrl?.let { " (+$it)" } ?: "")
+    )
+
     // Initialize database BEFORE UI starts — prevents race conditions
     println("[App] Initializing database...")
     try {

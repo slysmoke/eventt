@@ -1,85 +1,105 @@
 package org.eventt.core.http
 
-import kotlinx.coroutines.delay
 import okhttp3.Interceptor
 import okhttp3.Response
-import java.io.IOException
-import java.util.concurrent.atomic.AtomicInteger
 
-/**
- * Rate limiting interceptor for ESI API.
- * ESI allows ~20 requests/second globally, with per-endpoint limits.
- * This interceptor ensures we stay within limits.
- */
-class RateLimitInterceptor(
-    private val maxRequestsPerSecond: Int = 20
-) : Interceptor {
-
-    private val requestCount = AtomicInteger(0)
-    private var lastResetTime = System.currentTimeMillis()
-
+/** Sets the User-Agent ESI requires on every request (mandatory per CCP's best-practices docs). */
+class UserAgentInterceptor(private val userAgent: () -> String) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
-        synchronized(this) {
-            val now = System.currentTimeMillis()
-            val elapsed = now - lastResetTime
-
-            if (elapsed >= 1000) {
-                // Reset counter after 1 second
-                requestCount.set(0)
-                lastResetTime = now
-            } else if (requestCount.get() >= maxRequestsPerSecond) {
-                // We've hit the limit, wait until next second window
-                val waitTime = 1000 - elapsed
-                // Note: In a real implementation, we'd use a more sophisticated approach
-                // For now, we proceed and let ESI return 420 if needed
-            }
-
-            requestCount.incrementAndGet()
-        }
-
-        return chain.proceed(chain.request())
+        val request = chain.request().newBuilder()
+            .header("User-Agent", userAgent())
+            .build()
+        return chain.proceed(request)
     }
 }
 
 /**
- * Retry interceptor with exponential backoff for transient failures.
+ * Honors ESI's own rate-limit signals instead of guessing a fixed request rate — see
+ * https://developers.eveonline.com/docs/services/esi/rate-limiting/ and .../best-practices/.
+ *
+ * - HTTP 429 (per-route-group limiter): sleeps exactly `Retry-After` seconds, then retries.
+ * - HTTP 420 (legacy global error limit exceeded): no reset header is published for it, so
+ *   backs off a fixed window before retrying.
+ * - `X-ESI-Error-Limit-Remain` / `-Reset` (legacy): once the error budget is nearly spent,
+ *   pauses further requests through this client until it resets — before we ever get a 420.
+ * - `X-Ratelimit-Remaining` / `X-Ratelimit-Limit` (newer per-route-group budget): once a
+ *   response reports a route group is nearly exhausted, adds a short cooldown so the bucket
+ *   gets a chance to refill instead of racing it down to zero.
+ *
+ * The cooldown is shared (object companion) across all calls through this client, since the
+ * legacy error limit is global to the application regardless of which route triggered it.
+ * Retries are bounded; other 4xx responses (real client errors) are returned as-is.
  */
-class RetryInterceptor(
-    private val maxRetries: Int = 3,
-    private val initialBackoffMs: Long = 500,
-) : Interceptor {
+class EsiThrottleInterceptor(private val maxRetries: Int = 3) : Interceptor {
+
+    private companion object {
+        @Volatile var cooldownUntilMs: Long = 0L
+        const val LOW_ERROR_BUDGET = 5
+        const val LOW_RATE_LIMIT_MARGIN = 0.1
+        const val RATE_LIMIT_COOLDOWN_MS = 2_000L
+        const val LEGACY_420_BACKOFF_MS = 60_000L
+        const val DEFAULT_RETRY_AFTER_S = 5L
+    }
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
-        var lastException: IOException? = null
 
-        repeat(maxRetries) { attempt ->
-            try {
-                val response = chain.proceed(request)
+        repeat(maxRetries + 1) { attempt ->
+            awaitCooldown()
 
-                // Don't retry on client errors (4xx) except 420 (rate limit)
-                if (response.code == 420) {
-                    response.close()
-                    val backoffMs = initialBackoffMs * (1L shl attempt)
-                    Thread.sleep(backoffMs)
-                    return@repeat
+            val response = chain.proceed(request)
+            applyServerSignals(response)
+
+            val shouldRetry = attempt < maxRetries && when {
+                response.code == 429 -> {
+                    val retryAfterS = response.header("Retry-After")?.toLongOrNull() ?: DEFAULT_RETRY_AFTER_S
+                    cooldownUntilMs = System.currentTimeMillis() + retryAfterS * 1000
+                    true
                 }
-
-                if (response.code >= 500) {
-                    response.close()
-                    val backoffMs = initialBackoffMs * (1L shl attempt)
-                    Thread.sleep(backoffMs)
-                    return@repeat
+                response.code == 420 -> {
+                    cooldownUntilMs = System.currentTimeMillis() + LEGACY_420_BACKOFF_MS
+                    true
                 }
-
-                return response
-            } catch (e: IOException) {
-                lastException = e
-                val backoffMs = initialBackoffMs * (1L shl attempt)
-                Thread.sleep(backoffMs)
+                response.code >= 500 -> true
+                else -> false
             }
+
+            if (shouldRetry) {
+                response.close()
+                // 429/420 already set cooldownUntilMs above — awaitCooldown() on the next
+                // iteration handles the wait. 5xx has no such signal, so back off here instead.
+                if (response.code >= 500) {
+                    Thread.sleep(500L * (1L shl attempt))
+                }
+                return@repeat
+            }
+
+            return response
         }
 
-        throw IOException("Failed after $maxRetries retries: ${lastException?.message}", lastException)
+        // Unreachable: every iteration above either retries (`return@repeat`) or returns.
+        error("EsiThrottleInterceptor: exhausted retries without returning a response")
+    }
+
+    private fun awaitCooldown() {
+        val wait = cooldownUntilMs - System.currentTimeMillis()
+        if (wait > 0) Thread.sleep(wait)
+    }
+
+    private fun applyServerSignals(response: Response) {
+        val errorRemain = response.header("X-ESI-Error-Limit-Remain")?.toIntOrNull()
+        if (errorRemain != null && errorRemain <= LOW_ERROR_BUDGET) {
+            val resetS = response.header("X-ESI-Error-Limit-Reset")?.toLongOrNull() ?: DEFAULT_RETRY_AFTER_S
+            cooldownUntilMs = maxOf(cooldownUntilMs, System.currentTimeMillis() + resetS * 1000)
+        }
+
+        val rlRemaining = response.header("X-Ratelimit-Remaining")?.toIntOrNull()
+        // "X-Ratelimit-Limit" is formatted like "150/15m" — only the token count is needed here.
+        val rlLimit = response.header("X-Ratelimit-Limit")?.substringBefore("/")?.toIntOrNull()
+        if (rlRemaining != null && rlLimit != null && rlLimit > 0 &&
+            rlRemaining.toDouble() / rlLimit <= LOW_RATE_LIMIT_MARGIN
+        ) {
+            cooldownUntilMs = maxOf(cooldownUntilMs, System.currentTimeMillis() + RATE_LIMIT_COOLDOWN_MS)
+        }
     }
 }
