@@ -13,7 +13,7 @@
       in {
         packages.default = pkgs.stdenv.mkDerivation {
           pname = "eventt";
-          version = "1.0.0";
+          version = "0.0.1";
 
           # Требует предварительного запуска: ./gradlew createDistributable
           # Используем --impure и PWD чтобы обойти ограничение git-tracked файлов
