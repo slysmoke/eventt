@@ -283,37 +283,6 @@ object DatabaseManager {
                     character_id INTEGER
                 )
                 """.trimIndent(),
-                // Manufacturing Templates
-                """
-                CREATE TABLE IF NOT EXISTS manufacturing_templates (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL,
-                    blueprint_type_id INTEGER NOT NULL,
-                    blueprint_type_name TEXT DEFAULT '',
-                    quantity INTEGER DEFAULT 1,
-                    material_efficiency INTEGER DEFAULT 0,
-                    time_efficiency INTEGER DEFAULT 100,
-                    facility_id INTEGER DEFAULT 0,
-                    facility_name TEXT DEFAULT '',
-                    station_id INTEGER DEFAULT 0,
-                    station_name TEXT DEFAULT '',
-                    run_cost REAL DEFAULT 0.0,
-                    install_tax REAL DEFAULT 0.0
-                )
-                """.trimIndent(),
-                // Manufacturing Materials
-                """
-                CREATE TABLE IF NOT EXISTS manufacturing_materials (
-                    template_id INTEGER NOT NULL,
-                    type_id INTEGER NOT NULL,
-                    type_name TEXT DEFAULT '',
-                    required_quantity REAL NOT NULL,
-                    estimated_price REAL DEFAULT 0.0,
-                    total_cost REAL DEFAULT 0.0,
-                    PRIMARY KEY (template_id, type_id),
-                    FOREIGN KEY (template_id) REFERENCES manufacturing_templates(id) ON DELETE CASCADE
-                )
-                """.trimIndent(),
                 // Contracts
                 """
                 CREATE TABLE IF NOT EXISTS contracts (

@@ -26,7 +26,7 @@ Targets JVM 21, Kotlin 1.9.22. No linter configured; code style is `kotlin.code.
 Two layers of modules under `core/` and `features/`, plus `ui/`:
 
 - **`core/`**: model, database, http, cache, auth, esi, queue, staticdata
-- **`features/`**: characters, market, assets, wallet, orders, dashboard, alerts, industry, contracts, watchlist
+- **`features/`**: characters, market, assets, wallet, orders, dashboard, alerts, contracts, watchlist
 - **`ui/`**: theme (Material 3 + EVE color palette), common (shared Compose components)
 
 ### Dependency Flow

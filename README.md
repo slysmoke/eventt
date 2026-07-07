@@ -14,7 +14,6 @@ A desktop trading toolkit for [EVE Online](https://www.eveonline.com/), built wi
 - **Watchlist** — track items with sparklines
 - **Alerts** — price alerts with in-app notifications
 - **Contracts** — contract tracker
-- **Industry** — manufacturing cost calculator
 - **Settings** — tax rates, data source, and app preferences
 
 A global hotkey (Ctrl+Z) cycles through your queued orders, opens the in-game market window, and copies an overbid/undercut price to your clipboard.
@@ -66,7 +65,7 @@ The app checks the repo's latest GitHub Release on startup and offers a one-clic
 Modules are organized under `core/`, `features/`, and `ui/`:
 
 - **`core/`**: model, database, http, cache, auth, esi, queue, staticdata, image, everef
-- **`features/`**: characters, market, assets, wallet, orders, dashboard, alerts, industry, contracts, watchlist, settings, overlay
+- **`features/`**: characters, market, assets, wallet, orders, dashboard, alerts, contracts, watchlist, settings, overlay
 - **`ui/`**: theme (Material 3 + EVE color palette), common (shared Compose components)
 
 ```

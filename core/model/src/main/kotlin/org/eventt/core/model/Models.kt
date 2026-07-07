@@ -309,47 +309,6 @@ data class PriceAlertModel(
     val characterId: Int? = null,
 )
 
-// ─── Industry ───────────────────────────────────────────────────────────────
-
-@Serializable
-data class ManufacturingTemplateModel(
-    val id: Int = 0,
-    val name: String,
-    val blueprintTypeId: Int,
-    val blueprintTypeName: String = "",
-    val quantity: Int = 1,
-    val materialEfficiency: Int = 0,
-    val timeEfficiency: Int = 100,
-    val facilityId: Long = 0,
-    val facilityName: String = "",
-    val stationId: Long = 0,
-    val stationName: String = "",
-    val runCost: Double = 0.0,
-    val installTax: Double = 0.0,
-)
-
-@Serializable
-data class ManufacturingMaterialModel(
-    val templateId: Int,
-    val typeId: Int,
-    val typeName: String = "",
-    val requiredQuantity: Double,
-    val estimatedPrice: Double = 0.0,
-    val totalCost: Double = 0.0,
-)
-
-@Serializable
-data class ManufacturingResultModel(
-    val template: ManufacturingTemplateModel,
-    val materials: List<ManufacturingMaterialModel>,
-    val totalMaterialCost: Double,
-    val totalCost: Double,
-    val costPerUnit: Double,
-    val currentMarketSellPrice: Double = 0.0,
-    val profitPerUnit: Double = 0.0,
-    val profitPercent: Double = 0.0,
-)
-
 // ─── ESI Response Metadata ─────────────────────────────────────────────────
 
 data class EsiResponseMetadata(

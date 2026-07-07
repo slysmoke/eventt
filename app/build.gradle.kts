@@ -80,7 +80,6 @@ dependencies {
     implementation(project(":features:orders"))
     implementation(project(":features:dashboard"))
     implementation(project(":features:alerts"))
-    implementation(project(":features:industry"))
     implementation(project(":features:contracts"))
     implementation(project(":features:watchlist"))
     implementation(project(":features:settings"))

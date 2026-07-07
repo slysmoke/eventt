@@ -42,7 +42,6 @@ import org.eventt.features.assets.AssetViewerScreen
 import org.eventt.features.characters.CharacterManagementScreen
 import org.eventt.features.contracts.ContractTrackerScreen
 import org.eventt.features.dashboard.DashboardScreen
-import org.eventt.features.industry.IndustryCalculatorScreen
 import org.eventt.features.market.MarketAnalysisScreen
 import org.eventt.features.market.MarketBrowserScreen
 import org.eventt.features.orders.OrdersScreen
@@ -71,7 +70,6 @@ enum class AppScreen(
     WATCHLIST("Watchlist", Icons.Default.Visibility),
     ALERTS("Alerts", Icons.Default.Notifications),
     CONTRACTS("Contracts", Icons.Default.Description),
-    INDUSTRY("Industry", Icons.Default.Factory),
     SETTINGS("Settings", Icons.Default.Settings),
 }
 
@@ -719,7 +717,6 @@ private fun ScreenContent(
                             AppScreen.WATCHLIST -> WatchlistScreen()
                             AppScreen.ALERTS -> PriceAlertsScreen()
                             AppScreen.CONTRACTS -> ContractTrackerScreen(charId = selectedCharId)
-                            AppScreen.INDUSTRY -> IndustryCalculatorScreen()
                             AppScreen.SETTINGS -> SettingsScreen()
                         }
                     }
