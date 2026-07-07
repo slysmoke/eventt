@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.auth.SsoAuthManager
+import org.eventt.core.database.AppState
 import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.CorporationDao
 import org.eventt.core.esi.EsiClient
@@ -117,6 +118,10 @@ fun CharacterManagementScreen() {
                         scope.launch(Dispatchers.IO) {
                             try {
                                 val result = SsoAuthManager.startAuth()
+                                // Populate the new character's corp affiliation right away so it's
+                                // available to the character/corp switcher without a manual refresh.
+                                result.character?.let { runCatching { refreshCharacter(it.id) } }
+                                AppState.refreshCharacters()
                                 withContext(Dispatchers.Main) {
                                     isLoading = false
                                     if (result.success) {
@@ -154,6 +159,7 @@ fun CharacterManagementScreen() {
             onConfirm = {
                 scope.launch(Dispatchers.IO) {
                     CharacterDao.delete(char.id)
+                    AppState.refreshCharacters()
                     withContext(Dispatchers.Main) {
                         loadCharacters(characters = { characters = it }, corps = { corporations = it })
                     }
@@ -308,12 +314,18 @@ private suspend fun refreshCharacter(characterId: Int) {
         val corpId = (charInfo["corporation_id"] as? Number)?.toInt()
         if (corpId != null) {
             val corpInfo = EsiClient.getCorporationInfo(corpId)
+            val corpName = (corpInfo["name"] as? String) ?: ""
             CorporationDao.insert(
                 id = corpId,
-                name = (corpInfo["name"] as? String) ?: "",
+                name = corpName,
                 ticker = (corpInfo["ticker"] as? String) ?: "",
                 allianceId = (corpInfo["alliance_id"] as? Number)?.toInt(),
             )
+            // Denormalized onto the character row too — this is what lets the app know which
+            // corp a character belongs to without re-fetching ESI (e.g. to build the corp switcher).
+            CharacterDao.getById(characterId)?.let { existing ->
+                CharacterDao.insert(existing.copy(corporationId = corpId, corporationName = corpName))
+            }
         }
     } catch (e: Exception) {
         println("Error refreshing character: ${e.message}")

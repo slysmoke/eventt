@@ -89,6 +89,8 @@ object DatabaseManager {
                 "ALTER TABLE esi_cache ADD COLUMN etag TEXT",
                 "ALTER TABLE esi_cache ADD COLUMN last_modified TEXT",
                 "ALTER TABLE market_history ADD COLUMN source TEXT DEFAULT 'esi'",
+                "ALTER TABLE order_history ADD COLUMN corporation_id INTEGER",
+                "ALTER TABLE order_history ADD COLUMN is_corp INTEGER DEFAULT 0",
             )
         conn.createStatement().use { stmt ->
             migrations.forEach { sql ->
@@ -495,6 +497,7 @@ object DatabaseManager {
                 "CREATE INDEX IF NOT EXISTS idx_market_groups_name ON market_groups(name)",
                 "CREATE INDEX IF NOT EXISTS idx_order_history_character ON order_history(character_id, is_buy_order)",
                 "CREATE INDEX IF NOT EXISTS idx_order_history_issued ON order_history(issued)",
+                "CREATE INDEX IF NOT EXISTS idx_order_history_corp ON order_history(corporation_id)",
             )
 
         // using conn parameter

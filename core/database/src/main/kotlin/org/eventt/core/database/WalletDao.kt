@@ -81,12 +81,16 @@ object WalletDao {
         val isBuy: Boolean,
     )
 
-    fun getAllTransactions(characterId: Int): List<RawTxRecord> =
+    fun getAllTransactions(
+        characterId: Int? = null,
+        corporationId: Int? = null,
+    ): List<RawTxRecord> =
         DatabaseManager.transaction {
+            val where = buildWhereClause(characterId, corporationId)
             prepareStatement(
-                "SELECT date, type_id, type_name, quantity, unit_price, is_buy FROM transactions WHERE character_id = ? ORDER BY date ASC",
+                "SELECT date, type_id, type_name, quantity, unit_price, is_buy FROM transactions ${where.sql} ORDER BY date ASC",
             ).use { stmt ->
-                stmt.setInt(1, characterId)
+                where.params.forEachIndexed { i, param -> stmt.setObject(i + 1, param) }
                 stmt.executeQuery().use { rs ->
                     val result = mutableListOf<RawTxRecord>()
                     while (rs.next()) {

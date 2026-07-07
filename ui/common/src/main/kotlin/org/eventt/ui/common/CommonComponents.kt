@@ -168,6 +168,8 @@ fun EsiRefreshButton(
     expiresAtMs: Long?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    // When set, renders as a text button (e.g. "Refresh Orders") instead of a bare icon.
+    label: String? = null,
 ) {
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
 
@@ -180,13 +182,30 @@ fun EsiRefreshButton(
 
     val remainingSec = expiresAtMs?.let { ((it - nowMs) / 1000).coerceAtLeast(0) } ?: 0L
     val coolingDown = remainingSec > 0
-
-    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+    val cooldownText =
         if (coolingDown) {
             val mins = remainingSec / 60
             val secs = remainingSec % 60
+            if (mins > 0) "${mins}m ${"%02d".format(secs)}s" else "${secs}s"
+        } else {
+            null
+        }
+
+    if (label != null) {
+        TextButton(onClick = onClick, modifier = modifier, enabled = !isLoading && !coolingDown) {
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(if (cooldownText != null) "$label ($cooldownText)" else label)
+        }
+        return
+    }
+
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        if (cooldownText != null) {
             Text(
-                if (mins > 0) "${mins}m ${"%02d".format(secs)}s" else "${secs}s",
+                cooldownText,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

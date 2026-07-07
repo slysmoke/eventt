@@ -24,12 +24,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.OrderHistoryDao
 import org.eventt.core.database.StaticDataDao
+import org.eventt.core.database.ViewContext
 import org.eventt.core.database.WalletDao
 import org.eventt.core.esi.EsiClient
 import org.eventt.ui.common.EmptyState
@@ -68,6 +68,10 @@ private data class CharacterOrder(
     val duration: Int,
     val issued: String,
     val state: String,
+    // Only populated in corporation view — ESI's corp orders endpoint reports which member
+    // character placed each order (the character-scope endpoint has no such field, since it's
+    // always "me"). Lets a corp's trading activity across characters show up in one table.
+    val issuedByCharId: Int? = null,
 ) {
     val total: Double get() = price * volumeRemaining
     val timeLeftSeconds: Long get() {
@@ -123,8 +127,14 @@ private enum class SortCol { NAME, PRICE, VOLUME, TOTAL, TIME_LEFT, ORDER_AGE, S
 private enum class SortDir { ASC, DESC }
 
 @Composable
-fun OrdersScreen(charId: Int?) {
+fun OrdersScreen(context: ViewContext?) {
     val scope = rememberCoroutineScope()
+    // Character-mode: charId is set, corpId is null. Corp-mode: corpId is set, charId is null.
+    // actingCharId is whichever character's token authorizes ESI calls either way (open-market-
+    // window hotkey, corp API auth, tax-rate lookups — corp doesn't have its own tax rate).
+    val charId = (context as? ViewContext.Character)?.charId
+    val corpId = (context as? ViewContext.Corporation)?.corporationId
+    val actingCharId = context?.actingCharId
     var orders by remember { mutableStateOf<List<CharacterOrder>>(emptyList()) }
     var historyOrders by remember { mutableStateOf<List<OrderHistoryDao.OrderHistoryRecord>>(emptyList()) }
     var fifoResult by remember { mutableStateOf<CostBasisService.FifoResult?>(null) }
@@ -134,13 +144,19 @@ fun OrdersScreen(charId: Int?) {
     var sortCol by remember { mutableStateOf(SortCol.NAME) }
     var sortDir by remember { mutableStateOf(SortDir.ASC) }
 
-    // Market comparison data — loaded after orders, shown as overbid indicators
+    // Market comparison data — loaded after orders, shown as overbid indicators.
+    // Refreshed on order load and via the manual "Refresh Prices" button (no auto-refresh:
+    // that used to reset the Ctrl+Z hotkey cycle position every 60s — see PendingOrdersQueue.update).
     var marketComparisons by remember { mutableStateOf<Map<Pair<Int, Int>, MarketComparison>>(emptyMap()) }
     var isLoadingMarket by remember { mutableStateOf(false) }
+    var marketComparisonsExpiresAt by remember { mutableStateOf<Long?>(null) }
 
     // Best market sell price per type — used as an estimated Sell Price for inventory items
     // that don't have a matching active sell order of their own.
     var inventoryMarketPrices by remember { mutableStateOf<Map<Int, Double>>(emptyMap()) }
+
+    // Corp view only: issuedByCharId -> character name, for the "Character" column.
+    var issuerNames by remember { mutableStateOf<Map<Int, String>>(emptyMap()) }
 
     // Selected order for hotkey action
     var selectedOrderId by remember { mutableStateOf<Long?>(null) }
@@ -162,6 +178,12 @@ fun OrdersScreen(charId: Int?) {
                         .toSet()
 
                 val result = mutableMapOf<Pair<Int, Int>, MarketComparison>()
+                // Latest of the per-pair ESI cache expiries — waiting for every pair to have
+                // actually gone stale (rather than just the first one) means each click of
+                // "Refresh Prices" does real work for every pair instead of mostly re-checking
+                // ones that are still cached, which is what made frequent clicks feel like a
+                // burst of requests.
+                var latestExpiry: Long? = null
                 for ((typeId, regionId) in uniquePairs) {
                     try {
                         val ownIds =
@@ -181,10 +203,21 @@ fun OrdersScreen(charId: Int?) {
                                 .mapNotNull { (it["price"] as? Number)?.toDouble() }
                                 .maxOrNull()
                         result[typeId to regionId] = MarketComparison(bestSell, bestBuy)
+                        val expiry =
+                            EsiClient.getEndpointExpiry(
+                                "/markets/$regionId/orders/",
+                                mapOf("order_type" to "all", "type_id" to typeId.toString()),
+                            )
+                        if (expiry != null && (latestExpiry == null || expiry > latestExpiry!!)) {
+                            latestExpiry = expiry
+                        }
                     } catch (_: Exception) {
                     }
                 }
-                withContext(Dispatchers.Main) { marketComparisons = result }
+                withContext(Dispatchers.Main) {
+                    marketComparisons = result
+                    marketComparisonsExpiresAt = latestExpiry
+                }
             } finally {
                 withContext(Dispatchers.Main) { isLoadingMarket = false }
             }
@@ -206,41 +239,72 @@ fun OrdersScreen(charId: Int?) {
         }
     }
 
-    fun loadOrders(charId: Int) {
+    fun parseOrder(
+        m: Map<String, Any?>,
+        issuedByCharId: Int?,
+    ): CharacterOrder {
+        val typeId = (m["type_id"] as? Number)?.toInt() ?: 0
+        val locationId = (m["location_id"] as? Number)?.toLong() ?: 0L
+        // Corp orders report region_id directly; character orders don't, so it's derived from
+        // the station. Prefer the direct value when present — it also covers citadels/structures
+        // (locationId > 10^12) that the station lookup can't resolve.
+        val directRegionId = (m["region_id"] as? Number)?.toInt()
+        return CharacterOrder(
+            orderId = (m["order_id"] as? Number)?.toLong() ?: 0L,
+            typeId = typeId,
+            typeName = StaticDataDao.getTypeName(typeId) ?: "Unknown ($typeId)",
+            locationId = locationId,
+            regionId =
+                directRegionId
+                    ?: if (locationId < 1_000_000_000_000L) StaticDataDao.getStationById(locationId)?.regionId ?: 0 else 0,
+            stationName = StaticDataDao.getStationById(locationId)?.name ?: locationId.toString(),
+            price = (m["price"] as? Number)?.toDouble() ?: 0.0,
+            volumeTotal = (m["volume_total"] as? Number)?.toInt() ?: 0,
+            volumeRemaining = (m["volume_remain"] as? Number)?.toInt() ?: 0,
+            isBuyOrder = (m["is_buy_order"] as? Boolean) ?: false,
+            duration = (m["duration"] as? Number)?.toInt() ?: 0,
+            issued = (m["issued"] as? String) ?: "",
+            state = (m["state"] as? String) ?: "active",
+            issuedByCharId = issuedByCharId,
+        )
+    }
+
+    fun resolveIssuerNames(ids: Set<Int>) {
+        if (ids.isEmpty()) {
+            issuerNames = emptyMap()
+            return
+        }
+        scope.launch(Dispatchers.IO) {
+            val local = ids.mapNotNull { id -> CharacterDao.getById(id)?.let { id to it.name } }.toMap()
+            val missing = ids - local.keys
+            val resolved =
+                if (missing.isNotEmpty()) {
+                    try {
+                        EsiClient.resolveNames(missing.toList())
+                    } catch (_: Exception) {
+                        emptyMap()
+                    }
+                } else {
+                    emptyMap()
+                }
+            withContext(Dispatchers.Main) { issuerNames = local + resolved }
+        }
+    }
+
+    fun loadOrders() {
+        val cid = charId
+        val corp = corpId
+        val acting = actingCharId ?: return
         scope.launch(Dispatchers.IO) {
             withContext(Dispatchers.Main) { isLoading = true }
             try {
-                val raw = EsiClient.getCharacterOrders(charId)
-                val parsed =
-                    raw.map { m ->
-                        val typeId = (m["type_id"] as? Number)?.toInt() ?: 0
-                        val locationId = (m["location_id"] as? Number)?.toLong() ?: 0L
-                        CharacterOrder(
-                            orderId = (m["order_id"] as? Number)?.toLong() ?: 0L,
-                            typeId = typeId,
-                            typeName = StaticDataDao.getTypeName(typeId) ?: "Unknown ($typeId)",
-                            locationId = locationId,
-                            regionId =
-                                if (locationId <
-                                    1_000_000_000_000L
-                                ) {
-                                    StaticDataDao.getStationById(locationId)?.regionId ?: 0
-                                } else {
-                                    0
-                                },
-                            stationName = StaticDataDao.getStationById(locationId)?.name ?: locationId.toString(),
-                            price = (m["price"] as? Number)?.toDouble() ?: 0.0,
-                            volumeTotal = (m["volume_total"] as? Number)?.toInt() ?: 0,
-                            volumeRemaining = (m["volume_remain"] as? Number)?.toInt() ?: 0,
-                            isBuyOrder = (m["is_buy_order"] as? Boolean) ?: false,
-                            duration = (m["duration"] as? Number)?.toInt() ?: 0,
-                            issued = (m["issued"] as? String) ?: "",
-                            state = (m["state"] as? String) ?: "active",
-                        )
-                    }
+                val raw = if (corp != null) EsiClient.getCorporationOrders(corp, acting) else EsiClient.getCharacterOrders(cid!!)
+                val parsed = raw.map { m -> parseOrder(m, if (corp != null) (m["issued_by"] as? Number)?.toInt() else null) }
                 withContext(Dispatchers.Main) { orders = parsed }
+                if (corp != null) resolveIssuerNames(parsed.mapNotNull { it.issuedByCharId }.toSet())
 
-                val rawHistory = EsiClient.getCharacterOrdersHistory(charId)
+                val rawHistory =
+                    if (corp != null) EsiClient.getCorporationOrdersHistory(corp, acting) else EsiClient.getCharacterOrdersHistory(cid!!)
                 val historyRecords =
                     rawHistory.map { m ->
                         val typeId = (m["type_id"] as? Number)?.toInt() ?: 0
@@ -260,18 +324,27 @@ fun OrdersScreen(charId: Int?) {
                             range = (m["range"] as? String) ?: "station",
                             minVolume = (m["min_volume"] as? Number)?.toInt() ?: 1,
                             state = (m["state"] as? String) ?: "expired",
-                            characterId = charId,
+                            characterId = if (corp != null) null else cid,
+                            corporationId = corp,
+                            isCorp = corp != null,
                         )
                     }
                 OrderHistoryDao.upsertAll(historyRecords)
-                val stored = OrderHistoryDao.getAll(charId)
+                val stored = OrderHistoryDao.getAll(characterId = cid, corporationId = corp)
                 withContext(Dispatchers.Main) { historyOrders = stored }
 
                 // Sync wallet transactions to DB before recomputing FIFO.
                 // EsiClient serves from the ESI cache during cooldown, so no extra HTTP call is made.
                 // This ensures newly fulfilled orders get correct P&L once the wallet cache expires.
                 try {
-                    val txList = EsiClient.getCharacterTransactions(charId)
+                    val txList =
+                        if (corp !=
+                            null
+                        ) {
+                            EsiClient.getCorporationTransactions(corp, acting)
+                        } else {
+                            EsiClient.getCharacterTransactions(cid!!)
+                        }
                     txList.forEach { tx ->
                         val typeId = (tx["type_id"] as? Number)?.toInt() ?: 0
                         val qty = (tx["quantity"] as? Number)?.toInt() ?: 0
@@ -290,9 +363,9 @@ fun OrdersScreen(charId: Int?) {
                                 clientName = "",
                                 locationId = (tx["location_id"] as? Number)?.toLong() ?: 0L,
                                 locationName = "",
-                                isCorp = false,
-                                characterId = charId,
-                                corporationId = null,
+                                isCorp = corp != null,
+                                characterId = if (corp != null) null else cid,
+                                corporationId = corp,
                             )
                         }
                     }
@@ -301,11 +374,16 @@ fun OrdersScreen(charId: Int?) {
 
                 val taxConfig =
                     CostBasisService.TaxConfig(
-                        salesTaxPct = StaticDataDao.getCharSalesTax(charId),
-                        brokerFeePct = StaticDataDao.getCharBrokersFee(charId),
+                        salesTaxPct = StaticDataDao.getCharSalesTax(acting),
+                        brokerFeePct = StaticDataDao.getCharBrokersFee(acting),
                     )
-                val fifo = CostBasisService.compute(charId, taxConfig)
-                val expiry = EsiClient.getEndpointExpiry("/characters/$charId/orders/")
+                val fifo = CostBasisService.compute(characterId = cid, corporationId = corp, taxConfig = taxConfig)
+                val expiry =
+                    if (corp != null) {
+                        EsiClient.getEndpointExpiry("/corporations/$corp/orders/")
+                    } else {
+                        EsiClient.getEndpointExpiry("/characters/$cid/orders/")
+                    }
                 withContext(Dispatchers.Main) {
                     fifoResult = fifo
                     refreshAvailableAt = expiry
@@ -338,7 +416,7 @@ fun OrdersScreen(charId: Int?) {
             }
         scope.launch(Dispatchers.IO) {
             try {
-                charId?.let { EsiClient.openMarketWindow(it, order.typeId) }
+                actingCharId?.let { EsiClient.openMarketWindow(it, order.typeId) }
             } catch (_: Exception) {
             }
             withContext(Dispatchers.Main) {
@@ -349,54 +427,48 @@ fun OrdersScreen(charId: Int?) {
         }
     }
 
-    fun recalculateFifo(charId: Int) {
+    fun recalculateFifo() {
+        val acting = actingCharId ?: return
         scope.launch(Dispatchers.IO) {
             val taxConfig =
                 CostBasisService.TaxConfig(
-                    salesTaxPct = StaticDataDao.getCharSalesTax(charId),
-                    brokerFeePct = StaticDataDao.getCharBrokersFee(charId),
+                    salesTaxPct = StaticDataDao.getCharSalesTax(acting),
+                    brokerFeePct = StaticDataDao.getCharBrokersFee(acting),
                 )
-            val fifo = CostBasisService.compute(charId, taxConfig)
+            val fifo = CostBasisService.compute(characterId = charId, corporationId = corpId, taxConfig = taxConfig)
             withContext(Dispatchers.Main) { fifoResult = fifo }
             fetchInventoryMarketPrices(fifo.inventory)
         }
     }
 
-    LaunchedEffect(charId) {
-        charId?.let { id ->
-            val stored = withContext(Dispatchers.IO) { OrderHistoryDao.getAll(id) }
+    LaunchedEffect(context) {
+        val acting = actingCharId
+        if (acting != null) {
+            val stored = withContext(Dispatchers.IO) { OrderHistoryDao.getAll(characterId = charId, corporationId = corpId) }
             historyOrders = stored
             val taxConfig =
                 withContext(Dispatchers.IO) {
                     CostBasisService.TaxConfig(
-                        salesTaxPct = StaticDataDao.getCharSalesTax(id),
-                        brokerFeePct = StaticDataDao.getCharBrokersFee(id),
+                        salesTaxPct = StaticDataDao.getCharSalesTax(acting),
+                        brokerFeePct = StaticDataDao.getCharBrokersFee(acting),
                     )
                 }
-            val fifo = withContext(Dispatchers.IO) { CostBasisService.compute(id, taxConfig) }
+            val fifo =
+                withContext(Dispatchers.IO) {
+                    CostBasisService.compute(characterId = charId, corporationId = corpId, taxConfig = taxConfig)
+                }
             fifoResult = fifo
-            loadOrders(id)
-        } ?: PendingOrdersQueue.clear()
-    }
-
-    // Competing-order prices (who's undercut/overbid us) go stale as soon as the ESI cache
-    // entry expires — re-checking periodically picks that up automatically instead of only ever
-    // refreshing once on load. Cheap when nothing's actually expired yet: getMarketRegionOrders
-    // serves the cached response instantly for anything still FRESH, so this only triggers real
-    // network calls for the pairs that have actually gone stale.
-    LaunchedEffect(charId) {
-        if (charId == null) return@LaunchedEffect
-        while (isActive) {
-            delay(60_000)
-            fetchMarketComparisons(orders)
+            loadOrders()
+        } else {
+            PendingOrdersQueue.clear()
         }
     }
 
     // Keep the global hotkey queue in sync with the active tab + market comparison data.
     // Tab 0 = sell orders only, Tab 1 = buy orders only, other tabs = all.
     // Beaten orders sort first so the most urgent ones cycle first.
-    LaunchedEffect(charId, orders, marketComparisons, activeTab) {
-        val cid = charId ?: return@LaunchedEffect
+    LaunchedEffect(context, orders, marketComparisons, activeTab) {
+        val cid = actingCharId ?: return@LaunchedEffect
         val tabFiltered =
             when (activeTab) {
                 0 -> orders.filter { !it.isBuyOrder }
@@ -484,7 +556,7 @@ fun OrdersScreen(charId: Int?) {
                             comp?.bestSell?.let { it < o.price } ?: false
                         }
                     }
-                if (queueSize > 0 && charId != null) {
+                if (queueSize > 0 && actingCharId != null) {
                     Spacer(Modifier.width(4.dp))
                     Surface(
                         shape = MaterialTheme.shapes.small,
@@ -525,23 +597,25 @@ fun OrdersScreen(charId: Int?) {
                     }
                 }
             }
-            charId?.let { id ->
+            if (actingCharId != null) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    IconButton(onClick = { recalculateFifo(id) }, modifier = Modifier.size(32.dp)) {
-                        Icon(
-                            Icons.Default.Autorenew,
-                            contentDescription = "Recalculate P&L from wallet",
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                    TextButton(onClick = { recalculateFifo() }) {
+                        Text("Recalculate P&L")
                     }
+                    EsiRefreshButton(
+                        isLoading = isLoadingMarket,
+                        expiresAtMs = marketComparisonsExpiresAt,
+                        onClick = { fetchMarketComparisons(orders) },
+                        label = "Refresh Prices",
+                    )
                     EsiRefreshButton(
                         isLoading = isLoading,
                         expiresAtMs = refreshAvailableAt,
-                        onClick = { loadOrders(id) },
+                        onClick = { loadOrders() },
+                        label = if (corpId != null) "Refresh Corp Orders" else "Refresh Orders",
                     )
                 }
             }
@@ -598,7 +672,7 @@ fun OrdersScreen(charId: Int?) {
                         EmptyState(
                             icon = Icons.Default.History,
                             title = "No Order History",
-                            description = if (charId == null) "Add a character to view order history." else "No completed orders found.",
+                            description = if (context == null) "Add a character to view order history." else "No completed orders found.",
                         )
                     } else {
                         OrderHistoryTable(historyOrders, fifoResult)
@@ -609,7 +683,7 @@ fun OrdersScreen(charId: Int?) {
                         EmptyState(
                             icon = Icons.Default.Inventory2,
                             title = "No Inventory",
-                            description = if (charId == null) "Add a character to view inventory." else "No items in FIFO inventory.",
+                            description = if (context == null) "Add a character to view inventory." else "No items in FIFO inventory.",
                         )
                     } else {
                         InventoryTable(inventory, sellOrders, fifoResult, inventoryMarketPrices)
@@ -622,7 +696,7 @@ fun OrdersScreen(charId: Int?) {
                         EmptyState(
                             icon = Icons.Default.Receipt,
                             title = if (activeTab == 0) "No Sell Orders" else "No Buy Orders",
-                            description = if (charId == null) "Add a character to view orders." else "No active orders.",
+                            description = if (context == null) "Add a character to view orders." else "No active orders.",
                         )
                     } else if (activeTab == 0) {
                         SellOrdersTable(
@@ -636,6 +710,7 @@ fun OrdersScreen(charId: Int?) {
                             comparisons = marketComparisons,
                             selectedOrderId = selectedOrderId,
                             activeOrderId = activeOrderId,
+                            issuerNames = if (corpId != null) issuerNames else null,
                             onSelect = { id -> selectedOrderId = if (selectedOrderId == id) null else id },
                             onAction = { order -> triggerOrderAction(order) },
                         )
@@ -649,6 +724,7 @@ fun OrdersScreen(charId: Int?) {
                             comparisons = marketComparisons,
                             selectedOrderId = selectedOrderId,
                             activeOrderId = activeOrderId,
+                            issuerNames = if (corpId != null) issuerNames else null,
                             onSelect = { id -> selectedOrderId = if (selectedOrderId == id) null else id },
                             onAction = { order -> triggerOrderAction(order) },
                         )
@@ -707,6 +783,8 @@ private fun SellOrdersTable(
     comparisons: Map<Pair<Int, Int>, MarketComparison>,
     selectedOrderId: Long?,
     activeOrderId: Long?,
+    // Non-null only in corp view: issuedByCharId -> name, shown as a "Character" column.
+    issuerNames: Map<Int, String>?,
     onSelect: (Long) -> Unit,
     onAction: (CharacterOrder) -> Unit,
 ) {
@@ -721,6 +799,7 @@ private fun SellOrdersTable(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SortHeader("Name", SortCol.NAME, sortCol, sortDir, onSort, Modifier.weight(3f))
+            if (issuerNames != null) StaticHeader("Character", Modifier.weight(2f))
             StaticHeader("Price / Best", Modifier.weight(2.4f))
             StaticHeader("Cost", Modifier.weight(1.8f))
             StaticHeader("Profit", Modifier.weight(1.8f))
@@ -751,6 +830,8 @@ private fun SellOrdersTable(
                     comparison = comp,
                     isSelected = selectedOrderId == order.orderId,
                     isActiveInGame = activeOrderId == order.orderId,
+                    issuerName = issuerNames?.let { order.issuedByCharId?.let { id -> it[id] } },
+                    showCharacterColumn = issuerNames != null,
                     onSelect = { onSelect(order.orderId) },
                     onAction = { onAction(order) },
                 )
@@ -770,6 +851,7 @@ private fun BuyOrdersTable(
     comparisons: Map<Pair<Int, Int>, MarketComparison>,
     selectedOrderId: Long?,
     activeOrderId: Long?,
+    issuerNames: Map<Int, String>?,
     onSelect: (Long) -> Unit,
     onAction: (CharacterOrder) -> Unit,
 ) {
@@ -784,6 +866,7 @@ private fun BuyOrdersTable(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SortHeader("Name", SortCol.NAME, sortCol, sortDir, onSort, Modifier.weight(3f))
+            if (issuerNames != null) StaticHeader("Character", Modifier.weight(2f))
             StaticHeader("Price / Best", Modifier.weight(2.4f))
             StaticHeader("Margin", Modifier.weight(1.2f))
             StaticHeader("Best Margin", Modifier.weight(1.4f))
@@ -812,6 +895,8 @@ private fun BuyOrdersTable(
                     comparison = comp,
                     isSelected = selectedOrderId == order.orderId,
                     isActiveInGame = activeOrderId == order.orderId,
+                    issuerName = issuerNames?.let { order.issuedByCharId?.let { id -> it[id] } },
+                    showCharacterColumn = issuerNames != null,
                     onSelect = { onSelect(order.orderId) },
                     onAction = { onAction(order) },
                 )
@@ -913,6 +998,8 @@ private fun SellOrderRow(
     comparison: MarketComparison?,
     isSelected: Boolean,
     isActiveInGame: Boolean,
+    issuerName: String?,
+    showCharacterColumn: Boolean,
     onSelect: () -> Unit,
     onAction: () -> Unit,
 ) {
@@ -954,6 +1041,17 @@ private fun SellOrderRow(
                 Icon(Icons.Default.ArrowDownward, contentDescription = "Undercut", modifier = Modifier.size(11.dp), tint = UNDERCUT_COLOR)
             }
             Text(order.typeName, style = MaterialTheme.typography.bodyMedium, overflow = TextOverflow.Ellipsis, maxLines = 1)
+        }
+
+        if (showCharacterColumn) {
+            Text(
+                issuerName ?: "—",
+                modifier = Modifier.weight(2f),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                overflow = TextOverflow.Ellipsis,
+                maxLines = 1,
+            )
         }
 
         // Price column: order price + competing price below if undercut
@@ -1042,6 +1140,8 @@ private fun BuyOrderRow(
     comparison: MarketComparison?,
     isSelected: Boolean,
     isActiveInGame: Boolean,
+    issuerName: String?,
+    showCharacterColumn: Boolean,
     onSelect: () -> Unit,
     onAction: () -> Unit,
 ) {
@@ -1078,6 +1178,17 @@ private fun BuyOrderRow(
                 Icon(Icons.Default.ArrowUpward, contentDescription = "Overbid", modifier = Modifier.size(11.dp), tint = UNDERCUT_COLOR)
             }
             Text(order.typeName, style = MaterialTheme.typography.bodyMedium, overflow = TextOverflow.Ellipsis, maxLines = 1)
+        }
+
+        if (showCharacterColumn) {
+            Text(
+                issuerName ?: "—",
+                modifier = Modifier.weight(2f),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                overflow = TextOverflow.Ellipsis,
+                maxLines = 1,
+            )
         }
 
         // Price column: order price + competing price below if overbid

@@ -31,7 +31,9 @@ import org.eventt.GlobalHotkeyService
 import org.eventt.core.cache.EsiCacheManager
 import org.eventt.core.database.AppState
 import org.eventt.core.database.CharacterDao
+import org.eventt.core.database.CorporationDao
 import org.eventt.core.database.DatabaseManager
+import org.eventt.core.database.ViewContext
 import org.eventt.core.everef.EveRefService
 import org.eventt.core.model.CharacterModel
 import org.eventt.core.model.PriceAlertModel
@@ -191,14 +193,14 @@ fun EventtApp() {
                         }
 
                         Row(modifier = Modifier.weight(1f)) {
-                            val selectedCharId by AppState.selectedCharId.collectAsState()
+                            val selectedContext by AppState.selectedContext.collectAsState()
                             Sidebar(
                                 eveColors = eveColors,
                                 selectedScreen = selectedScreen,
-                                selectedCharId = selectedCharId,
+                                selectedContext = selectedContext,
                                 onScreenSelected = { selectedScreen = it },
                             )
-                            ScreenContent(selectedScreen, selectedCharId)
+                            ScreenContent(selectedScreen, selectedContext)
                         }
                     }
 
@@ -411,19 +413,44 @@ private fun TopBar(
 private fun Sidebar(
     eveColors: EveColors,
     selectedScreen: AppScreen,
-    selectedCharId: Int?,
+    selectedContext: ViewContext?,
     onScreenSelected: (AppScreen) -> Unit,
 ) {
+    // Re-fetched whenever the selection changes (e.g. after adding a character via
+    // CharacterManagementScreen, which calls AppState.refreshCharacters()) so newly-added
+    // characters/corps show up without an app restart.
     val characters =
-        remember {
+        remember(selectedContext) {
             try {
                 CharacterDao.getAll()
             } catch (_: Exception) {
                 emptyList<CharacterModel>()
             }
         }
+    // Only corps with at least one locally-added member can be selected — that member's token
+    // is what authorizes the corp-scope ESI calls.
+    val corporations =
+        remember(selectedContext) {
+            try {
+                CorporationDao.getAll().mapNotNull { corp ->
+                    val corpId = corp["id"] as? Int ?: return@mapNotNull null
+                    val actingChar = characters.filter { it.corporationId == corpId }.firstOrNull() ?: return@mapNotNull null
+                    Triple(corpId, corp["name"] as? String ?: "", actingChar)
+                }
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
     var charMenuExpanded by remember { mutableStateOf(false) }
-    val selectedChar = characters.find { it.id == selectedCharId }
+    val selectedChar = (selectedContext as? ViewContext.Character)?.let { ctx -> characters.find { it.id == ctx.charId } }
+    val selectedCorp = selectedContext as? ViewContext.Corporation
+    val headerLabel =
+        when {
+            selectedCorp != null -> selectedCorp.corporationName
+            selectedChar != null -> selectedChar.name
+            else -> "Select character"
+        }
+    val headerIcon = if (selectedCorp != null) Icons.Default.Business else Icons.Default.Person
 
     Surface(
         modifier = Modifier.width(200.dp).fillMaxHeight(),
@@ -433,7 +460,7 @@ private fun Sidebar(
         Column(modifier = Modifier.padding(vertical = 8.dp).fillMaxHeight()) {
             HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
 
-            // Character selector
+            // Character/corporation selector
             if (characters.isNotEmpty()) {
                 Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
                     Surface(
@@ -447,14 +474,14 @@ private fun Sidebar(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(
-                                Icons.Default.Person,
+                                headerIcon,
                                 contentDescription = null,
                                 tint = eveColors.accentColor,
                                 modifier = Modifier.size(14.dp),
                             )
                             Spacer(Modifier.width(6.dp))
                             Text(
-                                selectedChar?.name ?: "Select character",
+                                headerLabel,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1,
@@ -480,7 +507,7 @@ private fun Sidebar(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                                     ) {
-                                        if (char.id == selectedCharId) {
+                                        if (char.id == selectedChar?.id) {
                                             Icon(Icons.Default.Check, null, Modifier.size(14.dp), tint = eveColors.accentColor)
                                         } else {
                                             Spacer(Modifier.size(14.dp))
@@ -493,6 +520,38 @@ private fun Sidebar(
                                     charMenuExpanded = false
                                 },
                             )
+                        }
+
+                        if (corporations.isNotEmpty()) {
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                            Text(
+                                "Corporations",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                            )
+                            corporations.forEach { (corpId, corpName, actingChar) ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        ) {
+                                            if (corpId == selectedCorp?.corporationId) {
+                                                Icon(Icons.Default.Check, null, Modifier.size(14.dp), tint = eveColors.accentColor)
+                                            } else {
+                                                Spacer(Modifier.size(14.dp))
+                                            }
+                                            Icon(Icons.Default.Business, null, Modifier.size(14.dp), tint = eveColors.accentColor)
+                                            Text(corpName, style = MaterialTheme.typography.bodyMedium)
+                                        }
+                                    },
+                                    onClick = {
+                                        AppState.selectCorporation(corpId, corpName, actingChar.id)
+                                        charMenuExpanded = false
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -693,8 +752,9 @@ private fun EveRefSyncBanner(state: EveRefService.SyncState) {
 @Composable
 private fun ScreenContent(
     screen: AppScreen,
-    selectedCharId: Int?,
+    selectedContext: ViewContext?,
 ) {
+    val selectedCharId = selectedContext?.actingCharId
     // Track which screens have been visited so we only mount them on first visit,
     // but keep them in the composition afterwards to preserve their state.
     var visited by remember { mutableStateOf(setOf(screen)) }
@@ -724,9 +784,9 @@ private fun ScreenContent(
                             AppScreen.CHARACTERS -> CharacterManagementScreen()
                             AppScreen.MARKET -> MarketBrowserScreen()
                             AppScreen.ANALYSIS -> MarketAnalysisScreen()
-                            AppScreen.ASSETS -> AssetViewerScreen(charId = selectedCharId)
-                            AppScreen.WALLET -> WalletScreen(charId = selectedCharId)
-                            AppScreen.ORDERS -> OrdersScreen(charId = selectedCharId)
+                            AppScreen.ASSETS -> AssetViewerScreen(context = selectedContext)
+                            AppScreen.WALLET -> WalletScreen(context = selectedContext)
+                            AppScreen.ORDERS -> OrdersScreen(context = selectedContext)
                             AppScreen.WATCHLIST -> WatchlistScreen()
                             AppScreen.ALERTS -> PriceAlertsScreen()
                             AppScreen.CONTRACTS -> ContractTrackerScreen(charId = selectedCharId)

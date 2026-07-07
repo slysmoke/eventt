@@ -33,6 +33,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.StaticDataDao
+import org.eventt.core.database.ViewContext
 import org.eventt.core.database.WalletDao
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.DailyWalletEntry
@@ -42,8 +43,11 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 @Composable
-fun WalletScreen(charId: Int?) {
+fun WalletScreen(context: ViewContext?) {
     val scope = rememberCoroutineScope()
+    val charId = (context as? ViewContext.Character)?.charId
+    val corpId = (context as? ViewContext.Corporation)?.corporationId
+    val actingCharId = context?.actingCharId
     var balance by remember { mutableStateOf(0.0) }
     var dailyBreakdown by remember { mutableStateOf<List<DailyWalletEntry>>(emptyList()) }
     var pnlBreakdown by remember { mutableStateOf<List<DailyWalletEntry>>(emptyList()) }
@@ -53,11 +57,14 @@ fun WalletScreen(charId: Int?) {
     var refreshAvailableAt by remember { mutableStateOf<Long?>(null) }
     var activeTab by remember { mutableStateOf(0) }
 
-    LaunchedEffect(charId) {
-        if (charId != null) {
+    LaunchedEffect(context) {
+        val acting = actingCharId
+        if (acting != null) {
             isLoading = true
             loadWalletData(
                 charId,
+                corpId,
+                acting,
                 balanceCallback = { balance = it },
                 dailyCallback = { dailyBreakdown = it },
                 pnlCallback = { pnlBreakdown = it },
@@ -76,7 +83,7 @@ fun WalletScreen(charId: Int?) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Wallet", style = MaterialTheme.typography.headlineMedium)
-            charId?.let { id ->
+            actingCharId?.let { acting ->
                 EsiRefreshButton(
                     isLoading = isLoading,
                     expiresAtMs = refreshAvailableAt,
@@ -84,7 +91,9 @@ fun WalletScreen(charId: Int?) {
                         scope.launch {
                             isLoading = true
                             loadWalletData(
-                                id,
+                                charId,
+                                corpId,
+                                acting,
                                 balanceCallback = { balance = it },
                                 dailyCallback = { dailyBreakdown = it },
                                 pnlCallback = { pnlBreakdown = it },
@@ -747,7 +756,9 @@ private fun PnlBarChart(
 }
 
 private suspend fun loadWalletData(
-    characterId: Int,
+    characterId: Int?,
+    corporationId: Int?,
+    actingCharId: Int,
     balanceCallback: (Double) -> Unit,
     dailyCallback: (List<DailyWalletEntry>) -> Unit,
     pnlCallback: (List<DailyWalletEntry>) -> Unit,
@@ -756,24 +767,34 @@ private suspend fun loadWalletData(
     expiryCallback: (Long?) -> Unit = {},
 ) {
     withContext(Dispatchers.IO) {
+        val isCorp = corporationId != null
+
         // Load from DB, resolve names (local + ESI fallback for old records)
-        val summary = WalletDao.getWalletSummary(characterId = characterId)
+        val summary = WalletDao.getWalletSummary(characterId = characterId, corporationId = corporationId)
         balanceCallback(summary.balance)
         dailyCallback(summary.dailyBreakdown)
-        pnlCallback(WalletDao.getTradingPnlBreakdown(characterId = characterId))
-        transactionsCallback(resolveAllNames(WalletDao.getTransactions(characterId = characterId, limit = 200)))
-        journalCallback(WalletDao.getJournalEntries(characterId = characterId))
+        pnlCallback(WalletDao.getTradingPnlBreakdown(characterId = characterId, corporationId = corporationId))
+        transactionsCallback(
+            resolveAllNames(WalletDao.getTransactions(characterId = characterId, corporationId = corporationId, limit = 200)),
+        )
+        journalCallback(WalletDao.getJournalEntries(characterId = characterId, corporationId = corporationId))
 
         // Fetch from ESI
         try {
-            val walletBalance = EsiClient.getCharacterWallet(characterId)
+            val walletBalance =
+                if (isCorp) {
+                    EsiClient.getCorporationWallet(corporationId!!, actingCharId).values.sum()
+                } else {
+                    EsiClient.getCharacterWallet(characterId!!)
+                }
             balanceCallback(walletBalance)
         } catch (e: Exception) {
             println("Error fetching wallet: ${e.message}")
         }
 
         try {
-            val journalEntries = EsiClient.getCharacterJournal(characterId)
+            val journalEntries =
+                if (isCorp) EsiClient.getCorporationJournal(corporationId!!, actingCharId) else EsiClient.getCharacterJournal(characterId!!)
             journalEntries.forEach { entry ->
                 try {
                     WalletDao.insertJournalEntry(
@@ -788,22 +809,27 @@ private suspend fun loadWalletData(
                         secondPartyId = (entry["second_party_id"] as? Number)?.toInt() ?: 0,
                         secondPartyName = "",
                         taxAmount = (entry["tax"] as? Number)?.toDouble(),
-                        isCorp = false,
-                        characterId = characterId,
-                        corporationId = null,
-                        divisionId = null,
+                        isCorp = isCorp,
+                        characterId = if (isCorp) null else characterId,
+                        corporationId = corporationId,
+                        divisionId = if (isCorp) (entry["division"] as? Number)?.toInt() else null,
                     )
                 } catch (e: Exception) {
                     // skip duplicates or bad entries
                 }
             }
-            journalCallback(WalletDao.getJournalEntries(characterId = characterId))
+            journalCallback(WalletDao.getJournalEntries(characterId = characterId, corporationId = corporationId))
         } catch (e: Exception) {
             println("Error fetching journal: ${e.message}")
         }
 
         try {
-            val txList = EsiClient.getCharacterTransactions(characterId)
+            val txList =
+                if (isCorp) {
+                    EsiClient.getCorporationTransactions(corporationId!!, actingCharId)
+                } else {
+                    EsiClient.getCharacterTransactions(characterId!!)
+                }
 
             // Batch-resolve names before inserting
             val typeIds = txList.mapNotNull { (it["type_id"] as? Number)?.toInt() }.toSet()
@@ -835,23 +861,32 @@ private suspend fun loadWalletData(
                         clientName = clientNames[clientId] ?: "",
                         locationId = locationId,
                         locationName = locationNames[locationId] ?: "",
-                        isCorp = false,
-                        characterId = characterId,
-                        corporationId = null,
+                        isCorp = isCorp,
+                        characterId = if (isCorp) null else characterId,
+                        corporationId = corporationId,
                     )
                 } catch (_: Exception) {
                 }
             }
-            transactionsCallback(resolveAllNames(WalletDao.getTransactions(characterId = characterId, limit = 200)))
+            transactionsCallback(
+                resolveAllNames(WalletDao.getTransactions(characterId = characterId, corporationId = corporationId, limit = 200)),
+            )
         } catch (e: Exception) {
             println("Error fetching transactions: ${e.message}")
         }
 
-        pnlCallback(WalletDao.getTradingPnlBreakdown(characterId = characterId))
+        pnlCallback(WalletDao.getTradingPnlBreakdown(characterId = characterId, corporationId = corporationId))
 
-        val txExpiry = EsiClient.getEndpointExpiry("/characters/$characterId/wallet/transactions/")
-        val journalExpiry = EsiClient.getEndpointExpiry("/characters/$characterId/wallet/journal/")
-        val expiry = listOfNotNull(txExpiry, journalExpiry).maxOrNull()
+        val expiry =
+            if (isCorp) {
+                val txExpiry = EsiClient.getEndpointExpiry("/corporations/$corporationId/wallets/1/transactions/")
+                val journalExpiry = EsiClient.getEndpointExpiry("/corporations/$corporationId/wallets/1/journal/")
+                listOfNotNull(txExpiry, journalExpiry).maxOrNull()
+            } else {
+                val txExpiry = EsiClient.getEndpointExpiry("/characters/$characterId/wallet/transactions/")
+                val journalExpiry = EsiClient.getEndpointExpiry("/characters/$characterId/wallet/journal/")
+                listOfNotNull(txExpiry, journalExpiry).maxOrNull()
+            }
         expiryCallback(expiry)
     }
 }

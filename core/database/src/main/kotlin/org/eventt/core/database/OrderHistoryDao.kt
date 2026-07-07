@@ -19,7 +19,24 @@ object OrderHistoryDao {
         val minVolume: Int,
         val state: String,
         val characterId: Int?,
+        val corporationId: Int? = null,
+        val isCorp: Boolean = false,
     )
+
+    private data class WhereClause(
+        val sql: String,
+        val params: List<Any?>,
+    )
+
+    private fun buildWhereClause(
+        characterId: Int?,
+        corporationId: Int?,
+    ): WhereClause =
+        when {
+            characterId != null -> WhereClause("WHERE character_id = ?", listOf(characterId))
+            corporationId != null -> WhereClause("WHERE corporation_id = ?", listOf(corporationId))
+            else -> WhereClause("", emptyList())
+        }
 
     fun upsertAll(records: List<OrderHistoryRecord>) {
         if (records.isEmpty()) return
@@ -28,8 +45,9 @@ object OrderHistoryDao {
                 """
                 INSERT OR REPLACE INTO order_history
                 (order_id, type_id, type_name, location_id, station_name, price, volume_total,
-                 volume_remaining, is_buy_order, duration, issued, range, min_volume, state, character_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 volume_remaining, is_buy_order, duration, issued, range, min_volume, state, character_id,
+                 corporation_id, is_corp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent()
             prepareStatement(sql).use { ps ->
                 records.forEach { r ->
@@ -48,6 +66,8 @@ object OrderHistoryDao {
                     ps.setInt(13, r.minVolume)
                     ps.setString(14, r.state)
                     if (r.characterId != null) ps.setInt(15, r.characterId) else ps.setNull(15, Types.INTEGER)
+                    if (r.corporationId != null) ps.setInt(16, r.corporationId) else ps.setNull(16, Types.INTEGER)
+                    ps.setInt(17, if (r.isCorp) 1 else 0)
                     ps.addBatch()
                 }
                 ps.executeBatch()
@@ -56,20 +76,26 @@ object OrderHistoryDao {
     }
 
     fun getAll(
-        charId: Int,
+        characterId: Int? = null,
+        corporationId: Int? = null,
         isBuyOrder: Boolean? = null,
         limit: Int = 1000,
     ): List<OrderHistoryRecord> {
+        val where = buildWhereClause(characterId, corporationId)
         val sql =
             buildString {
-                append("SELECT * FROM order_history WHERE character_id = ?")
-                if (isBuyOrder != null) append(" AND is_buy_order = ${if (isBuyOrder) 1 else 0}")
+                append("SELECT * FROM order_history ${where.sql}")
+                if (isBuyOrder != null) {
+                    append(if (where.sql.isEmpty()) " WHERE" else " AND")
+                    append(" is_buy_order = ${if (isBuyOrder) 1 else 0}")
+                }
                 append(" ORDER BY issued DESC LIMIT ?")
             }
         return DatabaseManager.transaction {
             prepareStatement(sql).use { ps ->
-                ps.setInt(1, charId)
-                ps.setInt(2, limit)
+                var i = 1
+                where.params.forEach { ps.setObject(i++, it) }
+                ps.setInt(i, limit)
                 val rs = ps.executeQuery()
                 val result = mutableListOf<OrderHistoryRecord>()
                 while (rs.next()) {
@@ -90,6 +116,8 @@ object OrderHistoryDao {
                             minVolume = rs.getInt("min_volume"),
                             state = rs.getString("state") ?: "expired",
                             characterId = rs.getInt("character_id").takeIf { !rs.wasNull() },
+                            corporationId = rs.getInt("corporation_id").takeIf { !rs.wasNull() },
+                            isCorp = rs.getInt("is_corp") == 1,
                         ),
                     )
                 }

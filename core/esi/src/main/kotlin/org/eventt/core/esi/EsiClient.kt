@@ -519,34 +519,70 @@ object EsiClient {
     }
 
     // --- Corporation Endpoints ---
+    // All corp-scope calls act as a specific member character (there is no "corp token") — the
+    // acting characterId must hold the relevant corp role (accountant/director/etc.) or ESI 403s.
 
-    fun getCorporationAssets(corporationId: Int): List<Map<String, Any?>> = getAllMaps(endpoint = "/corporations/$corporationId/assets/")
+    fun getCorporationAssets(
+        corporationId: Int,
+        characterId: Int,
+    ): List<Map<String, Any?>> = getAllMaps(characterId = characterId, endpoint = "/corporations/$corporationId/assets/")
 
-    fun getCorporationOrders(corporationId: Int): List<Map<String, Any?>> = getAllMaps(endpoint = "/corporations/$corporationId/orders/")
+    fun getCorporationOrders(
+        corporationId: Int,
+        characterId: Int,
+    ): List<Map<String, Any?>> = getAllMaps(characterId = characterId, endpoint = "/corporations/$corporationId/orders/")
 
+    fun getCorporationOrdersHistory(
+        corporationId: Int,
+        characterId: Int,
+    ): List<Map<String, Any?>> = getAllMaps(characterId = characterId, endpoint = "/corporations/$corporationId/orders/history/")
+
+    // Unlike the character wallet endpoint (one balance), ESI returns all of a corp's wallet
+    // divisions in a single call: [{"division": 1, "balance": ...}, ...] — there is no
+    // per-division balance endpoint.
     fun getCorporationWallet(
         corporationId: Int,
-        division: Int = 1,
-    ): Double {
-        val (body, _) = getRaw("/corporations/$corporationId/wallets/$division/balance/")
-        return body.trim().toDoubleOrNull() ?: 0.0
-    }
+        characterId: Int,
+    ): Map<Int, Double> =
+        try {
+            getAllMaps(characterId = characterId, endpoint = "/corporations/$corporationId/wallets/")
+                .mapNotNull { entry ->
+                    val division = (entry["division"] as? Number)?.toInt() ?: return@mapNotNull null
+                    val balance = (entry["balance"] as? Number)?.toDouble() ?: return@mapNotNull null
+                    division to balance
+                }.toMap()
+        } catch (_: Exception) {
+            emptyMap()
+        }
 
+    // Each entry is tagged with its source division (ESI's payload itself carries no division
+    // field — you only know it from which division endpoint you queried) so callers can persist
+    // per-division records.
     fun getCorporationJournal(
         corporationId: Int,
-        division: Int? = null,
-    ): List<Map<String, Any?>> {
-        val params = division?.let { mapOf("division" to it.toString()) } ?: emptyMap()
-        return getAllMaps(endpoint = "/corporations/$corporationId/wallets/1/journal/", params = params)
-    }
+        characterId: Int,
+    ): List<Map<String, Any?>> =
+        (1..7).flatMap { division ->
+            try {
+                getAllMaps(characterId = characterId, endpoint = "/corporations/$corporationId/wallets/$division/journal/")
+                    .map { it + ("division" to division) }
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
 
     fun getCorporationTransactions(
         corporationId: Int,
-        division: Int? = null,
-    ): List<Map<String, Any?>> {
-        val params = division?.let { mapOf("division" to it.toString()) } ?: emptyMap()
-        return getAllMaps(endpoint = "/corporations/$corporationId/wallets/1/transactions/", params = params)
-    }
+        characterId: Int,
+    ): List<Map<String, Any?>> =
+        (1..7).flatMap { division ->
+            try {
+                getAllMaps(characterId = characterId, endpoint = "/corporations/$corporationId/wallets/$division/transactions/")
+                    .map { it + ("division" to division) }
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
 
     fun getCorporationInfo(corporationId: Int): Map<String, Any?> = getMap("/corporations/$corporationId/")
 
@@ -557,8 +593,10 @@ object EsiClient {
     fun getCharacterContracts(characterId: Int): List<Map<String, Any?>> =
         getAllMaps(characterId = characterId, endpoint = "/characters/$characterId/contracts/")
 
-    fun getCorporationContracts(corporationId: Int): List<Map<String, Any?>> =
-        getAllMaps(endpoint = "/corporations/$corporationId/contracts/")
+    fun getCorporationContracts(
+        corporationId: Int,
+        characterId: Int,
+    ): List<Map<String, Any?>> = getAllMaps(characterId = characterId, endpoint = "/corporations/$corporationId/contracts/")
 
     fun getContractItems(contractId: Int): List<Map<String, Any?>> = getAllMaps(endpoint = "/contracts/$contractId/items/")
 

@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.AssetDao
 import org.eventt.core.database.StaticDataDao
+import org.eventt.core.database.ViewContext
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.AssetModel
 import org.eventt.core.model.StaticStationModel
@@ -25,16 +26,17 @@ import org.eventt.ui.common.*
 import java.util.Locale
 
 @Composable
-fun AssetViewerScreen(charId: Int?) {
+fun AssetViewerScreen(context: ViewContext?) {
     val scope = rememberCoroutineScope()
+    val charId = (context as? ViewContext.Character)?.charId
+    val corpId = (context as? ViewContext.Corporation)?.corporationId
+    val actingCharId = context?.actingCharId
     var assets by remember { mutableStateOf<List<AssetModel>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
-    var selectedCorporationId by remember { mutableStateOf<Int?>(null) }
-    var showRefreshDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(charId) {
-        loadAssets(charId, selectedCorporationId) { list -> assets = list }
+    LaunchedEffect(context) {
+        loadAssets(charId, corpId) { list -> assets = list }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -46,7 +48,31 @@ fun AssetViewerScreen(charId: Int?) {
         ) {
             Text("Asset Viewer", style = MaterialTheme.typography.headlineMedium)
             Row {
-                IconButton(onClick = { showRefreshDialog = true }) {
+                // The character/corp switcher already decided which of the two to fetch —
+                // no per-click choice needed, unlike the old dual-button dialog.
+                IconButton(
+                    enabled = actingCharId != null && !isLoading,
+                    onClick = {
+                        val acting = actingCharId ?: return@IconButton
+                        scope.launch(Dispatchers.IO) {
+                            isLoading = true
+                            try {
+                                if (corpId != null) {
+                                    fetchCorporationAssets(corpId, acting)
+                                } else if (charId != null) {
+                                    fetchCharacterAssets(charId)
+                                }
+                                withContext(Dispatchers.Main) {
+                                    loadAssets(charId, corpId) { list -> assets = list }
+                                }
+                            } catch (e: Exception) {
+                                println("[Assets] Error fetching assets: ${e.message}")
+                            } finally {
+                                withContext(Dispatchers.Main) { isLoading = false }
+                            }
+                        }
+                    },
+                ) {
                     Icon(Icons.Default.Refresh, contentDescription = "Refresh from ESI")
                 }
             }
@@ -116,49 +142,6 @@ fun AssetViewerScreen(charId: Int?) {
         } else {
             AssetByLocationView(filteredAssets)
         }
-    }
-
-    // Refresh dialog
-    if (showRefreshDialog) {
-        RefreshAssetDialog(
-            charId = charId,
-            onDismiss = { showRefreshDialog = false },
-            onRefreshCharacter = { id ->
-                scope.launch(Dispatchers.IO) {
-                    isLoading = true
-                    try {
-                        fetchCharacterAssets(id)
-                        withContext(Dispatchers.Main) {
-                            loadAssets(id, null) { list -> assets = list }
-                            isLoading = false
-                            showRefreshDialog = false
-                        }
-                    } catch (e: Exception) {
-                        println("[Assets] Error fetching character assets: ${e.message}")
-                        withContext(Dispatchers.Main) { isLoading = false }
-                    }
-                }
-            },
-            onRefreshCorporation = { corpId ->
-                scope.launch(Dispatchers.IO) {
-                    isLoading = true
-                    try {
-                        // Structure (citadel) name lookups need docking access, which ESI checks
-                        // against a character token — the currently selected character (a member
-                        // of this corp) stands in for that, since ESI doesn't require it to be a director.
-                        fetchCorporationAssets(corpId, charId)
-                        withContext(Dispatchers.Main) {
-                            loadAssets(null, corpId) { list -> assets = list }
-                            isLoading = false
-                            showRefreshDialog = false
-                        }
-                    } catch (e: Exception) {
-                        println("[Assets] Error fetching corporation assets: ${e.message}")
-                        withContext(Dispatchers.Main) { isLoading = false }
-                    }
-                }
-            },
-        )
     }
 
     LoadingOverlay(isLoading = isLoading, message = "Fetching assets from ESI...")
@@ -286,62 +269,6 @@ private fun AssetRow(asset: AssetModel) {
             }
         }
     }
-}
-
-@Composable
-private fun RefreshAssetDialog(
-    charId: Int?,
-    onDismiss: () -> Unit,
-    onRefreshCharacter: (Int) -> Unit,
-    onRefreshCorporation: (Int) -> Unit,
-) {
-    val character =
-        remember(charId) {
-            if (charId == null) {
-                null
-            } else {
-                try {
-                    org.eventt.core.database.CharacterDao
-                        .getById(charId)
-                } catch (_: Exception) {
-                    null
-                }
-            }
-        }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Refresh Assets") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Fetch assets from ESI for the selected character.")
-
-                Button(
-                    onClick = { charId?.let { onRefreshCharacter(it) } },
-                    enabled = charId != null,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(Icons.Default.Person, null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Fetch Character Assets")
-                }
-
-                Button(
-                    onClick = { character?.corporationId?.let { onRefreshCorporation(it) } },
-                    enabled = character?.corporationId != null,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
-                ) {
-                    Icon(Icons.Default.Business, null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Fetch Corporation Assets")
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        },
-    )
 }
 
 private fun loadAssets(
@@ -487,9 +414,12 @@ private suspend fun fetchCharacterAssets(characterId: Int) {
 
 private suspend fun fetchCorporationAssets(
     corporationId: Int,
-    dockingCharacterId: Int? = null,
+    actingCharacterId: Int,
 ) {
-    val rawAssets = EsiClient.getCorporationAssets(corporationId)
+    // actingCharacterId both authorizes the corp-scope ESI call and stands in for structure
+    // (citadel) name lookups, which need docking access — ESI's structure endpoint doesn't
+    // require them to be a director, just a member present in the structure.
+    val rawAssets = EsiClient.getCorporationAssets(corporationId, actingCharacterId)
     val prices = EsiClient.getMarketPrices()
     val byItemId = rawAssets.mapNotNull { d -> (d["item_id"] as? Number)?.toLong()?.let { it to d } }.toMap()
     val locationCache = mutableMapOf<Long, StaticStationModel?>()
@@ -505,10 +435,8 @@ private suspend fun fetchCorporationAssets(
 
             val staticType = StaticDataDao.getTypeById(typeId)
             val typeName = staticType?.name ?: ""
-            // dockingCharacterId is any character with docking access to the corp's citadels — ESI's
-            // structure endpoint doesn't require them to be a director, just present in the structure.
             val (rootLocationId, rootLocationType) = resolveRootLocation(data, byItemId)
-            val location = locationCache.getOrPut(rootLocationId) { resolveLocation(rootLocationId, rootLocationType, dockingCharacterId) }
+            val location = locationCache.getOrPut(rootLocationId) { resolveLocation(rootLocationId, rootLocationType, actingCharacterId) }
 
             AssetModel(
                 itemId = itemId,

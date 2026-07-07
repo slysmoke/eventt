@@ -48,7 +48,7 @@ class OrderHistoryDaoTest {
     fun `upsertAll on an empty list does nothing`() {
         OrderHistoryDao.upsertAll(emptyList())
 
-        OrderHistoryDao.getAll(charId = 1).shouldBeEmpty()
+        OrderHistoryDao.getAll(characterId = 1).shouldBeEmpty()
     }
 
     @Test
@@ -61,7 +61,7 @@ class OrderHistoryDaoTest {
             ),
         )
 
-        OrderHistoryDao.getAll(charId = 1).map { it.orderId } shouldBe listOf(2L, 3L, 1L)
+        OrderHistoryDao.getAll(characterId = 1).map { it.orderId } shouldBe listOf(2L, 3L, 1L)
     }
 
     @Test
@@ -69,28 +69,28 @@ class OrderHistoryDaoTest {
         OrderHistoryDao.upsertAll(listOf(record(1, issued = "2024-01-01")))
         OrderHistoryDao.upsertAll(listOf(record(1, issued = "2024-01-01").copy(state = "cancelled")))
 
-        OrderHistoryDao.getAll(charId = 1).single().state shouldBe "cancelled"
+        OrderHistoryDao.getAll(characterId = 1).single().state shouldBe "cancelled"
     }
 
     @Test
     fun `getAll filters by isBuyOrder when specified`() {
         OrderHistoryDao.upsertAll(listOf(record(1, isBuyOrder = true), record(2, isBuyOrder = false)))
 
-        OrderHistoryDao.getAll(charId = 1, isBuyOrder = true).map { it.orderId } shouldBe listOf(1L)
-        OrderHistoryDao.getAll(charId = 1, isBuyOrder = false).map { it.orderId } shouldBe listOf(2L)
+        OrderHistoryDao.getAll(characterId = 1, isBuyOrder = true).map { it.orderId } shouldBe listOf(1L)
+        OrderHistoryDao.getAll(characterId = 1, isBuyOrder = false).map { it.orderId } shouldBe listOf(2L)
     }
 
     @Test
     fun `getAll respects the limit`() {
         OrderHistoryDao.upsertAll(listOf(record(1), record(2), record(3)))
 
-        OrderHistoryDao.getAll(charId = 1, limit = 2).size shouldBe 2
+        OrderHistoryDao.getAll(characterId = 1, limit = 2).size shouldBe 2
     }
 
     @Test
     fun `getAll only returns rows for the requested character`() {
         OrderHistoryDao.upsertAll(listOf(record(1, characterId = 1), record(2, characterId = 2)))
 
-        OrderHistoryDao.getAll(charId = 1).map { it.orderId } shouldBe listOf(1L)
+        OrderHistoryDao.getAll(characterId = 1).map { it.orderId } shouldBe listOf(1L)
     }
 }

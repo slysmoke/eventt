@@ -38,6 +38,16 @@ object CharacterDao {
             }
         }
 
+    // Locally-added characters that are members of the given corp — used to find an "acting
+    // character" whose token can authorize ESI calls on the corp's behalf.
+    fun getByCorporation(corporationId: Int): List<CharacterModel> =
+        DatabaseManager.transaction {
+            prepareStatement("SELECT * FROM characters WHERE corporation_id = ? ORDER BY name").use { stmt ->
+                stmt.setInt(1, corporationId)
+                stmt.executeQuery().mapResultSetToCharacters()
+            }
+        }
+
     fun updateToken(
         id: Int,
         accessToken: String,

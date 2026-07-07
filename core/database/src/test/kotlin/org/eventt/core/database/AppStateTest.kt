@@ -61,7 +61,7 @@ class AppStateTest {
     fun `init prefers the saved character id when it still exists`() {
         CharacterDao.insert(character(1))
         CharacterDao.insert(character(2))
-        StaticDataDao.setSetting("app.selected_char_id", "2")
+        StaticDataDao.setSetting("app.selected_context", "char:2")
 
         AppState.init()
 
@@ -71,7 +71,7 @@ class AppStateTest {
     @Test
     fun `init falls back to the first character when the saved id no longer exists`() {
         CharacterDao.insert(character(1))
-        StaticDataDao.setSetting("app.selected_char_id", "999")
+        StaticDataDao.setSetting("app.selected_context", "char:999")
 
         AppState.init()
 
@@ -87,7 +87,47 @@ class AppStateTest {
         AppState.selectCharacter(2)
 
         AppState.selectedCharId.value shouldBe 2
-        StaticDataDao.getSetting("app.selected_char_id") shouldBe "2"
+        StaticDataDao.getSetting("app.selected_context") shouldBe "char:2"
+    }
+
+    @Test
+    fun `selectCorporation sets a corporation context with the acting character as selectedCharId`() {
+        val char1 = character(1).copy(corporationId = 100, corporationName = "Test Corp")
+        CharacterDao.insert(char1)
+        AppState.init()
+
+        AppState.selectCorporation(100, "Test Corp", 1)
+
+        AppState.selectedCharId.value shouldBe 1
+        (AppState.selectedContext.value as ViewContext.Corporation).corporationId shouldBe 100
+        StaticDataDao.getSetting("app.selected_context") shouldBe "corp:100:1"
+    }
+
+    @Test
+    fun `init restores a persisted corporation context when the acting character still belongs to it`() {
+        val char1 = character(1).copy(corporationId = 100, corporationName = "Test Corp")
+        CharacterDao.insert(char1)
+        StaticDataDao.setSetting("app.selected_context", "corp:100:1")
+
+        AppState.init()
+
+        AppState.selectedCharId.value shouldBe 1
+        (AppState.selectedContext.value as ViewContext.Corporation).corporationId shouldBe 100
+    }
+
+    @Test
+    fun `refreshCharacters falls back when the acting character behind a corp selection is removed`() {
+        val char1 = character(1).copy(corporationId = 100, corporationName = "Test Corp")
+        val char2 = character(2)
+        CharacterDao.insert(char1)
+        CharacterDao.insert(char2)
+        AppState.init()
+        AppState.selectCorporation(100, "Test Corp", 1)
+        CharacterDao.delete(1)
+
+        AppState.refreshCharacters()
+
+        AppState.selectedContext.value shouldBe ViewContext.Character(2)
     }
 
     @Test

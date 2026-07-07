@@ -53,10 +53,11 @@ object CostBasisService {
     }
 
     fun compute(
-        characterId: Int,
+        characterId: Int? = null,
+        corporationId: Int? = null,
         taxConfig: TaxConfig = TaxConfig(),
     ): FifoResult {
-        val transactions = WalletDao.getAllTransactions(characterId)
+        val transactions = WalletDao.getAllTransactions(characterId, corporationId)
 
         val lots = mutableMapOf<Int, ArrayDeque<Pair<Int, Double>>>()
         val typeNames = mutableMapOf<Int, String>()
