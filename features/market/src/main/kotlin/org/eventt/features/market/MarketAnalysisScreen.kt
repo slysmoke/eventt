@@ -1132,7 +1132,11 @@ private fun InterRegionTab(
                                         }
                                     statusMsg = "0/${typeIds.size} types…"
 
-                                    val semaphore = Semaphore(8)
+                                    // Each permit fires 2 real HTTP requests (buy + sell region
+                                    // orders), so this is already up to 8 concurrent ESI calls —
+                                    // higher than it looks. Lower than Station Trading's single-
+                                    // call-per-permit Semaphore(10) for the same reason.
+                                    val semaphore = Semaphore(4)
                                     val mutex = Mutex()
                                     val found = mutableListOf<RegionOpportunity>()
                                     var checked = 0

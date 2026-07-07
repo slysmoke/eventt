@@ -63,12 +63,11 @@ object RequestQueueManager {
             }
     }
 
+    // Only drops successful requests — failed ones stay visible (and counted) until the user
+    // reviews them and clears everything explicitly via clearAll().
     @Synchronized
     fun clearCompleted() {
-        _requests.value =
-            _requests.value.filter {
-                it.status != RequestStatus.COMPLETED && it.status != RequestStatus.FAILED
-            }
+        _requests.value = _requests.value.filter { it.status != RequestStatus.COMPLETED }
     }
 
     @Synchronized

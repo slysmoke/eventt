@@ -48,6 +48,7 @@ class EsiThrottleInterceptor(
         const val RATE_LIMIT_COOLDOWN_MS = 2_000L
         const val LEGACY_420_BACKOFF_MS = 60_000L
         const val DEFAULT_RETRY_AFTER_S = 5L
+        val JITTER_MS_RANGE = 0L..1_500L
     }
 
     @Volatile
@@ -97,7 +98,13 @@ class EsiThrottleInterceptor(
 
     private fun awaitCooldown() {
         val wait = cooldownUntilMs - System.currentTimeMillis()
-        if (wait > 0) Thread.sleep(wait)
+        if (wait > 0) {
+            // Jitter avoids a thundering herd: with several concurrent calls through this one
+            // client (bulk analysis runs with 4-10x parallelism), all of them would otherwise
+            // read the same cooldownUntilMs and wake to retry in the same instant, immediately
+            // re-consuming whatever budget had refilled and re-triggering the same 420/429.
+            Thread.sleep(wait + JITTER_MS_RANGE.random())
+        }
     }
 
     private fun applyServerSignals(response: Response) {

@@ -68,16 +68,18 @@ class RequestQueueManagerTest {
     }
 
     @Test
-    fun `clearCompleted removes only COMPLETED and FAILED entries`() {
+    fun `clearCompleted removes only COMPLETED entries, leaving queued and failed ones for review`() {
         val queued = QueuedRequest(endpoint = "/queued/", description = "queued")
         val done = QueuedRequest(endpoint = "/done/", description = "done")
-        RequestQueueManager.enqueueMultiple(listOf(queued, done))
+        val failed = QueuedRequest(endpoint = "/failed/", description = "failed")
+        RequestQueueManager.enqueueMultiple(listOf(queued, done, failed))
         RequestQueueManager.completeRequest(done.id)
+        RequestQueueManager.completeRequest(failed.id, error = "boom")
 
         RequestQueueManager.clearCompleted()
 
         val remaining = RequestQueueManager.requests.value
-        remaining.map { it.id } shouldBe listOf(queued.id)
+        remaining.map { it.id }.toSet() shouldBe setOf(queued.id, failed.id)
     }
 
     @Test

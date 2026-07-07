@@ -13,14 +13,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.sample
 import org.eventt.core.model.RequestStatus
 import org.eventt.core.queue.RequestQueueManager
 
 val EventtBlue = Color(0xFF4A90D9)
 
+@OptIn(FlowPreview::class)
 @Composable
 fun RequestProgressDialog(onDismiss: () -> Unit) {
-    val requests by RequestQueueManager.requests.collectAsState()
+    // A bulk analysis run can enqueue/complete thousands of requests within a few seconds —
+    // collecting every single emission made this dialog redraw (and visibly jitter, since the
+    // active-request list reshuffles on every change) many times a second. Sampling caps the
+    // redraw rate to something the eye reads as smooth updates instead of a shaking window.
+    val requests by RequestQueueManager.requests.sample(300).collectAsState(RequestQueueManager.requests.value)
 
     val active = requests.filter { it.status == RequestStatus.QUEUED || it.status == RequestStatus.IN_PROGRESS }
     val failed = requests.filter { it.status == RequestStatus.FAILED }
@@ -81,8 +88,12 @@ fun RequestProgressDialog(onDismiss: () -> Unit) {
                         }
                     }
                 } else if (visible.isNotEmpty()) {
+                    // A fixed height (not heightIn(max=...)) keeps the dialog's own size constant
+                    // while requests churn — otherwise the box itself grows and shrinks along with
+                    // however many rows happen to be active at each redraw, which reads as the
+                    // whole window jittering rather than just its contents updating.
                     LazyColumn(
-                        modifier = Modifier.heightIn(max = 260.dp).fillMaxWidth(),
+                        modifier = Modifier.height(260.dp).fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         items(visible, key = { it.id }) { request ->

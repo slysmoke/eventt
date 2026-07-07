@@ -1,5 +1,10 @@
 package org.eventt.ui
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -11,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
@@ -27,6 +33,8 @@ import org.eventt.core.database.CharacterDao
 import org.eventt.core.everef.EveRefService
 import org.eventt.core.model.CharacterModel
 import org.eventt.core.model.PriceAlertModel
+import org.eventt.core.model.RequestStatus
+import org.eventt.core.queue.RequestQueueManager
 import org.eventt.core.staticdata.StaticDataImporter
 import org.eventt.features.alerts.AlertMonitor
 import org.eventt.features.alerts.PriceAlertsScreen
@@ -323,11 +331,29 @@ private fun TopBar(
                 }
             },
             actions = {
+                val esiRequests by RequestQueueManager.requests.collectAsState()
+                val esiActive = esiRequests.count { it.status == RequestStatus.QUEUED || it.status == RequestStatus.IN_PROGRESS }
+                val esiFailed = esiRequests.count { it.status == RequestStatus.FAILED }
+                // Keeps spinning continuously rather than restarting from 0° each time a burst of
+                // requests starts — only whether it's *applied* (below) depends on esiActive.
+                val syncRotation by
+                    rememberInfiniteTransition(label = "esiSyncSpin").animateFloat(
+                        initialValue = 0f,
+                        targetValue = 360f,
+                        animationSpec = infiniteRepeatable(tween(1000, easing = LinearEasing)),
+                        label = "esiSyncSpinAngle",
+                    )
                 IconButton(onClick = onShowProgress) {
                     Icon(
                         imageVector = Icons.Default.Sync,
                         contentDescription = "Show request progress",
-                        tint = MaterialTheme.colorScheme.onSurface,
+                        tint =
+                            when {
+                                esiFailed > 0 -> Color(0xFFFF6B6B)
+                                esiActive > 0 -> eveColors.accentColor
+                                else -> MaterialTheme.colorScheme.onSurface
+                            },
+                        modifier = Modifier.rotate(if (esiActive > 0) syncRotation else 0f),
                     )
                 }
                 IconButton(onClick = onToggleOverlay) {
