@@ -20,7 +20,9 @@ import java.io.IOException
  * Handles caching, request queuing, auth token management, and response parsing.
  */
 object EsiClient {
-    private const val ESI_BASE_URL = "https://esi.evetech.net/latest"
+    // internal var (not private const) so tests can point it at a local MockWebServer instead of
+    // the real ESI. Never reassigned in production.
+    internal var esiBaseUrl = "https://esi.evetech.net/latest"
     private const val ESI_DATASOURCE = "tranquility"
 
     val json =
@@ -168,7 +170,7 @@ object EsiClient {
         }
 
         val queryString = fullParams.entries.joinToString("&") { "${it.key}=${it.value}" }
-        val url = "$ESI_BASE_URL$endpoint${if (queryString.isNotEmpty()) "?$queryString" else ""}"
+        val url = "$esiBaseUrl$endpoint${if (queryString.isNotEmpty()) "?$queryString" else ""}"
 
         val queuedRequest =
             QueuedRequest(
@@ -347,7 +349,7 @@ object EsiClient {
         endpoint: String,
         jsonBody: String,
     ): String {
-        val url = "$ESI_BASE_URL$endpoint?datasource=$ESI_DATASOURCE"
+        val url = "$esiBaseUrl$endpoint?datasource=$ESI_DATASOURCE"
         val requestBody = jsonBody.toRequestBody("application/json; charset=utf-8".toMediaType())
         val request =
             okhttp3.Request
@@ -576,7 +578,7 @@ object EsiClient {
         typeId: Int,
     ) {
         val token = SsoAuthManager.ensureTokenFresh(characterId) ?: return
-        val url = "$ESI_BASE_URL/ui/openwindow/marketdetails/?datasource=$ESI_DATASOURCE&type_id=$typeId"
+        val url = "$esiBaseUrl/ui/openwindow/marketdetails/?datasource=$ESI_DATASOURCE&type_id=$typeId"
         val request =
             Request
                 .Builder()

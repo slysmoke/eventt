@@ -79,7 +79,7 @@ new modules get them for free, no per-module setup needed except MockWebServer.
 
 | Module | Target | Status | Notes |
 |---|---|---|---|
-| `core/esi` | `EsiClient` | ⬜ Not started | Caching (ETag/If-None-Match/304), pagination, 401 refresh-and-retry — biggest single payoff left in the project, exercises `core:cache` + `core:auth` + `core:http` together |
+| `core/esi` | `EsiClient` | ✅ Done | `esiBaseUrl` bumped from `private const` to `internal var` so tests can point it at MockWebServer. Covers fresh-cache hit avoiding a second request, stale-cache conditional request + 304 refresh, 401 refresh-and-retry, network failure falling back to stale cached data, and pagination (fetch-all-pages + the merged result being served from cache on a second call) |
 
 ### Tier 4 — database DAOs (in-memory SQLite via `DatabaseManager.initialize(":memory:")`)
 
@@ -117,7 +117,7 @@ Not started, not scheduled.
 2. ~~`ClipboardParser` + `JumpGraphService` (Tier 1) — quick wins, no blockers~~ done (`JumpGraphService` partially — see note above)
 3. ~~Bump the four `private → internal` blockers (SsoAuthManager, UpdateChecker, OrdersScreen helpers) and test those~~ done
 4. ~~`TokenCrypto` refactor + test~~ done
-5. `EsiClient` (Tier 3) — do this once Tier 1 is solid, since it exercises cache/auth/http together
+5. ~~`EsiClient` (Tier 3) — do this once Tier 1 is solid, since it exercises cache/auth/http together~~ done
 6. Tier 2 state managers
 7. Tier 4 DAOs
 8. Tier 5 only if/when there's an appetite for UI testing infrastructure
