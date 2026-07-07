@@ -354,6 +354,71 @@ object WalletDao {
             }
         }
 
+    // Trading P&L: gross buy/sell cash flow from `transactions`, plus the sales tax and broker
+    // fees actually charged for that trading (from `journal`) — the real cost of trading that
+    // `transactions.total` doesn't include. Deliberately excludes every other journal ref_type
+    // (market_escrow/market_escrow_refund, contracts, bounties, PI, etc.): escrow in particular
+    // is money reserved for a still-open buy order, not a realized trading expense, and including
+    // it would make P&L swing on order placement/cancellation rather than actual fills.
+    fun getTradingPnlBreakdown(
+        characterId: Int? = null,
+        corporationId: Int? = null,
+        since: String = "1970-01-01",
+    ): List<DailyWalletEntry> =
+        DatabaseManager.transaction {
+            val txWhere = buildWhereClause(characterId, corporationId)
+            val journalWhere = buildWhereClause(characterId, corporationId)
+            val txWhereSql = if (txWhere.sql.isEmpty()) "WHERE date >= ?" else "${txWhere.sql} AND date >= ?"
+            val journalWhereSql = if (journalWhere.sql.isEmpty()) "WHERE date >= ?" else "${journalWhere.sql} AND date >= ?"
+
+            prepareStatement(
+                """
+                WITH combined AS (
+                    SELECT substr(date, 1, 10) as day,
+                           CASE WHEN is_buy = 0 THEN total ELSE 0 END as income,
+                           CASE WHEN is_buy = 1 THEN total ELSE 0 END as expenses
+                    FROM transactions
+                    $txWhereSql
+                    UNION ALL
+                    SELECT substr(date, 1, 10) as day,
+                           0.0 as income,
+                           ABS(amount) as expenses
+                    FROM journal
+                    $journalWhereSql AND ref_type IN ('transaction_tax', 'brokers_fee')
+                )
+                SELECT
+                    day,
+                    SUM(income) as income,
+                    SUM(expenses) as expenses,
+                    SUM(income) - SUM(expenses) as net
+                FROM combined
+                GROUP BY day
+                ORDER BY day DESC
+                LIMIT 90
+                """.trimIndent(),
+            ).use { stmt ->
+                var i = 1
+                txWhere.params.forEach { stmt.setObject(i++, it) }
+                stmt.setString(i++, since)
+                journalWhere.params.forEach { stmt.setObject(i++, it) }
+                stmt.setString(i, since)
+                stmt.executeQuery().use { rs ->
+                    val list = mutableListOf<DailyWalletEntry>()
+                    while (rs.next()) {
+                        list.add(
+                            DailyWalletEntry(
+                                date = rs.getString("day"),
+                                income = rs.getDouble("income"),
+                                expenses = rs.getDouble("expenses"),
+                                net = rs.getDouble("net"),
+                            ),
+                        )
+                    }
+                    list
+                }
+            }
+        }
+
     // ─── Helper ───────────────────────────────────────────────────────────
 
     private data class WhereClause(

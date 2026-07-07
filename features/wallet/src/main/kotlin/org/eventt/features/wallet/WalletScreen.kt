@@ -46,6 +46,7 @@ fun WalletScreen(charId: Int?) {
     val scope = rememberCoroutineScope()
     var balance by remember { mutableStateOf(0.0) }
     var dailyBreakdown by remember { mutableStateOf<List<DailyWalletEntry>>(emptyList()) }
+    var pnlBreakdown by remember { mutableStateOf<List<DailyWalletEntry>>(emptyList()) }
     var transactions by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
     var journal by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
@@ -59,6 +60,7 @@ fun WalletScreen(charId: Int?) {
                 charId,
                 balanceCallback = { balance = it },
                 dailyCallback = { dailyBreakdown = it },
+                pnlCallback = { pnlBreakdown = it },
                 transactionsCallback = { transactions = it },
                 journalCallback = { journal = it },
                 expiryCallback = { refreshAvailableAt = it },
@@ -85,6 +87,7 @@ fun WalletScreen(charId: Int?) {
                                 id,
                                 balanceCallback = { balance = it },
                                 dailyCallback = { dailyBreakdown = it },
+                                pnlCallback = { pnlBreakdown = it },
                                 transactionsCallback = { transactions = it },
                                 journalCallback = { journal = it },
                                 expiryCallback = { refreshAvailableAt = it },
@@ -136,7 +139,7 @@ fun WalletScreen(charId: Int?) {
             when (activeTab) {
                 0 -> TransactionList(transactions)
                 1 -> JournalList(journal)
-                2 -> PnlChart(dailyBreakdown)
+                2 -> PnlChart(pnlBreakdown)
             }
         }
     }
@@ -747,6 +750,7 @@ private suspend fun loadWalletData(
     characterId: Int,
     balanceCallback: (Double) -> Unit,
     dailyCallback: (List<DailyWalletEntry>) -> Unit,
+    pnlCallback: (List<DailyWalletEntry>) -> Unit,
     transactionsCallback: (List<Map<String, Any?>>) -> Unit,
     journalCallback: (List<Map<String, Any?>>) -> Unit,
     expiryCallback: (Long?) -> Unit = {},
@@ -756,6 +760,7 @@ private suspend fun loadWalletData(
         val summary = WalletDao.getWalletSummary(characterId = characterId)
         balanceCallback(summary.balance)
         dailyCallback(summary.dailyBreakdown)
+        pnlCallback(WalletDao.getTradingPnlBreakdown(characterId = characterId))
         transactionsCallback(resolveAllNames(WalletDao.getTransactions(characterId = characterId, limit = 200)))
         journalCallback(WalletDao.getJournalEntries(characterId = characterId))
 
@@ -841,6 +846,8 @@ private suspend fun loadWalletData(
         } catch (e: Exception) {
             println("Error fetching transactions: ${e.message}")
         }
+
+        pnlCallback(WalletDao.getTradingPnlBreakdown(characterId = characterId))
 
         val txExpiry = EsiClient.getEndpointExpiry("/characters/$characterId/wallet/transactions/")
         val journalExpiry = EsiClient.getEndpointExpiry("/characters/$characterId/wallet/journal/")

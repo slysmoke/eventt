@@ -101,6 +101,7 @@ class WalletDaoTest {
         date: String,
         amount: Double,
         balance: Double,
+        refType: String = "market_transaction",
         characterId: Int = 1,
     ) = WalletDao.insertJournalEntry(
         entryId = id,
@@ -108,7 +109,7 @@ class WalletDaoTest {
         amount = amount,
         balance = balance,
         reason = "",
-        refType = "market_transaction",
+        refType = refType,
         firstPartyId = 0,
         firstPartyName = "",
         secondPartyId = 0,
@@ -167,5 +168,31 @@ class WalletDaoTest {
         val breakdown = WalletDao.getTransactionBreakdown(characterId = 1, since = "2024-01-01")
 
         breakdown.map { it.date } shouldBe listOf("2024-01-01")
+    }
+
+    @Test
+    fun `getTradingPnlBreakdown adds sales tax and broker fees from the journal onto the day's expenses`() {
+        insertTx(1, "2024-01-01", isBuy = false, total = 200.0)
+        insertJournal(101, "2024-01-01T10:00:00", amount = -16.0, balance = 1000.0, refType = "transaction_tax")
+        insertJournal(102, "2024-01-01T10:01:00", amount = -6.0, balance = 994.0, refType = "brokers_fee")
+
+        val day = WalletDao.getTradingPnlBreakdown(characterId = 1).single { it.date == "2024-01-01" }
+
+        day.income should (200.0 plusOrMinus TOLERANCE)
+        day.expenses should (22.0 plusOrMinus TOLERANCE) // 16 tax + 6 broker fee, no matching transaction expense
+        day.net should (178.0 plusOrMinus TOLERANCE)
+    }
+
+    @Test
+    fun `getTradingPnlBreakdown ignores market escrow and other non-trading journal entries`() {
+        insertTx(1, "2024-01-01", isBuy = false, total = 200.0)
+        insertJournal(101, "2024-01-01T10:00:00", amount = -500.0, balance = 1000.0, refType = "market_escrow")
+        insertJournal(102, "2024-01-01T10:01:00", amount = 500.0, balance = 1500.0, refType = "market_escrow_refund")
+        insertJournal(103, "2024-01-01T10:02:00", amount = 1_000_000.0, balance = 2500.0, refType = "bounty_prizes")
+
+        val day = WalletDao.getTradingPnlBreakdown(characterId = 1).single { it.date == "2024-01-01" }
+
+        day.income should (200.0 plusOrMinus TOLERANCE)
+        day.expenses should (0.0 plusOrMinus TOLERANCE)
     }
 }

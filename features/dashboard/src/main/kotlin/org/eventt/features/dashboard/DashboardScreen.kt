@@ -44,7 +44,7 @@ fun DashboardScreen(
             val since90 = LocalDate.now().minusDays(90).toString()
             try {
                 walletBalance = WalletDao.getWalletSummary(characterId = charId).balance
-                txBreakdown = WalletDao.getTransactionBreakdown(characterId = charId, since = since90)
+                txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = charId, since = since90)
                 assetValue = if (charId != null) AssetDao.getTotalValue(characterId = charId) else 0.0
                 recentTx = WalletDao.getTransactions(characterId = charId, limit = 12)
                 triggeredAlerts = AlertDao.getEnabled().filter { it.triggered }
@@ -83,7 +83,7 @@ fun DashboardScreen(
                         }
                     }
                     walletBalance = WalletDao.getWalletSummary(characterId = charId).balance
-                    txBreakdown = WalletDao.getTransactionBreakdown(characterId = charId, since = since90)
+                    txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = charId, since = since90)
                 } catch (e: Exception) {
                     println("Dashboard: journal ESI error: ${e.message}")
                 }
@@ -121,7 +121,7 @@ fun DashboardScreen(
                         }
                     }
                     recentTx = WalletDao.getTransactions(characterId = charId, limit = 12)
-                    txBreakdown = WalletDao.getTransactionBreakdown(characterId = charId, since = since90)
+                    txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = charId, since = since90)
                 } catch (e: Exception) {
                     println("Dashboard: transactions ESI error: ${e.message}")
                 }

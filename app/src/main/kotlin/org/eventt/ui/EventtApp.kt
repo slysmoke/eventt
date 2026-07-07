@@ -1,5 +1,6 @@
 package org.eventt.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -303,50 +305,69 @@ private fun TopBar(
     overlayActive: Boolean = false,
     onToggleOverlay: () -> Unit = {},
 ) {
-    TopAppBar(
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = currentScreen.icon,
-                    contentDescription = null,
-                    tint = eveColors.accentColor,
-                    modifier = Modifier.size(24.dp),
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = currentScreen.label,
-                    style = MaterialTheme.typography.headlineMedium,
-                )
-            }
-        },
-        actions = {
-            IconButton(onClick = onShowProgress) {
-                Icon(
-                    imageVector = Icons.Default.Sync,
-                    contentDescription = "Show request progress",
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-            IconButton(onClick = onToggleOverlay) {
-                Icon(
-                    imageVector = Icons.Default.Calculate,
-                    contentDescription = "Trade overlay",
-                    tint = if (overlayActive) eveColors.accentColor else MaterialTheme.colorScheme.onSurface,
-                )
-            }
-            IconButton(onClick = onThemeToggle) {
-                Icon(
-                    imageVector = if (darkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
-                    contentDescription = "Toggle theme",
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-        },
-        colors =
-            TopAppBarDefaults.topAppBarColors(
-                containerColor = eveColors.headerColor,
-            ),
-    )
+    Box {
+        TopAppBar(
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = currentScreen.icon,
+                        contentDescription = null,
+                        tint = eveColors.accentColor,
+                        modifier = Modifier.size(24.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = currentScreen.label,
+                        style = MaterialTheme.typography.headlineMedium,
+                    )
+                }
+            },
+            actions = {
+                IconButton(onClick = onShowProgress) {
+                    Icon(
+                        imageVector = Icons.Default.Sync,
+                        contentDescription = "Show request progress",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                IconButton(onClick = onToggleOverlay) {
+                    Icon(
+                        imageVector = Icons.Default.Calculate,
+                        contentDescription = "Trade overlay",
+                        tint = if (overlayActive) eveColors.accentColor else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                IconButton(onClick = onThemeToggle) {
+                    Icon(
+                        imageVector = if (darkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
+                        contentDescription = "Toggle theme",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            },
+            colors =
+                TopAppBarDefaults.topAppBarColors(
+                    containerColor = eveColors.headerColor,
+                ),
+        )
+        // App branding, centered in the bar regardless of the title/actions' widths.
+        Row(
+            modifier = Modifier.align(Alignment.Center),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Image(
+                painter = painterResource("icon.png"),
+                contentDescription = null,
+                modifier = Modifier.size(40.dp),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "EVE Night Trade Tools",
+                style = MaterialTheme.typography.titleMedium,
+                color = eveColors.accentColor,
+            )
+        }
+    }
 }
 
 @Composable
@@ -373,21 +394,6 @@ private fun Sidebar(
         tonalElevation = 2.dp,
     ) {
         Column(modifier = Modifier.padding(vertical = 8.dp).fillMaxHeight()) {
-            // EVE Night Trade Tools branding
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Star,
-                    contentDescription = null,
-                    tint = eveColors.accentColor,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("EVE Night Trade Tools", style = MaterialTheme.typography.titleMedium, color = eveColors.accentColor)
-            }
-
             HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
 
             // Character selector
