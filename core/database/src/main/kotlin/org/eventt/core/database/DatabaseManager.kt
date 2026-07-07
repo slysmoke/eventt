@@ -529,4 +529,40 @@ object DatabaseManager {
                 conn.autoCommit = wasAutoCommit
             }
         }
+
+    private const val LAST_VACUUM_SETTING = "db.last_vacuum_millis"
+
+    // VACUUM rewrites the whole file and needs exclusive access (can't run inside a
+    // transaction), so it's only worth paying for when there's a meaningful amount of free
+    // space to reclaim — checked via the freelist ratio rather than running unconditionally —
+    // and not more often than minInterval, so a ratio that hovers right at the threshold
+    // doesn't trigger a rewrite on every single startup.
+    fun vacuumIfNeeded(
+        minFreeRatio: Double = 0.20,
+        minInterval: Long = 7 * 24 * 60 * 60 * 1000L,
+    ) {
+        synchronized(this) {
+            val conn = getConnection()
+            val (freePages, totalPages) =
+                conn.createStatement().use { stmt ->
+                    val free =
+                        stmt.executeQuery("PRAGMA freelist_count").use {
+                            it.next()
+                            it.getLong(1)
+                        }
+                    val total =
+                        stmt.executeQuery("PRAGMA page_count").use {
+                            it.next()
+                            it.getLong(1)
+                        }
+                    free to total
+                }
+            if (totalPages == 0L || freePages.toDouble() / totalPages < minFreeRatio) return
+            val lastVacuum = StaticDataDao.getSetting(LAST_VACUUM_SETTING)?.toLongOrNull() ?: 0L
+            if (System.currentTimeMillis() - lastVacuum < minInterval) return
+
+            conn.createStatement().use { it.execute("VACUUM") }
+            StaticDataDao.setSetting(LAST_VACUUM_SETTING, System.currentTimeMillis().toString())
+        }
+    }
 }

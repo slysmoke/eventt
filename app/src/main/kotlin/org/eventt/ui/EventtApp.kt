@@ -31,6 +31,7 @@ import org.eventt.GlobalHotkeyService
 import org.eventt.core.cache.EsiCacheManager
 import org.eventt.core.database.AppState
 import org.eventt.core.database.CharacterDao
+import org.eventt.core.database.DatabaseManager
 import org.eventt.core.everef.EveRefService
 import org.eventt.core.model.CharacterModel
 import org.eventt.core.model.PriceAlertModel
@@ -104,6 +105,10 @@ fun EventtApp() {
         // Purges long-expired ESI cache rows — otherwise nothing ever deletes them and the
         // table grows without bound (found this at ~730MB / 55k dead rows on a real install).
         launch(Dispatchers.IO) { EsiCacheManager.cleanupExpired() }
+        // VACUUM reclaims that deleted space back from the file, but it's a full rewrite that
+        // needs exclusive DB access — only worth it when there's a meaningful amount of free
+        // space, and throttled so it can't run on every single startup.
+        launch(Dispatchers.IO) { DatabaseManager.vacuumIfNeeded() }
     }
 
     // Update check — runs in background, never blocks startup
