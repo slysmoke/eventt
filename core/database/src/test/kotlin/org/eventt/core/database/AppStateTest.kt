@@ -1,0 +1,128 @@
+package org.eventt.core.database
+
+import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.shouldBe
+import org.eventt.core.model.CharacterModel
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
+import java.io.File
+
+class AppStateTest {
+    companion object {
+        @BeforeAll
+        @JvmStatic
+        fun initInMemoryDb() {
+            DatabaseManager.close()
+            DatabaseManager.initialize(":memory:")
+        }
+    }
+
+    @TempDir
+    lateinit var tempDir: File
+
+    @BeforeEach
+    fun setUp() {
+        TokenCrypto.keyFile = File(tempDir, "token.key")
+    }
+
+    @AfterEach
+    fun cleanUp() {
+        DatabaseManager.transaction {
+            createStatement().use {
+                it.execute("DELETE FROM characters")
+                it.execute("DELETE FROM settings")
+            }
+        }
+    }
+
+    private fun character(id: Int) = CharacterModel(id = id, name = "Pilot $id", refreshToken = "r", accessToken = "a", tokenExpiry = 0)
+
+    @Test
+    fun `init with no characters and no saved setting selects nothing`() {
+        AppState.init()
+
+        AppState.selectedCharId.value.shouldBeNull()
+    }
+
+    @Test
+    fun `init with characters but no saved setting selects the first one`() {
+        CharacterDao.insert(character(1))
+        CharacterDao.insert(character(2))
+
+        AppState.init()
+
+        AppState.selectedCharId.value shouldBe 1
+    }
+
+    @Test
+    fun `init prefers the saved character id when it still exists`() {
+        CharacterDao.insert(character(1))
+        CharacterDao.insert(character(2))
+        StaticDataDao.setSetting("app.selected_char_id", "2")
+
+        AppState.init()
+
+        AppState.selectedCharId.value shouldBe 2
+    }
+
+    @Test
+    fun `init falls back to the first character when the saved id no longer exists`() {
+        CharacterDao.insert(character(1))
+        StaticDataDao.setSetting("app.selected_char_id", "999")
+
+        AppState.init()
+
+        AppState.selectedCharId.value shouldBe 1
+    }
+
+    @Test
+    fun `selectCharacter updates both the state flow and the persisted setting`() {
+        CharacterDao.insert(character(1))
+        CharacterDao.insert(character(2))
+        AppState.init()
+
+        AppState.selectCharacter(2)
+
+        AppState.selectedCharId.value shouldBe 2
+        StaticDataDao.getSetting("app.selected_char_id") shouldBe "2"
+    }
+
+    @Test
+    fun `refreshCharacters keeps the current selection if it's still valid`() {
+        CharacterDao.insert(character(1))
+        CharacterDao.insert(character(2))
+        AppState.init()
+        AppState.selectCharacter(2)
+
+        AppState.refreshCharacters()
+
+        AppState.selectedCharId.value shouldBe 2
+    }
+
+    @Test
+    fun `refreshCharacters falls back to another character if the current one was removed`() {
+        CharacterDao.insert(character(1))
+        CharacterDao.insert(character(2))
+        AppState.init()
+        AppState.selectCharacter(2)
+        CharacterDao.delete(2)
+
+        AppState.refreshCharacters()
+
+        AppState.selectedCharId.value shouldBe 1
+    }
+
+    @Test
+    fun `refreshCharacters selects nothing once the last character is removed`() {
+        CharacterDao.insert(character(1))
+        AppState.init()
+        CharacterDao.delete(1)
+
+        AppState.refreshCharacters()
+
+        AppState.selectedCharId.value.shouldBeNull()
+    }
+}

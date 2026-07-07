@@ -1,0 +1,171 @@
+package org.eventt.core.database
+
+import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.doubles.plusOrMinus
+import io.kotest.matchers.should
+import io.kotest.matchers.shouldBe
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.Test
+
+private const val TOLERANCE = 0.0001
+
+class WalletDaoTest {
+    companion object {
+        @BeforeAll
+        @JvmStatic
+        fun initInMemoryDb() {
+            DatabaseManager.close()
+            DatabaseManager.initialize(":memory:")
+        }
+    }
+
+    @AfterEach
+    fun cleanUp() {
+        DatabaseManager.transaction {
+            createStatement().use {
+                it.execute("DELETE FROM transactions")
+                it.execute("DELETE FROM journal")
+            }
+        }
+    }
+
+    private fun insertTx(
+        id: Long,
+        date: String,
+        isBuy: Boolean,
+        total: Double,
+        characterId: Int = 1,
+    ) = WalletDao.insertTransaction(
+        transactionId = id,
+        date = date,
+        typeId = 34,
+        typeName = "Tritanium",
+        quantity = 100,
+        unitPrice = total / 100,
+        total = total,
+        isBuy = isBuy,
+        clientId = 0,
+        clientName = "",
+        locationId = 60003760L,
+        locationName = "Jita IV - Moon 4",
+        isCorp = false,
+        characterId = characterId,
+        corporationId = null,
+    )
+
+    @Test
+    fun `getAllTransactions returns rows for the character sorted ascending by date`() {
+        insertTx(2, "2024-01-02", isBuy = false, total = 200.0)
+        insertTx(1, "2024-01-01", isBuy = true, total = 100.0)
+
+        val txs = WalletDao.getAllTransactions(1)
+
+        txs.map { it.date } shouldBe listOf("2024-01-01", "2024-01-02")
+    }
+
+    @Test
+    fun `getAllTransactions only returns rows for the requested character`() {
+        insertTx(1, "2024-01-01", isBuy = true, total = 100.0, characterId = 1)
+        insertTx(2, "2024-01-01", isBuy = true, total = 100.0, characterId = 2)
+
+        WalletDao.getAllTransactions(1) shouldHaveSize 1
+    }
+
+    @Test
+    fun `updateTransactionNames updates only the fields that were passed in`() {
+        insertTx(1, "2024-01-01", isBuy = false, total = 100.0)
+
+        WalletDao.updateTransactionNames(1, clientName = "Some Trader")
+
+        val row = WalletDao.getTransactions(characterId = 1).single()
+        row["client_name"] shouldBe "Some Trader"
+        row["location_name"] shouldBe "Jita IV - Moon 4" // untouched
+    }
+
+    @Test
+    fun `getTransactions respects limit and offset`() {
+        insertTx(1, "2024-01-01", isBuy = false, total = 100.0)
+        insertTx(2, "2024-01-02", isBuy = false, total = 200.0)
+        insertTx(3, "2024-01-03", isBuy = false, total = 300.0)
+
+        val page1 = WalletDao.getTransactions(characterId = 1, limit = 2, offset = 0)
+        val page2 = WalletDao.getTransactions(characterId = 1, limit = 2, offset = 2)
+
+        page1.map { it["transaction_id"] } shouldBe listOf(3L, 2L) // newest first
+        page2.map { it["transaction_id"] } shouldBe listOf(1L)
+    }
+
+    private fun insertJournal(
+        id: Long,
+        date: String,
+        amount: Double,
+        balance: Double,
+        characterId: Int = 1,
+    ) = WalletDao.insertJournalEntry(
+        entryId = id,
+        date = date,
+        amount = amount,
+        balance = balance,
+        reason = "",
+        refType = "market_transaction",
+        firstPartyId = 0,
+        firstPartyName = "",
+        secondPartyId = 0,
+        secondPartyName = "",
+        taxAmount = null,
+        isCorp = false,
+        characterId = characterId,
+        corporationId = null,
+        divisionId = null,
+    )
+
+    @Test
+    fun `getWalletSummary reads the balance from the most recent journal entry`() {
+        insertJournal(1, "2024-01-01T10:00:00", amount = 100.0, balance = 100.0)
+        insertJournal(2, "2024-01-01T12:00:00", amount = -30.0, balance = 70.0)
+        insertJournal(3, "2024-01-02T09:00:00", amount = 50.0, balance = 120.0)
+
+        val summary = WalletDao.getWalletSummary(characterId = 1)
+
+        summary.balance should (120.0 plusOrMinus TOLERANCE)
+    }
+
+    @Test
+    fun `getWalletSummary's daily breakdown separates income, expenses, and net per day`() {
+        insertJournal(1, "2024-01-01T10:00:00", amount = 100.0, balance = 100.0)
+        insertJournal(2, "2024-01-01T12:00:00", amount = -30.0, balance = 70.0)
+        insertJournal(3, "2024-01-02T09:00:00", amount = 50.0, balance = 120.0)
+
+        val summary = WalletDao.getWalletSummary(characterId = 1)
+
+        val jan1 = summary.dailyBreakdown.single { it.date == "2024-01-01" }
+        jan1.income should (100.0 plusOrMinus TOLERANCE)
+        jan1.expenses should (30.0 plusOrMinus TOLERANCE)
+        jan1.net should (70.0 plusOrMinus TOLERANCE)
+        summary.totalEarned should (150.0 plusOrMinus TOLERANCE)
+        summary.totalSpent should (30.0 plusOrMinus TOLERANCE)
+    }
+
+    @Test
+    fun `getTransactionBreakdown treats sells as income and buys as expenses`() {
+        insertTx(1, "2024-01-01", isBuy = false, total = 200.0)
+        insertTx(2, "2024-01-01", isBuy = true, total = 80.0)
+
+        val day = WalletDao.getTransactionBreakdown(characterId = 1).single { it.date == "2024-01-01" }
+
+        day.income should (200.0 plusOrMinus TOLERANCE)
+        day.expenses should (80.0 plusOrMinus TOLERANCE)
+        day.net should (120.0 plusOrMinus TOLERANCE)
+    }
+
+    @Test
+    fun `getTransactionBreakdown excludes rows before the given since date`() {
+        insertTx(1, "2023-01-01", isBuy = false, total = 999.0)
+        insertTx(2, "2024-01-01", isBuy = false, total = 200.0)
+
+        val breakdown = WalletDao.getTransactionBreakdown(characterId = 1, since = "2024-01-01")
+
+        breakdown.map { it.date } shouldBe listOf("2024-01-01")
+    }
+}

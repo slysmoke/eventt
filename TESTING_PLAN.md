@@ -83,20 +83,20 @@ new modules get them for free, no per-module setup needed except MockWebServer.
 
 ### Tier 4 — database DAOs (in-memory SQLite via `DatabaseManager.initialize(":memory:")`)
 
-| Module | Target | Status |
-|---|---|---|
-| `core/database` | `CharacterDao` | ⬜ Not started |
-| `core/database` | `WalletDao` | ⬜ Not started |
-| `core/database` | `AssetDao` | ⬜ Not started |
-| `core/database` | `MarketDao` | ⬜ Not started |
-| `core/database` | `ContractDao` | ⬜ Not started |
-| `core/database` | `TrackedOrderDao` | ⬜ Not started |
-| `core/database` | `WatchlistDao` | ⬜ Not started |
-| `core/database` | `AlertDao` | ⬜ Not started |
-| `core/database` | `OrderHistoryDao` | ⬜ Not started |
-| `core/database` | `StaticDataDao` | ⬜ Not started |
-| `core/database` | `EsiCacheDao` | ⬜ Not started | (already implicitly covered by `EsiCacheManagerTest`, but no dedicated tests of its own SQL) |
-| `core/database` | `AppState` | ⬜ Not started |
+| Module | Target | Status | Notes |
+|---|---|---|---|
+| `core/database` | `CharacterDao` | ✅ Done | Insert/getById/getAll (sorted, INSERT OR REPLACE), updateToken vs. updateRefreshToken touching only their own column, token encryption transparent round-trip, null `corporationId` staying null (not 0), delete. Uses a `@TempDir`-backed `TokenCrypto.keyFile`, same as `TokenCryptoTest` |
+| `core/database` | `WalletDao` | ✅ Done | Transactions (ascending date order, per-character scoping, partial `updateTransactionNames`, limit/offset paging), journal + `getWalletSummary` (latest balance, daily income/expense/net split), `getTransactionBreakdown` (buy=expense/sell=income, `since` filtering) |
+| `core/database` | `AssetDao` | ✅ Done | upsert (INSERT OR REPLACE) + bulkUpsert, character- vs. corp-scoped queries, `getTotalValue` aggregation (incl. zero for no rows), scoped deletes |
+| `core/database` | `MarketDao` | ✅ Done | `insertHistory`'s default source, ordering, per-source filtering (`getHistoryBySource`), `deleteEveRefBeforeDate` only touching `everef` rows before the cutoff, `days` limit |
+| `core/database` | `ContractDao` | ✅ Done | upsert/bulkUpsert, ordering by `date_issued`, `getByStatus` scoped to a character, contract items round-trip |
+| `core/database` | `TrackedOrderDao` | ✅ Done | Generated-id insert (asserted relatively, not as a hardcoded literal — ids aren't reset between test methods since SQLite `AUTOINCREMENT` never reuses them), update, `updateSellPrice` touching only that column, character/corp scoping, delete |
+| `core/database` | `WatchlistDao` | ✅ Done | Entries (sortOrder ordering, per-list grouping, delete), price snapshots (`getLatestPrice` — note: `captured_at` is second-granularity, so the test sleeps 1.1s between inserts to get an unambiguous "latest"), sparkline round-trip, `getPriceHistory` scoped by type+station |
+| `core/database` | `AlertDao` | ✅ Done | Generated-id insert, `getEnabled` filtering, update, `setEnabled`, `markTriggered` (before/after state), delete |
+| `core/database` | `OrderHistoryDao` | ✅ Done | Empty-list no-op, batch upsert + INSERT OR REPLACE, `issued`-descending order, `isBuyOrder` filter, `limit`, per-character scoping |
+| `core/database` | `StaticDataDao` | ✅ Done | The biggest DAO — types (search ranking: exact > prefix > substring, published-only, by-group), groups (incl. the type→group name JOIN), market groups (top-level/children/type lookups), stations (incl. the citadel-id-threshold count), regions, systems, the jump graph (bidirectional edge insert, adjacency read), and settings (incl. per-character tax/broker-fee defaults and overrides not leaking across characters) |
+| `core/database` | `EsiCacheDao` | ✅ Done | save/get round-trip, hash-based miss on different params, `computeHash`'s order-independence and null-vs-empty-map equivalence, `refreshExpiry`'s `COALESCE` behavior (null etag/lastModified keep the existing value), `isFresh`, `deleteExpired`, `clearAll` |
+| `core/database` | `AppState` | ✅ Done | `init()`'s three-way branch (no chars → null, saved id still valid → use it, saved id gone → first character), `selectCharacter` persisting the setting, `refreshCharacters` re-evaluating after characters are added/removed |
 
 ### Tier 5 — Compose UI screens (lowest priority — likely last, possibly never)
 
@@ -119,5 +119,5 @@ Not started, not scheduled.
 4. ~~`TokenCrypto` refactor + test~~ done
 5. ~~`EsiClient` (Tier 3) — do this once Tier 1 is solid, since it exercises cache/auth/http together~~ done
 6. ~~Tier 2 state managers~~ done (`StaticDataImporter` skipped — see its row above)
-7. Tier 4 DAOs
+7. ~~Tier 4 DAOs~~ done — all 12
 8. Tier 5 only if/when there's an appetite for UI testing infrastructure
