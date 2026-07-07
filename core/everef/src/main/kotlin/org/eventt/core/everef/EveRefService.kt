@@ -24,7 +24,8 @@ import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicInteger
 
 object EveRefService {
-    private const val BASE_URL = "https://data.everef.net/market-history"
+    // internal var (not private const) so tests can point it at a local MockWebServer.
+    internal var baseUrl = "https://data.everef.net/market-history"
     private const val MIN_FILE_SIZE = 300_000L
     private const val DATA_DELAY_DAYS = 3L
     private const val PARALLEL_DOWNLOADS = 6
@@ -187,9 +188,9 @@ object EveRefService {
         return runCatching { LocalDate.parse(match.groupValues[1]) }.getOrNull()
     }
 
-    private fun fetchYearIndex(year: Int): List<FileEntry> {
+    internal fun fetchYearIndex(year: Int): List<FileEntry> {
         return try {
-            val request = Request.Builder().url("$BASE_URL/$year/index.json").build()
+            val request = Request.Builder().url("$baseUrl/$year/index.json").build()
             val body =
                 EveHttpClient.getClient().newCall(request).execute().use { response ->
                     if (!response.isSuccessful) return emptyList()
@@ -214,7 +215,7 @@ object EveRefService {
         }
     }
 
-    private fun downloadAndParse(file: FileEntry) {
+    internal fun downloadAndParse(file: FileEntry) {
         val request = Request.Builder().url(file.url).build()
         val rows =
             EveHttpClient.getClient().newCall(request).execute().use { response ->

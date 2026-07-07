@@ -95,13 +95,22 @@ object StaticDataImporter {
                 while (entry != null) {
                     val name = entry.name.substringAfterLast('/')
                     when (name) {
-                        "types.jsonl" -> parseJsonl(zip) { parseTypeLine(it) }
-                        "groups.jsonl" -> parseJsonl(zip) { parseGroupLine(it) }
-                        "categories.jsonl" -> parseJsonl(zip) { parseCategoryLine(it) }
-                        "marketGroups.jsonl" -> parseJsonl(zip) { parseMarketGroupLine(it) }
-                        "mapRegions.jsonl" -> parseJsonl(zip) { parseRegionLine(it) }
-                        "mapSolarSystems.jsonl" -> parseJsonl(zip) { parseSystemLine(it) }
-                        "npcStations.jsonl" -> parseJsonl(zip) { parseStationLine(it) }
+                        "types.jsonl" ->
+                            parseJsonl(zip) { line ->
+                                parseTypeLine(line)?.let {
+                                    types.add(it)
+                                    typeCount++
+                                    if (typeCount % 5000 == 0 && typeCount > 0) {
+                                        setState(0.10f + (typeCount.toFloat() / 55000f) * 0.25f, "Parsing types: $typeCount…")
+                                    }
+                                }
+                            }
+                        "groups.jsonl" -> parseJsonl(zip) { line -> parseGroupLine(line)?.let { groups.add(it) } }
+                        "categories.jsonl" -> parseJsonl(zip) { line -> parseCategoryLine(line)?.let { categories.add(it) } }
+                        "marketGroups.jsonl" -> parseJsonl(zip) { line -> parseMarketGroupLine(line)?.let { marketGroups.add(it) } }
+                        "mapRegions.jsonl" -> parseJsonl(zip) { line -> parseRegionLine(line)?.let { regions.add(it) } }
+                        "mapSolarSystems.jsonl" -> parseJsonl(zip) { line -> parseSystemLine(line)?.let { systems.add(it) } }
+                        "npcStations.jsonl" -> parseJsonl(zip) { line -> parseStationLine(line)?.let { rawNpcStations.add(it) } }
                     }
                     zip.closeEntry()
                     entry = zip.nextEntry
@@ -135,110 +144,104 @@ object StaticDataImporter {
     private val types = mutableListOf<StaticTypeModel>()
     private var typeCount = 0
 
-    private fun parseTypeLine(line: String) {
+    internal fun parseTypeLine(line: String): StaticTypeModel? {
         val obj = Json.parseToJsonElement(line).jsonObject
-        val typeId = obj["_key"]?.jsonPrimitive?.intOrNull ?: return
+        val typeId = obj["_key"]?.jsonPrimitive?.intOrNull ?: return null
         val name =
             obj["name"]
                 ?.jsonObject
                 ?.get("en")
                 ?.jsonPrimitive
-                ?.content ?: return
-        types.add(
-            StaticTypeModel(
-                typeId = typeId,
-                name = name,
-                groupId = obj["groupID"]?.jsonPrimitive?.intOrNull ?: 0,
-                categoryId = 0,
-                volume = obj["volume"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
-                packagedVolume = obj["packagedVolume"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
-                portionSize = obj["portionSize"]?.jsonPrimitive?.intOrNull ?: 1,
-                published = obj["published"]?.jsonPrimitive?.booleanOrNull ?: false,
-                marketGroupId = obj["marketGroupID"]?.jsonPrimitive?.intOrNull,
-                iconId = obj["iconID"]?.jsonPrimitive?.intOrNull,
-            ),
+                ?.content ?: return null
+        return StaticTypeModel(
+            typeId = typeId,
+            name = name,
+            groupId = obj["groupID"]?.jsonPrimitive?.intOrNull ?: 0,
+            categoryId = 0,
+            volume = obj["volume"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
+            packagedVolume = obj["packagedVolume"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
+            portionSize = obj["portionSize"]?.jsonPrimitive?.intOrNull ?: 1,
+            published = obj["published"]?.jsonPrimitive?.booleanOrNull ?: false,
+            marketGroupId = obj["marketGroupID"]?.jsonPrimitive?.intOrNull,
+            iconId = obj["iconID"]?.jsonPrimitive?.intOrNull,
         )
-        typeCount++
-        if (typeCount % 5000 == 0 && typeCount > 0) {
-            setState(0.10f + (typeCount.toFloat() / 55000f) * 0.25f, "Parsing types: $typeCount…")
-        }
     }
 
     private val groups = mutableListOf<StaticGroupModel>()
 
-    private fun parseGroupLine(line: String) {
+    internal fun parseGroupLine(line: String): StaticGroupModel? {
         val obj = Json.parseToJsonElement(line).jsonObject
-        val groupId = obj["_key"]?.jsonPrimitive?.intOrNull ?: return
+        val groupId = obj["_key"]?.jsonPrimitive?.intOrNull ?: return null
         val name =
             obj["name"]
                 ?.jsonObject
                 ?.get("en")
                 ?.jsonPrimitive
-                ?.content ?: return
+                ?.content ?: return null
         val categoryId = obj["categoryID"]?.jsonPrimitive?.intOrNull ?: 0
-        groups.add(StaticGroupModel(groupId = groupId, name = name, categoryId = categoryId))
+        return StaticGroupModel(groupId = groupId, name = name, categoryId = categoryId)
     }
 
     private val categories = mutableListOf<StaticCategoryModel>()
 
-    private fun parseCategoryLine(line: String) {
+    internal fun parseCategoryLine(line: String): StaticCategoryModel? {
         val obj = Json.parseToJsonElement(line).jsonObject
-        val catId = obj["_key"]?.jsonPrimitive?.intOrNull ?: return
+        val catId = obj["_key"]?.jsonPrimitive?.intOrNull ?: return null
         val name =
             obj["name"]
                 ?.jsonObject
                 ?.get("en")
                 ?.jsonPrimitive
-                ?.content ?: return
-        categories.add(StaticCategoryModel(categoryId = catId, name = name))
+                ?.content ?: return null
+        return StaticCategoryModel(categoryId = catId, name = name)
     }
 
     private val marketGroups = mutableListOf<StaticMarketGroupModel>()
 
-    private fun parseMarketGroupLine(line: String) {
+    internal fun parseMarketGroupLine(line: String): StaticMarketGroupModel? {
         val obj = Json.parseToJsonElement(line).jsonObject
-        val mgId = obj["_key"]?.jsonPrimitive?.intOrNull ?: return
+        val mgId = obj["_key"]?.jsonPrimitive?.intOrNull ?: return null
         val name =
             obj["name"]
                 ?.jsonObject
                 ?.get("en")
                 ?.jsonPrimitive
-                ?.content ?: return
+                ?.content ?: return null
         val parentId = obj["parentGroupID"]?.jsonPrimitive?.intOrNull
-        marketGroups.add(StaticMarketGroupModel(marketGroupId = mgId, name = name, parentGroupId = parentId))
+        return StaticMarketGroupModel(marketGroupId = mgId, name = name, parentGroupId = parentId)
     }
 
     private val regions = mutableListOf<StaticRegionModel>()
 
-    private fun parseRegionLine(line: String) {
+    internal fun parseRegionLine(line: String): StaticRegionModel? {
         val obj = Json.parseToJsonElement(line).jsonObject
-        val regionId = obj["_key"]?.jsonPrimitive?.intOrNull ?: return
+        val regionId = obj["_key"]?.jsonPrimitive?.intOrNull ?: return null
         val name =
             obj["name"]
                 ?.jsonObject
                 ?.get("en")
                 ?.jsonPrimitive
-                ?.content ?: return
-        regions.add(StaticRegionModel(regionId = regionId, name = name))
+                ?.content ?: return null
+        return StaticRegionModel(regionId = regionId, name = name)
     }
 
     private val systems = mutableListOf<StaticSystemModel>()
 
-    private fun parseSystemLine(line: String) {
+    internal fun parseSystemLine(line: String): StaticSystemModel? {
         val obj = Json.parseToJsonElement(line).jsonObject
-        val systemId = obj["_key"]?.jsonPrimitive?.intOrNull ?: return
+        val systemId = obj["_key"]?.jsonPrimitive?.intOrNull ?: return null
         val name =
             obj["name"]
                 ?.jsonObject
                 ?.get("en")
                 ?.jsonPrimitive
-                ?.content ?: return
+                ?.content ?: return null
         val regionId = obj["regionID"]?.jsonPrimitive?.intOrNull ?: 0
-        systems.add(StaticSystemModel(systemId = systemId, name = name, regionId = regionId))
+        return StaticSystemModel(systemId = systemId, name = name, regionId = regionId)
     }
 
     // npcStations.jsonl has no name field — names are resolved from ESI after parsing
-    private data class RawNpcStation(
+    internal data class RawNpcStation(
         val stationId: Long,
         val solarSystemId: Int,
         val typeId: Int,
@@ -246,12 +249,12 @@ object StaticDataImporter {
 
     private val rawNpcStations = mutableListOf<RawNpcStation>()
 
-    private fun parseStationLine(line: String) {
+    internal fun parseStationLine(line: String): RawNpcStation? {
         val obj = Json.parseToJsonElement(line).jsonObject
-        val stationId = obj["_key"]?.jsonPrimitive?.longOrNull ?: return
-        val systemId = obj["solarSystemID"]?.jsonPrimitive?.intOrNull ?: return
+        val stationId = obj["_key"]?.jsonPrimitive?.longOrNull ?: return null
+        val systemId = obj["solarSystemID"]?.jsonPrimitive?.intOrNull ?: return null
         val typeId = obj["typeID"]?.jsonPrimitive?.intOrNull ?: 0
-        rawNpcStations.add(RawNpcStation(stationId, systemId, typeId))
+        return RawNpcStation(stationId, systemId, typeId)
     }
 
     // ─── Save to DB ─────────────────────────────────────────────────────
