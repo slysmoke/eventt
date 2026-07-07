@@ -55,7 +55,7 @@ object CitadelService {
         }
     }
 
-    private fun parse(raw: String): List<StaticStationModel> {
+    internal fun parse(raw: String): List<StaticStationModel> {
         val root = Json.parseToJsonElement(raw).jsonObject
         return root.entries.mapNotNull { (idStr, elem) ->
             val id = idStr.toLongOrNull() ?: return@mapNotNull null

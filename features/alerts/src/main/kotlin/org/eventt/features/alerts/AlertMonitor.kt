@@ -32,7 +32,7 @@ object AlertMonitor {
         _triggered.value = _triggered.value.filter { it.id != alert.id }
     }
 
-    private suspend fun checkAlerts() {
+    internal suspend fun checkAlerts() {
         val alerts =
             try {
                 AlertDao.getEnabled().filter { !it.triggered }

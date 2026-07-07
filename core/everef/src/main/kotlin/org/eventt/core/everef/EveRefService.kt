@@ -182,7 +182,7 @@ object EveRefService {
         return result.sortedBy { it.date }
     }
 
-    private fun parseFileDate(filename: String): LocalDate? {
+    internal fun parseFileDate(filename: String): LocalDate? {
         val match = Regex("""market-history-(\d{4}-\d{2}-\d{2})\.csv\.bz2""").find(filename) ?: return null
         return runCatching { LocalDate.parse(match.groupValues[1]) }.getOrNull()
     }
@@ -259,7 +259,7 @@ object EveRefService {
         EveRefDao.markDownloaded(file.date, file.name, file.size)
     }
 
-    private fun parseLine(
+    internal fun parseLine(
         line: String,
         typeIdIdx: Int,
         regionIdIdx: Int,

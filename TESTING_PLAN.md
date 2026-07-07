@@ -68,12 +68,12 @@ new modules get them for free, no per-module setup needed except MockWebServer.
 
 | Module | Target | Status | Notes |
 |---|---|---|---|
-| `features/alerts` | `AlertMonitor` | ⬜ Not started | Polling loop + `triggered` StateFlow |
-| `core/everef` | `EveRefService` | ⬜ Not started | Sync state flow + file diffing logic |
-| `core/staticdata` | `StaticDataImporter` | ⬜ Not started | Import state flow |
-| `core/staticdata` | `CitadelService` | ⬜ Not started | Sync state flow |
-| `features/market` | `StationTradingQueue`, `InterRegionQueue` | ⬜ Not started | Queue state management, same shape as `PendingOrdersQueue` |
-| `features/orders` | `PendingOrdersQueue` | ⬜ Not started | |
+| `features/alerts` | `AlertMonitor` | ✅ Done | `checkAlerts` bumped `private` → `internal`. Covers grouping/one-ESI-call-per-type, above/below firing, default-region fallback, a failed DB read and a failed ESI call both being swallowed without crashing or blocking other groups, and accumulation across repeated polls. `AlertDao`/`EsiClient` faked via `mockkObject` |
+| `core/everef` | `EveRefService` | 🟡 Partial | `parseLine`/`parseFileDate` bumped to `internal` and covered (well-formed row, missing-column defaults to zero, `-1` "not in header" index, short row, non-numeric required column). `sync`/`downloadAndParse`/`fetchYearIndex` (network + BZip2 orchestration) not covered — Tier 3-ish, lower priority |
+| `core/staticdata` | `StaticDataImporter` | ⬜ Not started | Its 7 `parseXLine` functions mutate shared private mutable lists as a side effect instead of returning a value — would need a small refactor (return the parsed model instead) to test cleanly. Skipped for now since `CitadelService`/`EveRefService` already cover the identical JSON-parsing-with-defaults pattern; revisit if this file gets touched for other reasons |
+| `core/staticdata` | `CitadelService` | ✅ Done | `parse` bumped `private` → `internal`. Covers a well-formed entry, missing optional fields defaulting rather than dropping the entry, a non-numeric key being skipped, a missing name being skipped, and multiple entries / empty object |
+| `features/market` | `StationTradingQueue`, `InterRegionQueue` | ✅ Done | Two-phase (PRICE/VOLUME) cursor cycling with `copyVolume` on/off, wraparound, empty-queue no-op, `clear`, and each queue's `priceToSet` math (competitive-bid sigfig step vs. as-is price). Each file has its own `private` (file-scoped, not `internal`) copy of `eveSigFigStep`/`formatEveSigFigPrice` — tried bumping one to `internal` and it collided with the other file's identically-named private one (same package), so both stay `private` and are only exercised indirectly via `priceToSet` |
+| `features/orders` | `PendingOrdersQueue` | ✅ Done | `eveSigFigStep`/`formatEveSigFigPrice` (already `internal`) covered directly: 4-sigfig/tenth/cent precision, non-positive-price floor, decimal-count formatting. Queue: sort order (beaten-first then alphabetical), cursor cycling + wraparound via `processNext`, `clear`, and `PendingOrder.priceToSet`'s beaten-vs-not-beaten branching |
 
 ### Tier 3 — HTTP/ESI layer (MockWebServer)
 
@@ -118,6 +118,6 @@ Not started, not scheduled.
 3. ~~Bump the four `private → internal` blockers (SsoAuthManager, UpdateChecker, OrdersScreen helpers) and test those~~ done
 4. ~~`TokenCrypto` refactor + test~~ done
 5. ~~`EsiClient` (Tier 3) — do this once Tier 1 is solid, since it exercises cache/auth/http together~~ done
-6. Tier 2 state managers
+6. ~~Tier 2 state managers~~ done (`StaticDataImporter` skipped — see its row above)
 7. Tier 4 DAOs
 8. Tier 5 only if/when there's an appetite for UI testing infrastructure
