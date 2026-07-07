@@ -85,6 +85,21 @@ object StaticDataDao {
             }
         }
 
+    // Targeted single-column update — used by StaticDataImporter to backfill packaged volume
+    // (resolved from ESI per-type, for ships only) without needing a full row's worth of data.
+    fun updatePackagedVolume(
+        typeId: Int,
+        packagedVolume: Double,
+    ) {
+        DatabaseManager.transaction {
+            prepareStatement("UPDATE static_types SET packaged_volume = ? WHERE type_id = ?").use { stmt ->
+                stmt.setDouble(1, packagedVolume)
+                stmt.setInt(2, typeId)
+                stmt.executeUpdate()
+            }
+        }
+    }
+
     /** Search published types — includes non-market items (for assets, contracts). */
     fun searchTypes(
         query: String,

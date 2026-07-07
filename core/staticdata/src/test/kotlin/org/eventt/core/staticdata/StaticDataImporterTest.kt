@@ -10,8 +10,10 @@ class StaticDataImporterTest {
 
     @Test
     fun `parseTypeLine reads a well-formed SDE type row`() {
+        // Real SDE types.jsonl rows have no packagedVolume/categoryID field at all (verified
+        // against an actual export) — parseTypeLine correctly ignores anything of the sort.
         val line =
-            """{"_key":34,"name":{"en":"Tritanium"},"groupID":18,"volume":0.01,"packagedVolume":0.01,
+            """{"_key":34,"name":{"en":"Tritanium"},"groupID":18,"volume":0.01,
                |"portionSize":1,"published":true,"marketGroupID":1857,"iconID":100}
             """.trimMargin().replace("\n", "")
 
@@ -23,6 +25,8 @@ class StaticDataImporterTest {
         type.marketGroupId shouldBe 1857
         type.iconId shouldBe 100
         type.published shouldBe true
+        type.categoryId shouldBe 0 // resolved later, in saveAll(), via the group->category join
+        type.packagedVolume shouldBe 0.0 // resolved later, in saveAll(), for ships only, from ESI
     }
 
     @Test

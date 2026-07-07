@@ -2,9 +2,14 @@ package org.eventt.core.staticdata
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import okhttp3.Request
@@ -14,11 +19,15 @@ import org.eventt.core.http.EveHttpClient
 import org.eventt.core.model.*
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.ZipInputStream
 
 object StaticDataImporter {
     private const val LATEST_URL = "https://developers.eveonline.com/static-data/tranquility/latest.jsonl"
     private const val ZIP_URL_TEMPLATE = "https://developers.eveonline.com/static-data/tranquility/eve-online-static-data-%d-jsonl.zip"
+
+    // EVE's category IDs are stable, well-known constants — 6 has always been "Ship".
+    private const val SHIP_CATEGORY_ID = 6
 
     data class ImportState(
         val isRunning: Boolean = false,
@@ -82,7 +91,7 @@ object StaticDataImporter {
             ?: throw Exception("buildNumber not found in latest.jsonl response")
     }
 
-    private fun downloadAndParse(zipUrl: String) {
+    private suspend fun downloadAndParse(zipUrl: String) {
         val request = Request.Builder().url(zipUrl).build()
         val response = EveHttpClient.getClient().newCall(request).execute()
         if (!response.isSuccessful) {
@@ -157,9 +166,16 @@ object StaticDataImporter {
             typeId = typeId,
             name = name,
             groupId = obj["groupID"]?.jsonPrimitive?.intOrNull ?: 0,
+            // types.jsonl has no categoryID field at all — types only carry a groupID, and the
+            // group->category relationship is resolved once, after all of groups.jsonl is also
+            // parsed, in saveAll() (this file alone doesn't have that data available).
             categoryId = 0,
             volume = obj["volume"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
-            packagedVolume = obj["packagedVolume"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
+            // types.jsonl has no packaged-volume field either (verified against a real SDE
+            // export) — CCP only computes/exposes it via ESI's per-type endpoint. Resolved
+            // separately in saveAll(), and only for ships, since that's the one category where
+            // packaged and unpacked volume meaningfully differ.
+            packagedVolume = 0.0,
             portionSize = obj["portionSize"]?.jsonPrimitive?.intOrNull ?: 1,
             published = obj["published"]?.jsonPrimitive?.booleanOrNull ?: false,
             marketGroupId = obj["marketGroupID"]?.jsonPrimitive?.intOrNull,
@@ -259,13 +275,18 @@ object StaticDataImporter {
 
     // ─── Save to DB ─────────────────────────────────────────────────────
 
-    private fun saveAll() {
-        setState(0.35f, "Saving ${types.size} types…")
-        types.chunked(5000).forEachIndexed { idx, chunk ->
+    private suspend fun saveAll() {
+        // types.jsonl only carries a groupID per type, not a category — resolve it here now that
+        // groups.jsonl (which does carry categoryID) has also been fully parsed.
+        val groupCategoryMap = groups.associate { it.groupId to it.categoryId }
+        val typesWithCategory = types.map { it.copy(categoryId = groupCategoryMap[it.groupId] ?: 0) }
+
+        setState(0.35f, "Saving ${typesWithCategory.size} types…")
+        typesWithCategory.chunked(5000).forEachIndexed { idx, chunk ->
             StaticDataDao.bulkInsertTypes(chunk)
             setState(
-                0.35f + (idx.toFloat() / (types.size / 5000 + 1)) * 0.10f,
-                "Saved ${minOf((idx + 1) * 5000, types.size)} / ${types.size} types",
+                0.35f + (idx.toFloat() / (typesWithCategory.size / 5000 + 1)) * 0.10f,
+                "Saved ${minOf((idx + 1) * 5000, typesWithCategory.size)} / ${typesWithCategory.size} types",
             )
         }
 
@@ -319,6 +340,39 @@ object StaticDataImporter {
         setState(0.78f, "Saving ${npcStations.size} NPC stations…")
         npcStations.chunked(2000).forEach { chunk ->
             StaticDataDao.bulkInsertStations(chunk)
+        }
+
+        // Packaged volume (what actually matters for "how much cargo space does this take to
+        // haul") isn't in the bulk SDE export at all for any type — only ESI's per-type endpoint
+        // computes and exposes it. Ships are the one category where packaged and unpacked volume
+        // meaningfully differ (a ship's own `volume` is its flying/assembled size, wildly bigger
+        // than what it takes up crated in a hauler's hold), and a small enough subset (low
+        // thousands) that fetching it individually here is reasonable for a one-time import step.
+        val shipTypeIds = typesWithCategory.filter { it.categoryId == SHIP_CATEGORY_ID }.map { it.typeId }
+        setState(0.85f, "Resolving ${shipTypeIds.size} ship packaged volumes from ESI…")
+        val resolved = AtomicInteger(0)
+        val semaphore = Semaphore(4)
+        coroutineScope {
+            shipTypeIds
+                .map { typeId ->
+                    async(Dispatchers.IO) {
+                        semaphore.withPermit {
+                            runCatching {
+                                val packagedVolume = (EsiClient.getUniverseType(typeId)["packaged_volume"] as? Number)?.toDouble()
+                                if (packagedVolume != null && packagedVolume > 0) {
+                                    StaticDataDao.updatePackagedVolume(typeId, packagedVolume)
+                                }
+                            }
+                            val done = resolved.incrementAndGet()
+                            if (done % 100 == 0) {
+                                setState(
+                                    0.85f + (done.toFloat() / shipTypeIds.size) * 0.08f,
+                                    "Resolved $done/${shipTypeIds.size} ship volumes…",
+                                )
+                            }
+                        }
+                    }
+                }.awaitAll()
         }
 
         // Clear memory
