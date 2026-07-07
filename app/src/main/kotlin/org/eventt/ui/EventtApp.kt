@@ -35,6 +35,7 @@ import org.eventt.core.model.CharacterModel
 import org.eventt.core.model.PriceAlertModel
 import org.eventt.core.model.RequestStatus
 import org.eventt.core.queue.RequestQueueManager
+import org.eventt.core.staticdata.CitadelService
 import org.eventt.core.staticdata.StaticDataImporter
 import org.eventt.features.alerts.AlertMonitor
 import org.eventt.features.alerts.PriceAlertsScreen
@@ -96,6 +97,9 @@ fun EventtApp() {
                 EveRefService.sync()
             }
         }
+        // Player structure (citadel) names — same reasoning, runs alongside rather than
+        // blocking startup on a network call.
+        launch(Dispatchers.IO) { CitadelService.sync() }
     }
 
     // Update check — runs in background, never blocks startup

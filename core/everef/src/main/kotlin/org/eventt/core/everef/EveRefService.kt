@@ -53,7 +53,13 @@ object EveRefService {
 
     fun setSelectedSource(source: String) = StaticDataDao.setSetting("market.history.source", source)
 
-    fun getHistoryPeriodMonths(): Int = (StaticDataDao.getSetting("market.history.period_months") ?: "12").toIntOrNull() ?: 12
+    // 1 year was removed as a choice (see SettingsScreen) — clamp anything outside the
+    // remaining 1/3/6 month options down to 6, so a value saved before that change (or any
+    // other stale/invalid setting) doesn't leave the UI with no chip selected.
+    fun getHistoryPeriodMonths(): Int {
+        val stored = (StaticDataDao.getSetting("market.history.period_months") ?: "6").toIntOrNull() ?: 6
+        return if (stored in setOf(1, 3, 6)) stored else 6
+    }
 
     fun setHistoryPeriodMonths(months: Int) = StaticDataDao.setSetting("market.history.period_months", months.toString())
 
