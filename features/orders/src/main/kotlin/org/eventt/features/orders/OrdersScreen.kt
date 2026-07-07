@@ -1116,9 +1116,11 @@ private fun OrderHistoryRow(
     pnl: Double?,
     marginPct: Double?,
 ) {
+    val effectiveState = effectiveOrderState(order)
     val stateColor =
-        when (order.state) {
+        when (effectiveState) {
             "fulfilled" -> Color(0xFF69DB7C)
+            "partially_filled" -> Color(0xFF74C0FC)
             "cancelled" -> Color(0xFFFF6B6B)
             else -> Color(0xFFFFD43B)
         }
@@ -1142,7 +1144,7 @@ private fun OrderHistoryRow(
             color = if (order.isBuyOrder) BUY_COLOR else SELL_COLOR,
         )
         Text(
-            order.state.replaceFirstChar { it.uppercase() },
+            effectiveState.split("_").joinToString(" ") { it.replaceFirstChar(Char::uppercase) },
             modifier = Modifier.weight(1.5f),
             style = MaterialTheme.typography.bodySmall,
             color = stateColor,
@@ -1411,12 +1413,14 @@ private fun HistorySummaryBar(
     orders: List<OrderHistoryDao.OrderHistoryRecord>,
     fifoResult: CostBasisService.FifoResult?,
 ) {
-    val fulfilled = orders.count { it.state == "fulfilled" }
-    val cancelled = orders.count { it.state == "cancelled" }
-    val expired = orders.count { it.state == "expired" }
+    val effectiveStates = orders.associateWith { effectiveOrderState(it) }
+    val fulfilled = effectiveStates.count { it.value == "fulfilled" }
+    val partiallyFilled = effectiveStates.count { it.value == "partially_filled" }
+    val cancelled = effectiveStates.count { it.value == "cancelled" }
+    val expired = effectiveStates.count { it.value == "expired" }
     val totalSold =
         orders
-            .filter { !it.isBuyOrder && it.state == "fulfilled" }
+            .filter { !it.isBuyOrder && effectiveStates[it] in setOf("fulfilled", "partially_filled") }
             .sumOf { it.price * (it.volumeTotal - it.volumeRemaining) }
     val totalPnl = fifoResult?.totalRealizedPnl
 
@@ -1428,6 +1432,7 @@ private fun HistorySummaryBar(
         ) {
             SummaryItem("Total", orders.size.toString())
             SummaryItem("Fulfilled", fulfilled.toString())
+            if (partiallyFilled > 0) SummaryItem("Partially filled", partiallyFilled.toString())
             SummaryItem("Cancelled", cancelled.toString())
             SummaryItem("Expired", expired.toString())
             if (totalSold > 0) SummaryItem("Sell volume", "${formatIsk(totalSold)} ISK")
@@ -1498,6 +1503,18 @@ internal fun historyPnl(
     val margin = if (cb > 0) (netSellPrice - cb) / cb * 100 else 0.0
     return profit to margin
 }
+
+// ESI's order-history `state` is only ever "expired" or "cancelled" — CCP never reports
+// "fulfilled", even when an order sold out completely before its duration ran out. The only
+// reliable signal for that is volume_remain vs volume_total, so this derives a more useful
+// four-way status ("fulfilled" / "partially_filled" / the raw "cancelled" / the raw "expired")
+// that the raw ESI field alone can't distinguish.
+internal fun effectiveOrderState(order: OrderHistoryDao.OrderHistoryRecord): String =
+    when {
+        order.volumeRemaining <= 0 -> "fulfilled"
+        order.volumeRemaining < order.volumeTotal -> "partially_filled"
+        else -> order.state // nothing filled at all: the raw "cancelled" or "expired" stands
+    }
 
 // ── Formatters ────────────────────────────────────────────────────────────
 

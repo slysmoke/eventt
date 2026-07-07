@@ -4,6 +4,7 @@ import io.kotest.matchers.doubles.plusOrMinus
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.should
+import io.kotest.matchers.shouldBe
 import org.eventt.core.database.OrderHistoryDao
 import org.eventt.features.orders.CostBasisService.FifoResult
 import org.eventt.features.orders.CostBasisService.InventoryItem
@@ -58,6 +59,7 @@ class OrdersScreenTest {
         volumeRemaining: Int = 0,
         issued: String = "2024-01-05",
         isBuyOrder: Boolean = false,
+        state: String = "expired",
     ) = OrderHistoryDao.OrderHistoryRecord(
         orderId = 1L,
         typeId = TYPE_ID,
@@ -72,7 +74,7 @@ class OrdersScreenTest {
         issued = issued,
         range = "region",
         minVolume = 1,
-        state = "expired",
+        state = state,
         characterId = 1,
     )
 
@@ -149,5 +151,26 @@ class OrdersScreenTest {
 
         profit.shouldBeNull()
         margin.shouldBeNull()
+    }
+
+    // ESI's order-history `state` never says "fulfilled" — only "expired" or "cancelled", even
+    // for an order that sold out completely. effectiveOrderState derives the real outcome from
+    // volume_remain vs volume_total instead of trusting that field alone.
+    @Test
+    fun `effectiveOrderState is fulfilled when nothing remains, regardless of the raw ESI state`() {
+        effectiveOrderState(sellOrder(volumeTotal = 10, volumeRemaining = 0, state = "expired")) shouldBe "fulfilled"
+        effectiveOrderState(sellOrder(volumeTotal = 10, volumeRemaining = 0, state = "cancelled")) shouldBe "fulfilled"
+    }
+
+    @Test
+    fun `effectiveOrderState is partially_filled when some but not all volume remains`() {
+        effectiveOrderState(sellOrder(volumeTotal = 10, volumeRemaining = 4, state = "expired")) shouldBe "partially_filled"
+        effectiveOrderState(sellOrder(volumeTotal = 10, volumeRemaining = 4, state = "cancelled")) shouldBe "partially_filled"
+    }
+
+    @Test
+    fun `effectiveOrderState falls back to the raw ESI state when nothing was filled at all`() {
+        effectiveOrderState(sellOrder(volumeTotal = 10, volumeRemaining = 10, state = "expired")) shouldBe "expired"
+        effectiveOrderState(sellOrder(volumeTotal = 10, volumeRemaining = 10, state = "cancelled")) shouldBe "cancelled"
     }
 }
