@@ -81,6 +81,15 @@ data class RegionOpportunity(
     val shippingCostPerUnit: Double,
     val dailyVolume: Long, // sell region
     val dailyVolumeSrc: Long, // buy region
+    // Real quantity actually available/absorbable at a profitable price, walked from the live
+    // order book(s) rather than assumed from a single best price — see walkSellLots/walkBuyLots/
+    // walkCrossedBook. Not meaningful for BUY_TO_SELL (neither side is a consumable order book),
+    // where it's left at 0 and regionFinalVol falls back to the vol/day estimate instead.
+    val profitableVolume: Long = 0,
+    // Exact accumulated profit for `profitableVolume` units (sum of each walked lot's own margin),
+    // not netProfit * profitableVolume — later lots in the walk have thinner margins than the best
+    // one, so that shortcut would overstate total profit.
+    val profitableTotalProfit: Double = 0.0,
     val priceChange7d: Double = Double.NaN,
 )
 
@@ -88,7 +97,19 @@ data class RegionOpportunity(
 
 private enum class StationSortCol { NAME, BUY_PRICE, SELL_PRICE, MARGIN, NET_PROFIT, VOLUME, DAILY_PROFIT, TREND_7D }
 
-private enum class RegionSortCol { NAME, BUY_PRICE, SELL_PRICE, MARGIN, ITEM_VOL, SHIPPING, NET_PROFIT, VOLUME, TREND_7D, NET_VOL }
+private enum class RegionSortCol {
+    NAME,
+    BUY_PRICE,
+    SELL_PRICE,
+    MARGIN,
+    ITEM_VOL,
+    SHIPPING,
+    NET_PROFIT,
+    VOLUME,
+    TREND_7D,
+    NET_VOL,
+    QTY_TO_BUY,
+}
 
 private enum class InterRegionTradeType(
     val label: String,
@@ -147,14 +168,52 @@ fun regionEffVol(
     return if (base > 0) (base * volCapPct / 100.0).toLong().coerceAtLeast(1) else 0
 }
 
+// The actual "how many should I buy" figure — this is what the Qty column, the hotkey queue, and
+// clipboard copy all use. Only BUY_TO_SELL has neither side backed by a real order book (both legs
+// are our own placed orders), so it falls back to the vol/day estimate exactly as before.
+// SELL_TO_SELL's own sell leg is *also* a placed order, so its real order-book supply is further
+// capped by vol/day — can't sell faster than the destination market actually absorbs, however much
+// profitable stock is sitting at the source. BUY_TO_BUY/SELL_TO_BUY's destination leg is an
+// instant fill into an existing buy order, so the order-book walk alone is already the true limit.
+private fun regionFinalVol(
+    opp: RegionOpportunity,
+    tradeType: InterRegionTradeType,
+    volCapEnabled: Boolean,
+    volCapPct: Double,
+): Long =
+    when (tradeType) {
+        InterRegionTradeType.BUY_TO_SELL -> regionEffVol(opp, volCapEnabled, volCapPct)
+        InterRegionTradeType.SELL_TO_SELL -> minOf(opp.profitableVolume, regionEffVol(opp, volCapEnabled, volCapPct))
+        InterRegionTradeType.BUY_TO_BUY, InterRegionTradeType.SELL_TO_BUY -> opp.profitableVolume
+    }
+
+// Estimated total profit at regionFinalVol — the exact walked total when the vol/day cap didn't
+// bind, otherwise profitableTotalProfit scaled proportionally (a fair approximation: we don't know
+// exactly *which* lots get filled first once capped below the full walked volume).
+private fun regionDailyProfit(
+    opp: RegionOpportunity,
+    tradeType: InterRegionTradeType,
+    volCapEnabled: Boolean,
+    volCapPct: Double,
+): Double {
+    val finalVol = regionFinalVol(opp, tradeType, volCapEnabled, volCapPct)
+    if (tradeType == InterRegionTradeType.BUY_TO_SELL) return opp.netProfit * finalVol
+    if (opp.profitableVolume <= 0) return 0.0
+    if (finalVol >= opp.profitableVolume) return opp.profitableTotalProfit
+    return opp.profitableTotalProfit * finalVol / opp.profitableVolume
+}
+
 private fun sortRegion(
     list: List<RegionOpportunity>,
+    tradeType: InterRegionTradeType,
     col: RegionSortCol,
     asc: Boolean,
     volCapEnabled: Boolean = false,
     volCapPct: Double = 100.0,
 ): List<RegionOpportunity> {
     fun effVol(opp: RegionOpportunity) = regionEffVol(opp, volCapEnabled, volCapPct)
+
+    fun finalVol(opp: RegionOpportunity) = regionFinalVol(opp, tradeType, volCapEnabled, volCapPct)
     val cmp: Comparator<RegionOpportunity> =
         when (col) {
             RegionSortCol.NAME -> compareBy { it.typeName }
@@ -166,7 +225,8 @@ private fun sortRegion(
             RegionSortCol.NET_PROFIT -> compareBy { it.netProfit }
             RegionSortCol.VOLUME -> compareBy { effVol(it) }
             RegionSortCol.TREND_7D -> compareBy { if (it.priceChange7d.isNaN()) Double.MIN_VALUE else it.priceChange7d }
-            RegionSortCol.NET_VOL -> compareBy { it.netProfit * effVol(it) }
+            RegionSortCol.NET_VOL -> compareBy { regionDailyProfit(it, tradeType, volCapEnabled, volCapPct) }
+            RegionSortCol.QTY_TO_BUY -> compareBy { finalVol(it) }
         }
     return if (asc) list.sortedWith(cmp) else list.sortedWith(cmp.reversed())
 }
@@ -1205,8 +1265,8 @@ private fun InterRegionTab(
             // Not capped at 100 — this scales volume in either direction (50 halves it, 200 doubles it).
             val volCapPctVal = volCapPct.toDoubleOrNull()?.coerceIn(0.01, 1000.0) ?: 10.0
             val sorted =
-                remember(results, sortCol, sortAsc, volCapEnabled, volCapPctVal) {
-                    sortRegion(results, sortCol, sortAsc, volCapEnabled, volCapPctVal)
+                remember(results, tradeType, sortCol, sortAsc, volCapEnabled, volCapPctVal) {
+                    sortRegion(results, tradeType, sortCol, sortAsc, volCapEnabled, volCapPctVal)
                 }
             var selectedIds by remember(results) { mutableStateOf(setOf<Int>()) }
             val listState = rememberLazyListState()
@@ -1232,7 +1292,7 @@ private fun InterRegionTab(
                                 typeName = opp.typeName,
                                 price = opp.buyPrice,
                                 isCompetitiveBid = isCompetitiveBid,
-                                volume = regionEffVol(opp, volCapEnabled, volCapPctVal),
+                                volume = regionFinalVol(opp, tradeType, volCapEnabled, volCapPctVal),
                             )
                         },
                     )
@@ -1263,7 +1323,9 @@ private fun InterRegionTab(
                         val text =
                             sorted
                                 .filter { it.typeId in selectedIds }
-                                .joinToString("\n") { opp -> "${opp.typeName}\t${regionEffVol(opp, volCapEnabled, volCapPctVal)}" }
+                                .joinToString(
+                                    "\n",
+                                ) { opp -> "${opp.typeName}\t${regionFinalVol(opp, tradeType, volCapEnabled, volCapPctVal)}" }
                         copyToClipboard(text)
                     },
                     onClear = { selectedIds = emptySet() },
@@ -1316,7 +1378,7 @@ private fun InterRegionTab(
             ) {
                 LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                     itemsIndexed(sorted, key = { _, item -> item.typeId }) { idx, opp ->
-                        RegionRow(opp, idx, opp.typeId in selectedIds, volCapEnabled, volCapPctVal, opp.typeId == activeTypeId)
+                        RegionRow(opp, idx, tradeType, opp.typeId in selectedIds, volCapEnabled, volCapPctVal, opp.typeId == activeTypeId)
                     }
                 }
             }
@@ -1837,6 +1899,7 @@ private fun RegionHeader(
             ACol("Net/unit", RegionSortCol.NET_PROFIT, sort, asc, onSort, Modifier.width(95.dp))
             ACol("7d", RegionSortCol.TREND_7D, sort, asc, onSort, Modifier.width(65.dp))
             ACol("Vol/day", RegionSortCol.VOLUME, sort, asc, onSort, Modifier.width(70.dp))
+            ACol("Qty to Buy", RegionSortCol.QTY_TO_BUY, sort, asc, onSort, Modifier.width(85.dp))
             ACol("Net×Vol", RegionSortCol.NET_VOL, sort, asc, onSort, Modifier.width(95.dp))
         }
     }
@@ -1916,12 +1979,15 @@ private fun StationRow(
 private fun RegionRow(
     opp: RegionOpportunity,
     index: Int,
+    tradeType: InterRegionTradeType,
     selected: Boolean,
     volCapEnabled: Boolean = false,
     volCapPct: Double = 100.0,
     isActiveInGame: Boolean = false,
 ) {
     val effVol = regionEffVol(opp, volCapEnabled, volCapPct)
+    val qtyToBuy = regionFinalVol(opp, tradeType, volCapEnabled, volCapPct)
+    val dailyProfit = regionDailyProfit(opp, tradeType, volCapEnabled, volCapPct)
     val bg =
         when {
             selected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
@@ -1970,7 +2036,13 @@ private fun RegionRow(
             color = Color.Gray,
             modifier = Modifier.width(70.dp),
         )
-        PriceText(opp.netProfit * effVol, Color(0xFF4DABF7), Modifier.width(95.dp), bold = true)
+        Text(
+            if (qtyToBuy > 0) fVol(qtyToBuy) else "—",
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.width(85.dp),
+        )
+        PriceText(dailyProfit, Color(0xFF4DABF7), Modifier.width(95.dp), bold = true)
     }
     HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
 }
@@ -2198,6 +2270,98 @@ private fun computeOpportunityForType(
     )
 }
 
+// ─── Order-book walkers (inter-region "real quantity" calculation) ────────
+
+// Walks a source SELL order book (ascending price — cheapest first) against a FIXED destination
+// price, accumulating volume from each lot while its own margin still clears minMarginPct. Stops
+// at the first lot that doesn't clear it: prices only get worse deeper into the book, so nothing
+// beyond that point would either. Returns (volume, exact accumulated profit for that volume).
+internal fun walkSourceSellLots(
+    lots: List<Pair<Double, Long>>, // (price, volume_remain), ascending by price
+    fixedSellPrice: Double,
+    shippingPerUnit: Double,
+    minMarginPct: Double,
+    feeForBuyPrice: (Double) -> Double,
+): Pair<Long, Double> {
+    var volume = 0L
+    var profit = 0.0
+    for ((buyPrice, qty) in lots) {
+        if (qty <= 0) continue
+        val gross = fixedSellPrice - buyPrice
+        val net = gross - feeForBuyPrice(buyPrice) - shippingPerUnit
+        val margin = if (buyPrice > 0) gross / buyPrice * 100.0 else 0.0
+        if (net <= 0 || margin < minMarginPct) break
+        volume += qty
+        profit += net * qty
+    }
+    return volume to profit
+}
+
+// Walks a destination BUY order book (descending price — best first) against a FIXED source
+// price. Symmetric to walkSourceSellLots.
+internal fun walkDestBuyLots(
+    lots: List<Pair<Double, Long>>, // (price, volume_remain), descending by price
+    fixedBuyPrice: Double,
+    shippingPerUnit: Double,
+    minMarginPct: Double,
+    feeForSellPrice: (Double) -> Double,
+): Pair<Long, Double> {
+    var volume = 0L
+    var profit = 0.0
+    for ((sellPrice, qty) in lots) {
+        if (qty <= 0) continue
+        val gross = sellPrice - fixedBuyPrice
+        val net = gross - feeForSellPrice(sellPrice) - shippingPerUnit
+        val margin = if (fixedBuyPrice > 0) gross / fixedBuyPrice * 100.0 else 0.0
+        if (net <= 0 || margin < minMarginPct) break
+        volume += qty
+        profit += net * qty
+    }
+    return volume to profit
+}
+
+// Walks BOTH the source sell book and destination buy book at once (SELL_TO_BUY, where neither
+// side is our own placed order): matches the cheapest remaining source lot against the best
+// remaining destination lot, consuming whichever side's current lot runs out first — like merging
+// two sorted runs. Stops as soon as the current pairing's margin no longer clears minMarginPct.
+internal fun walkCrossedBook(
+    sellLots: List<Pair<Double, Long>>, // ascending
+    buyLots: List<Pair<Double, Long>>, // descending
+    shippingPerUnit: Double,
+    minMarginPct: Double,
+    feeFor: (buyPrice: Double, sellPrice: Double) -> Double,
+): Pair<Long, Double> {
+    var i = 0
+    var j = 0
+    var remainingSell = sellLots.getOrNull(0)?.second ?: 0L
+    var remainingBuy = buyLots.getOrNull(0)?.second ?: 0L
+    var volume = 0L
+    var profit = 0.0
+    while (i < sellLots.size && j < buyLots.size) {
+        val buyPrice = sellLots[i].first
+        val sellPrice = buyLots[j].first
+        val gross = sellPrice - buyPrice
+        val net = gross - feeFor(buyPrice, sellPrice) - shippingPerUnit
+        val margin = if (buyPrice > 0) gross / buyPrice * 100.0 else 0.0
+        if (net <= 0 || margin < minMarginPct) break
+        val take = minOf(remainingSell, remainingBuy)
+        if (take <= 0) break
+        volume += take
+        profit += net * take
+        remainingSell -= take
+        remainingBuy -= take
+        if (remainingSell <= 0) {
+            i++
+            remainingSell = sellLots.getOrNull(i)?.second ?: 0L
+        }
+        if (remainingBuy <= 0) {
+            j++
+            remainingBuy = buyLots.getOrNull(j)?.second ?: 0L
+        }
+    }
+    return volume to profit
+}
+
 private fun computeRegionOpportunityForType(
     typeId: Int,
     buyRegionOrders: List<Map<String, Any?>>,
@@ -2233,22 +2397,30 @@ private fun computeRegionOpportunityForType(
 
     fun Map<String, Any?>.loc() = (get("location_id") as? Number)?.toLong()
 
+    fun Map<String, Any?>.volRemain() = (get("volume_remain") as? Number)?.toLong() ?: 0L
+
     val buyFiltered = if (buyStationId != null) buyRegionOrders.filter { it.loc() == buyStationId } else buyRegionOrders
     val sellFiltered = if (sellStationId != null) sellRegionOrders.filter { it.loc() == sellStationId } else sellRegionOrders
 
-    val srcSell = buyFiltered.filter { !it.isBuyOrd() }.minOfOrNull { it.price() }
+    // Real, walkable order books — cheapest sell first / best buy first — for the two sides that
+    // represent consuming someone else's existing liquidity rather than placing our own order.
+    val srcSellLots = buyFiltered.filter { !it.isBuyOrd() }.map { it.price() to it.volRemain() }.sortedBy { it.first }
+    val dstBuyLots =
+        sellRegionOrders
+            .filter {
+                it.isBuyOrd() &&
+                    isBuyOrderReachable(it, sellStationId, sellStationSystemId, sellDistanceFromStation, locationSystemCache)
+            }.map { it.price() to it.volRemain() }
+            .sortedByDescending { it.first }
+
+    val srcSell = srcSellLots.firstOrNull()?.first
     val srcBuy =
         buyRegionOrders
             .filter {
                 it.isBuyOrd() &&
                     isBuyOrderReachable(it, buyStationId, buyStationSystemId, buyDistanceFromStation, locationSystemCache)
             }.maxOfOrNull { it.price() }
-    val dstBuy =
-        sellRegionOrders
-            .filter {
-                it.isBuyOrd() &&
-                    isBuyOrderReachable(it, sellStationId, sellStationSystemId, sellDistanceFromStation, locationSystemCache)
-            }.maxOfOrNull { it.price() }
+    val dstBuy = dstBuyLots.firstOrNull()?.first
     val dstSell = sellFiltered.filter { !it.isBuyOrd() }.minOfOrNull { it.price() }
 
     val buyPrice =
@@ -2284,6 +2456,27 @@ private fun computeRegionOpportunityForType(
     val marginPct = grossProfit / buyPrice * 100.0
     if (marginPct < minMarginPct) return null
 
+    // Real achievable quantity: walk whichever side(s) represent existing order-book liquidity
+    // (not our own placed order) from the best price down, stopping once a lot's own margin drops
+    // below minMarginPct — a deep, cheap/expensive tail lot shouldn't inflate the "buy this many"
+    // figure just because the *best* price on the book was great.
+    val (profitableVolume, profitableTotalProfit) =
+        when (tradeType) {
+            InterRegionTradeType.BUY_TO_BUY ->
+                walkDestBuyLots(dstBuyLots, fixedBuyPrice = buyPrice, shippingPerUnit = shipping, minMarginPct = minMarginPct) { sellP ->
+                    buyPrice * brokerFeePct / 100.0 + sellP * salesTaxPct / 100.0
+                }
+            InterRegionTradeType.SELL_TO_SELL ->
+                walkSourceSellLots(srcSellLots, fixedSellPrice = sellPrice, shippingPerUnit = shipping, minMarginPct = minMarginPct) {
+                    sellPrice * (salesTaxPct + brokerFeePct) / 100.0
+                }
+            InterRegionTradeType.SELL_TO_BUY ->
+                walkCrossedBook(srcSellLots, dstBuyLots, shippingPerUnit = shipping, minMarginPct = minMarginPct) { _, sellP ->
+                    sellP * salesTaxPct / 100.0
+                }
+            InterRegionTradeType.BUY_TO_SELL -> 0L to 0.0
+        }
+
     val sellHistory = fetchHistory(typeId, sellRegionId, historySource)
     val buyHistory = fetchHistory(typeId, buyRegionId, historySource)
     val volSell = sellHistory.sumOf { it.volume } / 30L
@@ -2298,6 +2491,8 @@ private fun computeRegionOpportunityForType(
         sellPrice = sellPrice,
         grossProfit = grossProfit,
         netProfit = netProfit,
+        profitableVolume = profitableVolume,
+        profitableTotalProfit = profitableTotalProfit,
         marginPct = marginPct,
         itemVolumeM3 = itemVol,
         shippingCostPerUnit = shipping,
