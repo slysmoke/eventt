@@ -27,7 +27,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -335,6 +337,7 @@ private fun StationTradingTab(
     var maxBuyPrice by remember { mutableStateOf("500000000") }
     var minNetProfit by remember { mutableStateOf("100000") }
     var isAnalyzing by remember { mutableStateOf(false) }
+    var analyzeJob by remember { mutableStateOf<Job?>(null) }
     var statusMsg by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<StationOpportunity>>(emptyList()) }
     var sortCol by remember { mutableStateOf(StationSortCol.NET_PROFIT) }
@@ -534,125 +537,145 @@ private fun StationTradingTab(
                     Spacer(Modifier.height(19.dp)) // matches label height + gap
                     Button(
                         onClick = {
-                            scope.launch {
-                                isAnalyzing = true
-                                results = emptyList()
-                                try {
-                                    val filterGroupId = selectedSubGroup?.marketGroupId ?: selectedTopGroup?.marketGroupId
-                                    val filterGroupIds = filterGroupId?.let { withContext(Dispatchers.IO) { buildGroupSubtree(it) } }
+                            val job =
+                                scope.launch {
+                                    isAnalyzing = true
+                                    results = emptyList()
+                                    try {
+                                        val filterGroupId = selectedSubGroup?.marketGroupId ?: selectedTopGroup?.marketGroupId
+                                        val filterGroupIds = filterGroupId?.let { withContext(Dispatchers.IO) { buildGroupSubtree(it) } }
 
-                                    val typeIds =
-                                        withContext(Dispatchers.IO) {
-                                            if (filterGroupIds != null) {
-                                                StaticDataDao.getTypeIdsByMarketGroups(filterGroupIds)
-                                            } else {
-                                                StaticDataDao.getAllMarketTypeIds()
-                                            }
-                                        }
-
-                                    val minMarginD = minMargin.toDoubleOrNull() ?: 5.0
-                                    val minDailyVolL = minDailyVol.toLongOrNull() ?: 0L
-                                    val maxBuyPriceD = maxBuyPrice.toDoubleOrNull() ?: Double.MAX_VALUE
-                                    val minNetProfitD = minNetProfit.toDoubleOrNull() ?: 0.0
-                                    val brokerFeePctD = brokerFeePct
-                                    val salesTaxPctD = salesTaxPct
-                                    val stationIdSnap = stationId
-                                    val histSrc = withContext(Dispatchers.IO) { EveRefService.getSelectedSource() }
-
-                                    // Buy orders sitting at a different station/citadel — even in a
-                                    // neighboring system — still compete if their order range reaches
-                                    // the station being analyzed. Build the region's jump graph once
-                                    // up front (cached permanently after the first run) so every
-                                    // type's range check below is just a map lookup, not a network call.
-                                    val stationSystemId =
-                                        stationIdSnap?.let {
-                                            withContext(Dispatchers.IO) { StaticDataDao.getStationById(it)?.systemId }
-                                        }
-                                    val distanceFromStation: Map<Int, Int> =
-                                        if (stationSystemId != null) {
+                                        val typeIds =
                                             withContext(Dispatchers.IO) {
-                                                JumpGraphService.ensureRegionGraph(regionId) { progress ->
-                                                    statusMsg = "Building jump graph: ${progress.fetched}/${progress.total} systems…"
+                                                if (filterGroupIds != null) {
+                                                    StaticDataDao.getTypeIdsByMarketGroups(filterGroupIds)
+                                                } else {
+                                                    StaticDataDao.getAllMarketTypeIds()
                                                 }
-                                                JumpGraphService.bfsDistances(stationSystemId, regionId)
                                             }
-                                        } else {
-                                            emptyMap()
-                                        }
-                                    val locationSystemCache = java.util.concurrent.ConcurrentHashMap<Long, Int?>()
 
-                                    statusMsg = "0/${typeIds.size} types checked…"
+                                        val minMarginD = minMargin.toDoubleOrNull() ?: 5.0
+                                        val minDailyVolL = minDailyVol.toLongOrNull() ?: 0L
+                                        val maxBuyPriceD = maxBuyPrice.toDoubleOrNull() ?: Double.MAX_VALUE
+                                        val minNetProfitD = minNetProfit.toDoubleOrNull() ?: 0.0
+                                        val brokerFeePctD = brokerFeePct
+                                        val salesTaxPctD = salesTaxPct
+                                        val stationIdSnap = stationId
+                                        val histSrc = withContext(Dispatchers.IO) { EveRefService.getSelectedSource() }
 
-                                    val semaphore = Semaphore(10)
-                                    val mutex = Mutex()
-                                    val found = mutableListOf<StationOpportunity>()
-                                    var checked = 0
+                                        // Buy orders sitting at a different station/citadel — even in a
+                                        // neighboring system — still compete if their order range reaches
+                                        // the station being analyzed. Build the region's jump graph once
+                                        // up front (cached permanently after the first run) so every
+                                        // type's range check below is just a map lookup, not a network call.
+                                        val stationSystemId =
+                                            stationIdSnap?.let {
+                                                withContext(Dispatchers.IO) { StaticDataDao.getStationById(it)?.systemId }
+                                            }
+                                        val distanceFromStation: Map<Int, Int> =
+                                            if (stationSystemId != null) {
+                                                withContext(Dispatchers.IO) {
+                                                    JumpGraphService.ensureRegionGraph(regionId) { progress ->
+                                                        statusMsg = "Building jump graph: ${progress.fetched}/${progress.total} systems…"
+                                                    }
+                                                    JumpGraphService.bfsDistances(stationSystemId, regionId)
+                                                }
+                                            } else {
+                                                emptyMap()
+                                            }
+                                        val locationSystemCache = java.util.concurrent.ConcurrentHashMap<Long, Int?>()
 
-                                    coroutineScope {
-                                        typeIds
-                                            .map { typeId ->
-                                                async(Dispatchers.IO) {
-                                                    semaphore.withPermit {
-                                                        runCatching {
-                                                            val effRegion = if (typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else regionId
-                                                            val orders = EsiClient.getMarketRegionOrders(effRegion, typeId = typeId)
-                                                            val opp =
-                                                                computeOpportunityForType(
-                                                                    typeId,
-                                                                    orders,
-                                                                    effRegion,
-                                                                    minMarginD,
-                                                                    minDailyVolL,
-                                                                    maxBuyPriceD,
-                                                                    minNetProfitD,
-                                                                    brokerFeePctD,
-                                                                    salesTaxPctD,
-                                                                    stationIdSnap,
-                                                                    histSrc,
-                                                                    stationSystemId = if (effRegion == regionId) stationSystemId else null,
-                                                                    distanceFromStation =
-                                                                        if (effRegion ==
-                                                                            regionId
-                                                                        ) {
-                                                                            distanceFromStation
-                                                                        } else {
-                                                                            emptyMap()
-                                                                        },
-                                                                    locationSystemCache = locationSystemCache,
-                                                                )
-                                                            // Protect shared list mutation on IO, then update Compose state on Main
-                                                            val (sorted, c, f) =
-                                                                mutex.withLock {
-                                                                    checked++
-                                                                    if (opp != null) found.add(opp)
-                                                                    Triple(
-                                                                        if (opp !=
-                                                                            null
-                                                                        ) {
-                                                                            found.sortedByDescending { it.netProfit }
-                                                                        } else {
-                                                                            null
-                                                                        },
-                                                                        checked,
-                                                                        found.size,
+                                        statusMsg = "0/${typeIds.size} types checked…"
+
+                                        val semaphore = Semaphore(10)
+                                        val mutex = Mutex()
+                                        val found = mutableListOf<StationOpportunity>()
+                                        var checked = 0
+
+                                        coroutineScope {
+                                            typeIds
+                                                .map { typeId ->
+                                                    async(Dispatchers.IO) {
+                                                        semaphore.withPermit {
+                                                            runCatching {
+                                                                val effRegion =
+                                                                    if (typeId ==
+                                                                        PLEX_TYPE_ID
+                                                                    ) {
+                                                                        PLEX_MARKET_REGION_ID
+                                                                    } else {
+                                                                        regionId
+                                                                    }
+                                                                val orders = EsiClient.getMarketRegionOrders(effRegion, typeId = typeId)
+                                                                val opp =
+                                                                    computeOpportunityForType(
+                                                                        typeId,
+                                                                        orders,
+                                                                        effRegion,
+                                                                        minMarginD,
+                                                                        minDailyVolL,
+                                                                        maxBuyPriceD,
+                                                                        minNetProfitD,
+                                                                        brokerFeePctD,
+                                                                        salesTaxPctD,
+                                                                        stationIdSnap,
+                                                                        histSrc,
+                                                                        stationSystemId =
+                                                                            if (effRegion ==
+                                                                                regionId
+                                                                            ) {
+                                                                                stationSystemId
+                                                                            } else {
+                                                                                null
+                                                                            },
+                                                                        distanceFromStation =
+                                                                            if (effRegion ==
+                                                                                regionId
+                                                                            ) {
+                                                                                distanceFromStation
+                                                                            } else {
+                                                                                emptyMap()
+                                                                            },
+                                                                        locationSystemCache = locationSystemCache,
                                                                     )
+                                                                // Protect shared list mutation on IO, then update Compose state on Main
+                                                                val (sorted, c, f) =
+                                                                    mutex.withLock {
+                                                                        checked++
+                                                                        if (opp != null) found.add(opp)
+                                                                        Triple(
+                                                                            if (opp !=
+                                                                                null
+                                                                            ) {
+                                                                                found.sortedByDescending { it.netProfit }
+                                                                            } else {
+                                                                                null
+                                                                            },
+                                                                            checked,
+                                                                            found.size,
+                                                                        )
+                                                                    }
+                                                                withContext(Dispatchers.Main) {
+                                                                    if (sorted != null) results = sorted
+                                                                    statusMsg = "$c/${typeIds.size} checked, $f found"
                                                                 }
-                                                            withContext(Dispatchers.Main) {
-                                                                if (sorted != null) results = sorted
-                                                                statusMsg = "$c/${typeIds.size} checked, $f found"
                                                             }
                                                         }
                                                     }
-                                                }
-                                            }.awaitAll()
-                                    }
+                                                }.awaitAll()
+                                        }
 
-                                    statusMsg = "${found.size} opportunities found"
-                                } catch (e: Exception) {
-                                    statusMsg = "Error: ${e.message}"
+                                        statusMsg = "${found.size} opportunities found"
+                                    } catch (e: CancellationException) {
+                                        statusMsg = "Stopped — ${results.size} opportunities found so far"
+                                        throw e
+                                    } catch (e: Exception) {
+                                        statusMsg = "Error: ${e.message}"
+                                    } finally {
+                                        isAnalyzing = false
+                                    }
                                 }
-                                isAnalyzing = false
-                            }
+                            analyzeJob = job
                         },
                         enabled = !isAnalyzing,
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
@@ -665,6 +688,20 @@ private fun StationTradingTab(
                         }
                         Spacer(Modifier.width(6.dp))
                         Text(if (isAnalyzing) "Analyzing…" else "Analyze")
+                    }
+                }
+                if (isAnalyzing) {
+                    Column(verticalArrangement = Arrangement.Bottom) {
+                        Spacer(Modifier.height(19.dp))
+                        OutlinedButton(
+                            onClick = { analyzeJob?.cancel() },
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                            modifier = Modifier.height(48.dp),
+                        ) {
+                            Icon(Icons.Default.Stop, null, Modifier.size(14.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Stop")
+                        }
                     }
                 }
                 if (statusMsg.isNotEmpty()) {
@@ -844,6 +881,7 @@ private fun InterRegionTab(
     var maxCargoM3 by remember { mutableStateOf("10000") }
     var minNetProfit by remember { mutableStateOf("5000000") }
     var isAnalyzing by remember { mutableStateOf(false) }
+    var analyzeJob by remember { mutableStateOf<Job?>(null) }
     var statusMsg by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<RegionOpportunity>>(emptyList()) }
     var sortCol by remember { mutableStateOf(RegionSortCol.NET_VOL) }
@@ -1080,158 +1118,164 @@ private fun InterRegionTab(
                                 statusMsg = "Regions must differ"
                                 return@Button
                             }
-                            scope.launch {
-                                isAnalyzing = true
-                                results = emptyList()
-                                val buyName = allRegions.find { it.regionId == buyRegionId }?.name ?: "buy"
-                                val sellName = allRegions.find { it.regionId == sellRegionId }?.name ?: "sell"
-                                val filterGroupId = selectedSubGroup?.marketGroupId ?: selectedTopGroup?.marketGroupId
-                                val filterGroupIds = filterGroupId?.let { withContext(Dispatchers.IO) { buildGroupSubtree(it) } }
-                                val iskPerM3D = iskPerM3.toDoubleOrNull() ?: 1000.0
-                                val maxCargoM3D = maxCargoM3.toDoubleOrNull() ?: 10000.0
-                                val minMarginD = minMargin.toDoubleOrNull() ?: 5.0
-                                val minNetD = minNetProfit.toDoubleOrNull() ?: 0.0
-                                val brokerFeeD = brokerFeePct
-                                val salesTaxD = salesTaxPct
-                                val buyStSnap = buyStationId
-                                val sellStSnap = sellStationId
-                                val histSrc = withContext(Dispatchers.IO) { EveRefService.getSelectedSource() }
-                                try {
-                                    // Same citadel/jump-range reachability as Station Trading, built once up
-                                    // front for whichever side(s) have a specific station chosen.
-                                    val buySystemId =
-                                        buyStSnap?.let {
-                                            withContext(Dispatchers.IO) { StaticDataDao.getStationById(it)?.systemId }
-                                        }
-                                    val sellSystemId =
-                                        sellStSnap?.let {
-                                            withContext(Dispatchers.IO) { StaticDataDao.getStationById(it)?.systemId }
-                                        }
-                                    val buyDistances: Map<Int, Int> =
-                                        if (buySystemId != null) {
-                                            withContext(Dispatchers.IO) {
-                                                JumpGraphService.ensureRegionGraph(buyRegionId) { p ->
-                                                    statusMsg = "Building buy-region jump graph: ${p.fetched}/${p.total}…"
-                                                }
-                                                JumpGraphService.bfsDistances(buySystemId, buyRegionId)
+                            val job =
+                                scope.launch {
+                                    isAnalyzing = true
+                                    results = emptyList()
+                                    val buyName = allRegions.find { it.regionId == buyRegionId }?.name ?: "buy"
+                                    val sellName = allRegions.find { it.regionId == sellRegionId }?.name ?: "sell"
+                                    val filterGroupId = selectedSubGroup?.marketGroupId ?: selectedTopGroup?.marketGroupId
+                                    val filterGroupIds = filterGroupId?.let { withContext(Dispatchers.IO) { buildGroupSubtree(it) } }
+                                    val iskPerM3D = iskPerM3.toDoubleOrNull() ?: 1000.0
+                                    val maxCargoM3D = maxCargoM3.toDoubleOrNull() ?: 10000.0
+                                    val minMarginD = minMargin.toDoubleOrNull() ?: 5.0
+                                    val minNetD = minNetProfit.toDoubleOrNull() ?: 0.0
+                                    val brokerFeeD = brokerFeePct
+                                    val salesTaxD = salesTaxPct
+                                    val buyStSnap = buyStationId
+                                    val sellStSnap = sellStationId
+                                    val histSrc = withContext(Dispatchers.IO) { EveRefService.getSelectedSource() }
+                                    try {
+                                        // Same citadel/jump-range reachability as Station Trading, built once up
+                                        // front for whichever side(s) have a specific station chosen.
+                                        val buySystemId =
+                                            buyStSnap?.let {
+                                                withContext(Dispatchers.IO) { StaticDataDao.getStationById(it)?.systemId }
                                             }
-                                        } else {
-                                            emptyMap()
-                                        }
-                                    val sellDistances: Map<Int, Int> =
-                                        if (sellSystemId != null) {
-                                            withContext(Dispatchers.IO) {
-                                                JumpGraphService.ensureRegionGraph(sellRegionId) { p ->
-                                                    statusMsg = "Building sell-region jump graph: ${p.fetched}/${p.total}…"
-                                                }
-                                                JumpGraphService.bfsDistances(sellSystemId, sellRegionId)
+                                        val sellSystemId =
+                                            sellStSnap?.let {
+                                                withContext(Dispatchers.IO) { StaticDataDao.getStationById(it)?.systemId }
                                             }
-                                        } else {
-                                            emptyMap()
-                                        }
-                                    val locationSystemCache = java.util.concurrent.ConcurrentHashMap<Long, Int?>()
-
-                                    val typeIds =
-                                        withContext(Dispatchers.IO) {
-                                            if (filterGroupIds != null) {
-                                                StaticDataDao.getTypeIdsByMarketGroups(filterGroupIds)
+                                        val buyDistances: Map<Int, Int> =
+                                            if (buySystemId != null) {
+                                                withContext(Dispatchers.IO) {
+                                                    JumpGraphService.ensureRegionGraph(buyRegionId) { p ->
+                                                        statusMsg = "Building buy-region jump graph: ${p.fetched}/${p.total}…"
+                                                    }
+                                                    JumpGraphService.bfsDistances(buySystemId, buyRegionId)
+                                                }
                                             } else {
-                                                StaticDataDao.getAllMarketTypeIds()
+                                                emptyMap()
                                             }
-                                        }
-                                    statusMsg = "0/${typeIds.size} types…"
+                                        val sellDistances: Map<Int, Int> =
+                                            if (sellSystemId != null) {
+                                                withContext(Dispatchers.IO) {
+                                                    JumpGraphService.ensureRegionGraph(sellRegionId) { p ->
+                                                        statusMsg = "Building sell-region jump graph: ${p.fetched}/${p.total}…"
+                                                    }
+                                                    JumpGraphService.bfsDistances(sellSystemId, sellRegionId)
+                                                }
+                                            } else {
+                                                emptyMap()
+                                            }
+                                        val locationSystemCache = java.util.concurrent.ConcurrentHashMap<Long, Int?>()
 
-                                    // Each permit fires 2 real HTTP requests (buy + sell region
-                                    // orders), so this is already up to 8 concurrent ESI calls —
-                                    // higher than it looks. Lower than Station Trading's single-
-                                    // call-per-permit Semaphore(10) for the same reason.
-                                    val semaphore = Semaphore(4)
-                                    val mutex = Mutex()
-                                    val found = mutableListOf<RegionOpportunity>()
-                                    var checked = 0
+                                        val typeIds =
+                                            withContext(Dispatchers.IO) {
+                                                if (filterGroupIds != null) {
+                                                    StaticDataDao.getTypeIdsByMarketGroups(filterGroupIds)
+                                                } else {
+                                                    StaticDataDao.getAllMarketTypeIds()
+                                                }
+                                            }
+                                        statusMsg = "0/${typeIds.size} types…"
 
-                                    coroutineScope {
-                                        typeIds
-                                            .map { typeId ->
-                                                async(Dispatchers.IO) {
-                                                    semaphore.withPermit {
-                                                        runCatching {
-                                                            // Both regions for this type fetched simultaneously
-                                                            val (buyOrders, sellOrders) =
-                                                                coroutineScope {
-                                                                    val bDef =
-                                                                        async {
-                                                                            EsiClient.getMarketRegionOrders(
-                                                                                buyRegionId,
-                                                                                typeId = typeId,
-                                                                            )
-                                                                        }
-                                                                    val sDef =
-                                                                        async {
-                                                                            EsiClient.getMarketRegionOrders(
-                                                                                sellRegionId,
-                                                                                typeId = typeId,
-                                                                            )
-                                                                        }
-                                                                    bDef.await() to sDef.await()
-                                                                }
-                                                            val opp =
-                                                                computeRegionOpportunityForType(
-                                                                    typeId,
-                                                                    buyOrders,
-                                                                    sellOrders,
-                                                                    buyRegionId,
-                                                                    sellRegionId,
-                                                                    buyName,
-                                                                    sellName,
-                                                                    tradeType,
-                                                                    filterGroupIds,
-                                                                    iskPerM3D,
-                                                                    maxCargoM3D,
-                                                                    minMarginD,
-                                                                    minNetD,
-                                                                    brokerFeeD,
-                                                                    salesTaxD,
-                                                                    buyStSnap,
-                                                                    sellStSnap,
-                                                                    histSrc,
-                                                                    buyStationSystemId = buySystemId,
-                                                                    buyDistanceFromStation = buyDistances,
-                                                                    sellStationSystemId = sellSystemId,
-                                                                    sellDistanceFromStation = sellDistances,
-                                                                    locationSystemCache = locationSystemCache,
-                                                                )
-                                                            val (sorted, c, f) =
-                                                                mutex.withLock {
-                                                                    checked++
-                                                                    if (opp != null) found.add(opp)
-                                                                    Triple(
-                                                                        if (opp !=
-                                                                            null
-                                                                        ) {
-                                                                            found.sortedByDescending { it.netProfit }
-                                                                        } else {
-                                                                            null
-                                                                        },
-                                                                        checked,
-                                                                        found.size,
+                                        // Each permit fires 2 real HTTP requests (buy + sell region
+                                        // orders), so this is already up to 8 concurrent ESI calls —
+                                        // higher than it looks. Lower than Station Trading's single-
+                                        // call-per-permit Semaphore(10) for the same reason.
+                                        val semaphore = Semaphore(4)
+                                        val mutex = Mutex()
+                                        val found = mutableListOf<RegionOpportunity>()
+                                        var checked = 0
+
+                                        coroutineScope {
+                                            typeIds
+                                                .map { typeId ->
+                                                    async(Dispatchers.IO) {
+                                                        semaphore.withPermit {
+                                                            runCatching {
+                                                                // Both regions for this type fetched simultaneously
+                                                                val (buyOrders, sellOrders) =
+                                                                    coroutineScope {
+                                                                        val bDef =
+                                                                            async {
+                                                                                EsiClient.getMarketRegionOrders(
+                                                                                    buyRegionId,
+                                                                                    typeId = typeId,
+                                                                                )
+                                                                            }
+                                                                        val sDef =
+                                                                            async {
+                                                                                EsiClient.getMarketRegionOrders(
+                                                                                    sellRegionId,
+                                                                                    typeId = typeId,
+                                                                                )
+                                                                            }
+                                                                        bDef.await() to sDef.await()
+                                                                    }
+                                                                val opp =
+                                                                    computeRegionOpportunityForType(
+                                                                        typeId,
+                                                                        buyOrders,
+                                                                        sellOrders,
+                                                                        buyRegionId,
+                                                                        sellRegionId,
+                                                                        buyName,
+                                                                        sellName,
+                                                                        tradeType,
+                                                                        filterGroupIds,
+                                                                        iskPerM3D,
+                                                                        maxCargoM3D,
+                                                                        minMarginD,
+                                                                        minNetD,
+                                                                        brokerFeeD,
+                                                                        salesTaxD,
+                                                                        buyStSnap,
+                                                                        sellStSnap,
+                                                                        histSrc,
+                                                                        buyStationSystemId = buySystemId,
+                                                                        buyDistanceFromStation = buyDistances,
+                                                                        sellStationSystemId = sellSystemId,
+                                                                        sellDistanceFromStation = sellDistances,
+                                                                        locationSystemCache = locationSystemCache,
                                                                     )
+                                                                val (sorted, c, f) =
+                                                                    mutex.withLock {
+                                                                        checked++
+                                                                        if (opp != null) found.add(opp)
+                                                                        Triple(
+                                                                            if (opp !=
+                                                                                null
+                                                                            ) {
+                                                                                found.sortedByDescending { it.netProfit }
+                                                                            } else {
+                                                                                null
+                                                                            },
+                                                                            checked,
+                                                                            found.size,
+                                                                        )
+                                                                    }
+                                                                withContext(Dispatchers.Main) {
+                                                                    if (sorted != null) results = sorted
+                                                                    statusMsg = "$c/${typeIds.size} checked, $f found"
                                                                 }
-                                                            withContext(Dispatchers.Main) {
-                                                                if (sorted != null) results = sorted
-                                                                statusMsg = "$c/${typeIds.size} checked, $f found"
                                                             }
                                                         }
                                                     }
-                                                }
-                                            }.awaitAll()
+                                                }.awaitAll()
+                                        }
+                                        statusMsg = "${found.size} opportunities found"
+                                    } catch (e: CancellationException) {
+                                        statusMsg = "Stopped — ${results.size} opportunities found so far"
+                                        throw e
+                                    } catch (e: Exception) {
+                                        statusMsg = "Error: ${e.message}"
+                                    } finally {
+                                        isAnalyzing = false
                                     }
-                                    statusMsg = "${found.size} opportunities found"
-                                } catch (e: Exception) {
-                                    statusMsg = "Error: ${e.message}"
                                 }
-                                isAnalyzing = false
-                            }
+                            analyzeJob = job
                         },
                         enabled = !isAnalyzing,
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
@@ -1244,6 +1288,20 @@ private fun InterRegionTab(
                         }
                         Spacer(Modifier.width(6.dp))
                         Text(if (isAnalyzing) "Analyzing…" else "Analyze")
+                    }
+                }
+                if (isAnalyzing) {
+                    Column(verticalArrangement = Arrangement.Bottom) {
+                        Spacer(Modifier.height(19.dp))
+                        OutlinedButton(
+                            onClick = { analyzeJob?.cancel() },
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                            modifier = Modifier.height(48.dp),
+                        ) {
+                            Icon(Icons.Default.Stop, null, Modifier.size(14.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Stop")
+                        }
                     }
                 }
                 if (statusMsg.isNotEmpty()) {
