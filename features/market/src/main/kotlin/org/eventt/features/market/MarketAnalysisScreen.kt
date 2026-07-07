@@ -1946,10 +1946,10 @@ private fun StationHeader(
             ACol("Vol/day", StationSortCol.VOLUME, sort, asc, onSort, Modifier.width(75.dp))
             ACol("Est. Daily", StationSortCol.DAILY_PROFIT, sort, asc, onSort, Modifier.width(95.dp))
             Text(
-                "Orders",
+                "Orders (sell/buy)",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                modifier = Modifier.width(65.dp),
+                modifier = Modifier.width(95.dp),
             )
         }
     }
@@ -2048,7 +2048,7 @@ private fun StationRow(
             "${opp.sellOrderCount}s / ${opp.buyOrderCount}b",
             style = MaterialTheme.typography.labelSmall,
             color = Color.Gray,
-            modifier = Modifier.width(65.dp),
+            modifier = Modifier.width(95.dp),
         )
     }
     HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
