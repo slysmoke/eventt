@@ -30,6 +30,12 @@ private data class MemEntry(
 object EsiCacheManager {
     private const val DEFAULT_TTL_MS = 5 * 60 * 1000L
 
+    // How long a merely-STALE row is kept around after its expiry before cleanupExpired()
+    // actually deletes it — long enough that anything still in regular use gets revalidated
+    // (extending its expiry via refreshExpiry on a 304) well before this cutoff, short enough
+    // that entries nobody's asked for again eventually get purged instead of growing forever.
+    private const val CLEANUP_GRACE_MS = 24 * 60 * 60 * 1000L
+
     // L1 in-memory cache — survives within a single app session. Keys are "$endpoint|$hash".
     private val mem = ConcurrentHashMap<String, MemEntry>()
 
@@ -162,7 +168,7 @@ object EsiCacheManager {
     }
 
     fun cleanupExpired() {
-        EsiCacheDao.deleteExpired()
+        EsiCacheDao.deleteExpired(System.currentTimeMillis() - CLEANUP_GRACE_MS)
         // Prune memory entries that have been stale for > 1 hour so it doesn't grow unbounded.
         val cutoff = System.currentTimeMillis() - 60 * 60 * 1000L
         mem.entries.removeIf { it.value.expiresAt < cutoff }

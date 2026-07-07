@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.AppVersion
 import org.eventt.GlobalHotkeyService
+import org.eventt.core.cache.EsiCacheManager
 import org.eventt.core.database.AppState
 import org.eventt.core.database.CharacterDao
 import org.eventt.core.everef.EveRefService
@@ -100,6 +101,9 @@ fun EventtApp() {
         // Player structure (citadel) names — same reasoning, runs alongside rather than
         // blocking startup on a network call.
         launch(Dispatchers.IO) { CitadelService.sync() }
+        // Purges long-expired ESI cache rows — otherwise nothing ever deletes them and the
+        // table grows without bound (found this at ~730MB / 55k dead rows on a real install).
+        launch(Dispatchers.IO) { EsiCacheManager.cleanupExpired() }
     }
 
     // Update check — runs in background, never blocks startup

@@ -94,10 +94,13 @@ object EsiCacheDao {
         return System.currentTimeMillis() < entry.expiresAt
     }
 
-    fun deleteExpired() {
+    // Default cutoff (now) deletes anything already expired. EsiCacheManager.cleanupExpired()
+    // instead passes an older cutoff, so recently-expired (merely stale) rows survive long
+    // enough to still be useful for a conditional If-None-Match/If-Modified-Since revalidation.
+    fun deleteExpired(olderThan: Long = System.currentTimeMillis()) {
         DatabaseManager.transaction {
             prepareStatement("DELETE FROM esi_cache WHERE expires_at < ?").use { stmt ->
-                stmt.setLong(1, System.currentTimeMillis())
+                stmt.setLong(1, olderThan)
                 stmt.executeUpdate()
             }
         }

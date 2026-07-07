@@ -81,4 +81,18 @@ class EsiCacheManagerTest {
         result.state shouldBe CacheState.STALE
         result.data shouldBe "stale-body"
     }
+
+    @Test
+    fun `cleanupExpired keeps recently-expired rows but purges rows expired over a day ago`() {
+        val recentlyExpired = "/test/cleanup-recent/"
+        val longExpired = "/test/cleanup-old/"
+
+        EsiCacheManager.save(recentlyExpired, null, "recent-body", System.currentTimeMillis() - 60_000)
+        EsiCacheManager.save(longExpired, null, "old-body", System.currentTimeMillis() - 25 * 60 * 60 * 1000L)
+
+        EsiCacheManager.cleanupExpired()
+
+        EsiCacheManager.get(recentlyExpired, null).state shouldBe CacheState.STALE
+        EsiCacheManager.get(longExpired, null).state shouldBe CacheState.MISS
+    }
 }
