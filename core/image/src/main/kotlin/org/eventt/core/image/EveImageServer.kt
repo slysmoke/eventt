@@ -2,6 +2,7 @@ package org.eventt.core.image
 
 import okhttp3.Request
 import org.eventt.core.http.EveHttpClient
+import org.eventt.core.model.AppPaths
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
 import javax.imageio.ImageIO
@@ -22,7 +23,7 @@ object EveImageServer {
         }
 
     // Disk cache: store raw bytes in a simple file-based cache
-    private val diskCacheDir = java.io.File("${System.getProperty("user.home")}/.eventt/image-cache")
+    private val diskCacheDir = java.io.File(AppPaths.appDataDir, "image-cache")
 
     enum class ImageCategory(
         val path: String,

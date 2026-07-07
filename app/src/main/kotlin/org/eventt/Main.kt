@@ -7,6 +7,7 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import org.eventt.core.database.DatabaseManager
 import org.eventt.core.http.EveHttpClient
+import org.eventt.core.model.AppPaths
 import org.eventt.ui.EventtApp
 
 fun main() {
@@ -16,6 +17,10 @@ fun main() {
     EveHttpClient.configure(
         "EventNightTradeTools/${AppVersion.NAME}" + (repoUrl?.let { " (+$it)" } ?: ""),
     )
+
+    // One-time pickup of data from the old ~/.eve-trader / ~/.eventt home-dir locations, before
+    // anything (DB, token key) reads/writes the new per-OS app-data directory.
+    AppPaths.migrateLegacyData()
 
     // Initialize database BEFORE UI starts — prevents race conditions
     println("[App] Initializing database...")

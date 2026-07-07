@@ -14,7 +14,7 @@ class TokenCryptoTest {
 
     @BeforeEach
     fun setUp() {
-        // A fresh, never-before-seen path per test — never the real ~/.eve-trader/token.key.
+        // A fresh, never-before-seen path per test — never the real app-data token.key.
         TokenCrypto.keyFile = File(tempDir, "token.key")
     }
 

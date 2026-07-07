@@ -4,6 +4,7 @@ import kotlinx.serialization.json.*
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.eventt.AppVersion
+import org.eventt.core.model.AppPaths
 import java.io.File
 import java.util.concurrent.TimeUnit
 import java.util.zip.ZipInputStream
@@ -115,7 +116,7 @@ object UpdateChecker {
         info: UpdateInfo,
         onProgress: (UpdateProgress) -> Unit,
     ) {
-        val updateDir = File(System.getProperty("user.home"), ".eventt/update").also { it.mkdirs() }
+        val updateDir = File(AppPaths.appDataDir, "update").also { it.mkdirs() }
         try {
             val jar = jarPath
             if (jar != null) {

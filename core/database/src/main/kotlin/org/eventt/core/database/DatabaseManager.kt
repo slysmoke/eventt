@@ -1,5 +1,6 @@
 package org.eventt.core.database
 
+import org.eventt.core.model.AppPaths
 import java.sql.Connection
 import java.sql.DriverManager
 import java.sql.SQLException
@@ -23,7 +24,7 @@ object DatabaseManager {
         synchronized(initLock) {
             if (isInitialized) return@synchronized
 
-            val dbFilePath = dbPath ?: "${System.getProperty("user.home")}/.eve-trader/$DEFAULT_DB_NAME"
+            val dbFilePath = dbPath ?: java.io.File(AppPaths.appDataDir, DEFAULT_DB_NAME).absolutePath
             val dir = java.io.File(dbFilePath).parentFile
             dir?.mkdirs()
 

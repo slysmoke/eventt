@@ -1,5 +1,6 @@
 package org.eventt.core.database
 
+import org.eventt.core.model.AppPaths
 import java.io.File
 import java.security.SecureRandom
 import java.util.Base64
@@ -24,7 +25,7 @@ object TokenCrypto {
     // Overridable (not `by lazy`) so tests can point it at a temp file before the first
     // encrypt/decrypt call — the key itself is re-read from this path on every call rather than
     // cached, so reassigning it can never leave a stale key from an earlier value bound in memory.
-    internal var keyFile: File = File(System.getProperty("user.home"), ".eve-trader/token.key")
+    internal var keyFile: File = File(AppPaths.appDataDir, "token.key")
 
     private fun key(): SecretKeySpec {
         if (!keyFile.exists()) {
