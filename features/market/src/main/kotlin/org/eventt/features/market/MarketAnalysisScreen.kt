@@ -46,6 +46,7 @@ import org.eventt.core.model.StaticMarketGroupModel
 import org.eventt.core.model.StaticRegionModel
 import org.eventt.core.model.StaticStationModel
 import org.eventt.core.staticdata.JumpGraphService
+import org.eventt.ui.common.ensureVisible
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 import java.util.Locale
@@ -725,6 +726,14 @@ private fun StationTradingTab(
                 }
             }
 
+            // The Ctrl+Z hotkey cycles activeTypeId through the list, but the highlighted row
+            // moves independently of scroll position — without this, cycling can walk the active
+            // row off-screen with no visual indication of where it went.
+            LaunchedEffect(activeTypeId, sorted) {
+                val idx = sorted.indexOfFirst { it.typeId == activeTypeId }
+                if (idx >= 0) listState.ensureVisible(idx)
+            }
+
             StationHeader(sortCol, sortAsc) { col ->
                 if (sortCol == col) {
                     sortAsc = !sortAsc
@@ -1301,6 +1310,14 @@ private fun InterRegionTab(
                         },
                     )
                 }
+            }
+
+            // The Ctrl+Z hotkey cycles activeTypeId through the list, but the highlighted row
+            // moves independently of scroll position — without this, cycling can walk the active
+            // row off-screen with no visual indication of where it went.
+            LaunchedEffect(activeTypeId, sorted) {
+                val idx = sorted.indexOfFirst { it.typeId == activeTypeId }
+                if (idx >= 0) listState.ensureVisible(idx)
             }
 
             RegionHeader(sortCol, sortAsc) { col ->

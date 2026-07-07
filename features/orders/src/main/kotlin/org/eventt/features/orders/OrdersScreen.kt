@@ -6,6 +6,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -32,6 +33,7 @@ import org.eventt.core.esi.EsiClient
 import org.eventt.ui.common.EmptyState
 import org.eventt.ui.common.EsiRefreshButton
 import org.eventt.ui.common.LoadingOverlay
+import org.eventt.ui.common.ensureVisible
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 import java.time.OffsetDateTime
@@ -715,7 +717,15 @@ private fun SellOrdersTable(
             StaticHeader("", Modifier.width(36.dp))
         }
         HorizontalDivider()
-        LazyColumn {
+        val listState = rememberLazyListState()
+        // The hotkey cycles activeOrderId through the list, but the highlighted row moves
+        // independently of scroll position — without this, cycling can walk the active row
+        // off-screen with no visual indication of where it went.
+        LaunchedEffect(activeOrderId, orders) {
+            val idx = orders.indexOfFirst { it.orderId == activeOrderId }
+            if (idx >= 0) listState.ensureVisible(idx)
+        }
+        LazyColumn(state = listState) {
             items(orders, key = { it.orderId }) { order ->
                 val comp = comparisons[order.typeId to order.regionId]
                 SellOrderRow(
@@ -770,7 +780,15 @@ private fun BuyOrdersTable(
             StaticHeader("", Modifier.width(36.dp))
         }
         HorizontalDivider()
-        LazyColumn {
+        val listState = rememberLazyListState()
+        // The hotkey cycles activeOrderId through the list, but the highlighted row moves
+        // independently of scroll position — without this, cycling can walk the active row
+        // off-screen with no visual indication of where it went.
+        LaunchedEffect(activeOrderId, orders) {
+            val idx = orders.indexOfFirst { it.orderId == activeOrderId }
+            if (idx >= 0) listState.ensureVisible(idx)
+        }
+        LazyColumn(state = listState) {
             items(orders, key = { it.orderId }) { order ->
                 val comp = comparisons[order.typeId to order.regionId]
                 BuyOrderRow(
