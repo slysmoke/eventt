@@ -24,6 +24,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.OrderHistoryDao
@@ -375,6 +377,19 @@ fun OrdersScreen(charId: Int?) {
             fifoResult = fifo
             loadOrders(id)
         } ?: PendingOrdersQueue.clear()
+    }
+
+    // Competing-order prices (who's undercut/overbid us) go stale as soon as the ESI cache
+    // entry expires — re-checking periodically picks that up automatically instead of only ever
+    // refreshing once on load. Cheap when nothing's actually expired yet: getMarketRegionOrders
+    // serves the cached response instantly for anything still FRESH, so this only triggers real
+    // network calls for the pairs that have actually gone stale.
+    LaunchedEffect(charId) {
+        if (charId == null) return@LaunchedEffect
+        while (isActive) {
+            delay(60_000)
+            fetchMarketComparisons(orders)
+        }
     }
 
     // Keep the global hotkey queue in sync with the active tab + market comparison data.
