@@ -9,6 +9,7 @@ import org.eventt.core.database.DatabaseManager
 import org.eventt.core.http.EveHttpClient
 import org.eventt.core.marketlogs.MarketLogWatcher
 import org.eventt.core.model.AppPaths
+import org.eventt.core.nostr.NostrRelayManager
 import org.eventt.ui.EventtApp
 
 fun main() {
@@ -39,6 +40,7 @@ fun main() {
     // processed. A blind delete-on-startup step used to run here and would destroy exactly that
     // file before the watcher ever saw it — a real data-loss bug, not just theoretical.
     MarketLogWatcher.start()
+    NostrRelayManager.start()
 
     application {
         Window(
@@ -48,6 +50,7 @@ fun main() {
             onCloseRequest = {
                 GlobalHotkeyService.stop()
                 MarketLogWatcher.stop()
+                NostrRelayManager.stop()
                 exitApplication()
             },
         ) {

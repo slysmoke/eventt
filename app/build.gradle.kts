@@ -67,6 +67,7 @@ dependencies {
     implementation(project(":core:queue"))
     implementation(project(":core:staticdata"))
     implementation(project(":core:image"))
+    implementation(project(":core:nostr"))
 
     // UI modules
     implementation(project(":ui:theme"))
@@ -85,6 +86,7 @@ dependencies {
     implementation(project(":features:settings"))
     implementation(project(":features:overlay"))
     implementation(project(":features:tools"))
+    implementation(project(":features:p2pmarket"))
     implementation(project(":core:everef"))
     implementation(project(":core:marketlogs"))
 

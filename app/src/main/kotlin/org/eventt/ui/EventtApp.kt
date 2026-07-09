@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -51,6 +52,7 @@ import org.eventt.features.market.MarketAnalysisScreen
 import org.eventt.features.market.MarketBrowserScreen
 import org.eventt.features.orders.OrdersScreen
 import org.eventt.features.overlay.OverlayWindow
+import org.eventt.features.p2pmarket.P2pMarketScreen
 import org.eventt.features.settings.SettingsScreen
 import org.eventt.features.tools.ToolsScreen
 import org.eventt.features.wallet.WalletScreen
@@ -77,6 +79,7 @@ enum class AppScreen(
     ALERTS("Alerts", Icons.Default.Notifications),
     CONTRACTS("Contracts", Icons.Default.Description),
     TOOLS("Tools", Icons.Default.Build),
+    P2P_MARKET("P2P Market", Icons.AutoMirrored.Filled.CompareArrows),
     SETTINGS("Settings", Icons.Default.Settings),
 }
 
@@ -800,6 +803,7 @@ private fun ScreenContent(
                             AppScreen.ALERTS -> PriceAlertsScreen()
                             AppScreen.CONTRACTS -> ContractTrackerScreen(charId = selectedCharId)
                             AppScreen.TOOLS -> ToolsScreen(context = selectedContext)
+                            AppScreen.P2P_MARKET -> P2pMarketScreen()
                             AppScreen.SETTINGS -> SettingsScreen()
                         }
                     }

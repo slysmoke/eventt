@@ -471,6 +471,56 @@ object DatabaseManager {
                     corporation_id INTEGER
                 )
                 """.trimIndent(),
+                // P2P Market (Nostr) — local Nostr identities. encrypted_privkey is opaque
+                // ciphertext from NostrKeyCrypto; the raw key never touches this table.
+                """
+                CREATE TABLE IF NOT EXISTS nostr_identity (
+                    pubkey TEXT PRIMARY KEY,
+                    encrypted_privkey TEXT NOT NULL,
+                    label TEXT DEFAULT '',
+                    is_active INTEGER DEFAULT 0,
+                    created_at INTEGER DEFAULT (strftime('%s', 'now') * 1000)
+                )
+                """.trimIndent(),
+                // P2P Market (Nostr) — configurable relay list, seeded with defaults on first run.
+                """
+                CREATE TABLE IF NOT EXISTS nostr_relays (
+                    url TEXT PRIMARY KEY,
+                    enabled INTEGER DEFAULT 1,
+                    read INTEGER DEFAULT 1,
+                    write INTEGER DEFAULT 1,
+                    sort_order INTEGER DEFAULT 0,
+                    last_connected_at INTEGER,
+                    last_status TEXT DEFAULT 'unknown',
+                    last_error TEXT
+                )
+                """.trimIndent(),
+                // P2P Market (Nostr) — local mirror of kind-30735 addressable order events (own +
+                // others). (order_uuid, pubkey) is the NIP-33 addressable coordinate; upserts keep
+                // only the highest-seen created_at per coordinate, matching relay replace semantics.
+                """
+                CREATE TABLE IF NOT EXISTS nostr_orders (
+                    order_uuid TEXT NOT NULL,
+                    pubkey TEXT NOT NULL,
+                    event_id TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    side TEXT NOT NULL,
+                    type_id INTEGER NOT NULL,
+                    region_id INTEGER NOT NULL,
+                    price REAL NOT NULL,
+                    qty_total INTEGER NOT NULL,
+                    qty_remaining INTEGER NOT NULL,
+                    min_lot INTEGER NOT NULL,
+                    min_lot_unit TEXT NOT NULL,
+                    trader_char TEXT DEFAULT '',
+                    expiration INTEGER NOT NULL,
+                    raw_event_json TEXT NOT NULL,
+                    is_mine INTEGER DEFAULT 0,
+                    first_seen_at INTEGER DEFAULT (strftime('%s', 'now') * 1000),
+                    updated_at INTEGER DEFAULT (strftime('%s', 'now') * 1000),
+                    PRIMARY KEY (order_uuid, pubkey)
+                )
+                """.trimIndent(),
             )
 
         // using conn parameter
@@ -523,6 +573,9 @@ object DatabaseManager {
                 "CREATE INDEX IF NOT EXISTS idx_order_history_corp ON order_history(corporation_id)",
                 "CREATE INDEX IF NOT EXISTS idx_active_orders_character ON active_orders(character_id)",
                 "CREATE INDEX IF NOT EXISTS idx_active_orders_corp ON active_orders(corporation_id)",
+                "CREATE INDEX IF NOT EXISTS idx_nostr_orders_lookup ON nostr_orders(type_id, region_id, side)",
+                "CREATE INDEX IF NOT EXISTS idx_nostr_orders_expiration ON nostr_orders(expiration)",
+                "CREATE INDEX IF NOT EXISTS idx_nostr_orders_mine ON nostr_orders(is_mine)",
             )
 
         // using conn parameter

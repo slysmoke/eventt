@@ -27,6 +27,7 @@ include(":core:staticdata")
 include(":core:image")
 include(":core:everef")
 include(":core:marketlogs")
+include(":core:nostr")
 
 // UI modules
 include(":ui:theme")
@@ -45,6 +46,7 @@ include(":features:watchlist")
 include(":features:settings")
 include(":features:overlay")
 include(":features:tools")
+include(":features:p2pmarket")
 
 // Main app
 include(":app")

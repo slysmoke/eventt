@@ -100,6 +100,10 @@ fun SettingsScreen() {
 
         CharacterFeesCard()
 
+        NostrIdentityCard()
+
+        NostrRelaysCard()
+
         MarketLogsCard(
             path = marketLogPath,
             autoDetectFailed = marketLogAutoDetectFailed,
