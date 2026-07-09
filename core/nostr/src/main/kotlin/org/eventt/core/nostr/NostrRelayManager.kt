@@ -2,7 +2,9 @@ package org.eventt.core.nostr
 
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.relay.client.NostrClient
+import com.vitorpamplona.quartz.nip01Core.relay.client.listeners.RelayConnectionListener
 import com.vitorpamplona.quartz.nip01Core.relay.client.reqs.SubscriptionListener
+import com.vitorpamplona.quartz.nip01Core.relay.client.single.IRelayClient
 import com.vitorpamplona.quartz.nip01Core.relay.filters.Filter
 import com.vitorpamplona.quartz.nip01Core.relay.normalizer.NormalizedRelayUrl
 import com.vitorpamplona.quartz.nip01Core.relay.normalizer.normalizeRelayUrlOrNull
@@ -27,6 +29,8 @@ sealed class NostrRelayEvent {
     data class OrderUpdated(val order: ParsedOrder) : NostrRelayEvent()
 
     data object ReservationActivity : NostrRelayEvent()
+
+    data object RelayStatusChanged : NostrRelayEvent()
 }
 
 private const val ORDERS_SUBSCRIPTION_ID = "p2pmarket-orders"
@@ -78,6 +82,31 @@ object NostrRelayManager {
             val websocketBuilder: WebsocketBuilder = BasicOkHttpWebSocket.Builder { httpClient }
             val c = NostrClient(websocketBuilder, s)
             client = c
+            c.addConnectionListener(
+                object : RelayConnectionListener {
+                    override fun onConnected(
+                        relay: IRelayClient,
+                        subs: Int,
+                        needsAuth: Boolean,
+                    ) {
+                        NostrRelayDao.updateStatus(relay.url.url, "connected", null)
+                        _events.tryEmit(NostrRelayEvent.RelayStatusChanged)
+                    }
+
+                    override fun onDisconnected(relay: IRelayClient) {
+                        NostrRelayDao.updateStatus(relay.url.url, "disconnected", null)
+                        _events.tryEmit(NostrRelayEvent.RelayStatusChanged)
+                    }
+
+                    override fun onCannotConnect(
+                        relay: IRelayClient,
+                        reason: String,
+                    ) {
+                        NostrRelayDao.updateStatus(relay.url.url, "error", reason)
+                        _events.tryEmit(NostrRelayEvent.RelayStatusChanged)
+                    }
+                },
+            )
             c.connect()
 
             val relayUrls = NostrRelayDao.getAll().filter { it.enabled }.mapNotNull { it.url.normalizeRelayUrlOrNull() }

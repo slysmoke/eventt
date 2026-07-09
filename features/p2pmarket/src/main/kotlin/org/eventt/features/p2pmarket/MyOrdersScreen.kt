@@ -71,6 +71,7 @@ fun MyOrdersScreen() {
     var traderChar by remember { mutableStateOf("") }
     var isPosting by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
+    var actionError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         allRegions = withContext(Dispatchers.IO) { StaticDataDao.getAllRegions() }
@@ -208,6 +209,11 @@ fun MyOrdersScreen() {
             }
         }
 
+        actionError?.let {
+            Spacer(Modifier.height(12.dp))
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+        }
+
         if (incomingRequests.isNotEmpty()) {
             Spacer(Modifier.height(16.dp))
             Text("Incoming requests", style = MaterialTheme.typography.titleMedium)
@@ -218,13 +224,15 @@ fun MyOrdersScreen() {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(onClick = {
                                 scope.launch(Dispatchers.IO) {
-                                    ReservationService.respond(reservation, accept = true)
+                                    val ok = ReservationService.respond(reservation, accept = true)
+                                    actionError = if (ok) null else "Couldn't accept — is your P2P Market identity still set up?"
                                     reloadReservations()
                                 }
                             }) { Text("Accept") }
                             OutlinedButton(onClick = {
                                 scope.launch(Dispatchers.IO) {
-                                    ReservationService.respond(reservation, accept = false)
+                                    val ok = ReservationService.respond(reservation, accept = false)
+                                    actionError = if (ok) null else "Couldn't decline — is your P2P Market identity still set up?"
                                     reloadReservations()
                                 }
                             }) { Text("Decline") }
@@ -244,13 +252,15 @@ fun MyOrdersScreen() {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(onClick = {
                                 scope.launch(Dispatchers.IO) {
-                                    ReservationService.markCompleted(reservation)
+                                    val ok = ReservationService.markCompleted(reservation)
+                                    actionError = if (ok) null else "Couldn't publish the completion receipt — is your P2P Market identity still set up?"
                                     reloadReservations()
                                 }
                             }) { Text("Mark completed") }
                             OutlinedButton(onClick = {
                                 scope.launch(Dispatchers.IO) {
-                                    ReservationService.release(reservation)
+                                    val ok = ReservationService.release(reservation)
+                                    actionError = if (ok) null else "Couldn't release — is your P2P Market identity still set up?"
                                     reloadReservations()
                                 }
                             }) { Text("Release (buyer no-show)") }
@@ -325,6 +335,7 @@ private fun MyOrderRow(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            ExpiringSoonLabel(order.expiration)
             HorizontalDivider()
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onRenew) { Text("Renew") }

@@ -88,6 +88,7 @@ private fun OrderRow(order: NostrOrderModel) {
     var savings by remember(order.orderUuid, order.pubkey, order.price) { mutableStateOf<SavingsResult?>(null) }
     var showRequestDialog by remember { mutableStateOf(false) }
     var requestSent by remember(order.orderUuid, order.pubkey) { mutableStateOf(false) }
+    var requestError by remember { mutableStateOf<String?>(null) }
     var confirmedTrades by remember(order.pubkey) { mutableStateOf(0) }
     val side = remember(order.side) { OrderSide.valueOf(order.side.uppercase()) }
 
@@ -118,6 +119,7 @@ private fun OrderRow(order: NostrOrderModel) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(typeName, style = MaterialTheme.typography.bodyMedium)
                 Text(regionName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                ExpiringSoonLabel(order.expiration)
             }
             Text(String.format(Locale.US, "%,.2f ISK", order.price), style = MaterialTheme.typography.bodyMedium)
             Text("${order.qtyRemaining}/${order.qtyTotal}", style = MaterialTheme.typography.bodySmall)
@@ -153,13 +155,23 @@ private fun OrderRow(order: NostrOrderModel) {
     if (showRequestDialog) {
         RequestReservationDialog(
             order = order,
-            onDismiss = { showRequestDialog = false },
+            error = requestError,
+            onDismiss = {
+                showRequestDialog = false
+                requestError = null
+            },
             onSend = { qty, note ->
                 scope.launch(Dispatchers.IO) {
                     val tradeId = ReservationService.sendRequest(order, qty, note)
-                    if (tradeId != null) requestSent = true
+                    withContext(Dispatchers.Main) {
+                        if (tradeId != null) {
+                            requestSent = true
+                            showRequestDialog = false
+                        } else {
+                            requestError = "No P2P Market identity set up yet — add one in Settings first."
+                        }
+                    }
                 }
-                showRequestDialog = false
             },
         )
     }
@@ -168,6 +180,7 @@ private fun OrderRow(order: NostrOrderModel) {
 @Composable
 private fun RequestReservationDialog(
     order: NostrOrderModel,
+    error: String?,
     onDismiss: () -> Unit,
     onSend: (qty: Long, note: String) -> Unit,
 ) {
@@ -190,6 +203,10 @@ private fun RequestReservationDialog(
                 OutlinedTextField(value = qtyText, onValueChange = { qtyText = it }, label = { Text("Quantity") }, singleLine = true)
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Note (optional)") }, singleLine = true)
+                error?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
             }
         },
         confirmButton = {

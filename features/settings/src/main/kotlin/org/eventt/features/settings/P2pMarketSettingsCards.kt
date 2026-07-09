@@ -39,6 +39,8 @@ import org.eventt.core.database.NostrRelayDao
 import org.eventt.core.database.NostrRelayModel
 import org.eventt.core.nostr.NostrIdentity
 import org.eventt.core.nostr.NostrIdentityService
+import org.eventt.core.nostr.NostrRelayEvent
+import org.eventt.core.nostr.NostrRelayManager
 
 @Composable
 internal fun NostrIdentityCard() {
@@ -134,7 +136,10 @@ internal fun NostrRelaysCard() {
         scope.launch(Dispatchers.IO) { relays = NostrRelayDao.getAll() }
     }
 
-    LaunchedEffect(Unit) { reload() }
+    LaunchedEffect(Unit) {
+        reload()
+        NostrRelayManager.events.collect { event -> if (event is NostrRelayEvent.RelayStatusChanged) reload() }
+    }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -160,7 +165,10 @@ internal fun NostrRelaysCard() {
                             }
                         },
                     )
-                    Text(relay.url, style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth().padding(start = 4.dp))
+                    Column(modifier = Modifier.fillMaxWidth().padding(start = 4.dp)) {
+                        Text(relay.url, style = MaterialTheme.typography.bodySmall)
+                        RelayStatusLabel(relay)
+                    }
                     IconButton(onClick = {
                         scope.launch(Dispatchers.IO) {
                             NostrRelayDao.remove(relay.url)
@@ -194,4 +202,16 @@ internal fun NostrRelaysCard() {
             }
         }
     }
+}
+
+@Composable
+private fun RelayStatusLabel(relay: NostrRelayModel) {
+    val (label, color) =
+        when (relay.lastStatus) {
+            "connected" -> "Connected" to MaterialTheme.colorScheme.tertiary
+            "error" -> (relay.lastError?.let { "Error: $it" } ?: "Error") to MaterialTheme.colorScheme.error
+            "disconnected" -> "Disconnected" to MaterialTheme.colorScheme.onSurfaceVariant
+            else -> "Not yet connected" to MaterialTheme.colorScheme.onSurfaceVariant
+        }
+    Text(label, style = MaterialTheme.typography.labelSmall, color = color)
 }
