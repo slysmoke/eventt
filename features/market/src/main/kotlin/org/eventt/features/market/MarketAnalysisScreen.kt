@@ -4,13 +4,11 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.*
@@ -39,6 +37,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import org.eventt.core.database.ActiveOrderDao
 import org.eventt.core.database.AppState
 import org.eventt.core.database.MarketDao
 import org.eventt.core.database.StaticDataDao
@@ -52,6 +51,7 @@ import org.eventt.ui.common.ensureVisible
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 import java.util.Locale
+import kotlin.math.round
 
 // ─── Data models ──────────────────────────────────────────────────────────
 
@@ -192,12 +192,20 @@ private fun regionFinalVol(
     tradeType: InterRegionTradeType,
     volCapEnabled: Boolean,
     volCapPct: Double,
-): Long =
-    when (tradeType) {
-        InterRegionTradeType.BUY_TO_SELL, InterRegionTradeType.SAFE_BUY_TO_SELL -> regionEffVol(opp, volCapEnabled, volCapPct)
-        InterRegionTradeType.SELL_TO_SELL -> minOf(opp.profitableVolume, regionEffVol(opp, volCapEnabled, volCapPct))
-        InterRegionTradeType.BUY_TO_BUY, InterRegionTradeType.SELL_TO_BUY -> opp.profitableVolume
-    }
+    maxCargoM3: Double = Double.MAX_VALUE,
+): Long {
+    val base =
+        when (tradeType) {
+            InterRegionTradeType.BUY_TO_SELL, InterRegionTradeType.SAFE_BUY_TO_SELL -> regionEffVol(opp, volCapEnabled, volCapPct)
+            InterRegionTradeType.SELL_TO_SELL -> minOf(opp.profitableVolume, regionEffVol(opp, volCapEnabled, volCapPct))
+            InterRegionTradeType.BUY_TO_BUY, InterRegionTradeType.SELL_TO_BUY -> opp.profitableVolume
+        }
+    // "Max m³" caps the suggested quantity by total cargo volume, not just excluding oversized
+    // single units (that exclusion happens earlier, at computeRegionOpportunityForType) — an item
+    // that fits at all still shouldn't suggest more than maxCargoM3 worth of it in one haul.
+    if (maxCargoM3 >= Double.MAX_VALUE || opp.itemVolumeM3 <= 0) return base
+    return minOf(base, (maxCargoM3 / opp.itemVolumeM3).toLong())
+}
 
 // Estimated total profit at regionFinalVol — the exact walked total when the vol/day cap didn't
 // bind, otherwise profitableTotalProfit scaled proportionally (a fair approximation: we don't know
@@ -207,8 +215,9 @@ private fun regionDailyProfit(
     tradeType: InterRegionTradeType,
     volCapEnabled: Boolean,
     volCapPct: Double,
+    maxCargoM3: Double = Double.MAX_VALUE,
 ): Double {
-    val finalVol = regionFinalVol(opp, tradeType, volCapEnabled, volCapPct)
+    val finalVol = regionFinalVol(opp, tradeType, volCapEnabled, volCapPct, maxCargoM3)
     if (tradeType == InterRegionTradeType.BUY_TO_SELL || tradeType == InterRegionTradeType.SAFE_BUY_TO_SELL) return opp.netProfit * finalVol
     if (opp.profitableVolume <= 0) return 0.0
     if (finalVol >= opp.profitableVolume) return opp.profitableTotalProfit
@@ -222,10 +231,11 @@ private fun sortRegion(
     asc: Boolean,
     volCapEnabled: Boolean = false,
     volCapPct: Double = 100.0,
+    maxCargoM3: Double = Double.MAX_VALUE,
 ): List<RegionOpportunity> {
     fun effVol(opp: RegionOpportunity) = regionEffVol(opp, volCapEnabled, volCapPct)
 
-    fun finalVol(opp: RegionOpportunity) = regionFinalVol(opp, tradeType, volCapEnabled, volCapPct)
+    fun finalVol(opp: RegionOpportunity) = regionFinalVol(opp, tradeType, volCapEnabled, volCapPct, maxCargoM3)
     val cmp: Comparator<RegionOpportunity> =
         when (col) {
             RegionSortCol.NAME -> compareBy { it.typeName }
@@ -237,7 +247,7 @@ private fun sortRegion(
             RegionSortCol.NET_PROFIT -> compareBy { it.netProfit }
             RegionSortCol.VOLUME -> compareBy { effVol(it) }
             RegionSortCol.TREND_7D -> compareBy { if (it.priceChange7d.isNaN()) Double.MIN_VALUE else it.priceChange7d }
-            RegionSortCol.NET_VOL -> compareBy { regionDailyProfit(it, tradeType, volCapEnabled, volCapPct) }
+            RegionSortCol.NET_VOL -> compareBy { regionDailyProfit(it, tradeType, volCapEnabled, volCapPct, maxCargoM3) }
             RegionSortCol.QTY_TO_BUY -> compareBy { finalVol(it) }
         }
     return if (asc) list.sortedWith(cmp) else list.sortedWith(cmp.reversed())
@@ -258,6 +268,7 @@ private object S {
     const val ST_VOL_CAP_ENABLED = "analysis.s.volCapEnabled"
     const val ST_VOL_CAP_PCT = "analysis.s.volCapPct"
     const val ST_COPY_VOLUME = "analysis.s.copyVolume"
+    const val ST_SKIP_EXISTING = "analysis.s.skipExisting"
 
     // Inter-region keys
     const val IR_BUY_REGION = "analysis.r.buyRegion"
@@ -274,6 +285,7 @@ private object S {
     const val IR_VOL_CAP_ENABLED = "analysis.r.volCapEnabled"
     const val IR_VOL_CAP_PCT = "analysis.r.volCapPct"
     const val IR_COPY_VOLUME = "analysis.r.copyVolume"
+    const val IR_SKIP_EXISTING = "analysis.r.skipExisting"
 
     fun get(key: String): String? = StaticDataDao.getSetting(key)
 
@@ -327,6 +339,7 @@ fun MarketAnalysisScreen() {
 
 // ─── Station Trading ──────────────────────────────────────────────────────
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StationTradingTab(
     allRegions: List<StaticRegionModel>,
@@ -356,6 +369,7 @@ private fun StationTradingTab(
     var volCapEnabled by remember { mutableStateOf(false) }
     var volCapPct by remember { mutableStateOf("10") }
     var copyVolumeEnabled by remember { mutableStateOf(true) }
+    var skipExistingOrders by remember { mutableStateOf(false) }
 
     // Load persisted settings + character tax values
     LaunchedEffect(charId) {
@@ -369,6 +383,7 @@ private fun StationTradingTab(
             S.get(S.ST_VOL_CAP_ENABLED)?.let { volCapEnabled = it == "true" }
             S.get(S.ST_VOL_CAP_PCT)?.let { volCapPct = it }
             S.get(S.ST_COPY_VOLUME)?.let { copyVolumeEnabled = it == "true" }
+            S.get(S.ST_SKIP_EXISTING)?.let { skipExistingOrders = it == "true" }
             if (charId != null) {
                 brokerFeePct = StaticDataDao.getCharBrokersFee(charId)
                 salesTaxPct = StaticDataDao.getCharSalesTax(charId)
@@ -417,10 +432,9 @@ private fun StationTradingTab(
     Column(modifier = Modifier.fillMaxSize()) {
         // ── Filter bar ─────────────────────────────────────────────
         FilterBar {
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
+            FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.Bottom,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 RegionPicker(allRegions, regionId, width = 180.dp) {
                     regionId = it
@@ -467,43 +481,35 @@ private fun StationTradingTab(
                 FilterDivider()
                 // Volume modifier — scales the suggested/displayed daily volume by this percentage
                 // (e.g. entering 50 shows/copies 50% of the computed daily volume).
-                Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                    Text(
-                        "Vol %",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                CheckboxParamField(
+                    label = "Vol %",
+                    checked = volCapEnabled,
+                    onCheckedChange = {
+                        volCapEnabled = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_VOL_CAP_ENABLED, it.toString()) } }
+                    },
+                    value = volCapPct,
+                    onValueChange = { v ->
+                        volCapPct = v
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_VOL_CAP_PCT, v) } }
+                    },
+                )
+                FilterControl("Skip Orders") {
+                    Checkbox(
+                        checked = skipExistingOrders,
+                        onCheckedChange = {
+                            skipExistingOrders = it
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_SKIP_EXISTING, it.toString()) } }
+                        },
+                        modifier = Modifier.size(24.dp),
                     )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = volCapEnabled,
-                            onCheckedChange = {
-                                volCapEnabled = it
-                                scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_VOL_CAP_ENABLED, it.toString()) } }
-                            },
-                            modifier = Modifier.size(24.dp),
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        OutlinedTextField(
-                            value = volCapPct,
-                            onValueChange = { v ->
-                                volCapPct = v
-                                scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_VOL_CAP_PCT, v) } }
-                            },
-                            label = { Text("%") },
-                            enabled = volCapEnabled,
-                            singleLine = true,
-                            textStyle = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.width(68.dp),
-                        )
-                    }
                 }
             }
             // Row 2: hotkey toggle + fees + analyze button + status — its own line so it doesn't
-            // get squeezed off-screen next to the (already scrollable) filter fields above.
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
+            // get squeezed off-screen next to the filter fields above.
+            FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.Bottom,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 // Toggles whether the hotkey's second press copies the suggested volume, or just
                 // advances straight to the next item after copying the price.
@@ -554,7 +560,7 @@ private fun StationTradingTab(
                                         val filterGroupId = selectedSubGroup?.marketGroupId ?: selectedTopGroup?.marketGroupId
                                         val filterGroupIds = filterGroupId?.let { withContext(Dispatchers.IO) { buildGroupSubtree(it) } }
 
-                                        val typeIds =
+                                        val allTypeIds =
                                             withContext(Dispatchers.IO) {
                                                 if (filterGroupIds != null) {
                                                     StaticDataDao.getTypeIdsByMarketGroups(filterGroupIds)
@@ -562,8 +568,27 @@ private fun StationTradingTab(
                                                     StaticDataDao.getAllMarketTypeIds()
                                                 }
                                             }
+                                        // Region-scoped, not character-scoped: excludes a type if
+                                        // ANY locally-known character/corp already has an active
+                                        // order for it in this region — saves the ESI calls too.
+                                        val typeIds =
+                                            if (skipExistingOrders) {
+                                                val excluded =
+                                                    withContext(Dispatchers.IO) {
+                                                        ActiveOrderDao
+                                                            .getAll()
+                                                            .filter { it.regionId == regionId }
+                                                            .map { it.typeId }
+                                                            .toSet()
+                                                    }
+                                                allTypeIds.filter { it !in excluded }
+                                            } else {
+                                                allTypeIds
+                                            }
 
-                                        val minMarginD = minMargin.toDoubleOrNull() ?: 5.0
+                                        // Empty = no minimum required (matches Min Vol/Min Net's
+                                        // convention below), not a silent revert to a nonzero default.
+                                        val minMarginD = minMargin.toDoubleOrNull() ?: 0.0
                                         val minDailyVolL = minDailyVol.toLongOrNull() ?: 0L
                                         val maxBuyPriceD = maxBuyPrice.toDoubleOrNull() ?: Double.MAX_VALUE
                                         val minNetProfitD = minNetProfit.toDoubleOrNull() ?: 0.0
@@ -867,6 +892,7 @@ private fun StationTradingTab(
 
 // ─── Inter-Region ─────────────────────────────────────────────────────────
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun InterRegionTab(
     allRegions: List<StaticRegionModel>,
@@ -900,6 +926,7 @@ private fun InterRegionTab(
     var volCapEnabled by remember { mutableStateOf(false) }
     var volCapPct by remember { mutableStateOf("10") }
     var copyVolumeEnabled by remember { mutableStateOf(true) }
+    var skipExistingOrders by remember { mutableStateOf(false) }
 
     // Load persisted settings + character tax values
     LaunchedEffect(charId) {
@@ -918,6 +945,7 @@ private fun InterRegionTab(
             S.get(S.IR_VOL_CAP_ENABLED)?.let { volCapEnabled = it == "true" }
             S.get(S.IR_VOL_CAP_PCT)?.let { volCapPct = it }
             S.get(S.IR_COPY_VOLUME)?.let { copyVolumeEnabled = it == "true" }
+            S.get(S.IR_SKIP_EXISTING)?.let { skipExistingOrders = it == "true" }
             if (charId != null) {
                 brokerFeePct = StaticDataDao.getCharBrokersFee(charId)
                 salesTaxPct = StaticDataDao.getCharSalesTax(charId)
@@ -974,10 +1002,9 @@ private fun InterRegionTab(
         // ── Filter bar ─────────────────────────────────────────────
         FilterBar {
             // Row 1: regions + trade type + categories
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
+            FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.Bottom,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 RegionPicker(allRegions, buyRegionId, width = 168.dp, label = "Buy Region") {
                     buyRegionId = it
@@ -1020,10 +1047,9 @@ private fun InterRegionTab(
                 }
             }
             // Row 2: numeric params + button
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
+            FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.Bottom,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 ParamField("Margin %", minMargin, 68.dp) {
                     minMargin = it
@@ -1046,42 +1072,35 @@ private fun InterRegionTab(
                 // the source/buy region's daily volume when checked, the destination/sell
                 // region's when unchecked — so the field stays live either way, not just when
                 // "use source volume" is on.
-                Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                    Text(
-                        if (volCapEnabled) "Src vol %" else "Dst vol %",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                CheckboxParamField(
+                    label = if (volCapEnabled) "Src vol %" else "Dst vol %",
+                    checked = volCapEnabled,
+                    onCheckedChange = {
+                        volCapEnabled = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_VOL_CAP_ENABLED, it.toString()) } }
+                    },
+                    value = volCapPct,
+                    onValueChange = { v ->
+                        volCapPct = v
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_VOL_CAP_PCT, v) } }
+                    },
+                )
+                FilterControl("Skip Orders") {
+                    Checkbox(
+                        checked = skipExistingOrders,
+                        onCheckedChange = {
+                            skipExistingOrders = it
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SKIP_EXISTING, it.toString()) } }
+                        },
+                        modifier = Modifier.size(24.dp),
                     )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = volCapEnabled,
-                            onCheckedChange = {
-                                volCapEnabled = it
-                                scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_VOL_CAP_ENABLED, it.toString()) } }
-                            },
-                            modifier = Modifier.size(24.dp),
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        OutlinedTextField(
-                            value = volCapPct,
-                            onValueChange = { v ->
-                                volCapPct = v
-                                scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_VOL_CAP_PCT, v) } }
-                            },
-                            label = { Text("%") },
-                            singleLine = true,
-                            textStyle = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.width(68.dp),
-                        )
-                    }
                 }
             }
             // Row 3: hotkey toggle + fees + analyze button + status — its own line, same reasoning
             // as Station Trading's row split (otherwise it gets squeezed off-screen).
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
+            FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.Bottom,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 // Toggles whether the hotkey's second press copies the suggested volume, or just
                 // advances straight to the next item after copying the price.
@@ -1136,8 +1155,10 @@ private fun InterRegionTab(
                                     val filterGroupId = selectedSubGroup?.marketGroupId ?: selectedTopGroup?.marketGroupId
                                     val filterGroupIds = filterGroupId?.let { withContext(Dispatchers.IO) { buildGroupSubtree(it) } }
                                     val iskPerM3D = iskPerM3.toDoubleOrNull() ?: 1000.0
-                                    val maxCargoM3D = maxCargoM3.toDoubleOrNull() ?: 10000.0
-                                    val minMarginD = minMargin.toDoubleOrNull() ?: 5.0
+                                    // Empty = no cap (matches Max Buy's convention in Station
+                                    // Trading), not a silent revert to a nonzero 10000 m³ cap.
+                                    val maxCargoM3D = maxCargoM3.toDoubleOrNull() ?: Double.MAX_VALUE
+                                    val minMarginD = minMargin.toDoubleOrNull() ?: 0.0
                                     val minNetD = minNetProfit.toDoubleOrNull() ?: 0.0
                                     val brokerFeeD = brokerFeePct
                                     val salesTaxD = salesTaxPct
@@ -1179,13 +1200,30 @@ private fun InterRegionTab(
                                             }
                                         val locationSystemCache = java.util.concurrent.ConcurrentHashMap<Long, Int?>()
 
-                                        val typeIds =
+                                        val allTypeIds =
                                             withContext(Dispatchers.IO) {
                                                 if (filterGroupIds != null) {
                                                     StaticDataDao.getTypeIdsByMarketGroups(filterGroupIds)
                                                 } else {
                                                     StaticDataDao.getAllMarketTypeIds()
                                                 }
+                                            }
+                                        // Region-scoped, not character-scoped, on EITHER leg: excludes
+                                        // a type if any locally-known character/corp already has an
+                                        // active order for it in the buy region or the sell region.
+                                        val typeIds =
+                                            if (skipExistingOrders) {
+                                                val excluded =
+                                                    withContext(Dispatchers.IO) {
+                                                        ActiveOrderDao
+                                                            .getAll()
+                                                            .filter { it.regionId == buyRegionId || it.regionId == sellRegionId }
+                                                            .map { it.typeId }
+                                                            .toSet()
+                                                    }
+                                                allTypeIds.filter { it !in excluded }
+                                            } else {
+                                                allTypeIds
                                             }
                                         statusMsg = "0/${typeIds.size} types…"
 
@@ -1344,9 +1382,12 @@ private fun InterRegionTab(
         } else {
             // Not capped at 100 — this scales volume in either direction (50 halves it, 200 doubles it).
             val volCapPctVal = volCapPct.toDoubleOrNull()?.coerceIn(0.01, 1000.0) ?: 10.0
+            // Live-reactive (not just at Analyze time) — matches volCapPctVal's own convention, so
+            // adjusting Max m³ after a run re-caps quantities immediately without re-analyzing.
+            val maxCargoM3Val = maxCargoM3.toDoubleOrNull() ?: Double.MAX_VALUE
             val sorted =
-                remember(results, tradeType, sortCol, sortAsc, volCapEnabled, volCapPctVal) {
-                    sortRegion(results, tradeType, sortCol, sortAsc, volCapEnabled, volCapPctVal)
+                remember(results, tradeType, sortCol, sortAsc, volCapEnabled, volCapPctVal, maxCargoM3Val) {
+                    sortRegion(results, tradeType, sortCol, sortAsc, volCapEnabled, volCapPctVal, maxCargoM3Val)
                 }
             var selectedIds by remember(results) { mutableStateOf(setOf<Int>()) }
             val listState = rememberLazyListState()
@@ -1375,7 +1416,7 @@ private fun InterRegionTab(
                                 typeName = opp.typeName,
                                 price = opp.buyPrice,
                                 isCompetitiveBid = isCompetitiveBid,
-                                volume = regionFinalVol(opp, tradeType, volCapEnabled, volCapPctVal),
+                                volume = regionFinalVol(opp, tradeType, volCapEnabled, volCapPctVal, maxCargoM3Val),
                             )
                         },
                     )
@@ -1416,7 +1457,15 @@ private fun InterRegionTab(
                                 .filter { it.typeId in selectedIds }
                                 .joinToString(
                                     "\n",
-                                ) { opp -> "${opp.typeName}\t${regionFinalVol(opp, tradeType, volCapEnabled, volCapPctVal)}" }
+                                ) { opp ->
+                                    "${opp.typeName}\t${regionFinalVol(
+                                        opp,
+                                        tradeType,
+                                        volCapEnabled,
+                                        volCapPctVal,
+                                        maxCargoM3Val,
+                                    )}"
+                                }
                         copyToClipboard(text)
                     },
                     onClear = { selectedIds = emptySet() },
@@ -1469,7 +1518,16 @@ private fun InterRegionTab(
             ) {
                 LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                     itemsIndexed(sorted, key = { _, item -> item.typeId }) { idx, opp ->
-                        RegionRow(opp, idx, tradeType, opp.typeId in selectedIds, volCapEnabled, volCapPctVal, opp.typeId == activeTypeId)
+                        RegionRow(
+                            opp,
+                            idx,
+                            tradeType,
+                            opp.typeId in selectedIds,
+                            volCapEnabled,
+                            volCapPctVal,
+                            opp.typeId == activeTypeId,
+                            maxCargoM3Val,
+                        )
                     }
                 }
             }
@@ -1535,6 +1593,33 @@ private fun FilterControl(
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
         )
         content()
+    }
+}
+
+// ─── Checkbox + numeric field, styled to match every other FilterControl-based control ────
+
+@Composable
+private fun CheckboxParamField(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    value: String,
+    onValueChange: (String) -> Unit,
+    fieldWidth: Dp = 68.dp,
+) {
+    FilterControl(label) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = checked, onCheckedChange = onCheckedChange, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(4.dp))
+            OutlinedTextField(
+                value = value,
+                onValueChange = onValueChange,
+                enabled = checked,
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.width(fieldWidth),
+            )
+        }
     }
 }
 
@@ -2075,10 +2160,11 @@ private fun RegionRow(
     volCapEnabled: Boolean = false,
     volCapPct: Double = 100.0,
     isActiveInGame: Boolean = false,
+    maxCargoM3: Double = Double.MAX_VALUE,
 ) {
     val effVol = regionEffVol(opp, volCapEnabled, volCapPct)
-    val qtyToBuy = regionFinalVol(opp, tradeType, volCapEnabled, volCapPct)
-    val dailyProfit = regionDailyProfit(opp, tradeType, volCapEnabled, volCapPct)
+    val qtyToBuy = regionFinalVol(opp, tradeType, volCapEnabled, volCapPct, maxCargoM3)
+    val dailyProfit = regionDailyProfit(opp, tradeType, volCapEnabled, volCapPct, maxCargoM3)
     val bg =
         when {
             selected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
@@ -2518,8 +2604,21 @@ private fun computeRegionOpportunityForType(
         when (tradeType) {
             InterRegionTradeType.SELL_TO_BUY, InterRegionTradeType.SELL_TO_SELL -> srcSell
             InterRegionTradeType.BUY_TO_BUY, InterRegionTradeType.BUY_TO_SELL -> srcBuy
-            // Priced off the sell side, not the buy side — see the enum's doc comment.
-            InterRegionTradeType.SAFE_BUY_TO_SELL -> srcSell?.let { it * (1.0 - (salesTaxPct + brokerFeePct) / 100.0) }
+            // Priced off the sell side, not the buy side — see the enum's doc comment. But it must
+            // still never sit at or behind the current best buy order (it would just never fill,
+            // parked behind someone else's bid) — when the fee-net price would tie or lose, bump it
+            // one EVE price-tick above the current best buy instead, so it becomes the winning bid.
+            InterRegionTradeType.SAFE_BUY_TO_SELL ->
+                srcSell?.let { sell ->
+                    val raw = sell * (1.0 - (salesTaxPct + brokerFeePct) / 100.0)
+                    if (srcBuy != null && raw <= srcBuy) {
+                        val step = eveSigFigStep(srcBuy)
+                        round(srcBuy / step) * step + step
+                    } else {
+                        val step = eveSigFigStep(raw)
+                        round(raw / step) * step
+                    }
+                }
         } ?: return null
     val sellPrice =
         when (tradeType) {

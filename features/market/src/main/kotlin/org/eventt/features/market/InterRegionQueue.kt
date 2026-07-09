@@ -17,9 +17,10 @@ import kotlin.math.pow
 import kotlin.math.round
 
 // EVE price rounding: 4 significant figures, minimum 0.01 ISK precision. Duplicated from
-// StationTradingQueue.kt rather than shared, since these are the only two call sites in this
-// module and it's not worth a cross-cutting helper for two ~10-line functions.
-private fun eveSigFigStep(price: Double): Double {
+// StationTradingQueue.kt rather than shared, since these are (otherwise) the only two call sites
+// in this module. internal (not private) so MarketAnalysisScreen.kt can reuse this exact copy for
+// its Safe Buy→Sell price-floor logic instead of adding a third duplicate.
+internal fun eveSigFigStep(price: Double): Double {
     if (price <= 0) return 0.01
     val magnitude = floor(log10(price))
     return maxOf(0.01, 10.0.pow(magnitude - 3))

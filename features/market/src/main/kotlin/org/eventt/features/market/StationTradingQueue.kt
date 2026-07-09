@@ -13,18 +13,12 @@ import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.floor
 import kotlin.math.log10
-import kotlin.math.pow
 import kotlin.math.round
 
-// EVE price rounding: 4 significant figures, minimum 0.01 ISK precision. Mirrors the identical
-// helper in features/orders/PendingOrdersQueue.kt — duplicated rather than shared across modules
-// since features:market doesn't depend on features:orders.
-private fun eveSigFigStep(price: Double): Double {
-    if (price <= 0) return 0.01
-    val magnitude = floor(log10(price))
-    return maxOf(0.01, 10.0.pow(magnitude - 3))
-}
-
+// eveSigFigStep (EVE price rounding: 4 significant figures, minimum 0.01 ISK precision) lives in
+// InterRegionQueue.kt (internal, module-visible) — was duplicated here too until MarketAnalysisScreen
+// needed a third copy for Safe Buy→Sell pricing, at which point this one was dropped in favor of
+// reusing that single internal copy.
 private fun formatEveSigFigPrice(price: Double): String {
     if (price <= 0) return "0.01"
     val step = eveSigFigStep(price)
