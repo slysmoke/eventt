@@ -44,6 +44,7 @@ jobs:
         include:
           - os: ubuntu-latest
             platform: linux
+            javaArch: x64
             exe: app/build/compose/binaries/main/app/eventt/bin/eventt
             installerTask: packageDeb
             installerDir: app/build/compose/binaries/main/deb
@@ -51,6 +52,7 @@ jobs:
 
           - os: windows-latest
             platform: windows
+            javaArch: x64
             # No bin/ subfolder here, unlike Linux/macOS — jpackage's Windows app-image puts
             # the exe directly at <packageName>/<packageName>.exe.
             exe: app/build/compose/binaries/main/app/eventt/eventt.exe
@@ -58,19 +60,25 @@ jobs:
             installerDir: app/build/compose/binaries/main/msi
             installerExt: msi
 
-          # No universal (fat) binary — jpackage/Skiko natives are tied to the build
-          # machine's arch, so Intel and Apple Silicon are built and shipped separately.
-          # UpdateChecker matches the asset filename on "macos-x64"/"macos-arm64", so these
-          # platform values must stay in sync with app/src/main/kotlin/org/eventt/update/UpdateChecker.kt.
-          - os: macos-13
+          # No universal (fat) binary — jpackage/Skiko natives are tied to the JDK's arch, so
+          # Intel and Apple Silicon are built and shipped separately. GitHub retired the hosted
+          # Intel macOS runner, so both variants now build on the same Apple Silicon runner;
+          # the x64 leg forces setup-java to install an x64 JDK, which macOS runs under Rosetta
+          # 2 (preinstalled on this runner image) — Rosetta only translates the *build*, the
+          # jpackage output embeds that x64 JVM and is a genuinely native Intel app. UpdateChecker
+          # matches the asset filename on "macos-x64"/"macos-arm64", so these platform values
+          # must stay in sync with app/src/main/kotlin/org/eventt/update/UpdateChecker.kt.
+          - os: macos-latest
             platform: macos-x64
+            javaArch: x64
             exe: app/build/compose/binaries/main/app/eventt.app/Contents/MacOS/eventt
             installerTask: packageDmg
             installerDir: app/build/compose/binaries/main/dmg
             installerExt: dmg
 
-          - os: macos-14
+          - os: macos-latest
             platform: macos-arm64
+            javaArch: arm64
             exe: app/build/compose/binaries/main/app/eventt.app/Contents/MacOS/eventt
             installerTask: packageDmg
             installerDir: app/build/compose/binaries/main/dmg
@@ -86,6 +94,7 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
+          architecture: ${{ matrix.javaArch }}
 
       - uses: actions/cache@v4
         with:
