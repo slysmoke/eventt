@@ -429,16 +429,21 @@ private fun Sidebar(
                 emptyList<CharacterModel>()
             }
         }
-    // Only corps with at least one locally-added member can be selected — that member's token
-    // is what authorizes the corp-scope ESI calls.
+    // One entry per (corp, member character) pair rather than one per corp — picking an
+    // arbitrary "acting character" for a corp broke opening items in the game client (ESI's
+    // open-market-window call only does anything visible for whichever character is actually
+    // logged into the local EVE client) and made it impossible to tell corp orders apart by who
+    // placed them. Listing every locally-added member lets you pick the one you're actually
+    // playing, same as the plain character list above.
     val corporations =
         remember(selectedContext) {
             try {
-                CorporationDao.getAll().mapNotNull { corp ->
-                    val corpId = corp["id"] as? Int ?: return@mapNotNull null
-                    val actingChar = characters.filter { it.corporationId == corpId }.firstOrNull() ?: return@mapNotNull null
-                    Triple(corpId, corp["name"] as? String ?: "", actingChar)
-                }
+                val corpNames = CorporationDao.getAll().associate { (it["id"] as? Int) to (it["name"] as? String ?: "") }
+                characters
+                    .mapNotNull { char ->
+                        val corpId = char.corporationId ?: return@mapNotNull null
+                        Triple(corpId, corpNames[corpId] ?: char.corporationName ?: "", char)
+                    }.sortedBy { (_, corpName, char) -> corpName + char.name }
             } catch (_: Exception) {
                 emptyList()
             }
@@ -446,9 +451,10 @@ private fun Sidebar(
     var charMenuExpanded by remember { mutableStateOf(false) }
     val selectedChar = (selectedContext as? ViewContext.Character)?.let { ctx -> characters.find { it.id == ctx.charId } }
     val selectedCorp = selectedContext as? ViewContext.Corporation
+    val selectedCorpActingChar = selectedCorp?.let { corp -> characters.find { it.id == corp.actingCharacterId } }
     val headerLabel =
         when {
-            selectedCorp != null -> selectedCorp.corporationName
+            selectedCorp != null -> "${selectedCorp.corporationName} (${selectedCorpActingChar?.name ?: "?"})"
             selectedChar != null -> selectedChar.name
             else -> "Select character"
         }
@@ -533,19 +539,20 @@ private fun Sidebar(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                             )
                             corporations.forEach { (corpId, corpName, actingChar) ->
+                                val isSelected = corpId == selectedCorp?.corporationId && actingChar.id == selectedCorp.actingCharacterId
                                 DropdownMenuItem(
                                     text = {
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                                         ) {
-                                            if (corpId == selectedCorp?.corporationId) {
+                                            if (isSelected) {
                                                 Icon(Icons.Default.Check, null, Modifier.size(14.dp), tint = eveColors.accentColor)
                                             } else {
                                                 Spacer(Modifier.size(14.dp))
                                             }
                                             Icon(Icons.Default.Business, null, Modifier.size(14.dp), tint = eveColors.accentColor)
-                                            Text(corpName, style = MaterialTheme.typography.bodyMedium)
+                                            Text("$corpName (${actingChar.name})", style = MaterialTheme.typography.bodyMedium)
                                         }
                                     },
                                     onClick = {
@@ -782,7 +789,7 @@ private fun ScreenContent(
                                 .clipToBounds(),
                     ) {
                         when (s) {
-                            AppScreen.DASHBOARD -> DashboardScreen(charId = selectedCharId, refreshTrigger = dashboardRefreshTrigger)
+                            AppScreen.DASHBOARD -> DashboardScreen(context = selectedContext, refreshTrigger = dashboardRefreshTrigger)
                             AppScreen.CHARACTERS -> CharacterManagementScreen()
                             AppScreen.MARKET -> MarketBrowserScreen()
                             AppScreen.ANALYSIS -> MarketAnalysisScreen()

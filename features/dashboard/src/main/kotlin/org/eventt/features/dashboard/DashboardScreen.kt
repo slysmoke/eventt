@@ -28,9 +28,13 @@ private val ACCENT = Color(0xFF4A90D9)
 
 @Composable
 fun DashboardScreen(
-    charId: Int?,
+    context: ViewContext?,
     refreshTrigger: Int = 0,
 ) {
+    val charId = (context as? ViewContext.Character)?.charId
+    val corpId = (context as? ViewContext.Corporation)?.corporationId
+    val corpName = (context as? ViewContext.Corporation)?.corporationName
+    val actingCharId = context?.actingCharId
     var walletBalance by remember { mutableStateOf(0.0) }
     var txBreakdown by remember { mutableStateOf<List<org.eventt.core.model.DailyWalletEntry>>(emptyList()) }
     var assetValue by remember { mutableStateOf(0.0) }
@@ -38,28 +42,39 @@ fun DashboardScreen(
     var triggeredAlerts by remember { mutableStateOf<List<PriceAlertModel>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
 
-    LaunchedEffect(charId, refreshTrigger) {
+    LaunchedEffect(context, refreshTrigger) {
         isLoading = true
         withContext(Dispatchers.IO) {
+            val isCorp = corpId != null
             val since90 = LocalDate.now().minusDays(90).toString()
             try {
-                walletBalance = WalletDao.getWalletSummary(characterId = charId).balance
-                txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = charId, since = since90)
-                assetValue = if (charId != null) AssetDao.getTotalValue(characterId = charId) else 0.0
-                recentTx = WalletDao.getTransactions(characterId = charId, limit = 12)
+                walletBalance = WalletDao.getWalletSummary(characterId = charId, corporationId = corpId).balance
+                txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = charId, corporationId = corpId, since = since90)
+                assetValue = if (context != null) AssetDao.getTotalValue(characterId = charId, corporationId = corpId) else 0.0
+                recentTx = WalletDao.getTransactions(characterId = charId, corporationId = corpId, limit = 12)
                 triggeredAlerts = AlertDao.getEnabled().filter { it.triggered }
             } catch (_: Exception) {
             }
 
-            if (charId != null) {
+            val acting = actingCharId
+            if (acting != null) {
                 try {
-                    walletBalance = EsiClient.getCharacterWallet(charId)
+                    walletBalance =
+                        if (isCorp) EsiClient.getCorporationWallet(corpId!!, acting).values.sum() else EsiClient.getCharacterWallet(acting)
                 } catch (e: Exception) {
                     println("Dashboard: wallet ESI error: ${e.message}")
                 }
 
                 try {
-                    val journalEntries = EsiClient.getCharacterJournal(charId)
+                    val journalEntries =
+                        if (isCorp) {
+                            EsiClient.getCorporationJournal(
+                                corpId!!,
+                                acting,
+                            )
+                        } else {
+                            EsiClient.getCharacterJournal(acting)
+                        }
                     journalEntries.forEach { entry ->
                         try {
                             WalletDao.insertJournalEntry(
@@ -74,22 +89,23 @@ fun DashboardScreen(
                                 secondPartyId = (entry["second_party_id"] as? Number)?.toInt() ?: 0,
                                 secondPartyName = "",
                                 taxAmount = (entry["tax"] as? Number)?.toDouble(),
-                                isCorp = false,
-                                characterId = charId,
-                                corporationId = null,
-                                divisionId = null,
+                                isCorp = isCorp,
+                                characterId = if (isCorp) null else charId,
+                                corporationId = corpId,
+                                divisionId = if (isCorp) (entry["division"] as? Number)?.toInt() else null,
                             )
                         } catch (_: Exception) {
                         }
                     }
-                    walletBalance = WalletDao.getWalletSummary(characterId = charId).balance
-                    txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = charId, since = since90)
+                    walletBalance = WalletDao.getWalletSummary(characterId = charId, corporationId = corpId).balance
+                    txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = charId, corporationId = corpId, since = since90)
                 } catch (e: Exception) {
                     println("Dashboard: journal ESI error: ${e.message}")
                 }
 
                 try {
-                    val txList = EsiClient.getCharacterTransactions(charId)
+                    val txList =
+                        if (isCorp) EsiClient.getCorporationTransactions(corpId!!, acting) else EsiClient.getCharacterTransactions(acting)
                     val typeNames =
                         txList
                             .mapNotNull { (it["type_id"] as? Number)?.toInt() }
@@ -113,15 +129,15 @@ fun DashboardScreen(
                                 clientName = "",
                                 locationId = (tx["location_id"] as? Number)?.toLong() ?: 0L,
                                 locationName = "",
-                                isCorp = false,
-                                characterId = charId,
-                                corporationId = null,
+                                isCorp = isCorp,
+                                characterId = if (isCorp) null else charId,
+                                corporationId = corpId,
                             )
                         } catch (_: Exception) {
                         }
                     }
-                    recentTx = WalletDao.getTransactions(characterId = charId, limit = 12)
-                    txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = charId, since = since90)
+                    recentTx = WalletDao.getTransactions(characterId = charId, corporationId = corpId, limit = 12)
+                    txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = charId, corporationId = corpId, since = since90)
                 } catch (e: Exception) {
                     println("Dashboard: transactions ESI error: ${e.message}")
                 }
@@ -130,7 +146,7 @@ fun DashboardScreen(
         isLoading = false
     }
 
-    if (charId == null) {
+    if (context == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("No character selected", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
         }
@@ -158,7 +174,10 @@ fun DashboardScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Dashboard", style = MaterialTheme.typography.headlineMedium)
+                Text(
+                    if (corpName != null) "Dashboard — $corpName" else "Dashboard",
+                    style = MaterialTheme.typography.headlineMedium,
+                )
                 if (isLoading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
             }
         }

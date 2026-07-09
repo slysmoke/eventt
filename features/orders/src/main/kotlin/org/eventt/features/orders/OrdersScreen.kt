@@ -158,6 +158,14 @@ fun OrdersScreen(context: ViewContext?) {
     // Corp view only: issuedByCharId -> character name, for the "Character" column.
     var issuerNames by remember { mutableStateOf<Map<Int, String>>(emptyMap()) }
 
+    // Corp view only: narrows the Sell/Buy tabs (and the Ctrl+Z queue) down to orders placed by
+    // one specific member — null means show every member's orders. Resets whenever the selected
+    // corp/character changes so a stale filter doesn't silently hide orders after switching.
+    var issuerFilter by remember(corpId) { mutableStateOf<Int?>(null) }
+
+    fun applyIssuerFilter(list: List<CharacterOrder>): List<CharacterOrder> =
+        if (issuerFilter != null) list.filter { it.issuedByCharId == issuerFilter } else list
+
     // Selected order for hotkey action
     var selectedOrderId by remember { mutableStateOf<Long?>(null) }
 
@@ -467,14 +475,16 @@ fun OrdersScreen(context: ViewContext?) {
     // Keep the global hotkey queue in sync with the active tab + market comparison data.
     // Tab 0 = sell orders only, Tab 1 = buy orders only, other tabs = all.
     // Beaten orders sort first so the most urgent ones cycle first.
-    LaunchedEffect(context, orders, marketComparisons, activeTab) {
+    LaunchedEffect(context, orders, marketComparisons, activeTab, issuerFilter) {
         val cid = actingCharId ?: return@LaunchedEffect
         val tabFiltered =
-            when (activeTab) {
-                0 -> orders.filter { !it.isBuyOrder }
-                1 -> orders.filter { it.isBuyOrder }
-                else -> orders
-            }
+            applyIssuerFilter(
+                when (activeTab) {
+                    0 -> orders.filter { !it.isBuyOrder }
+                    1 -> orders.filter { it.isBuyOrder }
+                    else -> orders
+                },
+            )
         val pending =
             tabFiltered
                 .filter { it.state == "active" }
@@ -541,11 +551,13 @@ fun OrdersScreen(context: ViewContext?) {
                 }
                 // Global hotkey queue indicator — scoped to the visible tab
                 val tabActive =
-                    when (activeTab) {
-                        0 -> orders.filter { !it.isBuyOrder && it.state == "active" }
-                        1 -> orders.filter { it.isBuyOrder && it.state == "active" }
-                        else -> orders.filter { it.state == "active" }
-                    }
+                    applyIssuerFilter(
+                        when (activeTab) {
+                            0 -> orders.filter { !it.isBuyOrder && it.state == "active" }
+                            1 -> orders.filter { it.isBuyOrder && it.state == "active" }
+                            else -> orders.filter { it.state == "active" }
+                        },
+                    )
                 val queueSize = tabActive.size
                 val beatenCount =
                     tabActive.count { o ->
@@ -602,6 +614,13 @@ fun OrdersScreen(context: ViewContext?) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
+                    if (corpId != null && issuerNames.isNotEmpty()) {
+                        IssuerFilterChip(
+                            issuerNames = issuerNames,
+                            selected = issuerFilter,
+                            onSelect = { issuerFilter = it },
+                        )
+                    }
                     TextButton(onClick = { recalculateFifo() }) {
                         Text("Recalculate P&L")
                     }
@@ -621,8 +640,8 @@ fun OrdersScreen(context: ViewContext?) {
             }
         }
 
-        val sellOrders = orders.filter { !it.isBuyOrder }
-        val buyOrders = orders.filter { it.isBuyOrder }
+        val sellOrders = applyIssuerFilter(orders.filter { !it.isBuyOrder })
+        val buyOrders = applyIssuerFilter(orders.filter { it.isBuyOrder })
         val inventory = fifoResult?.inventory ?: emptyMap()
 
         // Fallback cost map from completed buy orders in history.
@@ -1393,6 +1412,66 @@ private fun InventoryRow(
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────
+
+// Corp view: narrows the Sell/Buy tables (and the Ctrl+Z queue) down to one member's orders.
+@Composable
+private fun IssuerFilterChip(
+    issuerNames: Map<Int, String>,
+    selected: Int?,
+    onSelect: (Int?) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val sortedIssuers = remember(issuerNames) { issuerNames.entries.sortedBy { it.value } }
+
+    Box {
+        Surface(
+            shape = MaterialTheme.shapes.small,
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            onClick = { expanded = true },
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(14.dp))
+                Text(
+                    selected?.let { issuerNames[it] } ?: "All characters",
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp))
+            }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (selected == null) Icon(Icons.Default.Check, null, Modifier.size(14.dp)) else Spacer(Modifier.size(14.dp))
+                        Text("All characters")
+                    }
+                },
+                onClick = {
+                    onSelect(null)
+                    expanded = false
+                },
+            )
+            sortedIssuers.forEach { (charId, name) ->
+                DropdownMenuItem(
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (selected == charId) Icon(Icons.Default.Check, null, Modifier.size(14.dp)) else Spacer(Modifier.size(14.dp))
+                            Text(name)
+                        }
+                    },
+                    onClick = {
+                        onSelect(charId)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
 
 @Composable
 private fun VolumeBar(

@@ -121,6 +121,15 @@ private enum class InterRegionTradeType(
     SELL_TO_SELL("Sell → Sell Order"),
     BUY_TO_BUY("Buy Order → Buy"),
     BUY_TO_SELL("Buy → Sell (orders)"),
+
+    // Places a buy order at the source like BUY_TO_SELL, but doesn't price it by outbidding the
+    // current best buy order — instead it's priced at the source's lowest sell price minus the
+    // round-trip cost (sales tax + broker fee) a local station trader would pay to sell via their
+    // own sell order. That price is unattractive to outbid (there's no local margin left to
+    // squeeze), which is fine for us — we're hauling the stock to sellRegion to sell anyway, so we
+    // don't care about capturing margin at the source station, just about a cheap, low-competition
+    // fill. Sell leg is a placed sell order at the destination, same as BUY_TO_SELL.
+    SAFE_BUY_TO_SELL("Safe Buy → Sell (orders)"),
 }
 
 // The effective daily volume for a station opportunity once the volume modifier is applied —
@@ -185,7 +194,7 @@ private fun regionFinalVol(
     volCapPct: Double,
 ): Long =
     when (tradeType) {
-        InterRegionTradeType.BUY_TO_SELL -> regionEffVol(opp, volCapEnabled, volCapPct)
+        InterRegionTradeType.BUY_TO_SELL, InterRegionTradeType.SAFE_BUY_TO_SELL -> regionEffVol(opp, volCapEnabled, volCapPct)
         InterRegionTradeType.SELL_TO_SELL -> minOf(opp.profitableVolume, regionEffVol(opp, volCapEnabled, volCapPct))
         InterRegionTradeType.BUY_TO_BUY, InterRegionTradeType.SELL_TO_BUY -> opp.profitableVolume
     }
@@ -200,7 +209,7 @@ private fun regionDailyProfit(
     volCapPct: Double,
 ): Double {
     val finalVol = regionFinalVol(opp, tradeType, volCapEnabled, volCapPct)
-    if (tradeType == InterRegionTradeType.BUY_TO_SELL) return opp.netProfit * finalVol
+    if (tradeType == InterRegionTradeType.BUY_TO_SELL || tradeType == InterRegionTradeType.SAFE_BUY_TO_SELL) return opp.netProfit * finalVol
     if (opp.profitableVolume <= 0) return 0.0
     if (finalVol >= opp.profitableVolume) return opp.profitableTotalProfit
     return opp.profitableTotalProfit * finalVol / opp.profitableVolume
@@ -1353,6 +1362,9 @@ private fun InterRegionTab(
                 if (cid == null) {
                     InterRegionQueue.clear()
                 } else {
+                    // SAFE_BUY_TO_SELL also places a buy order, but its price is a fixed formula
+                    // (source sell price net of fees), not a bid against another buy order — so
+                    // unlike BUY_TO_BUY/BUY_TO_SELL it must NOT get bumped up to outbid anyone.
                     val isCompetitiveBid = tradeType == InterRegionTradeType.BUY_TO_BUY || tradeType == InterRegionTradeType.BUY_TO_SELL
                     val source = if (selectedIds.isNotEmpty()) sorted.filter { it.typeId in selectedIds } else sorted
                     InterRegionQueue.update(
@@ -2506,11 +2518,13 @@ private fun computeRegionOpportunityForType(
         when (tradeType) {
             InterRegionTradeType.SELL_TO_BUY, InterRegionTradeType.SELL_TO_SELL -> srcSell
             InterRegionTradeType.BUY_TO_BUY, InterRegionTradeType.BUY_TO_SELL -> srcBuy
+            // Priced off the sell side, not the buy side — see the enum's doc comment.
+            InterRegionTradeType.SAFE_BUY_TO_SELL -> srcSell?.let { it * (1.0 - (salesTaxPct + brokerFeePct) / 100.0) }
         } ?: return null
     val sellPrice =
         when (tradeType) {
             InterRegionTradeType.SELL_TO_BUY, InterRegionTradeType.BUY_TO_BUY -> dstBuy
-            InterRegionTradeType.SELL_TO_SELL, InterRegionTradeType.BUY_TO_SELL -> dstSell
+            InterRegionTradeType.SELL_TO_SELL, InterRegionTradeType.BUY_TO_SELL, InterRegionTradeType.SAFE_BUY_TO_SELL -> dstSell
         } ?: return null
 
     if (sellPrice <= buyPrice) return null
@@ -2528,7 +2542,8 @@ private fun computeRegionOpportunityForType(
             InterRegionTradeType.SELL_TO_BUY -> sellPrice * salesTaxPct / 100.0
             InterRegionTradeType.SELL_TO_SELL -> sellPrice * (salesTaxPct + brokerFeePct) / 100.0
             InterRegionTradeType.BUY_TO_BUY -> buyPrice * brokerFeePct / 100.0 + sellPrice * salesTaxPct / 100.0
-            InterRegionTradeType.BUY_TO_SELL -> buyPrice * brokerFeePct / 100.0 + sellPrice * (salesTaxPct + brokerFeePct) / 100.0
+            InterRegionTradeType.BUY_TO_SELL, InterRegionTradeType.SAFE_BUY_TO_SELL ->
+                buyPrice * brokerFeePct / 100.0 + sellPrice * (salesTaxPct + brokerFeePct) / 100.0
         }
     val netProfit = grossProfit - fees - shipping
     if (netProfit < minNetProfit) return null
@@ -2553,7 +2568,7 @@ private fun computeRegionOpportunityForType(
                 walkCrossedBook(srcSellLots, dstBuyLots, shippingPerUnit = shipping, minMarginPct = minMarginPct) { _, sellP ->
                     sellP * salesTaxPct / 100.0
                 }
-            InterRegionTradeType.BUY_TO_SELL -> 0L to 0.0
+            InterRegionTradeType.BUY_TO_SELL, InterRegionTradeType.SAFE_BUY_TO_SELL -> 0L to 0.0
         }
 
     val sellHistory = fetchHistory(typeId, sellRegionId, historySource)
