@@ -6,8 +6,8 @@ import kotlinx.coroutines.withContext
 import org.eventt.core.database.NostrReceiptDao
 import org.eventt.core.database.NostrReservationModel
 
-// Placeholder — verify against github.com/nostr-protocol/nips for collisions before shipping,
-// same caveat as ORDER_KIND in NostrEventFactory.
+// Checked against github.com/nostr-protocol/nips (2026-07-09) — 7733 is unassigned, same check as
+// ORDER_KIND in NostrEventFactory.
 const val RECEIPT_KIND = 7733
 
 /**

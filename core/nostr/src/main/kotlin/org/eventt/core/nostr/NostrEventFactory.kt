@@ -8,8 +8,8 @@ import com.vitorpamplona.quartz.nip01Core.tags.dTag.dTag
 import com.vitorpamplona.quartz.nip40Expiration.expiration
 import java.util.UUID
 
-// Placeholder — verify against github.com/nostr-protocol/nips for collisions before shipping.
-// Confirmed via the Phase 0 spike not to collide with any kind Quartz itself has registered.
+// Checked against github.com/nostr-protocol/nips (2026-07-09) — 30735 is unassigned, and the
+// Phase 0 spike confirmed it doesn't collide with any kind Quartz itself has registered.
 const val ORDER_KIND = 30735
 
 private const val TWO_WEEKS_SECONDS = 14L * 24 * 3600
