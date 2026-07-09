@@ -12,12 +12,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.ViewContext
 import org.eventt.core.esi.EsiClient
 import org.eventt.features.tools.ParseWarning
 import org.eventt.features.tools.ToolsInputParser
+import org.eventt.features.tools.pricing.PricingService
 import org.eventt.ui.common.ConfirmDialog
 import org.eventt.ui.common.ContentCard
 import java.awt.Toolkit
@@ -37,6 +44,15 @@ private fun formatIsk(v: Double): String =
 
 private fun formatVolume(v: Double): String = "%.1f m³".format(v)
 
+// Persisted across restarts — constraints and ship choice are per-user setup, not per-paste, so
+// they shouldn't reset every time the app reopens.
+private object SplitterSettings {
+    const val MAX_ISK = "tools.splitter.maxIsk"
+    const val MAX_VOLUME = "tools.splitter.maxVolume"
+    const val ALGORITHM = "tools.splitter.algorithm"
+    const val SHIP_TYPE_ID = "tools.splitter.shipTypeId"
+}
+
 @Composable
 fun SplitterScreen(context: ViewContext?) {
     val scope = rememberCoroutineScope()
@@ -47,6 +63,19 @@ fun SplitterScreen(context: ViewContext?) {
     var maxVolumeText by remember { mutableStateOf("320000") }
     var algorithm by remember { mutableStateOf(SplitAlgorithm.FILL_FIRST) }
     var shipTypeId by remember { mutableStateOf(ShipFittingCatalog.HAULERS.first().typeId) }
+
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            StaticDataDao.getSetting(SplitterSettings.MAX_ISK)?.let { maxIskText = it }
+            StaticDataDao.getSetting(SplitterSettings.MAX_VOLUME)?.let { maxVolumeText = it }
+            StaticDataDao.getSetting(SplitterSettings.ALGORITHM)?.let { name ->
+                SplitAlgorithm.entries.find { it.name == name }?.let { algorithm = it }
+            }
+            StaticDataDao.getSetting(SplitterSettings.SHIP_TYPE_ID)?.toIntOrNull()?.let { id ->
+                if (ShipFittingCatalog.HAULERS.any { it.typeId == id }) shipTypeId = id
+            }
+        }
+    }
 
     var isCalculating by remember { mutableStateOf(false) }
     var warnings by remember { mutableStateOf<List<ParseWarning>>(emptyList()) }
@@ -66,19 +95,69 @@ fun SplitterScreen(context: ViewContext?) {
         pushResults = emptyMap()
         val maxIsk = maxIskText.toDoubleOrNull() ?: 0.0
         val maxVolume = maxVolumeText.toDoubleOrNull() ?: 0.0
+        val actingCharId = context?.actingCharId
         scope.launch(Dispatchers.IO) {
             val (parsed, parseWarnings) = ToolsInputParser.parse(pasteText)
             val (resolved, resolveWarnings) =
                 ToolsInputParser.resolve(parsed) { type ->
                     if (type.categoryId == SHIP_CATEGORY_ID && type.packagedVolume > 0) type.packagedVolume else type.volume
                 }
-            val prices = EsiClient.getMarketPrices()
+
+            val priceWarnings = mutableListOf<ParseWarning>()
+            // ESI's /markets/prices/ ("adjusted_price"/"average_price") is a global, insurance-style
+            // 30-day rolling average — often nowhere close to what these items actually sell for right
+            // now. Value cargo off the acting character's current-region live sell orders instead,
+            // falling back to the global average only for items with no local sell orders at all.
+            val regionId = actingCharId?.let { PricingService.resolveRegionId(it) }
+            if (regionId == null) {
+                priceWarnings +=
+                    ParseWarning(
+                        "(region)",
+                        "could not determine your character's current region — valuing items off ESI's global " +
+                            "average price instead of live sell orders",
+                    )
+            }
+            val globalPrices = EsiClient.getMarketPrices()
+            val regionSellByType: Map<Int, Double?> =
+                if (regionId == null) {
+                    emptyMap()
+                } else {
+                    coroutineScope {
+                        val semaphore = Semaphore(8)
+                        resolved
+                            .map { item ->
+                                async {
+                                    semaphore.withPermit {
+                                        item.typeId to
+                                            runCatching {
+                                                EsiClient
+                                                    .getMarketRegionOrders(regionId, orderType = "sell", typeId = item.typeId)
+                                                    .mapNotNull { (it["price"] as? Number)?.toDouble() }
+                                                    .minOrNull()
+                                            }.getOrNull()
+                                    }
+                                }
+                            }.awaitAll()
+                            .toMap()
+                    }
+                }
+
             val lineItems =
-                resolved.map { SplitLineItem(it.typeId, it.name, it.quantity, prices[it.typeId] ?: 0.0, it.unitVolume) }
+                resolved.map { item ->
+                    val regionSell = regionSellByType[item.typeId]
+                    val price = regionSell ?: globalPrices[item.typeId]
+                    if (regionId != null && regionSell == null) {
+                        priceWarnings += ParseWarning(item.name, "no live sell orders in your region — used ESI's global average price instead")
+                    }
+                    if (price == null) {
+                        priceWarnings += ParseWarning(item.name, "no price data found anywhere — valued at 0 ISK")
+                    }
+                    SplitLineItem(item.typeId, item.name, item.quantity, price ?: 0.0, item.unitVolume)
+                }
             val constraints = SplitConstraints(maxIsk, maxVolume)
             val (ffd, balanced) = SplitterService.computeBoth(lineItems, constraints)
             withContext(Dispatchers.Main) {
-                warnings = parseWarnings + resolveWarnings
+                warnings = parseWarnings + resolveWarnings + priceWarnings
                 ffdPlan = ffd
                 balancedPlan = balanced
                 recommended = SplitterService.recommend(ffd, balanced)
@@ -139,14 +218,20 @@ fun SplitterScreen(context: ViewContext?) {
                 ) {
                     OutlinedTextField(
                         value = maxIskText,
-                        onValueChange = { maxIskText = it },
+                        onValueChange = {
+                            maxIskText = it
+                            scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SplitterSettings.MAX_ISK, it) }
+                        },
                         label = { Text("Max ISK / split") },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
                     OutlinedTextField(
                         value = maxVolumeText,
-                        onValueChange = { maxVolumeText = it },
+                        onValueChange = {
+                            maxVolumeText = it
+                            scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SplitterSettings.MAX_VOLUME, it) }
+                        },
                         label = { Text("Max m³ / split") },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
@@ -158,19 +243,31 @@ fun SplitterScreen(context: ViewContext?) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
                         selected = algorithm == SplitAlgorithm.FILL_FIRST,
-                        onClick = { algorithm = SplitAlgorithm.FILL_FIRST },
+                        onClick = {
+                            algorithm = SplitAlgorithm.FILL_FIRST
+                            scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SplitterSettings.ALGORITHM, SplitAlgorithm.FILL_FIRST.name) }
+                        },
                         label = { Text("Fill First" + if (recommended == SplitAlgorithm.FILL_FIRST) " (recommended)" else "") },
                     )
                     FilterChip(
                         selected = algorithm == SplitAlgorithm.BALANCED,
-                        onClick = { algorithm = SplitAlgorithm.BALANCED },
+                        onClick = {
+                            algorithm = SplitAlgorithm.BALANCED
+                            scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SplitterSettings.ALGORITHM, SplitAlgorithm.BALANCED.name) }
+                        },
                         label = { Text("Balanced" + if (recommended == SplitAlgorithm.BALANCED) " (recommended)" else "") },
                     )
                 }
                 Spacer(Modifier.height(12.dp))
                 Text("Ship (fitting label only — doesn't affect the split)", style = MaterialTheme.typography.labelMedium)
                 Spacer(Modifier.height(4.dp))
-                ShipDropdown(selectedTypeId = shipTypeId, onSelect = { shipTypeId = it })
+                ShipDropdown(
+                    selectedTypeId = shipTypeId,
+                    onSelect = {
+                        shipTypeId = it
+                        scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SplitterSettings.SHIP_TYPE_ID, it.toString()) }
+                    },
+                )
                 Spacer(Modifier.height(12.dp))
                 Button(onClick = { calculate() }, enabled = !isCalculating && pasteText.isNotBlank()) {
                     if (isCalculating) {

@@ -1,5 +1,6 @@
 package org.eventt.features.tools.pricing
 
+import io.kotest.matchers.doubles.plusOrMinus
 import io.kotest.matchers.shouldBe
 import org.eventt.features.orders.eveSigFigStep
 import org.junit.jupiter.api.Test
@@ -11,10 +12,27 @@ import kotlin.math.round
 // and any future refactor must preserve, expressed directly against the formulas computePrices
 // uses (mirrored from its private resolveFinalPrice/undercutPrice helpers).
 class PricingServiceTest {
+    // Sales tax + broker fee both come off a completed sale, so the target price is grossed up by
+    // this rate to compensate — mirrors computePrices' private netProceedsRate/target formulas.
+    private fun netProceedsRate(
+        salesTaxPct: Double = 8.0,
+        brokerFeePct: Double = 3.0,
+    ): Double = 1.0 - (salesTaxPct + brokerFeePct) / 100.0
+
+    // Mirrors computePrices' private roundToSigFig — rounds to a real EVE price tick (4 sig figs)
+    // rather than leaving a target at raw decimal precision no one could actually list an order at.
+    private fun roundToSigFig(price: Double): Double {
+        if (price <= 0) return 0.01
+        val step = eveSigFigStep(price)
+        return round(price / step) * step
+    }
+
     private fun targetPrice(
         costBasis: Double,
         marginPct: Double,
-    ): Double = costBasis * (1.0 + marginPct / 100.0)
+        salesTaxPct: Double = 8.0,
+        brokerFeePct: Double = 3.0,
+    ): Double = roundToSigFig(costBasis * (1.0 + marginPct / 100.0) / netProceedsRate(salesTaxPct, brokerFeePct))
 
     private fun undercutPrice(bestSell: Double): Double {
         val step = eveSigFigStep(bestSell)
@@ -36,9 +54,27 @@ class PricingServiceTest {
         }
 
     @Test
-    fun `margin math applies the percentage on top of cost basis`() {
-        targetPrice(costBasis = 100.0, marginPct = 30.0) shouldBe 130.0
-        targetPrice(costBasis = 1_000_000.0, marginPct = 0.0) shouldBe 1_000_000.0
+    fun `margin math applies the percentage on top of cost basis, then grosses up for zero fees`() {
+        targetPrice(costBasis = 100.0, marginPct = 30.0, salesTaxPct = 0.0, brokerFeePct = 0.0) shouldBe 130.0
+        targetPrice(costBasis = 1_000_000.0, marginPct = 0.0, salesTaxPct = 0.0, brokerFeePct = 0.0) shouldBe 1_000_000.0
+    }
+
+    @Test
+    fun `target price is grossed up so sales tax and broker fee don't eat into the requested margin`() {
+        // 100 cost, 30% margin, 8% tax + 3% broker: naive target (130) would net only
+        // 130 * 0.89 - 100 = 15.7 (15.7%), not 30% — the grossed-up target corrects for that.
+        // Raw 130 / 0.89 ≈ 146.067, rounded to the nearest 0.1 tick at this price magnitude.
+        val target = targetPrice(costBasis = 100.0, marginPct = 30.0, salesTaxPct = 8.0, brokerFeePct = 3.0)
+        target shouldBe 146.1
+        val netProceeds = target * 0.89
+        ((netProceeds - 100.0) / 100.0 * 100.0) shouldBe (30.0 plusOrMinus 0.1)
+    }
+
+    @Test
+    fun `target price is rounded to a real EVE price tick, not left at raw decimal precision`() {
+        roundToSigFig(146.0674157303371) shouldBe 146.1
+        // Large prices round to a coarser tick (4 sig figs) — nearest 1000, not nearest cent.
+        roundToSigFig(1_234_567.0) shouldBe 1_235_000.0
     }
 
     @Test
@@ -49,7 +85,7 @@ class PricingServiceTest {
 
     @Test
     fun `market undercut is used whenever it is cheaper than the margin target, always, not optionally`() {
-        val target = targetPrice(100.0, 30.0) // 130
+        val target = targetPrice(100.0, 30.0) // ≈ 146.1 with default 8% tax + 3% broker, sigfig-rounded
         val (final, usedMarket) = resolveFinalPrice(marginLimitEnabled = true, target = target, marketUndercut = 110.0)
         final shouldBe 110.0
         usedMarket shouldBe true
@@ -57,9 +93,9 @@ class PricingServiceTest {
 
     @Test
     fun `margin target wins when the market undercut is higher than it`() {
-        val target = targetPrice(100.0, 30.0) // 130
+        val target = targetPrice(100.0, 30.0) // ≈ 146.1 with default 8% tax + 3% broker, sigfig-rounded
         val (final, usedMarket) = resolveFinalPrice(marginLimitEnabled = true, target = target, marketUndercut = 150.0)
-        final shouldBe 130.0
+        final shouldBe target
         usedMarket shouldBe false
     }
 
@@ -89,9 +125,21 @@ class PricingServiceTest {
     fun `formatForClipboard skips items with no resolvable price and is tab-separated`() {
         val results =
             listOf(
-                PricingResult(1, "Tritanium", 100, 4.0, 5.2, 5.05, 5.0, 5.0, usedMarketPrice = true),
-                PricingResult(2, "Pyerite", 50, null, null, null, null, null, usedMarketPrice = false),
-                PricingResult(3, "Mexallon", 10, 20.0, 26.0, null, null, 26.0, usedMarketPrice = false),
+                PricingResult(1, "Tritanium", 100, 4.0, 5.2, 5.05, 5.0, 5.0, usedMarketPrice = true, salesTaxPct = 8.0, brokerFeePct = 3.0),
+                PricingResult(2, "Pyerite", 50, null, null, null, null, null, usedMarketPrice = false, salesTaxPct = 8.0, brokerFeePct = 3.0),
+                PricingResult(
+                    3,
+                    "Mexallon",
+                    10,
+                    20.0,
+                    26.0,
+                    null,
+                    null,
+                    26.0,
+                    usedMarketPrice = false,
+                    salesTaxPct = 8.0,
+                    brokerFeePct = 3.0,
+                ),
             )
         val text = PricingService.formatForClipboard(results)
         text shouldBe "Tritanium\t5.00\nMexallon\t26.00"
