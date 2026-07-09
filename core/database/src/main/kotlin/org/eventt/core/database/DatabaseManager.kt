@@ -542,6 +542,22 @@ object DatabaseManager {
                     responded_at INTEGER
                 )
                 """.trimIndent(),
+                // P2P Market (Nostr) — local mirror of kind-7733 trade receipts (mine + the
+                // counterparty's). Reputation only counts a trade_id once BOTH sides' receipts are
+                // present — a one-sided receipt (self-attested) earns nothing.
+                """
+                CREATE TABLE IF NOT EXISTS nostr_receipts (
+                    event_id TEXT PRIMARY KEY,
+                    trade_id TEXT NOT NULL,
+                    order_coordinate TEXT NOT NULL,
+                    author_pubkey TEXT NOT NULL,
+                    counterparty_pubkey TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    qty INTEGER NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    raw_event_json TEXT NOT NULL
+                )
+                """.trimIndent(),
             )
 
         // using conn parameter
@@ -599,6 +615,8 @@ object DatabaseManager {
                 "CREATE INDEX IF NOT EXISTS idx_nostr_orders_mine ON nostr_orders(is_mine)",
                 "CREATE INDEX IF NOT EXISTS idx_nostr_reservations_role_status ON nostr_reservations(role, status)",
                 "CREATE INDEX IF NOT EXISTS idx_nostr_reservations_order ON nostr_reservations(order_uuid)",
+                "CREATE INDEX IF NOT EXISTS idx_nostr_receipts_trade ON nostr_receipts(trade_id)",
+                "CREATE INDEX IF NOT EXISTS idx_nostr_receipts_counterparty ON nostr_receipts(counterparty_pubkey)",
             )
 
         // using conn parameter

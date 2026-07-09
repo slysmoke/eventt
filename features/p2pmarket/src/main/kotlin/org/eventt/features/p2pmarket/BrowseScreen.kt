@@ -42,6 +42,7 @@ import org.eventt.core.database.StaticDataDao
 import org.eventt.core.nostr.OrderFilter
 import org.eventt.core.nostr.OrderRepository
 import org.eventt.core.nostr.OrderSide
+import org.eventt.core.nostr.ReputationAggregator
 import org.eventt.core.nostr.ReservationService
 import java.util.Locale
 import kotlin.math.abs
@@ -87,6 +88,7 @@ private fun OrderRow(order: NostrOrderModel) {
     var savings by remember(order.orderUuid, order.pubkey, order.price) { mutableStateOf<SavingsResult?>(null) }
     var showRequestDialog by remember { mutableStateOf(false) }
     var requestSent by remember(order.orderUuid, order.pubkey) { mutableStateOf(false) }
+    var confirmedTrades by remember(order.pubkey) { mutableStateOf(0) }
     val side = remember(order.side) { OrderSide.valueOf(order.side.uppercase()) }
 
     LaunchedEffect(order.typeId) {
@@ -97,6 +99,9 @@ private fun OrderRow(order: NostrOrderModel) {
     }
     LaunchedEffect(order.orderUuid, order.pubkey, order.price) {
         savings = withContext(Dispatchers.IO) { SavingsBadgeService.computeSavings(order.typeId, order.regionId, side, order.price) }
+    }
+    LaunchedEffect(order.pubkey) {
+        confirmedTrades = ReputationAggregator.confirmedTradeCount(order.pubkey)
     }
 
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -123,11 +128,20 @@ private fun OrderRow(order: NostrOrderModel) {
                     color = if (s.savingsPct >= 0) PositiveColor else MaterialTheme.colorScheme.error,
                 )
             }
-            Text(
-                order.traderChar.ifBlank { "—" },
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    order.traderChar.ifBlank { "—" },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (confirmedTrades > 0) {
+                    Text(
+                        "$confirmedTrades confirmed trade${if (confirmedTrades == 1) "" else "s"}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.tertiary,
+                    )
+                }
+            }
             if (!order.isMine) {
                 OutlinedButton(onClick = { showRequestDialog = true }, enabled = !requestSent) {
                     Text(if (requestSent) "Sent" else "Request")

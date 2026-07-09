@@ -31,6 +31,7 @@ sealed class NostrRelayEvent {
 
 private const val ORDERS_SUBSCRIPTION_ID = "p2pmarket-orders"
 private const val DMS_SUBSCRIPTION_ID = "p2pmarket-dms"
+private const val RECEIPTS_SUBSCRIPTION_ID = "p2pmarket-receipts"
 private const val GIFT_WRAP_KIND = 1059
 
 private val DEFAULT_RELAYS =
@@ -138,6 +139,23 @@ object NostrRelayManager {
                             ReservationService.handleIncomingDm(unwrapped.pubKey, unwrapped.content)
                             _events.tryEmit(NostrRelayEvent.ReservationActivity)
                         }
+                    }
+                },
+            )
+
+            val receiptFilter = Filter(null, null, listOf(RECEIPT_KIND), mapOf("p" to listOf(myPubkey)), null, null, null, null, null)
+            c.subscribe(
+                RECEIPTS_SUBSCRIPTION_ID,
+                relayUrls.associateWith { listOf(receiptFilter) },
+                object : SubscriptionListener {
+                    override fun onEvent(
+                        event: Event,
+                        isLive: Boolean,
+                        relay: NormalizedRelayUrl,
+                        forFilters: List<Filter>?,
+                    ) {
+                        ReceiptService.handleIncomingReceipt(event)
+                        _events.tryEmit(NostrRelayEvent.ReservationActivity)
                     }
                 },
             )

@@ -62,7 +62,7 @@ fun MyRequestsScreen() {
                 items(requests, key = { it.tradeId }) { reservation ->
                     RequestRow(reservation, onMarkCompleted = {
                         scope.launch(Dispatchers.IO) {
-                            ReservationService.markCompleted(reservation.tradeId)
+                            ReservationService.markCompleted(reservation)
                             reload()
                         }
                     })

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Tab
@@ -19,14 +20,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-// Inbox arrives in a later phase as a real sub-tab — not stubbed here, since a tab row with a
-// dead tab would be worse than a smaller-but-fully-working one.
 private enum class P2pMarketTab(
     val label: String,
 ) {
     BROWSE("Browse"),
     MY_ORDERS("My Orders"),
     MY_REQUESTS("My Requests"),
+    INBOX("Inbox"),
 }
 
 @Composable
@@ -46,6 +46,7 @@ fun P2pMarketScreen() {
                                 P2pMarketTab.BROWSE -> Icons.Default.Search
                                 P2pMarketTab.MY_ORDERS -> Icons.AutoMirrored.Filled.List
                                 P2pMarketTab.MY_REQUESTS -> Icons.AutoMirrored.Filled.Send
+                                P2pMarketTab.INBOX -> Icons.Default.Inbox
                             },
                             null,
                             Modifier.size(16.dp),
@@ -58,6 +59,7 @@ fun P2pMarketScreen() {
             P2pMarketTab.BROWSE -> BrowseScreen()
             P2pMarketTab.MY_ORDERS -> MyOrdersScreen()
             P2pMarketTab.MY_REQUESTS -> MyRequestsScreen()
+            P2pMarketTab.INBOX -> InboxScreen()
         }
     }
 }

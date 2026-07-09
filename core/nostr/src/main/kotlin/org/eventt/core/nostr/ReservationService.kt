@@ -108,9 +108,16 @@ object ReservationService {
         return true
     }
 
-    /** Buyer confirms the in-game trade happened. Informational only until Phase 4 wires up mutual trade receipts. */
-    suspend fun markCompleted(tradeId: String) {
-        withContext(Dispatchers.IO) { NostrReservationDao.updateStatus(tradeId, "completed") }
+    /**
+     * Either side confirms the in-game trade happened: publishes this side's kind-[RECEIPT_KIND]
+     * receipt and marks the local reservation completed. Reputation only counts once the *other*
+     * side's receipt also lands (see [ReputationAggregator]) — this alone doesn't prove anything
+     * by itself. False if there's no active identity to sign the receipt with.
+     */
+    suspend fun markCompleted(reservation: NostrReservationModel): Boolean {
+        if (!ReceiptService.publish(reservation)) return false
+        withContext(Dispatchers.IO) { NostrReservationDao.updateStatus(reservation.tradeId, "completed") }
+        return true
     }
 
     /** Seller gives up on a held reservation (buyer never showed) — restores qty_remaining, no receipt either way. */

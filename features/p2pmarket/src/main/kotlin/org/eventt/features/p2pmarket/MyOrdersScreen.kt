@@ -241,12 +241,20 @@ fun MyOrdersScreen() {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 acceptedReservations.forEach { reservation ->
                     ReservationRow(reservation) {
-                        OutlinedButton(onClick = {
-                            scope.launch(Dispatchers.IO) {
-                                ReservationService.release(reservation)
-                                reloadReservations()
-                            }
-                        }) { Text("Release (buyer no-show)") }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = {
+                                scope.launch(Dispatchers.IO) {
+                                    ReservationService.markCompleted(reservation)
+                                    reloadReservations()
+                                }
+                            }) { Text("Mark completed") }
+                            OutlinedButton(onClick = {
+                                scope.launch(Dispatchers.IO) {
+                                    ReservationService.release(reservation)
+                                    reloadReservations()
+                                }
+                            }) { Text("Release (buyer no-show)") }
+                        }
                     }
                 }
             }
