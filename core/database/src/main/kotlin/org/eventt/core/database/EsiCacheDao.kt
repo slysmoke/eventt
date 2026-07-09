@@ -114,6 +114,18 @@ object EsiCacheDao {
         }
     }
 
+    // Wipes every cached response for one endpoint regardless of params/page — used when we
+    // learn the true current state some other way (e.g. a Marketlogs file import) and don't
+    // want a stale-but-not-yet-expired ESI response silently overriding it on the next fetch.
+    fun deleteByEndpoint(endpoint: String) {
+        DatabaseManager.transaction {
+            prepareStatement("DELETE FROM esi_cache WHERE endpoint = ?").use { stmt ->
+                stmt.setString(1, endpoint)
+                stmt.executeUpdate()
+            }
+        }
+    }
+
     internal fun computeHash(params: Map<String, String>?): String {
         val input = params?.entries?.sortedBy { it.key }?.joinToString { "${it.key}=${it.value}" } ?: ""
         val md = MessageDigest.getInstance("SHA-256")

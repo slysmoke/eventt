@@ -178,4 +178,13 @@ object EsiCacheManager {
         EsiCacheDao.clearAll()
         mem.clear()
     }
+
+    // Wipes every cached response (merged + per-page) for one endpoint — both the SQLite (L2)
+    // and in-memory (L1) copies — so the next getRaw()/getAllMaps() call for it is forced to hit
+    // ESI live instead of serving a response that predates data we already know is more current
+    // (e.g. right after importing a Marketlogs export).
+    fun invalidateEndpoint(endpoint: String) {
+        EsiCacheDao.deleteByEndpoint(endpoint)
+        mem.keys.removeIf { it.startsWith("$endpoint|") }
+    }
 }

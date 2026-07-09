@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.eventt.core.database.ActiveOrderDao
 import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.OrderHistoryDao
 import org.eventt.core.database.StaticDataDao
@@ -110,6 +111,49 @@ private fun MarketLogOrderRow.toEsiOrderMap(): Map<String, Any?> =
         "is_buy_order" to isBuyOrder,
         "duration" to duration,
         "issued" to issuedIso,
+    )
+
+// Mirrors CharacterOrder into the local active-orders cache so the screen has something to show
+// instantly on the next launch, instead of an empty table until ESI's live fetch completes.
+private fun CharacterOrder.toActiveOrderRecord(
+    characterId: Int?,
+    corporationId: Int?,
+): ActiveOrderDao.ActiveOrderRecord =
+    ActiveOrderDao.ActiveOrderRecord(
+        orderId = orderId,
+        typeId = typeId,
+        typeName = typeName,
+        locationId = locationId,
+        regionId = regionId,
+        stationName = stationName,
+        price = price,
+        volumeTotal = volumeTotal,
+        volumeRemaining = volumeRemaining,
+        isBuyOrder = isBuyOrder,
+        duration = duration,
+        issued = issued,
+        state = state,
+        issuedByCharId = issuedByCharId,
+        characterId = characterId,
+        corporationId = corporationId,
+    )
+
+private fun ActiveOrderDao.ActiveOrderRecord.toCharacterOrder(): CharacterOrder =
+    CharacterOrder(
+        orderId = orderId,
+        typeId = typeId,
+        typeName = typeName,
+        locationId = locationId,
+        regionId = regionId,
+        stationName = stationName,
+        price = price,
+        volumeTotal = volumeTotal,
+        volumeRemaining = volumeRemaining,
+        isBuyOrder = isBuyOrder,
+        duration = duration,
+        issued = issued,
+        state = state,
+        issuedByCharId = issuedByCharId,
     )
 
 /** Best competing prices for a (typeId, regionId) pair, excluding the character's own orders. */
@@ -329,6 +373,7 @@ fun OrdersScreen(context: ViewContext?) {
                 val parsed = raw.map { m -> parseOrder(m, if (corp != null) (m["issued_by"] as? Number)?.toInt() else null) }
                 withContext(Dispatchers.Main) { orders = parsed }
                 if (corp != null) resolveIssuerNames(parsed.mapNotNull { it.issuedByCharId }.toSet())
+                ActiveOrderDao.replaceAll(cid, corp, parsed.map { it.toActiveOrderRecord(cid, corp) })
 
                 val rawHistory =
                     if (corp != null) EsiClient.getCorporationOrdersHistory(corp, acting) else EsiClient.getCharacterOrdersHistory(cid!!)
@@ -469,15 +514,21 @@ fun OrdersScreen(context: ViewContext?) {
     }
 
     // Instant refresh from EVE's own "My Orders"/"Corporation Orders" export, bypassing ESI's
-    // ~25min orders cache. Only replaces the `orders` snapshot (what Sell/Buy tables + the
-    // Ctrl+Z queue read) — doesn't touch history/FIFO/ESI cache state, which stay on their
-    // normal cadence.
+    // ~25min orders cache. Replaces the `orders` snapshot (what Sell/Buy tables + the Ctrl+Z
+    // queue read) and the persisted active-orders cache — and also invalidates ESI's own cached
+    // response for this endpoint, so a later loadOrders() (e.g. on the next app launch) doesn't
+    // silently resurrect a pre-import, now-stale ESI response over data we already know is newer.
     LaunchedEffect(charId, corpId) {
         MarketLogWatcher.events.collect { event ->
             when (event) {
                 is MarketLogEvent.MyOrdersImported -> {
                     if (corpId == null && event.charId == charId) {
-                        orders = event.rows.map { parseOrder(it.toEsiOrderMap(), issuedByCharId = null) }
+                        val parsed = event.rows.map { parseOrder(it.toEsiOrderMap(), issuedByCharId = null) }
+                        orders = parsed
+                        withContext(Dispatchers.IO) {
+                            ActiveOrderDao.replaceAll(charId, null, parsed.map { it.toActiveOrderRecord(charId, null) })
+                            EsiClient.invalidateEndpointCache("/characters/$charId/orders/")
+                        }
                     } else {
                         println("[MarketLogs] Ignoring My Orders export for char ${event.charId} (active: $charId)")
                     }
@@ -494,6 +545,10 @@ fun OrdersScreen(context: ViewContext?) {
                             val parsed = event.rows.map { parseOrder(it.toEsiOrderMap(), issuedByCharId = it.charId) }
                             orders = parsed
                             resolveIssuerNames(parsed.mapNotNull { it.issuedByCharId }.toSet())
+                            withContext(Dispatchers.IO) {
+                                ActiveOrderDao.replaceAll(null, corp, parsed.map { it.toActiveOrderRecord(null, corp) })
+                                EsiClient.invalidateEndpointCache("/corporations/$corp/orders/")
+                            }
                         } else {
                             println("[MarketLogs] Ignoring Corporation Orders export — contains a member from a different corp")
                         }
@@ -507,6 +562,13 @@ fun OrdersScreen(context: ViewContext?) {
     LaunchedEffect(context) {
         val acting = actingCharId
         if (acting != null) {
+            // Show the last-known snapshot immediately — instant on launch instead of an empty
+            // table while the ESI fetch below is in flight (and survives a restart for data that
+            // arrived via a Marketlogs file import, which never touches ESI's own cache).
+            val cachedOrders =
+                withContext(Dispatchers.IO) { ActiveOrderDao.getAll(characterId = charId, corporationId = corpId) }
+            if (cachedOrders.isNotEmpty()) orders = cachedOrders.map { it.toCharacterOrder() }
+
             val stored = withContext(Dispatchers.IO) { OrderHistoryDao.getAll(characterId = charId, corporationId = corpId) }
             historyOrders = stored
             val taxConfig =

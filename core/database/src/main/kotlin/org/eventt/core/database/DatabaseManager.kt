@@ -448,6 +448,29 @@ object DatabaseManager {
                     character_id INTEGER
                 )
                 """.trimIndent(),
+                // Currently active orders — a full snapshot per character/corp, replaced wholesale
+                // on every ESI/Marketlogs-file refresh (not append-only like order_history), so the
+                // Orders screen has something to show instantly on startup before the next live fetch.
+                """
+                CREATE TABLE IF NOT EXISTS active_orders (
+                    order_id INTEGER PRIMARY KEY,
+                    type_id INTEGER NOT NULL,
+                    type_name TEXT DEFAULT '',
+                    location_id INTEGER DEFAULT 0,
+                    region_id INTEGER DEFAULT 0,
+                    station_name TEXT DEFAULT '',
+                    price REAL NOT NULL,
+                    volume_total INTEGER NOT NULL,
+                    volume_remaining INTEGER NOT NULL,
+                    is_buy_order INTEGER NOT NULL DEFAULT 0,
+                    duration INTEGER NOT NULL DEFAULT 90,
+                    issued TEXT NOT NULL,
+                    state TEXT DEFAULT 'active',
+                    issued_by_char_id INTEGER,
+                    character_id INTEGER,
+                    corporation_id INTEGER
+                )
+                """.trimIndent(),
             )
 
         // using conn parameter
@@ -498,6 +521,8 @@ object DatabaseManager {
                 "CREATE INDEX IF NOT EXISTS idx_order_history_character ON order_history(character_id, is_buy_order)",
                 "CREATE INDEX IF NOT EXISTS idx_order_history_issued ON order_history(issued)",
                 "CREATE INDEX IF NOT EXISTS idx_order_history_corp ON order_history(corporation_id)",
+                "CREATE INDEX IF NOT EXISTS idx_active_orders_character ON active_orders(character_id)",
+                "CREATE INDEX IF NOT EXISTS idx_active_orders_corp ON active_orders(corporation_id)",
             )
 
         // using conn parameter

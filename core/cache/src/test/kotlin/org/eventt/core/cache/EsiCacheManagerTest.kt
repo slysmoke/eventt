@@ -83,6 +83,27 @@ class EsiCacheManagerTest {
     }
 
     @Test
+    fun `invalidateEndpoint forces a subsequent get to MISS, in both the memory and SQLite layers`() {
+        val endpoint = "/test/invalidate/"
+        EsiCacheManager.save(endpoint, mapOf("page" to "1"), "page-1-body", System.currentTimeMillis() + 60_000)
+        EsiCacheManager.save(endpoint, null, "merged-body", System.currentTimeMillis() + 60_000)
+
+        EsiCacheManager.invalidateEndpoint(endpoint)
+
+        EsiCacheManager.get(endpoint, mapOf("page" to "1")).state shouldBe CacheState.MISS
+        EsiCacheManager.get(endpoint, null).state shouldBe CacheState.MISS
+    }
+
+    @Test
+    fun `invalidateEndpoint leaves other endpoints' cached entries untouched`() {
+        EsiCacheManager.save("/test/keep-me/", null, "still-here", System.currentTimeMillis() + 60_000)
+
+        EsiCacheManager.invalidateEndpoint("/test/unrelated/")
+
+        EsiCacheManager.get("/test/keep-me/", null).state shouldBe CacheState.FRESH
+    }
+
+    @Test
     fun `cleanupExpired keeps recently-expired rows but purges rows expired over a day ago`() {
         val recentlyExpired = "/test/cleanup-recent/"
         val longExpired = "/test/cleanup-old/"

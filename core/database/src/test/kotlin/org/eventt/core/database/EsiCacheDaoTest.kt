@@ -119,6 +119,19 @@ class EsiCacheDaoTest {
     }
 
     @Test
+    fun `deleteByEndpoint removes every params variant for that endpoint but leaves others alone`() {
+        EsiCacheDao.save(entry(endpoint = "/characters/1/orders/", paramsHash = EsiCacheDao.computeHash(null)))
+        EsiCacheDao.save(entry(endpoint = "/characters/1/orders/", paramsHash = EsiCacheDao.computeHash(mapOf("page" to "2"))))
+        EsiCacheDao.save(entry(endpoint = "/characters/1/wallet/"))
+
+        EsiCacheDao.deleteByEndpoint("/characters/1/orders/")
+
+        EsiCacheDao.get("/characters/1/orders/", null).shouldBeNull()
+        EsiCacheDao.get("/characters/1/orders/", mapOf("page" to "2")).shouldBeNull()
+        EsiCacheDao.get("/characters/1/wallet/", mapOf("order_type" to "all")).shouldNotBeNull()
+    }
+
+    @Test
     fun `clearAll removes every cache entry`() {
         EsiCacheDao.save(entry(endpoint = "/a/"))
         EsiCacheDao.save(entry(endpoint = "/b/"))

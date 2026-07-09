@@ -712,6 +712,11 @@ object EsiClient {
         return EsiCacheManager.getExpiry(endpoint, fullParams)
     }
 
+    // Forces the next call to this endpoint to hit ESI live instead of serving a cached response
+    // that's technically still within its TTL but is now known to be stale — e.g. right after a
+    // Marketlogs file import taught us the true current order state.
+    fun invalidateEndpointCache(endpoint: String) = EsiCacheManager.invalidateEndpoint(endpoint)
+
     // ─── UI Endpoints (in-game window control) ────────────────────────────
 
     /** Opens the market details window in the running EVE client for the given type. */
