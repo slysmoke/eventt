@@ -26,6 +26,7 @@ include(":core:queue")
 include(":core:staticdata")
 include(":core:image")
 include(":core:everef")
+include(":core:marketlogs")
 
 // UI modules
 include(":ui:theme")

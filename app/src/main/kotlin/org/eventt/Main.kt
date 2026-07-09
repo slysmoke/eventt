@@ -7,6 +7,8 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import org.eventt.core.database.DatabaseManager
 import org.eventt.core.http.EveHttpClient
+import org.eventt.core.marketlogs.MarketLogCleaner
+import org.eventt.core.marketlogs.MarketLogWatcher
 import org.eventt.core.model.AppPaths
 import org.eventt.ui.EventtApp
 
@@ -31,7 +33,13 @@ fun main() {
         println("[App] Database init failed: ${e.stackTraceToString()}")
     }
 
+    // Wipe stale exports left over from a previous session before the watcher starts picking
+    // up files — this folder holds nothing but transient EVE client exports.
+    val cleaned = MarketLogCleaner.cleanOnStartup()
+    if (cleaned > 0) println("[App] Cleared $cleaned stale marketlog file(s)")
+
     GlobalHotkeyService.start()
+    MarketLogWatcher.start()
 
     application {
         Window(
@@ -40,6 +48,7 @@ fun main() {
             icon = painterResource("icon.png"),
             onCloseRequest = {
                 GlobalHotkeyService.stop()
+                MarketLogWatcher.stop()
                 exitApplication()
             },
         ) {

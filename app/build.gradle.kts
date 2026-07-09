@@ -86,6 +86,7 @@ dependencies {
     implementation(project(":features:overlay"))
     implementation(project(":features:tools"))
     implementation(project(":core:everef"))
+    implementation(project(":core:marketlogs"))
 
     // Compose
     implementation(compose.desktop.currentOs)

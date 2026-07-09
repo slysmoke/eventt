@@ -18,10 +18,13 @@ import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.everef.EveRefDao
 import org.eventt.core.everef.EveRefService
+import org.eventt.core.marketlogs.MarketLogPaths
 import org.eventt.core.staticdata.CitadelService
 import org.eventt.core.staticdata.StaticDataImporter
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
+import javax.swing.JFileChooser
 
 @Composable
 fun SettingsScreen() {
@@ -44,6 +47,9 @@ fun SettingsScreen() {
     var sdeImportDate by remember { mutableStateOf<Long?>(null) }
     var sdeTypeCount by remember { mutableStateOf(0) }
 
+    var marketLogPath by remember { mutableStateOf<String?>(null) }
+    var marketLogAutoDetectFailed by remember { mutableStateOf(false) }
+
     fun reloadStats() {
         downloadCount = EveRefDao.getDownloadCount()
         earliestDate = EveRefDao.getEarliestDate()
@@ -61,6 +67,7 @@ fun SettingsScreen() {
             selectedSource = EveRefService.getSelectedSource()
             periodMonths = EveRefService.getHistoryPeriodMonths()
             reloadStats()
+            marketLogPath = MarketLogPaths.getConfiguredPath() ?: MarketLogPaths.autoDetect()
         }
     }
 
@@ -92,6 +99,39 @@ fun SettingsScreen() {
         Text("Settings", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
 
         CharacterFeesCard()
+
+        MarketLogsCard(
+            path = marketLogPath,
+            autoDetectFailed = marketLogAutoDetectFailed,
+            onAutoDetect = {
+                scope.launch(Dispatchers.IO) {
+                    val detected = MarketLogPaths.autoDetect()
+                    if (detected != null) {
+                        MarketLogPaths.setConfiguredPath(detected)
+                        withContext(Dispatchers.Main) {
+                            marketLogPath = detected
+                            marketLogAutoDetectFailed = false
+                        }
+                    } else {
+                        withContext(Dispatchers.Main) { marketLogAutoDetectFailed = true }
+                    }
+                }
+            },
+            onBrowse = {
+                val chooser =
+                    JFileChooser().apply {
+                        fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+                        dialogTitle = "Select EVE Marketlogs folder"
+                        marketLogPath?.let { currentDirectory = File(it) }
+                    }
+                if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+                    val selected = chooser.selectedFile.path
+                    scope.launch(Dispatchers.IO) { MarketLogPaths.setConfiguredPath(selected) }
+                    marketLogPath = selected
+                    marketLogAutoDetectFailed = false
+                }
+            },
+        )
 
         SdeCard(
             sdeState = sdeState,
@@ -513,6 +553,70 @@ private fun CitadelCard(
                 if (syncState.isRunning) {
                     Text(syncState.status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MarketLogsCard(
+    path: String?,
+    autoDetectFailed: Boolean,
+    onAutoDetect: () -> Unit,
+    onBrowse: () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.FolderOpen, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text("Marketlogs Folder", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            }
+
+            Text(
+                "EVE's client can export your active orders and item order books to this folder. " +
+                    "EventNight Trade Tools watches it and imports new exports automatically, bypassing ESI's cache delay.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            HorizontalDivider()
+
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = MaterialTheme.shapes.small,
+            ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (path != null) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CheckCircle, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                            Text(path, style = MaterialTheme.typography.bodySmall)
+                        }
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Warning, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error)
+                            Text("Not configured", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    if (autoDetectFailed) {
+                        Text(
+                            "Auto-detect couldn't find it — please Browse to it manually.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    if (System.getProperty("os.name").lowercase().contains("mac")) {
+                        Text(
+                            "macOS path detection is best-effort and unverified — please confirm the folder manually.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
+                    }
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onAutoDetect) { Text("Auto-detect") }
+                OutlinedButton(onClick = onBrowse) { Text("Browse…") }
             }
         }
     }

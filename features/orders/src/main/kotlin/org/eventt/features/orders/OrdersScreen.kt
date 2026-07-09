@@ -32,6 +32,9 @@ import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.ViewContext
 import org.eventt.core.database.WalletDao
 import org.eventt.core.esi.EsiClient
+import org.eventt.core.marketlogs.MarketLogEvent
+import org.eventt.core.marketlogs.MarketLogOrderRow
+import org.eventt.core.marketlogs.MarketLogWatcher
 import org.eventt.ui.common.EmptyState
 import org.eventt.ui.common.EsiRefreshButton
 import org.eventt.ui.common.LoadingOverlay
@@ -92,6 +95,22 @@ private data class CharacterOrder(
     }
     val issuedFormatted: String get() = issued.take(16).replace("T", " ")
 }
+
+// Adapts a Marketlogs-file-derived order row into the same key set ESI's own orders response
+// uses, so it flows through parseOrder() unchanged — no separate model/parsing path needed.
+private fun MarketLogOrderRow.toEsiOrderMap(): Map<String, Any?> =
+    mapOf(
+        "order_id" to orderId,
+        "type_id" to typeId,
+        "location_id" to stationId,
+        "region_id" to regionId,
+        "price" to price,
+        "volume_total" to volEntered,
+        "volume_remain" to volRemaining,
+        "is_buy_order" to isBuyOrder,
+        "duration" to duration,
+        "issued" to issuedIso,
+    )
 
 /** Best competing prices for a (typeId, regionId) pair, excluding the character's own orders. */
 internal data class MarketComparison(
@@ -446,6 +465,42 @@ fun OrdersScreen(context: ViewContext?) {
             val fifo = CostBasisService.compute(characterId = charId, corporationId = corpId, taxConfig = taxConfig)
             withContext(Dispatchers.Main) { fifoResult = fifo }
             fetchInventoryMarketPrices(fifo.inventory)
+        }
+    }
+
+    // Instant refresh from EVE's own "My Orders"/"Corporation Orders" export, bypassing ESI's
+    // ~25min orders cache. Only replaces the `orders` snapshot (what Sell/Buy tables + the
+    // Ctrl+Z queue read) — doesn't touch history/FIFO/ESI cache state, which stay on their
+    // normal cadence.
+    LaunchedEffect(charId, corpId) {
+        MarketLogWatcher.events.collect { event ->
+            when (event) {
+                is MarketLogEvent.MyOrdersImported -> {
+                    if (corpId == null && event.charId == charId) {
+                        orders = event.rows.map { parseOrder(it.toEsiOrderMap(), issuedByCharId = null) }
+                    } else {
+                        println("[MarketLogs] Ignoring My Orders export for char ${event.charId} (active: $charId)")
+                    }
+                }
+                is MarketLogEvent.CorpOrdersImported -> {
+                    val corp = corpId
+                    if (corp != null) {
+                        val mismatch =
+                            event.rows.any { row ->
+                                val rowCorp = CharacterDao.getById(row.charId)?.corporationId
+                                rowCorp != null && rowCorp != corp
+                            }
+                        if (!mismatch) {
+                            val parsed = event.rows.map { parseOrder(it.toEsiOrderMap(), issuedByCharId = it.charId) }
+                            orders = parsed
+                            resolveIssuerNames(parsed.mapNotNull { it.issuedByCharId }.toSet())
+                        } else {
+                            println("[MarketLogs] Ignoring Corporation Orders export — contains a member from a different corp")
+                        }
+                    }
+                }
+                is MarketLogEvent.OrderBookImported -> Unit // consumed by the overlay, not here
+            }
         }
     }
 

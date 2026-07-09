@@ -18,7 +18,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import org.eventt.core.database.AppState
+import org.eventt.core.database.StaticDataDao
+import org.eventt.core.marketlogs.MarketLogEvent
+import org.eventt.core.marketlogs.MarketLogWatcher
 import org.eventt.ui.theme.DarkColorScheme
 import org.eventt.ui.theme.EveTypography
 import java.awt.KeyboardFocusManager
@@ -36,7 +42,6 @@ private val ACCENT = Color(0xFF4A90D9)
 @Composable
 fun OverlayWindow(onClose: () -> Unit) {
     val prefs = remember { Preferences.userRoot().node("org/eve/trader/overlay") }
-    var showSettings by remember { mutableStateOf(false) }
 
     val windowState =
         rememberWindowState(
@@ -49,10 +54,6 @@ fun OverlayWindow(onClose: () -> Unit) {
                 ),
         )
 
-    LaunchedEffect(showSettings) {
-        windowState.size = DpSize(290.dp, if (showSettings) 370.dp else 290.dp)
-    }
-
     Window(
         onCloseRequest = onClose,
         state = windowState,
@@ -62,20 +63,15 @@ fun OverlayWindow(onClose: () -> Unit) {
         title = "EVE Trade Overlay",
     ) {
         MaterialTheme(colorScheme = DarkColorScheme, typography = EveTypography) {
-            OverlayContent(
-                showSettings = showSettings,
-                onToggleSettings = { showSettings = !showSettings },
-                onClose = onClose,
-                prefs = prefs,
-            )
+            OverlayContent(onClose = onClose, prefs = prefs)
         }
     }
 }
 
+private enum class PriceSource { CLIPBOARD, FILE }
+
 @Composable
 private fun OverlayContent(
-    showSettings: Boolean,
-    onToggleSettings: () -> Unit,
     onClose: () -> Unit,
     prefs: Preferences,
 ) {
@@ -85,11 +81,30 @@ private fun OverlayContent(
     var buyVol by remember { mutableStateOf(0L) }
     var sellLoc by remember { mutableStateOf("") }
     var buyLoc by remember { mutableStateOf("") }
+    var sellSource by remember { mutableStateOf<PriceSource?>(null) }
+    var buySource by remember { mutableStateOf<PriceSource?>(null) }
+    var bookItemName by remember { mutableStateOf<String?>(null) }
 
-    var brokerFee by remember { mutableStateOf(prefs.getFloat("broker_fee", 3.0f)) }
-    var salesTax by remember { mutableStateOf(prefs.getFloat("sales_tax", 8.0f)) }
+    // Tax rates come from the currently active character's own configured fees (Settings ›
+    // Character Fees) instead of a manual slider here — one less place to keep in sync.
+    val selectedContext by AppState.selectedContext.collectAsState()
+    val actingCharId = selectedContext?.actingCharId
+    var brokerFeePct by remember { mutableStateOf(3.0) }
+    var salesTaxPct by remember { mutableStateOf(8.0) }
+    LaunchedEffect(actingCharId) {
+        val id = actingCharId
+        withContext(Dispatchers.IO) {
+            val bf = id?.let { StaticDataDao.getCharBrokersFee(it) } ?: 3.0
+            val st = id?.let { StaticDataDao.getCharSalesTax(it) } ?: 8.0
+            withContext(Dispatchers.Main) {
+                brokerFeePct = bf
+                salesTaxPct = st
+            }
+        }
+    }
 
-    // Clipboard polling — auto-assign sell/buy by EVE row format
+    // Clipboard polling — auto-assign sell/buy by EVE row format (manual fallback: copy one
+    // order row in-game, this overlay picks it up within ~400ms).
     var lastClipboard by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -102,11 +117,37 @@ private fun OverlayContent(
                     buyPrice = p.price
                     buyVol = p.volume
                     buyLoc = p.location
+                    buySource = PriceSource.CLIPBOARD
                 } else {
                     sellPrice = p.price
                     sellVol = p.volume
                     sellLoc = p.location
+                    sellSource = PriceSource.CLIPBOARD
                 }
+            }
+        }
+    }
+
+    // Richer, automatic source: EVE's own item order-book export (Settings › Marketlogs Folder)
+    // — the whole book for the item you have open in-game, not just one copied row.
+    LaunchedEffect(Unit) {
+        MarketLogWatcher.events.collect { event ->
+            if (event is MarketLogEvent.OrderBookImported) {
+                val bestSell = event.sellRows.filter { it.jumps == 0 }.minByOrNull { it.price } ?: event.sellRows.minByOrNull { it.price }
+                val bestBuy = event.buyRows.filter { it.jumps == 0 }.maxByOrNull { it.price } ?: event.buyRows.maxByOrNull { it.price }
+                bestSell?.let {
+                    sellPrice = it.price
+                    sellVol = it.volRemaining.toLong()
+                    sellLoc = StaticDataDao.getStationById(it.stationId)?.name ?: it.stationId.toString()
+                    sellSource = PriceSource.FILE
+                }
+                bestBuy?.let {
+                    buyPrice = it.price
+                    buyVol = it.volRemaining.toLong()
+                    buyLoc = StaticDataDao.getStationById(it.stationId)?.name ?: it.stationId.toString()
+                    buySource = PriceSource.FILE
+                }
+                bookItemName = StaticDataDao.getTypeName(event.typeId) ?: "Unknown (${event.typeId})"
             }
         }
     }
@@ -177,34 +218,20 @@ private fun OverlayContent(
                         fontWeight = FontWeight.Bold,
                     )
                     Spacer(Modifier.weight(1f))
-                    IconButton(onClick = onToggleSettings, modifier = Modifier.size(24.dp)) {
-                        Icon(
-                            if (showSettings) Icons.Default.ExpandLess else Icons.Default.Settings,
-                            null,
-                            tint = DIM_TEXT,
-                            modifier = Modifier.size(14.dp),
-                        )
-                    }
-                    Spacer(Modifier.width(2.dp))
                     IconButton(onClick = onClose, modifier = Modifier.size(24.dp)) {
                         Icon(Icons.Default.Close, null, tint = DIM_TEXT, modifier = Modifier.size(14.dp))
                     }
                 }
 
-                // ─── Fee settings (collapsible) ───────────────────────────
-                if (showSettings) {
-                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                        FeeRow("Broker fee", brokerFee, 0f..5f) {
-                            brokerFee = it
-                            prefs.putFloat("broker_fee", it)
-                        }
-                        Spacer(Modifier.height(2.dp))
-                        FeeRow("Sales tax", salesTax, 0f..10f) {
-                            salesTax = it
-                            prefs.putFloat("sales_tax", it)
-                        }
-                    }
-                    HorizontalDivider(color = OVERLAY_BORDER)
+                bookItemName?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ACCENT,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                    )
                 }
 
                 // ─── Prices ───────────────────────────────────────────────
@@ -214,11 +241,13 @@ private fun OverlayContent(
                         price = sellPrice,
                         location = sellLoc,
                         color = SELL_COLOR,
+                        source = sellSource,
                         onSet = {
                             val p = ClipboardParser.parse(ClipboardParser.readClipboard()) ?: return@PriceRow
                             sellPrice = p.price
                             sellVol = p.volume
                             sellLoc = p.location
+                            sellSource = PriceSource.CLIPBOARD
                         },
                     )
                     Spacer(Modifier.height(6.dp))
@@ -227,11 +256,13 @@ private fun OverlayContent(
                         price = buyPrice,
                         location = buyLoc,
                         color = BUY_COLOR,
+                        source = buySource,
                         onSet = {
                             val p = ClipboardParser.parse(ClipboardParser.readClipboard()) ?: return@PriceRow
                             buyPrice = p.price
                             buyVol = p.volume
                             buyLoc = p.location
+                            buySource = PriceSource.CLIPBOARD
                         },
                     )
                 }
@@ -241,8 +272,8 @@ private fun OverlayContent(
                     HorizontalDivider(color = OVERLAY_BORDER)
                     val sp = sellPrice!!
                     val bp = buyPrice!!
-                    val bf = brokerFee / 100.0
-                    val st = salesTax / 100.0
+                    val bf = brokerFeePct / 100.0
+                    val st = salesTaxPct / 100.0
 
                     // Station-trading formulas:
                     // Post a buy order → pay broker fee on buy
@@ -285,6 +316,7 @@ private fun PriceRow(
     price: Double?,
     location: String,
     color: Color,
+    source: PriceSource?,
     onSet: () -> Unit,
 ) {
     Column {
@@ -304,6 +336,8 @@ private fun PriceRow(
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                 )
+                Spacer(Modifier.width(6.dp))
+                SourceBadge(source)
             } else {
                 Text("—  copy an order row", color = DIM_TEXT, style = MaterialTheme.typography.bodySmall)
             }
@@ -329,6 +363,24 @@ private fun PriceRow(
     }
 }
 
+// Shows whether a price came from the automatic order-book file import ("auto") or a manual
+// clipboard copy ("manual") — the file source is richer (whole order book, not one copied line)
+// and refreshes itself the moment a new export appears.
+@Composable
+private fun SourceBadge(source: PriceSource?) {
+    if (source == null) return
+    val (icon, label) =
+        when (source) {
+            PriceSource.FILE -> Icons.Default.Bolt to "auto"
+            PriceSource.CLIPBOARD -> Icons.Default.ContentPaste to "manual"
+        }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = DIM_TEXT, modifier = Modifier.size(10.dp))
+        Spacer(Modifier.width(2.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = DIM_TEXT)
+    }
+}
+
 @Composable
 private fun CalcRow(
     label: String,
@@ -343,36 +395,6 @@ private fun CalcRow(
             color = valueColor,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
-        )
-    }
-}
-
-@Composable
-private fun FeeRow(
-    label: String,
-    value: Float,
-    range: ClosedFloatingPointRange<Float>,
-    onChange: (Float) -> Unit,
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            label,
-            color = DIM_TEXT,
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.width(70.dp),
-        )
-        Slider(
-            value = value,
-            onValueChange = onChange,
-            valueRange = range,
-            modifier = Modifier.weight(1f).height(28.dp),
-            colors = SliderDefaults.colors(thumbColor = ACCENT, activeTrackColor = ACCENT),
-        )
-        Text(
-            "%.1f%%".format(value),
-            color = Color.White,
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.width(38.dp).padding(start = 4.dp),
         )
     }
 }
