@@ -1,6 +1,6 @@
 [versions]
-kotlin = "2.0.21"
-compose = "1.7.3"
+kotlin = "2.4.0"
+compose = "1.11.1"
 okhttp = "4.12.0"
 kotlinx-serialization = "1.6.2"
 kotlinx-coroutines = "1.8.0"
@@ -17,8 +17,11 @@ junit = "5.10.2"
 mockk = "1.13.11"
 kotest = "5.9.1"
 turbine = "1.1.0"
+quartz = "1.12.6"
 
 [libraries]
+# Nostr (P2P Market — Phase 0 spike)
+quartz-jvm = { module = "com.vitorpamplona.quartz:quartz-jvm", version.ref = "quartz" }
 # Compose
 compose-desktop = { module = "org.jetbrains.compose.desktop:desktop", version.ref = "compose" }
 compose-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "compose" }
