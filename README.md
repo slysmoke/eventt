@@ -25,6 +25,26 @@ A global hotkey (Ctrl+Z) cycles through your queued orders, opens the in-game ma
 
 No API keys or configuration needed — the ESI OAuth client ID is bundled; you just log in with your EVE account on first launch.
 
+### Installing a JDK 21
+
+Only needed for building/running from source or the fat jar (`java -jar`) — the `.dmg`/`.msi`/`.deb` installers bundle their own runtime.
+
+- **macOS**: download the Temurin 21 `.pkg` for your chip (x64 or aarch64) from [adoptium.net](https://adoptium.net/) and run it — no Homebrew needed (if you do have `brew`: `brew install openjdk@21`)
+- **Linux**: `sudo apt install openjdk-21-jdk` (Debian/Ubuntu) or `sudo dnf install java-21-openjdk-devel` (Fedora)
+- **Windows**: download the Temurin 21 `.msi` from [adoptium.net](https://adoptium.net/) and run it (or `winget install EclipseAdoptium.Temurin.21.JDK` if you use winget)
+
+Verify with `java -version` — it should report `21`.
+
+### Installing on macOS (unsigned build)
+
+The macOS build isn't signed with an Apple Developer ID or notarized (no paid certificate), so Gatekeeper blocks it on first launch with an "app is damaged" or "unidentified developer" warning. After installing the `.dmg`, clear the quarantine flag once:
+
+```bash
+xattr -cr /Applications/eventt.app
+```
+
+Two separate downloads are published for macOS — `eventt-macos-x64.dmg` for Intel Macs and `eventt-macos-arm64.dmg` for Apple Silicon (M1/M2/M3/M4) — there is no universal binary; grab the one matching your Mac's chip (Apple menu → About This Mac).
+
 ## Auth & data storage
 
 Login uses EVE SSO's OAuth2 Authorization Code flow with PKCE — no client secret is embedded in the app. Character access/refresh tokens are encrypted at rest (AES-256-GCM) with a local, per-machine key, both stored under `~/.eve-trader/`.
@@ -50,7 +70,7 @@ Targets JVM 21 / Kotlin 1.9.22. No linter configured; code style is `kotlin.code
 ./gradlew shadowJar             # Runnable fat jar (java -jar app/build/libs/eventt-<version>.jar)
 ```
 
-The fat jar is **not** cross-platform despite the format — it bundles whichever OS's Skiko/Compose native rendering libs were present at build time (`compose.desktop.currentOs`). CI builds one per OS, released as `eventt-linux.jar` / `eventt-windows.jar` / `eventt-macos.jar`; grab the one matching your OS, same as the zip or installer.
+The fat jar is **not** cross-platform despite the format — it bundles whichever OS/arch's Skiko/Compose native rendering libs were present at build time (`compose.desktop.currentOs`). CI builds one per OS (and, for macOS, per arch), released as `eventt-linux.jar` / `eventt-windows.jar` / `eventt-macos-x64.jar` / `eventt-macos-arm64.jar`; grab the one matching your OS, same as the zip or installer.
 
 A NixOS package is also available via `flake.nix` (run `./gradlew createDistributable` first).
 

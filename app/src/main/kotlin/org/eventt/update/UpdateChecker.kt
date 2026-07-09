@@ -49,6 +49,16 @@ object UpdateChecker {
             else -> "linux"
         }
 
+    // macOS ships two arch-specific builds (no universal binary — see release.yml), so the
+    // release asset name for mac must disambiguate x64 vs arm64; other platforms ship one asset.
+    private val arch: String = System.getProperty("os.arch").lowercase()
+    private val assetTag: String =
+        if (platform == "macos") {
+            if (arch.contains("aarch64") || arch.contains("arm")) "macos-arm64" else "macos-x64"
+        } else {
+            platform
+        }
+
     // Set when the app was launched via `java -jar <path>` (as opposed to the native
     // launcher from a zip/dmg/msi/deb install) — `sun.java.command` is the jar path in that case.
     // .absoluteFile matters: launched as a bare "java -jar eventt.jar" (no directory component),
@@ -90,7 +100,7 @@ object UpdateChecker {
             val asset =
                 assets.firstOrNull { elem ->
                     val name = elem.jsonObject["name"]?.jsonPrimitive?.content ?: ""
-                    name.contains(platform, ignoreCase = true) && name.endsWith(assetSuffix)
+                    name.contains(assetTag, ignoreCase = true) && name.endsWith(assetSuffix)
                 }
             val downloadUrl =
                 asset

@@ -58,8 +58,19 @@ jobs:
             installerDir: app/build/compose/binaries/main/msi
             installerExt: msi
 
-          - os: macos-latest
-            platform: macos
+          # No universal (fat) binary — jpackage/Skiko natives are tied to the build
+          # machine's arch, so Intel and Apple Silicon are built and shipped separately.
+          # UpdateChecker matches the asset filename on "macos-x64"/"macos-arm64", so these
+          # platform values must stay in sync with app/src/main/kotlin/org/eventt/update/UpdateChecker.kt.
+          - os: macos-13
+            platform: macos-x64
+            exe: app/build/compose/binaries/main/app/eventt.app/Contents/MacOS/eventt
+            installerTask: packageDmg
+            installerDir: app/build/compose/binaries/main/dmg
+            installerExt: dmg
+
+          - os: macos-14
+            platform: macos-arm64
             exe: app/build/compose/binaries/main/app/eventt.app/Contents/MacOS/eventt
             installerTask: packageDmg
             installerDir: app/build/compose/binaries/main/dmg
@@ -135,7 +146,7 @@ jobs:
           }
 
       - name: Smoke test (macOS)
-        if: matrix.platform == 'macos'
+        if: startsWith(matrix.platform, 'macos')
         run: |
           ${{ matrix.exe }} &
           PID=$!
@@ -231,10 +242,13 @@ jobs:
             --generate-notes \
             artifacts/eventt-linux/eventt-linux.zip \
             artifacts/eventt-windows/eventt-windows.zip \
-            artifacts/eventt-macos/eventt-macos.zip \
+            artifacts/eventt-macos-x64/eventt-macos-x64.zip \
+            artifacts/eventt-macos-arm64/eventt-macos-arm64.zip \
             artifacts/eventt-linux-installer/eventt-linux.deb \
             artifacts/eventt-windows-installer/eventt-windows.msi \
-            artifacts/eventt-macos-installer/eventt-macos.dmg \
+            artifacts/eventt-macos-x64-installer/eventt-macos-x64.dmg \
+            artifacts/eventt-macos-arm64-installer/eventt-macos-arm64.dmg \
             artifacts/eventt-linux-jar/eventt-linux.jar \
             artifacts/eventt-windows-jar/eventt-windows.jar \
-            artifacts/eventt-macos-jar/eventt-macos.jar
+            artifacts/eventt-macos-x64-jar/eventt-macos-x64.jar \
+            artifacts/eventt-macos-arm64-jar/eventt-macos-arm64.jar
