@@ -7,7 +7,6 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import org.eventt.core.database.DatabaseManager
 import org.eventt.core.http.EveHttpClient
-import org.eventt.core.marketlogs.MarketLogCleaner
 import org.eventt.core.marketlogs.MarketLogWatcher
 import org.eventt.core.model.AppPaths
 import org.eventt.ui.EventtApp
@@ -33,12 +32,12 @@ fun main() {
         println("[App] Database init failed: ${e.stackTraceToString()}")
     }
 
-    // Wipe stale exports left over from a previous session before the watcher starts picking
-    // up files — this folder holds nothing but transient EVE client exports.
-    val cleaned = MarketLogCleaner.cleanOnStartup()
-    if (cleaned > 0) println("[App] Cleared $cleaned stale marketlog file(s)")
-
     GlobalHotkeyService.start()
+    // No separate startup wipe: MarketLogWatcher itself consumes (imports, then deletes) any
+    // recognized export already sitting in the folder within its first couple of polls after
+    // start() — including one written just before a restart, before it had a chance to be
+    // processed. A blind delete-on-startup step used to run here and would destroy exactly that
+    // file before the watcher ever saw it — a real data-loss bug, not just theoretical.
     MarketLogWatcher.start()
 
     application {

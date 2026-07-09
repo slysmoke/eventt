@@ -5,9 +5,15 @@ import org.junit.jupiter.api.Test
 
 class MarketLogPathsTest {
     @Test
-    fun `candidatePaths on Windows uses the Documents suffix`() {
+    fun `candidatePaths on Windows uses the Documents suffix with backslash separators`() {
         val result = MarketLogPaths.candidatePaths(osName = "Windows 11", home = "C:\\Users\\bob")
-        result shouldBe listOf("C:\\Users\\bob/Documents/EVE/logs/Marketlogs")
+        result shouldBe listOf("C:\\Users\\bob\\Documents\\EVE\\logs\\Marketlogs")
+    }
+
+    @Test
+    fun `candidatePaths on Windows trims a trailing separator from home before joining`() {
+        val result = MarketLogPaths.candidatePaths(osName = "Windows 11", home = "C:\\Users\\bob\\")
+        result shouldBe listOf("C:\\Users\\bob\\Documents\\EVE\\logs\\Marketlogs")
     }
 
     @Test

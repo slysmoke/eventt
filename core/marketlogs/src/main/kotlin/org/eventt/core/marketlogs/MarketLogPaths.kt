@@ -20,7 +20,8 @@ object MarketLogPaths {
     ): List<String> {
         val lower = osName.lowercase()
         return when {
-            lower.contains("win") -> listOf("$home/Documents/EVE/logs/Marketlogs")
+            // Windows paths use \, not / — home arrives as "C:\Users\bob".
+            lower.contains("win") -> listOf("${home.trimEnd('\\', '/')}\\Documents\\EVE\\logs\\Marketlogs")
             // Best-effort guess only — EVE's Mac client is a wrapped Windows build that
             // historically mirrors the same relative Documents/EVE/logs/Marketlogs suffix, but
             // this is unverified; the Settings UI flags it as such whenever running on macOS.

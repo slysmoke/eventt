@@ -40,9 +40,15 @@ sealed class MarketLogEvent {
  * unreliable over Proton/compatdata's FUSE-like mounts, and this folder is normally empty, so a
  * cheap poll loop (mirroring the overlay's own existing clipboard-poll idiom) is simpler and more
  * robust than chasing OS-level file-event delivery through a Wine prefix.
+ *
+ * This also doubles as the startup cleanup: any recognized file already sitting in the folder
+ * when start() is called — including one written moments before a restart and never processed —
+ * gets imported and removed within the first couple of polls, regardless of age. There is
+ * deliberately no separate blind "delete everything on startup" step: that would (and once did)
+ * destroy a fresh, not-yet-processed export before this loop ever got to read it.
  */
 object MarketLogWatcher {
-    private const val DEFAULT_POLL_INTERVAL_MS = 3_000L
+    private const val DEFAULT_POLL_INTERVAL_MS = 1_000L
 
     private val _events = MutableSharedFlow<MarketLogEvent>(extraBufferCapacity = 16)
     val events: SharedFlow<MarketLogEvent> = _events.asSharedFlow()
