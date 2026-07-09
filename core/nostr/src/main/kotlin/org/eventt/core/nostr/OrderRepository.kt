@@ -77,8 +77,10 @@ object OrderRepository {
         order: NostrOrderModel,
         buildEvent: (NostrSignerSync, ParsedOrder) -> Event,
     ): ParsedOrder? {
-        val identity = NostrIdentityService.getActiveIdentity() ?: return null
-        if (identity.pubkey != order.pubkey) return null
+        // Resolves the identity that actually owns this order, not whichever one is currently
+        // "active" — renewing/cancelling an order posted by a different one of your own
+        // characters shouldn't require switching your active trader first.
+        val identity = NostrIdentityService.getIdentityByPubkey(order.pubkey) ?: return null
         val event = buildEvent(QuartzGateway.signerFor(identity.keyPair), order.toParsedOrder())
         return persistAndPublish(event, identity.pubkey)
     }

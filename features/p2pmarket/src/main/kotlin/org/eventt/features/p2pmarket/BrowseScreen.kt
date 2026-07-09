@@ -187,7 +187,7 @@ private fun BrowseTableHeader(
             active = sortColumn == BrowseSortColumn.SAVINGS,
             direction = sortDirection,
         ) { onSort(BrowseSortColumn.SAVINGS, SortDirection.DESC) }
-        Text("Trader", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(140.dp))
+        Text("Trader", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(160.dp))
         SortHeaderCell(
             "Expires",
             Modifier.width(90.dp),
@@ -244,14 +244,18 @@ private fun BrowseTableRow(
                 )
             }
         }
-        Column(modifier = Modifier.width(140.dp)) {
-            Text(
-                order.traderChar.ifBlank { "—" },
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+        Column(modifier = Modifier.width(160.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    order.traderChar.ifBlank { "—" },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (order.traderChar.isNotBlank()) TraderInfoButton(order.traderChar)
+            }
             if (row.confirmedTrades > 0) {
                 Text(
                     "${row.confirmedTrades} confirmed",

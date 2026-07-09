@@ -69,6 +69,19 @@ object NostrIdentityService {
             NostrIdentityDao.getActive()?.let { rowToIdentity(it) }
         }
 
+    /**
+     * Looks up whichever of the user's identities owns [pubkey] — the app holds every identity's
+     * private key regardless of which one is currently "active," so actions on an *existing*
+     * order/reservation (renew, cancel, accept, decline, release, mark-completed) should resolve
+     * the identity that actually owns it rather than requiring the user to first switch their
+     * active character to match. Only [getActiveIdentity] should be used for *new* orders/requests,
+     * where there's no prior owner to resolve against.
+     */
+    suspend fun getIdentityByPubkey(pubkey: String): NostrIdentity? =
+        withContext(Dispatchers.IO) {
+            NostrIdentityDao.getAll().find { it.pubkey == pubkey }?.let { rowToIdentity(it) }
+        }
+
     suspend fun listIdentities(): List<NostrIdentity> =
         withContext(Dispatchers.IO) {
             NostrIdentityDao.getAll().map { rowToIdentity(it) }

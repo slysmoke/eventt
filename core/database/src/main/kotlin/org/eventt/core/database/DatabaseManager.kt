@@ -92,6 +92,7 @@ object DatabaseManager {
                 "ALTER TABLE order_history ADD COLUMN corporation_id INTEGER",
                 "ALTER TABLE order_history ADD COLUMN is_corp INTEGER DEFAULT 0",
                 "ALTER TABLE nostr_identity ADD COLUMN character_id INTEGER",
+                "ALTER TABLE nostr_reservations ADD COLUMN buyer_char TEXT DEFAULT ''",
             )
         conn.createStatement().use { stmt ->
             migrations.forEach { sql ->
@@ -535,6 +536,7 @@ object DatabaseManager {
                     role TEXT NOT NULL,
                     qty INTEGER NOT NULL,
                     note TEXT DEFAULT '',
+                    buyer_char TEXT DEFAULT '',
                     status TEXT NOT NULL DEFAULT 'sent',
                     reserved_qty INTEGER,
                     hold_until INTEGER,

@@ -9,6 +9,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.NostrOrderDao
 import org.eventt.core.database.NostrOrderModel
 import org.eventt.core.database.NostrReservationDao
@@ -23,6 +24,7 @@ data class ReservationRequest(
     @SerialName("trade_id") val tradeId: String,
     val qty: Long,
     val note: String = "",
+    @SerialName("buyer_char") val buyerChar: String = "",
 )
 
 @Serializable
@@ -53,7 +55,19 @@ object ReservationService {
     ): String? {
         val identity = NostrIdentityService.getActiveIdentity() ?: return null
         val tradeId = UUID.randomUUID().toString()
-        val payload = ReservationRequest(orderId = order.orderUuid, orderPubkey = order.pubkey, tradeId = tradeId, qty = qty, note = note)
+        val buyerChar =
+            withContext(Dispatchers.IO) {
+                identity.characterId?.let { CharacterDao.getById(it)?.name } ?: identity.label
+            }
+        val payload =
+            ReservationRequest(
+                orderId = order.orderUuid,
+                orderPubkey = order.pubkey,
+                tradeId = tradeId,
+                qty = qty,
+                note = note,
+                buyerChar = buyerChar,
+            )
         if (!sendDm(identity, order.pubkey, json.encodeToString(payload))) return null
 
         withContext(Dispatchers.IO) {
@@ -66,20 +80,25 @@ object ReservationService {
                 role = "buyer",
                 qty = qty,
                 note = note,
+                buyerChar = buyerChar,
                 requestedAt = System.currentTimeMillis() / 1000,
             )
         }
         return tradeId
     }
 
-    /** False if there's no active identity, or [reservation]'s order isn't ours to answer for. */
+    /**
+     * False if we don't hold the seller's identity for this reservation. Resolves the identity
+     * that actually owns [reservation]'s order rather than requiring it to be the currently
+     * *active* one — a seller shouldn't have to switch their active trader character just to
+     * answer a request that came in for a different one of their own characters.
+     */
     suspend fun respond(
         reservation: NostrReservationModel,
         accept: Boolean,
         holdHours: Long = 24,
     ): Boolean {
-        val identity = NostrIdentityService.getActiveIdentity() ?: return false
-        if (identity.pubkey != reservation.sellerPubkey) return false
+        val identity = NostrIdentityService.getIdentityByPubkey(reservation.sellerPubkey) ?: return false
         val order =
             withContext(Dispatchers.IO) {
                 NostrOrderDao.getByCoordinate(reservation.orderUuid, reservation.sellerPubkey)
@@ -120,10 +139,13 @@ object ReservationService {
         return true
     }
 
-    /** Seller gives up on a held reservation (buyer never showed) — restores qty_remaining, no receipt either way. */
+    /**
+     * Seller gives up on a held reservation (buyer never showed) — restores qty_remaining, no
+     * receipt either way. [OrderRepository.setRemainingQty] resolves the owning identity itself,
+     * so no active-identity check is needed here.
+     */
     suspend fun release(reservation: NostrReservationModel): Boolean {
-        val identity = NostrIdentityService.getActiveIdentity() ?: return false
-        if (identity.pubkey != reservation.sellerPubkey || reservation.status != "accepted") return false
+        if (reservation.status != "accepted") return false
         val order =
             withContext(Dispatchers.IO) {
                 NostrOrderDao.getByCoordinate(reservation.orderUuid, reservation.sellerPubkey)
@@ -156,6 +178,7 @@ object ReservationService {
                         role = "seller",
                         qty = req.qty,
                         note = req.note,
+                        buyerChar = req.buyerChar,
                         requestedAt = System.currentTimeMillis() / 1000,
                     )
                 }

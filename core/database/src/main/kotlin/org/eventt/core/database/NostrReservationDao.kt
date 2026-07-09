@@ -9,6 +9,7 @@ data class NostrReservationModel(
     val role: String,
     val qty: Long,
     val note: String,
+    val buyerChar: String,
     val status: String,
     val reservedQty: Long?,
     val holdUntil: Long?,
@@ -28,14 +29,15 @@ object NostrReservationDao {
         role: String,
         qty: Long,
         note: String,
+        buyerChar: String,
         requestedAt: Long,
     ) {
         DatabaseManager.transaction {
             prepareStatement(
                 """
                 INSERT OR IGNORE INTO nostr_reservations
-                (trade_id, order_uuid, order_pubkey, buyer_pubkey, seller_pubkey, role, qty, note, requested_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (trade_id, order_uuid, order_pubkey, buyer_pubkey, seller_pubkey, role, qty, note, buyer_char, requested_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent(),
             ).use { stmt ->
                 stmt.setString(1, tradeId)
@@ -46,7 +48,8 @@ object NostrReservationDao {
                 stmt.setString(6, role)
                 stmt.setLong(7, qty)
                 stmt.setString(8, note)
-                stmt.setLong(9, requestedAt)
+                stmt.setString(9, buyerChar)
+                stmt.setLong(10, requestedAt)
                 stmt.executeUpdate()
             }
         }
@@ -131,6 +134,7 @@ object NostrReservationDao {
             role = getString("role"),
             qty = getLong("qty"),
             note = getString("note") ?: "",
+            buyerChar = getString("buyer_char") ?: "",
             status = getString("status"),
             reservedQty = getLong("reserved_qty").takeIf { !wasNull() },
             holdUntil = getLong("hold_until").takeIf { !wasNull() },

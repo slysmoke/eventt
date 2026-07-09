@@ -394,6 +394,14 @@ private fun ReservationRow(
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Qty ${reservation.qty} · order ${reservation.orderUuid.take(8)}…", style = MaterialTheme.typography.bodyMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "From: " + reservation.buyerChar.ifBlank { "${reservation.buyerPubkey.take(12)}…" },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (reservation.buyerChar.isNotBlank()) TraderInfoButton(reservation.buyerChar)
+            }
             if (reservation.note.isNotBlank()) {
                 Text(reservation.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

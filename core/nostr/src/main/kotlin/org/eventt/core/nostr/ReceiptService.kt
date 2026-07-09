@@ -19,9 +19,15 @@ const val RECEIPT_KIND = 7733
  * sign, publish, and parse the event itself.
  */
 object ReceiptService {
-    /** Signs+publishes a receipt for [reservation] from the current identity's side. False if there's no active identity. */
+    /**
+     * Signs+publishes a receipt for [reservation] from this side's identity — resolved from
+     * [reservation]'s own buyer/seller pubkey for its `role`, not whichever identity happens to be
+     * currently active, so completing a trade never depends on switching your active trader first.
+     * False if we don't hold that identity.
+     */
     suspend fun publish(reservation: NostrReservationModel): Boolean {
-        val identity = NostrIdentityService.getActiveIdentity() ?: return false
+        val myPubkey = if (reservation.role == "buyer") reservation.buyerPubkey else reservation.sellerPubkey
+        val identity = NostrIdentityService.getIdentityByPubkey(myPubkey) ?: return false
         val counterpartyPubkey = if (reservation.role == "buyer") reservation.sellerPubkey else reservation.buyerPubkey
         val orderCoordinate = "$ORDER_KIND:${reservation.orderPubkey}:${reservation.orderUuid}"
         val createdAt = System.currentTimeMillis() / 1000
