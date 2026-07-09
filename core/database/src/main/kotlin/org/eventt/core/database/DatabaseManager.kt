@@ -91,6 +91,7 @@ object DatabaseManager {
                 "ALTER TABLE market_history ADD COLUMN source TEXT DEFAULT 'esi'",
                 "ALTER TABLE order_history ADD COLUMN corporation_id INTEGER",
                 "ALTER TABLE order_history ADD COLUMN is_corp INTEGER DEFAULT 0",
+                "ALTER TABLE nostr_identity ADD COLUMN character_id INTEGER",
             )
         conn.createStatement().use { stmt ->
             migrations.forEach { sql ->

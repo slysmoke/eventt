@@ -4,35 +4,64 @@ import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.NostrIdentityDao
 import org.eventt.core.database.NostrIdentityModel
 import org.eventt.core.database.NostrKeyCrypto
+import org.eventt.core.model.CharacterModel
 
 data class NostrIdentity(
     val pubkey: String,
     val label: String,
     val keyPair: KeyPair,
+    val characterId: Int?,
 )
 
 /**
  * Owns the only code path in the app that ever holds a decrypted Nostr private key in memory —
  * generation/import go through [QuartzGateway], persistence through [NostrKeyCrypto] (its own
- * encryption key, separate from OAuth token storage) and [NostrIdentityDao].
+ * encryption key, separate from OAuth token storage) and [NostrIdentityDao]. Each EVE character
+ * gets its own P2P Market identity (one nostr_identity row per character_id, enforced by always
+ * deleting-then-inserting rather than having two rows fight over the same character) —
+ * [ensureIdentitiesForAllCharacters] auto-generates any missing ones, so there's no separate
+ * manual "create identity" step; import/export exist for moving a character's key between machines.
  */
 object NostrIdentityService {
-    suspend fun generateNew(label: String): NostrIdentity =
+    /** Idempotent — a character that already has an identity is left untouched. */
+    suspend fun ensureIdentityForCharacter(character: CharacterModel): NostrIdentity =
         withContext(Dispatchers.IO) {
-            persist(QuartzGateway.generateKeyPair(), label)
+            NostrIdentityDao.getByCharacterId(character.id)?.let { return@withContext rowToIdentity(it) }
+            val identity = persist(QuartzGateway.generateKeyPair(), character.name, character.id)
+            if (NostrIdentityDao.getActive() == null) NostrIdentityDao.setActive(identity.pubkey)
+            identity
         }
 
-    /** Returns null if [nsecOrHex] doesn't parse as a valid nsec1.../hex private key. */
-    suspend fun importPrivateKey(
+    /** Called from Settings whenever the identity list is shown — backfills identities for any newly-added character. */
+    suspend fun ensureIdentitiesForAllCharacters(): List<NostrIdentity> =
+        withContext(Dispatchers.IO) {
+            CharacterDao.getAll().map { ensureIdentityForCharacter(it) }
+        }
+
+    /** Replaces [character]'s current identity (if any) with an imported key. Null if [nsecOrHex] doesn't parse. */
+    suspend fun importPrivateKeyForCharacter(
         nsecOrHex: String,
-        label: String,
+        character: CharacterModel,
     ): NostrIdentity? =
         withContext(Dispatchers.IO) {
             val keyPair = QuartzGateway.importPrivateKey(nsecOrHex) ?: return@withContext null
-            persist(keyPair, label)
+            val wasActive = NostrIdentityDao.getByCharacterId(character.id)?.isActive ?: false
+            NostrIdentityDao.deleteByCharacterId(character.id)
+            val identity = persist(keyPair, character.name, character.id)
+            if (wasActive || NostrIdentityDao.getActive() == null) NostrIdentityDao.setActive(identity.pubkey)
+            identity
+        }
+
+    /** Null if [pubkey] doesn't match a stored identity. */
+    suspend fun exportPrivateKey(pubkey: String): String? =
+        withContext(Dispatchers.IO) {
+            val row = NostrIdentityDao.getAll().find { it.pubkey == pubkey } ?: return@withContext null
+            val privKeyHex = requireNotNull(NostrKeyCrypto.decrypt(row.encryptedPrivkey)) { "corrupt or undecryptable identity key" }
+            QuartzGateway.encodeAsNsec(KeyPair(privKey = privKeyHex.hexToByteArray()))
         }
 
     suspend fun getActiveIdentity(): NostrIdentity? =
@@ -49,23 +78,19 @@ object NostrIdentityService {
         withContext(Dispatchers.IO) { NostrIdentityDao.setActive(pubkey) }
     }
 
-    suspend fun delete(pubkey: String) {
-        withContext(Dispatchers.IO) { NostrIdentityDao.delete(pubkey) }
-    }
-
     private fun persist(
         keyPair: KeyPair,
         label: String,
+        characterId: Int?,
     ): NostrIdentity {
         val pubkeyHex = QuartzGateway.pubKeyHex(keyPair)
         val privKeyHex = requireNotNull(QuartzGateway.privKeyHex(keyPair)) { "generated/imported keypair unexpectedly read-only" }
-        NostrIdentityDao.insert(pubkeyHex, NostrKeyCrypto.encrypt(privKeyHex), label)
-        NostrIdentityDao.setActive(pubkeyHex)
-        return NostrIdentity(pubkeyHex, label, keyPair)
+        NostrIdentityDao.insert(pubkeyHex, NostrKeyCrypto.encrypt(privKeyHex), label, characterId)
+        return NostrIdentity(pubkeyHex, label, keyPair, characterId)
     }
 
     private fun rowToIdentity(row: NostrIdentityModel): NostrIdentity {
         val privKeyHex = requireNotNull(NostrKeyCrypto.decrypt(row.encryptedPrivkey)) { "corrupt or undecryptable identity key" }
-        return NostrIdentity(row.pubkey, row.label, KeyPair(privKey = privKeyHex.hexToByteArray()))
+        return NostrIdentity(row.pubkey, row.label, KeyPair(privKey = privKeyHex.hexToByteArray()), row.characterId)
     }
 }

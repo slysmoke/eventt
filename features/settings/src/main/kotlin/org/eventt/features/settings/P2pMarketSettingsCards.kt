@@ -8,10 +8,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Podcasts
+import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
@@ -20,6 +21,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,24 +37,40 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.NostrRelayDao
 import org.eventt.core.database.NostrRelayModel
+import org.eventt.core.model.CharacterModel
 import org.eventt.core.nostr.NostrIdentity
 import org.eventt.core.nostr.NostrIdentityService
 import org.eventt.core.nostr.NostrRelayEvent
 import org.eventt.core.nostr.NostrRelayManager
+import java.io.File
+import javax.swing.JFileChooser
 
+/**
+ * One P2P Market identity per EVE character, auto-generated the first time this card loads — the
+ * radio selection is "which character is currently trading P2P," not "which raw key," since a
+ * character-scoped key is what makes the trader_char shown to counterparties actually trustworthy
+ * (it's the name of the character that owns the signing key, not free-text someone typed in).
+ */
 @Composable
 internal fun NostrIdentityCard() {
     val scope = rememberCoroutineScope()
-    var identity by remember { mutableStateOf<NostrIdentity?>(null) }
-    var labelInput by remember { mutableStateOf("") }
-    var importInput by remember { mutableStateOf("") }
-    var importError by remember { mutableStateOf(false) }
+    var characters by remember { mutableStateOf<List<CharacterModel>>(emptyList()) }
+    var identitiesByCharacter by remember { mutableStateOf<Map<Int, NostrIdentity>>(emptyMap()) }
+    var activePubkey by remember { mutableStateOf<String?>(null) }
+    var importError by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
-        identity = withContext(Dispatchers.IO) { NostrIdentityService.getActiveIdentity() }
+    suspend fun reload() {
+        val chars = withContext(Dispatchers.IO) { CharacterDao.getAll() }
+        val identities = withContext(Dispatchers.IO) { NostrIdentityService.ensureIdentitiesForAllCharacters() }
+        characters = chars
+        identitiesByCharacter = identities.mapNotNull { id -> id.characterId?.let { it to id } }.toMap()
+        activePubkey = withContext(Dispatchers.IO) { NostrIdentityService.getActiveIdentity()?.pubkey }
     }
+
+    LaunchedEffect(Unit) { reload() }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -61,67 +79,77 @@ internal fun NostrIdentityCard() {
                 Text("P2P Market Identity (Nostr)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             }
             Text(
-                "Used to post/discover off-market orders. Not linked to your EVE character or ESI account.",
+                "Each character gets its own P2P Market identity automatically. Pick which one is currently trading; export/import moves a key to another machine.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             HorizontalDivider()
 
-            val current = identity
-            if (current != null) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.CheckCircle, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
-                    Text(
-                        (current.label.ifBlank { "Identity" }) + " — " + current.pubkey.take(12) + "…",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
+            if (characters.isEmpty()) {
+                Text("No EVE characters added yet — add one in the Characters tab first.", style = MaterialTheme.typography.bodySmall)
             } else {
-                Text("No identity yet — generate or import one below.", style = MaterialTheme.typography.bodySmall)
-            }
-
-            OutlinedTextField(
-                value = labelInput,
-                onValueChange = { labelInput = it },
-                label = { Text("Label (optional)") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = {
-                    scope.launch(Dispatchers.IO) {
-                        val created = NostrIdentityService.generateNew(labelInput)
-                        identity = created
-                    }
-                }) { Text("Generate new identity") }
-            }
-
-            HorizontalDivider()
-            Text("Or import an existing key", style = MaterialTheme.typography.labelMedium)
-            OutlinedTextField(
-                value = importInput,
-                onValueChange = {
-                    importInput = it
-                    importError = false
-                },
-                label = { Text("nsec1… or hex private key") },
-                singleLine = true,
-                isError = importError,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            if (importError) {
-                Text("Couldn't parse that as a private key.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-            }
-            OutlinedButton(onClick = {
-                scope.launch(Dispatchers.IO) {
-                    val imported = NostrIdentityService.importPrivateKey(importInput, labelInput)
-                    if (imported != null) {
-                        identity = imported
-                    } else {
-                        importError = true
+                characters.forEach { character ->
+                    val characterIdentity = identitiesByCharacter[character.id]
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(
+                            selected = characterIdentity != null && characterIdentity.pubkey == activePubkey,
+                            onClick = {
+                                val pubkey = characterIdentity?.pubkey ?: return@RadioButton
+                                scope.launch(Dispatchers.IO) {
+                                    NostrIdentityService.switchActive(pubkey)
+                                    withContext(Dispatchers.Main) { activePubkey = pubkey }
+                                }
+                            },
+                        )
+                        Column(modifier = Modifier.weight(1f).padding(start = 4.dp)) {
+                            Text(character.name, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                characterIdentity?.pubkey?.take(12)?.plus("…") ?: "…",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        IconButton(onClick = {
+                            val pubkey = characterIdentity?.pubkey ?: return@IconButton
+                            val chooser =
+                                JFileChooser().apply {
+                                    dialogTitle = "Export Nostr key for ${character.name}"
+                                    fileSelectionMode = JFileChooser.FILES_ONLY
+                                    selectedFile = File("${character.name.replace(" ", "_")}_nostr_key.txt")
+                                }
+                            if (chooser.showSaveDialog(null) == JFileChooser.APPROVE_OPTION) {
+                                val file = chooser.selectedFile
+                                scope.launch(Dispatchers.IO) {
+                                    val nsec = NostrIdentityService.exportPrivateKey(pubkey)
+                                    if (nsec != null) {
+                                        runCatching { file.writeText(nsec) }
+                                    }
+                                }
+                            }
+                        }) { Icon(Icons.Default.Download, "Export key", Modifier.size(16.dp)) }
+                        IconButton(onClick = {
+                            val chooser =
+                                JFileChooser().apply {
+                                    dialogTitle = "Import Nostr key for ${character.name}"
+                                    fileSelectionMode = JFileChooser.FILES_ONLY
+                                }
+                            if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+                                val file = chooser.selectedFile
+                                scope.launch(Dispatchers.IO) {
+                                    val content = runCatching { file.readText().trim() }.getOrNull()
+                                    val imported = content?.let { NostrIdentityService.importPrivateKeyForCharacter(it, character) }
+                                    withContext(Dispatchers.Main) {
+                                        importError =
+                                            if (imported == null) "Couldn't import key for ${character.name} — file unreadable or not a valid key." else null
+                                    }
+                                    reload()
+                                }
+                            }
+                        }) { Icon(Icons.Default.Upload, "Import key", Modifier.size(16.dp)) }
                     }
                 }
-            }) { Text("Import") }
+            }
+            importError?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         }
     }
 }

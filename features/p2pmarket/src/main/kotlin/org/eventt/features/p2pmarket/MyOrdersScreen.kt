@@ -1,5 +1,6 @@
 package org.eventt.features.p2pmarket
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,7 +9,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -33,16 +36,21 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.NostrOrderModel
 import org.eventt.core.database.NostrReservationDao
 import org.eventt.core.database.NostrReservationModel
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.model.StaticRegionModel
+import org.eventt.core.model.StaticTypeModel
 import org.eventt.core.nostr.MinLotUnit
+import org.eventt.core.nostr.NostrIdentityService
 import org.eventt.core.nostr.NostrRelayEvent
 import org.eventt.core.nostr.NostrRelayManager
 import org.eventt.core.nostr.OrderDraft
@@ -50,7 +58,15 @@ import org.eventt.core.nostr.OrderFilter
 import org.eventt.core.nostr.OrderRepository
 import org.eventt.core.nostr.OrderSide
 import org.eventt.core.nostr.ReservationService
+import org.eventt.ui.common.SearchField
 import java.util.Locale
+
+private data class MyOrderRowData(
+    val order: NostrOrderModel,
+    val typeName: String,
+)
+
+private enum class MyOrdersSortColumn { PRICE, QTY, EXPIRY }
 
 @Composable
 fun MyOrdersScreen() {
@@ -58,17 +74,22 @@ fun MyOrdersScreen() {
 
     var allRegions by remember { mutableStateOf<List<StaticRegionModel>>(emptyList()) }
     var myOrders by remember { mutableStateOf<List<NostrOrderModel>>(emptyList()) }
+    var myOrderRows by remember { mutableStateOf<List<MyOrderRowData>>(emptyList()) }
+    var myOrdersSortColumn by remember { mutableStateOf(MyOrdersSortColumn.EXPIRY) }
+    var myOrdersSortDirection by remember { mutableStateOf(SortDirection.ASC) }
     var incomingRequests by remember { mutableStateOf<List<NostrReservationModel>>(emptyList()) }
     var acceptedReservations by remember { mutableStateOf<List<NostrReservationModel>>(emptyList()) }
 
     var side by remember { mutableStateOf(OrderSide.SELL) }
-    var itemName by remember { mutableStateOf("") }
+    var itemQuery by remember { mutableStateOf("") }
+    var selectedType by remember { mutableStateOf<StaticTypeModel?>(null) }
+    var itemSearchResults by remember { mutableStateOf<List<StaticTypeModel>>(emptyList()) }
     var regionId by remember { mutableStateOf<Int?>(null) }
     var priceText by remember { mutableStateOf("") }
     var qtyText by remember { mutableStateOf("") }
     var minLotText by remember { mutableStateOf("1") }
     var minLotUnit by remember { mutableStateOf(MinLotUnit.UNITS) }
-    var traderChar by remember { mutableStateOf("") }
+    var tradingAs by remember { mutableStateOf<String?>(null) }
     var isPosting by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
@@ -79,6 +100,43 @@ fun MyOrdersScreen() {
     LaunchedEffect(Unit) {
         OrderRepository.browse(OrderFilter()).collect { orders ->
             myOrders = orders.filter { it.isMine }
+        }
+    }
+    LaunchedEffect(myOrders) {
+        myOrderRows =
+            withContext(Dispatchers.IO) {
+                myOrders.map { order -> MyOrderRowData(order, StaticDataDao.getTypeById(order.typeId)?.name ?: "Type #${order.typeId}") }
+            }
+    }
+
+    fun toggleMyOrdersSort(
+        column: MyOrdersSortColumn,
+        defaultDirection: SortDirection,
+    ) {
+        if (myOrdersSortColumn == column) {
+            myOrdersSortDirection = if (myOrdersSortDirection == SortDirection.ASC) SortDirection.DESC else SortDirection.ASC
+        } else {
+            myOrdersSortColumn = column
+            myOrdersSortDirection = defaultDirection
+        }
+    }
+    // Refreshed every time this tab is (re)entered, so switching the active character in Settings
+    // is reflected here without a manual reload.
+    LaunchedEffect(Unit) {
+        val identity = withContext(Dispatchers.IO) { NostrIdentityService.getActiveIdentity() }
+        tradingAs =
+            identity?.let { id ->
+                id.characterId?.let { withContext(Dispatchers.IO) { CharacterDao.getById(it)?.name } } ?: id.label
+            }
+    }
+    // Only pre-fills when empty — mirrors PriceAlertsScreen's convention so a manually-edited
+    // price is never silently clobbered by a later item/region change.
+    LaunchedEffect(selectedType, regionId, side) {
+        val type = selectedType
+        val region = regionId
+        if (type != null && region != null && priceText.isEmpty()) {
+            val recommended = withContext(Dispatchers.IO) { SavingsBadgeService.recommendedPrice(type.typeId, region, side) }
+            recommended?.let { priceText = String.format(Locale.US, "%.2f", it) }
         }
     }
 
@@ -95,7 +153,7 @@ fun MyOrdersScreen() {
     }
 
     fun submit() {
-        val type = itemName.trim()
+        val type = selectedType
         val region = regionId
         val price = priceText.toDoubleOrNull()
         val qty = qtyText.toLongOrNull()
@@ -103,7 +161,7 @@ fun MyOrdersScreen() {
 
         formError =
             when {
-                type.isEmpty() -> "Item name required"
+                type == null -> "Pick an item from the suggestions"
                 region == null -> "Pick a region"
                 price == null || price <= 0 -> "Invalid price"
                 qty == null || qty <= 0 -> "Invalid quantity"
@@ -114,33 +172,35 @@ fun MyOrdersScreen() {
 
         isPosting = true
         scope.launch(Dispatchers.IO) {
-            val resolvedType = StaticDataDao.getTypeByExactName(type)
-            if (resolvedType == null) {
+            val identity = NostrIdentityService.getActiveIdentity()
+            if (identity == null) {
                 withContext(Dispatchers.Main) {
-                    formError = "Unknown item name: $type"
+                    formError = "No P2P Market identity set up yet — pick a character in Settings first."
                     isPosting = false
                 }
                 return@launch
             }
+            val traderName = identity.characterId?.let { CharacterDao.getById(it)?.name } ?: identity.label
             val posted =
                 OrderRepository.postNewOrder(
                     OrderDraft(
                         side = side,
-                        typeId = resolvedType.typeId,
+                        typeId = type!!.typeId,
                         regionId = region!!,
                         price = price!!,
                         qtyTotal = qty!!,
                         minLot = minLot!!,
                         minLotUnit = minLotUnit,
-                        traderChar = traderChar.trim(),
+                        traderChar = traderName,
                     ),
                 )
             withContext(Dispatchers.Main) {
                 isPosting = false
                 if (posted == null) {
-                    formError = "No P2P Market identity set up yet — add one in Settings first."
+                    formError = "No P2P Market identity set up yet — pick a character in Settings first."
                 } else {
-                    itemName = ""
+                    itemQuery = ""
+                    selectedType = null
                     priceText = ""
                     qtyText = ""
                 }
@@ -156,13 +216,38 @@ fun MyOrdersScreen() {
                     FilterChip(selected = side == OrderSide.SELL, onClick = { side = OrderSide.SELL }, label = { Text("Selling") })
                     FilterChip(selected = side == OrderSide.BUY, onClick = { side = OrderSide.BUY }, label = { Text("Buying") })
                 }
-                OutlinedTextField(
-                    value = itemName,
-                    onValueChange = { itemName = it },
-                    label = { Text("Item name (exact)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                SearchField(
+                    query = itemQuery,
+                    onQueryChange = { q ->
+                        itemQuery = q
+                        selectedType = null
+                        if (q.length >= 2) {
+                            scope.launch(Dispatchers.IO) { itemSearchResults = StaticDataDao.searchMarketTypes(q, limit = 10) }
+                        } else {
+                            itemSearchResults = emptyList()
+                        }
+                    },
+                    placeholder = "Search item...",
                 )
+                if (itemSearchResults.isNotEmpty()) {
+                    LazyColumn(modifier = Modifier.heightIn(max = 140.dp)) {
+                        items(itemSearchResults, key = { it.typeId }) { type ->
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            selectedType = type
+                                            itemQuery = type.name
+                                            itemSearchResults = emptyList()
+                                            priceText = ""
+                                        }.padding(8.dp),
+                            ) {
+                                Text(type.name, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
+                }
                 RegionDropdown(allRegions, regionId) { regionId = it }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
@@ -191,12 +276,10 @@ fun MyOrdersScreen() {
                     FilterChip(selected = minLotUnit == MinLotUnit.UNITS, onClick = { minLotUnit = MinLotUnit.UNITS }, label = { Text("units") })
                     FilterChip(selected = minLotUnit == MinLotUnit.ISK, onClick = { minLotUnit = MinLotUnit.ISK }, label = { Text("ISK") })
                 }
-                OutlinedTextField(
-                    value = traderChar,
-                    onValueChange = { traderChar = it },
-                    label = { Text("Your character name (shown to buyers, not verified)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                Text(
+                    tradingAs?.let { "Trading as: $it" } ?: "No character selected — pick one in Settings first.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (tradingAs != null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
                 )
                 formError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 Button(onClick = { submit() }, enabled = !isPosting) {
@@ -273,19 +356,30 @@ fun MyOrdersScreen() {
         Spacer(Modifier.height(16.dp))
         Text("My active orders", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))
-        if (myOrders.isEmpty()) {
+        if (myOrderRows.isEmpty()) {
             Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                 Text("No active orders yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
+            val sortedRows =
+                when (myOrdersSortColumn) {
+                    MyOrdersSortColumn.PRICE -> myOrderRows.sortedBy { it.order.price }
+                    MyOrdersSortColumn.QTY -> myOrderRows.sortedBy { it.order.qtyRemaining }
+                    MyOrdersSortColumn.EXPIRY -> myOrderRows.sortedBy { it.order.expiration }
+                }.let { if (myOrdersSortDirection == SortDirection.DESC) it.reversed() else it }
+
+            MyOrdersTableHeader(myOrdersSortColumn, myOrdersSortDirection, onSort = ::toggleMyOrdersSort)
+            HorizontalDivider()
             LazyColumn(
-                modifier = Modifier.height((myOrders.size * 96).coerceAtMost(600).dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.height((sortedRows.size * 48).coerceAtMost(500).dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                items(myOrders, key = { "${it.orderUuid}:${it.pubkey}" }) { order ->
-                    MyOrderRow(order, onRenew = { scope.launch(Dispatchers.IO) { OrderRepository.renewOrder(order) } }, onCancel = {
-                        scope.launch(Dispatchers.IO) { OrderRepository.cancelOrder(order) }
-                    })
+                items(sortedRows, key = { "${it.order.orderUuid}:${it.order.pubkey}" }) { row ->
+                    MyOrderTableRow(
+                        row,
+                        onRenew = { scope.launch(Dispatchers.IO) { OrderRepository.renewOrder(row.order) } },
+                        onCancel = { scope.launch(Dispatchers.IO) { OrderRepository.cancelOrder(row.order) } },
+                    )
                 }
             }
         }
@@ -317,30 +411,64 @@ private fun ReservationRow(
 }
 
 @Composable
-private fun MyOrderRow(
-    order: NostrOrderModel,
+private fun MyOrdersTableHeader(
+    sortColumn: MyOrdersSortColumn,
+    sortDirection: SortDirection,
+    onSort: (MyOrdersSortColumn, SortDirection) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Side", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(60.dp))
+        Text("Item", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        SortHeaderCell(
+            "Price",
+            Modifier.width(110.dp),
+            active = sortColumn == MyOrdersSortColumn.PRICE,
+            direction = sortDirection,
+        ) { onSort(MyOrdersSortColumn.PRICE, SortDirection.DESC) }
+        SortHeaderCell(
+            "Qty",
+            Modifier.width(90.dp),
+            active = sortColumn == MyOrdersSortColumn.QTY,
+            direction = sortDirection,
+        ) { onSort(MyOrdersSortColumn.QTY, SortDirection.DESC) }
+        SortHeaderCell(
+            "Expires",
+            Modifier.width(90.dp),
+            active = sortColumn == MyOrdersSortColumn.EXPIRY,
+            direction = sortDirection,
+        ) { onSort(MyOrdersSortColumn.EXPIRY, SortDirection.ASC) }
+        Spacer(Modifier.width(170.dp))
+    }
+}
+
+@Composable
+private fun MyOrderTableRow(
+    row: MyOrderRowData,
     onRenew: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    var typeName by remember(order.typeId) { mutableStateOf("Type #${order.typeId}") }
-    LaunchedEffect(order.typeId) {
-        withContext(Dispatchers.IO) { StaticDataDao.getTypeById(order.typeId)?.name }?.let { typeName = it }
-    }
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("${order.side.uppercase()} — $typeName", style = MaterialTheme.typography.bodyMedium)
-            Text(
-                "${String.format(Locale.US, "%,.2f", order.price)} ISK · ${order.qtyRemaining}/${order.qtyTotal} remaining",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+    val order = row.order
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(order.side.uppercase(), style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(60.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(row.typeName, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             ExpiringSoonLabel(order.expiration)
-            HorizontalDivider()
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onRenew) { Text("Renew") }
-                OutlinedButton(onClick = onCancel) { Text("Cancel") }
-            }
+        }
+        Text(String.format(Locale.US, "%,.2f", order.price), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(110.dp))
+        Text("${order.qtyRemaining}/${order.qtyTotal}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(90.dp))
+        val daysLeft = ((order.expiration - System.currentTimeMillis() / 1000) / (24 * 3600)).coerceAtLeast(0)
+        Text("${daysLeft}d left", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(90.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(170.dp)) {
+            OutlinedButton(onClick = onRenew) { Text("Renew") }
+            OutlinedButton(onClick = onCancel) { Text("Cancel") }
         }
     }
 }

@@ -40,4 +40,32 @@ object SavingsBadgeService {
             }
         return SavingsResult(marketPrice, savingsPct)
     }
+
+    /**
+     * Suggested post price for a new order: undercut (SELL) or overbid (BUY) the current market
+     * best by [RECOMMENDED_UNDERCUT_PCT] — an OTC trader pays no sales tax/broker fee, so giving up
+     * a couple percent versus the open market still nets more than trading through it, while
+     * staying an attractive deal for the counterparty. Null if the region has no orders for this
+     * type yet (nothing to base a suggestion on).
+     */
+    fun recommendedPrice(
+        typeId: Int,
+        regionId: Int,
+        side: OrderSide,
+    ): Double? {
+        val marketOrderType = if (side == OrderSide.SELL) "sell" else "buy"
+        val marketPrice =
+            EsiClient
+                .getMarketRegionOrders(regionId, orderType = marketOrderType, typeId = typeId)
+                .mapNotNull { (it["price"] as? Number)?.toDouble() }
+                .let { if (side == OrderSide.SELL) it.minOrNull() else it.maxOrNull() }
+                ?: return null
+
+        return when (side) {
+            OrderSide.SELL -> marketPrice * (1 - RECOMMENDED_UNDERCUT_PCT)
+            OrderSide.BUY -> marketPrice * (1 + RECOMMENDED_UNDERCUT_PCT)
+        }
+    }
+
+    private const val RECOMMENDED_UNDERCUT_PCT = 0.02
 }
