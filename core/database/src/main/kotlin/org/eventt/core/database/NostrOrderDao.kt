@@ -99,34 +99,45 @@ object NostrOrderDao {
                 }
                 stmt.executeQuery().use { rs ->
                     val result = mutableListOf<NostrOrderModel>()
-                    while (rs.next()) {
-                        result.add(
-                            NostrOrderModel(
-                                orderUuid = rs.getString("order_uuid"),
-                                pubkey = rs.getString("pubkey"),
-                                eventId = rs.getString("event_id"),
-                                createdAt = rs.getLong("created_at"),
-                                side = rs.getString("side"),
-                                typeId = rs.getInt("type_id"),
-                                regionId = rs.getInt("region_id"),
-                                price = rs.getDouble("price"),
-                                qtyTotal = rs.getLong("qty_total"),
-                                qtyRemaining = rs.getLong("qty_remaining"),
-                                minLot = rs.getLong("min_lot"),
-                                minLotUnit = rs.getString("min_lot_unit"),
-                                traderChar = rs.getString("trader_char") ?: "",
-                                expiration = rs.getLong("expiration"),
-                                rawEventJson = rs.getString("raw_event_json"),
-                                isMine = rs.getInt("is_mine") == 1,
-                            ),
-                        )
-                    }
+                    while (rs.next()) result.add(rs.toModel())
                     result
                 }
             }
         }
 
     fun getMine(pubkey: String): List<NostrOrderModel> = queryActive().filter { it.pubkey == pubkey && it.isMine }
+
+    fun getByCoordinate(
+        orderUuid: String,
+        pubkey: String,
+    ): NostrOrderModel? =
+        DatabaseManager.transaction {
+            prepareStatement("SELECT * FROM nostr_orders WHERE order_uuid = ? AND pubkey = ?").use { stmt ->
+                stmt.setString(1, orderUuid)
+                stmt.setString(2, pubkey)
+                stmt.executeQuery().use { rs -> if (rs.next()) rs.toModel() else null }
+            }
+        }
+
+    private fun java.sql.ResultSet.toModel() =
+        NostrOrderModel(
+            orderUuid = getString("order_uuid"),
+            pubkey = getString("pubkey"),
+            eventId = getString("event_id"),
+            createdAt = getLong("created_at"),
+            side = getString("side"),
+            typeId = getInt("type_id"),
+            regionId = getInt("region_id"),
+            price = getDouble("price"),
+            qtyTotal = getLong("qty_total"),
+            qtyRemaining = getLong("qty_remaining"),
+            minLot = getLong("min_lot"),
+            minLotUnit = getString("min_lot_unit"),
+            traderChar = getString("trader_char") ?: "",
+            expiration = getLong("expiration"),
+            rawEventJson = getString("raw_event_json"),
+            isMine = getInt("is_mine") == 1,
+        )
 
     fun purgeExpired() {
         DatabaseManager.transaction {

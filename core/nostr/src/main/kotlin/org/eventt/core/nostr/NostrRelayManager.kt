@@ -25,9 +25,13 @@ import java.util.concurrent.TimeUnit
 
 sealed class NostrRelayEvent {
     data class OrderUpdated(val order: ParsedOrder) : NostrRelayEvent()
+
+    data object ReservationActivity : NostrRelayEvent()
 }
 
 private const val ORDERS_SUBSCRIPTION_ID = "p2pmarket-orders"
+private const val DMS_SUBSCRIPTION_ID = "p2pmarket-dms"
+private const val GIFT_WRAP_KIND = 1059
 
 private val DEFAULT_RELAYS =
     listOf(
@@ -62,7 +66,8 @@ object NostrRelayManager {
             // No identity yet (first run, nothing generated/imported) — nothing useful to connect
             // for until Settings creates one; NostrIdentityService itself doesn't require a
             // running relay connection, so this is a clean early-out, not a broken dependency.
-            val myPubkey = NostrIdentityService.getActiveIdentity()?.pubkey ?: return@launch
+            val identity = NostrIdentityService.getActiveIdentity() ?: return@launch
+            val myPubkey = identity.pubkey
 
             val httpClient =
                 OkHttpClient.Builder()
@@ -111,6 +116,28 @@ object NostrRelayManager {
                                 ),
                             )
                         if (isNewer) _events.tryEmit(NostrRelayEvent.OrderUpdated(parsed))
+                    }
+                },
+            )
+
+            val dmFilter = Filter(null, null, listOf(GIFT_WRAP_KIND), mapOf("p" to listOf(myPubkey)), null, null, null, null, null)
+            c.subscribe(
+                DMS_SUBSCRIPTION_ID,
+                relayUrls.associateWith { listOf(dmFilter) },
+                object : SubscriptionListener {
+                    override fun onEvent(
+                        event: Event,
+                        isLive: Boolean,
+                        relay: NormalizedRelayUrl,
+                        forFilters: List<Filter>?,
+                    ) {
+                        // unwrapGiftWrap/handleIncomingDm are both suspend — this callback isn't,
+                        // so hop onto the manager's own scope rather than blocking the relay client.
+                        s.launch {
+                            val unwrapped = QuartzGateway.unwrapGiftWrap(event, QuartzGateway.asyncSignerFor(identity.keyPair)) ?: return@launch
+                            ReservationService.handleIncomingDm(unwrapped.pubKey, unwrapped.content)
+                            _events.tryEmit(NostrRelayEvent.ReservationActivity)
+                        }
                     }
                 },
             )

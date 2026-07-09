@@ -4,10 +4,16 @@ import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
+import com.vitorpamplona.quartz.nip01Core.signers.NostrSigner
+import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerInternal
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
+import com.vitorpamplona.quartz.nip01Core.tags.people.PTag
+import com.vitorpamplona.quartz.nip17Dm.NIP17Factory
+import com.vitorpamplona.quartz.nip17Dm.messages.ChatMessageEvent
 import com.vitorpamplona.quartz.nip19Bech32.Nip19Parser
 import com.vitorpamplona.quartz.nip19Bech32.entities.NSec
 import com.vitorpamplona.quartz.nip19Bech32.toNsec
+import com.vitorpamplona.quartz.nip59Giftwrap.wraps.GiftWrapEvent
 
 /**
  * The only file in this module that calls Quartz's API directly — everything else in core:nostr
@@ -47,4 +53,34 @@ object QuartzGateway {
         tags: Array<Array<String>>,
         content: String,
     ): Event = signer.sign(createdAt, kind, tags, content)
+
+    /** The suspend-capable signer NIP17Factory needs — wraps the same keypair as [signerFor]. */
+    fun asyncSignerFor(keyPair: KeyPair): NostrSigner = NostrSignerInternal(keyPair)
+
+    /**
+     * Builds a NIP-17 encrypted DM and gift-wraps it — returns the wrap events ready to publish
+     * (one per recipient, per NIP-59; there's no separate "send" step, publishing the wraps *is*
+     * sending). [content] is our own JSON reservation payload, opaque to Quartz.
+     */
+    suspend fun buildEncryptedDm(
+        signer: NostrSigner,
+        recipientPubkeyHex: String,
+        content: String,
+        createdAt: Long,
+    ): List<Event> {
+        val template = ChatMessageEvent.build(content, listOf(PTag(recipientPubkeyHex, null)), createdAt) {}
+        return NIP17Factory().createMessageNIP17(template, signer).wraps
+    }
+
+    /** True when [event] is a NIP-59 gift wrap (kind 1059) — the shape everything in our DM subscription receives. */
+    fun isGiftWrap(event: Event): Boolean = event is GiftWrapEvent
+
+    /** The gift wrap's own (unencrypted) recipient tag — used to route without decrypting anything. */
+    fun giftWrapRecipient(event: Event): String? = (event as? GiftWrapEvent)?.recipientPubKey()
+
+    /** Decrypts+unseals a gift wrap addressed to [signer]'s identity. Null on any failure (not ours, or malformed). */
+    suspend fun unwrapGiftWrap(
+        event: Event,
+        signer: NostrSigner,
+    ): Event? = (event as? GiftWrapEvent)?.unwrapOrNull(signer)
 }

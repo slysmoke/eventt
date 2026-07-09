@@ -38,13 +38,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.NostrOrderModel
+import org.eventt.core.database.NostrReservationDao
+import org.eventt.core.database.NostrReservationModel
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.model.StaticRegionModel
 import org.eventt.core.nostr.MinLotUnit
+import org.eventt.core.nostr.NostrRelayEvent
+import org.eventt.core.nostr.NostrRelayManager
 import org.eventt.core.nostr.OrderDraft
 import org.eventt.core.nostr.OrderFilter
 import org.eventt.core.nostr.OrderRepository
 import org.eventt.core.nostr.OrderSide
+import org.eventt.core.nostr.ReservationService
 import java.util.Locale
 
 @Composable
@@ -53,6 +58,8 @@ fun MyOrdersScreen() {
 
     var allRegions by remember { mutableStateOf<List<StaticRegionModel>>(emptyList()) }
     var myOrders by remember { mutableStateOf<List<NostrOrderModel>>(emptyList()) }
+    var incomingRequests by remember { mutableStateOf<List<NostrReservationModel>>(emptyList()) }
+    var acceptedReservations by remember { mutableStateOf<List<NostrReservationModel>>(emptyList()) }
 
     var side by remember { mutableStateOf(OrderSide.SELL) }
     var itemName by remember { mutableStateOf("") }
@@ -71,6 +78,18 @@ fun MyOrdersScreen() {
     LaunchedEffect(Unit) {
         OrderRepository.browse(OrderFilter()).collect { orders ->
             myOrders = orders.filter { it.isMine }
+        }
+    }
+
+    suspend fun reloadReservations() {
+        val all = withContext(Dispatchers.IO) { NostrReservationDao.listForRole("seller") }
+        incomingRequests = all.filter { it.status == "sent" }
+        acceptedReservations = all.filter { it.status == "accepted" }
+    }
+    LaunchedEffect(Unit) {
+        reloadReservations()
+        NostrRelayManager.events.collect { event ->
+            if (event is NostrRelayEvent.ReservationActivity) reloadReservations()
         }
     }
 
@@ -189,6 +208,50 @@ fun MyOrdersScreen() {
             }
         }
 
+        if (incomingRequests.isNotEmpty()) {
+            Spacer(Modifier.height(16.dp))
+            Text("Incoming requests", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                incomingRequests.forEach { reservation ->
+                    ReservationRow(reservation) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = {
+                                scope.launch(Dispatchers.IO) {
+                                    ReservationService.respond(reservation, accept = true)
+                                    reloadReservations()
+                                }
+                            }) { Text("Accept") }
+                            OutlinedButton(onClick = {
+                                scope.launch(Dispatchers.IO) {
+                                    ReservationService.respond(reservation, accept = false)
+                                    reloadReservations()
+                                }
+                            }) { Text("Decline") }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (acceptedReservations.isNotEmpty()) {
+            Spacer(Modifier.height(16.dp))
+            Text("Accepted — awaiting completion", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                acceptedReservations.forEach { reservation ->
+                    ReservationRow(reservation) {
+                        OutlinedButton(onClick = {
+                            scope.launch(Dispatchers.IO) {
+                                ReservationService.release(reservation)
+                                reloadReservations()
+                            }
+                        }) { Text("Release (buyer no-show)") }
+                    }
+                }
+            }
+        }
+
         Spacer(Modifier.height(16.dp))
         Text("My active orders", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))
@@ -207,6 +270,30 @@ fun MyOrdersScreen() {
                     })
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ReservationRow(
+    reservation: NostrReservationModel,
+    actions: @Composable () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Qty ${reservation.qty} · order ${reservation.orderUuid.take(8)}…", style = MaterialTheme.typography.bodyMedium)
+            if (reservation.note.isNotBlank()) {
+                Text(reservation.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            reservation.holdUntil?.let {
+                Text(
+                    "Held until ${java.time.Instant.ofEpochSecond(it)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            HorizontalDivider()
+            actions()
         }
     }
 }

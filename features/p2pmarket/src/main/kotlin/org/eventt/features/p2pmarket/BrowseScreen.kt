@@ -14,28 +14,35 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.NostrOrderModel
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.nostr.OrderFilter
 import org.eventt.core.nostr.OrderRepository
 import org.eventt.core.nostr.OrderSide
+import org.eventt.core.nostr.ReservationService
 import java.util.Locale
 import kotlin.math.abs
 
@@ -74,9 +81,12 @@ fun BrowseScreen() {
 
 @Composable
 private fun OrderRow(order: NostrOrderModel) {
+    val scope = rememberCoroutineScope()
     var typeName by remember(order.typeId) { mutableStateOf("Type #${order.typeId}") }
     var regionName by remember(order.regionId) { mutableStateOf("Region #${order.regionId}") }
     var savings by remember(order.orderUuid, order.pubkey, order.price) { mutableStateOf<SavingsResult?>(null) }
+    var showRequestDialog by remember { mutableStateOf(false) }
+    var requestSent by remember(order.orderUuid, order.pubkey) { mutableStateOf(false) }
     val side = remember(order.side) { OrderSide.valueOf(order.side.uppercase()) }
 
     LaunchedEffect(order.typeId) {
@@ -118,6 +128,61 @@ private fun OrderRow(order: NostrOrderModel) {
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (!order.isMine) {
+                OutlinedButton(onClick = { showRequestDialog = true }, enabled = !requestSent) {
+                    Text(if (requestSent) "Sent" else "Request")
+                }
+            }
         }
     }
+
+    if (showRequestDialog) {
+        RequestReservationDialog(
+            order = order,
+            onDismiss = { showRequestDialog = false },
+            onSend = { qty, note ->
+                scope.launch(Dispatchers.IO) {
+                    val tradeId = ReservationService.sendRequest(order, qty, note)
+                    if (tradeId != null) requestSent = true
+                }
+                showRequestDialog = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun RequestReservationDialog(
+    order: NostrOrderModel,
+    onDismiss: () -> Unit,
+    onSend: (qty: Long, note: String) -> Unit,
+) {
+    var qtyText by remember { mutableStateOf(order.minLot.toString()) }
+    var note by remember { mutableStateOf("") }
+    val qty = qtyText.toLongOrNull()
+    val valid = qty != null && qty in order.minLot..order.qtyRemaining
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Request reservation") },
+        text = {
+            Column {
+                Text(
+                    "Min lot ${order.minLot} · ${order.qtyRemaining} remaining",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = qtyText, onValueChange = { qtyText = it }, label = { Text("Quantity") }, singleLine = true)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Note (optional)") }, singleLine = true)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { qty?.let { onSend(it, note) } }, enabled = valid) { Text("Send") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
 }

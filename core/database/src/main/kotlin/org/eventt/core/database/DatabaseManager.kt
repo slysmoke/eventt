@@ -521,6 +521,27 @@ object DatabaseManager {
                     PRIMARY KEY (order_uuid, pubkey)
                 )
                 """.trimIndent(),
+                // P2P Market (Nostr) — durable local record of the NIP-17 DM reservation handshake.
+                // Relays don't reliably replay old DMs, so this table (not the relay) is the source
+                // of truth once a request/response has been seen locally.
+                """
+                CREATE TABLE IF NOT EXISTS nostr_reservations (
+                    trade_id TEXT PRIMARY KEY,
+                    order_uuid TEXT NOT NULL,
+                    order_pubkey TEXT NOT NULL,
+                    buyer_pubkey TEXT NOT NULL,
+                    seller_pubkey TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    qty INTEGER NOT NULL,
+                    note TEXT DEFAULT '',
+                    status TEXT NOT NULL DEFAULT 'sent',
+                    reserved_qty INTEGER,
+                    hold_until INTEGER,
+                    contact_char TEXT DEFAULT '',
+                    requested_at INTEGER NOT NULL,
+                    responded_at INTEGER
+                )
+                """.trimIndent(),
             )
 
         // using conn parameter
@@ -576,6 +597,8 @@ object DatabaseManager {
                 "CREATE INDEX IF NOT EXISTS idx_nostr_orders_lookup ON nostr_orders(type_id, region_id, side)",
                 "CREATE INDEX IF NOT EXISTS idx_nostr_orders_expiration ON nostr_orders(expiration)",
                 "CREATE INDEX IF NOT EXISTS idx_nostr_orders_mine ON nostr_orders(is_mine)",
+                "CREATE INDEX IF NOT EXISTS idx_nostr_reservations_role_status ON nostr_reservations(role, status)",
+                "CREATE INDEX IF NOT EXISTS idx_nostr_reservations_order ON nostr_reservations(order_uuid)",
             )
 
         // using conn parameter
