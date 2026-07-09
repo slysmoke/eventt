@@ -4,12 +4,17 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -17,8 +22,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.text.font.FontWeight
@@ -432,11 +439,12 @@ private fun StationTradingTab(
     Column(modifier = Modifier.fillMaxSize()) {
         // ── Filter bar ─────────────────────────────────────────────
         FilterBar {
+            // Row 1: location + category
             FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                RegionPicker(allRegions, regionId, width = 180.dp) {
+                RegionPicker(allRegions, regionId, width = 180.dp, accentColor = MaterialTheme.colorScheme.primary) {
                     regionId = it
                     scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_REGION, it.toString()) } }
                 }
@@ -461,95 +469,85 @@ private fun StationTradingTab(
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_CAT_SUB, g?.marketGroupId?.toString() ?: "") } }
                     }
                 }
-                FilterDivider()
-                ParamField("Margin %", minMargin, 68.dp) {
-                    minMargin = it
-                    scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MARGIN, it) } }
-                }
-                ParamField("Min Vol", minDailyVol, 72.dp) {
-                    minDailyVol = it
-                    scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MIN_VOL, it) } }
-                }
-                ParamField("Max Buy", maxBuyPrice, 105.dp) {
-                    maxBuyPrice = it
-                    scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MAX_PRICE, it) } }
-                }
-                ParamField("Min Net", minNetProfit, 100.dp) {
-                    minNetProfit = it
-                    scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MIN_PROFIT, it) } }
-                }
-                FilterDivider()
-                // Volume modifier — scales the suggested/displayed daily volume by this percentage
-                // (e.g. entering 50 shows/copies 50% of the computed daily volume).
-                CheckboxParamField(
-                    label = "Vol %",
-                    checked = volCapEnabled,
-                    onCheckedChange = {
-                        volCapEnabled = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_VOL_CAP_ENABLED, it.toString()) } }
-                    },
-                    value = volCapPct,
-                    onValueChange = { v ->
-                        volCapPct = v
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_VOL_CAP_PCT, v) } }
-                    },
-                )
-                FilterControl("Skip Orders") {
-                    Checkbox(
-                        checked = skipExistingOrders,
-                        onCheckedChange = {
-                            skipExistingOrders = it
-                            scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_SKIP_EXISTING, it.toString()) } }
-                        },
-                        modifier = Modifier.size(24.dp),
-                    )
-                }
             }
-            // Row 2: hotkey toggle + fees + analyze button + status — its own line so it doesn't
-            // get squeezed off-screen next to the filter fields above.
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
+            // Row 2: numeric filters + behavior toggles + analyze action, right-aligned
+            Row(verticalAlignment = Alignment.Top) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    ParamField("Margin %", minMargin, 68.dp) {
+                        minMargin = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MARGIN, it) } }
+                    }
+                    ParamField("Min Vol", minDailyVol, 72.dp) {
+                        minDailyVol = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MIN_VOL, it) } }
+                    }
+                    ParamField("Max Buy", maxBuyPrice, 105.dp) {
+                        maxBuyPrice = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MAX_PRICE, it) } }
+                    }
+                    ParamField("Min Net", minNetProfit, 100.dp) {
+                        minNetProfit = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MIN_PROFIT, it) } }
+                    }
+                    FilterDivider()
+                    // Volume modifier — scales the suggested/displayed daily volume by this percentage
+                    // (e.g. entering 50 shows/copies 50% of the computed daily volume).
+                    CheckboxParamField(
+                        label = "Vol %",
+                        checked = volCapEnabled,
+                        onCheckedChange = {
+                            volCapEnabled = it
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_VOL_CAP_ENABLED, it.toString()) } }
+                        },
+                        value = volCapPct,
+                        onValueChange = { v ->
+                            volCapPct = v
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_VOL_CAP_PCT, v) } }
+                        },
+                    )
+                    FilterControl("Skip Orders") {
+                        Checkbox(
+                            checked = skipExistingOrders,
+                            onCheckedChange = {
+                                skipExistingOrders = it
+                                scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_SKIP_EXISTING, it.toString()) } }
+                            },
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                }
+                FilterDivider()
                 // Toggles whether the hotkey's second press copies the suggested volume, or just
                 // advances straight to the next item after copying the price.
-                Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                    Text(
-                        "Copy Vol",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                    )
+                FilterControl("Copy Vol") {
                     Switch(
                         checked = copyVolumeEnabled,
                         onCheckedChange = {
                             copyVolumeEnabled = it
                             scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_COPY_VOLUME, it.toString()) } }
                         },
-                        modifier = Modifier.height(32.dp),
+                        modifier = Modifier.height(FilterFieldHeight),
                     )
                 }
                 FilterDivider()
                 // Read-only tax display
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        "Fees (character)",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                    )
+                FilterControl("Fees") {
                     Text(
                         "Tax ${String.format(
                             Locale.US,
                             "%.2f",
                             salesTaxPct,
-                        )}%  |  Broker ${String.format(Locale.US, "%.2f", brokerFeePct)}%",
+                        )}%  ·  Broker ${String.format(Locale.US, "%.2f", brokerFeePct)}%",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
                     )
                 }
-                FilterDivider()
-                // Align button to bottom of the row (matching field bottom)
-                Column(verticalArrangement = Arrangement.Bottom) {
-                    Spacer(Modifier.height(19.dp)) // matches label height + gap
+                Spacer(Modifier.width(12.dp))
+                FilterActionSlot {
                     Button(
                         onClick = {
                             val job =
@@ -725,8 +723,8 @@ private fun StationTradingTab(
                     }
                 }
                 if (isAnalyzing) {
-                    Column(verticalArrangement = Arrangement.Bottom) {
-                        Spacer(Modifier.height(19.dp))
+                    Spacer(Modifier.width(8.dp))
+                    FilterActionSlot {
                         OutlinedButton(
                             onClick = { analyzeJob?.cancel() },
                             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
@@ -739,8 +737,8 @@ private fun StationTradingTab(
                     }
                 }
                 if (statusMsg.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.Bottom) {
-                        Spacer(Modifier.height(19.dp))
+                    Spacer(Modifier.width(12.dp))
+                    FilterActionSlot {
                         Text(
                             statusMsg,
                             style = MaterialTheme.typography.labelSmall,
@@ -757,7 +755,7 @@ private fun StationTradingTab(
         // ── Results ────────────────────────────────────────────────
         if (results.isEmpty() && !isAnalyzing) {
             AnalysisEmptyState(
-                icon = { Icon(Icons.Default.Store, null, Modifier.size(52.dp), tint = Color.Gray) },
+                icon = Icons.Default.Store,
                 primary = "Configure filters and click Analyze",
                 secondary = "Finds items with profitable spread between buy and sell orders at the same station",
             )
@@ -1001,25 +999,31 @@ private fun InterRegionTab(
     Column(modifier = Modifier.fillMaxSize()) {
         // ── Filter bar ─────────────────────────────────────────────
         FilterBar {
-            // Row 1: regions + trade type + categories
+            // Row 1: route (buy → sell) + trade type + categories
             FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                RegionPicker(allRegions, buyRegionId, width = 168.dp, label = "Buy Region") {
+                RegionPicker(allRegions, buyRegionId, width = 158.dp, label = "Buy Region", accentColor = MaterialTheme.colorScheme.primary) {
                     buyRegionId = it
                     scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_BUY_REGION, it.toString()) } }
                 }
-                StationPicker(buyStations, buyStationId, width = 200.dp, label = "Buy Station") {
+                StationPicker(buyStations, buyStationId, width = 190.dp, label = "Buy Station") {
                     buyStationId = it
                     scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_BUY_STATION, it?.toString() ?: "") } }
                 }
-                FilterDivider()
-                RegionPicker(allRegions, sellRegionId, width = 168.dp, label = "Sell Region") {
+                RouteArrow()
+                RegionPicker(
+                    allRegions,
+                    sellRegionId,
+                    width = 158.dp,
+                    label = "Sell Region",
+                    accentColor = MaterialTheme.colorScheme.tertiary,
+                ) {
                     sellRegionId = it
                     scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SELL_REGION, it.toString()) } }
                 }
-                StationPicker(sellStations, sellStationId, width = 200.dp, label = "Sell Station") {
+                StationPicker(sellStations, sellStationId, width = 190.dp, label = "Sell Station") {
                     sellStationId = it
                     scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SELL_STATION, it?.toString() ?: "") } }
                 }
@@ -1046,100 +1050,86 @@ private fun InterRegionTab(
                     }
                 }
             }
-            // Row 2: numeric params + button
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                ParamField("Margin %", minMargin, 68.dp) {
-                    minMargin = it
-                    scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MARGIN, it) } }
-                }
-                ParamField("ISK/m³", iskPerM3, 88.dp) {
-                    iskPerM3 = it
-                    scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_ISK_PER_M3, it) } }
-                }
-                ParamField("Max m³", maxCargoM3, 88.dp) {
-                    maxCargoM3 = it
-                    scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MAX_CARGO, it) } }
-                }
-                ParamField("Min Net", minNetProfit, 108.dp) {
-                    minNetProfit = it
-                    scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MIN_PROFIT, it) } }
+            // Row 2: numeric filters + behavior toggles + analyze action, right-aligned
+            Row(verticalAlignment = Alignment.Top) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    ParamField("Margin %", minMargin, 68.dp) {
+                        minMargin = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MARGIN, it) } }
+                    }
+                    ParamField("ISK/m³", iskPerM3, 88.dp) {
+                        iskPerM3 = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_ISK_PER_M3, it) } }
+                    }
+                    ParamField("Max m³", maxCargoM3, 88.dp) {
+                        maxCargoM3 = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MAX_CARGO, it) } }
+                    }
+                    ParamField("Min Net", minNetProfit, 108.dp) {
+                        minNetProfit = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MIN_PROFIT, it) } }
+                    }
+                    FilterDivider()
+                    // The % always scales whichever side is currently selected as the volume basis:
+                    // the source/buy region's daily volume when checked, the destination/sell
+                    // region's when unchecked — so the field stays live either way, not just when
+                    // "use source volume" is on.
+                    CheckboxParamField(
+                        label = if (volCapEnabled) "Src vol %" else "Dst vol %",
+                        checked = volCapEnabled,
+                        onCheckedChange = {
+                            volCapEnabled = it
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_VOL_CAP_ENABLED, it.toString()) } }
+                        },
+                        value = volCapPct,
+                        onValueChange = { v ->
+                            volCapPct = v
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_VOL_CAP_PCT, v) } }
+                        },
+                    )
+                    FilterControl("Skip Orders") {
+                        Checkbox(
+                            checked = skipExistingOrders,
+                            onCheckedChange = {
+                                skipExistingOrders = it
+                                scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SKIP_EXISTING, it.toString()) } }
+                            },
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
                 }
                 FilterDivider()
-                // The % always scales whichever side is currently selected as the volume basis:
-                // the source/buy region's daily volume when checked, the destination/sell
-                // region's when unchecked — so the field stays live either way, not just when
-                // "use source volume" is on.
-                CheckboxParamField(
-                    label = if (volCapEnabled) "Src vol %" else "Dst vol %",
-                    checked = volCapEnabled,
-                    onCheckedChange = {
-                        volCapEnabled = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_VOL_CAP_ENABLED, it.toString()) } }
-                    },
-                    value = volCapPct,
-                    onValueChange = { v ->
-                        volCapPct = v
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_VOL_CAP_PCT, v) } }
-                    },
-                )
-                FilterControl("Skip Orders") {
-                    Checkbox(
-                        checked = skipExistingOrders,
-                        onCheckedChange = {
-                            skipExistingOrders = it
-                            scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SKIP_EXISTING, it.toString()) } }
-                        },
-                        modifier = Modifier.size(24.dp),
-                    )
-                }
-            }
-            // Row 3: hotkey toggle + fees + analyze button + status — its own line, same reasoning
-            // as Station Trading's row split (otherwise it gets squeezed off-screen).
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
                 // Toggles whether the hotkey's second press copies the suggested volume, or just
                 // advances straight to the next item after copying the price.
-                Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                    Text(
-                        "Copy Vol",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                    )
+                FilterControl("Copy Vol") {
                     Switch(
                         checked = copyVolumeEnabled,
                         onCheckedChange = {
                             copyVolumeEnabled = it
                             scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_COPY_VOLUME, it.toString()) } }
                         },
-                        modifier = Modifier.height(32.dp),
+                        modifier = Modifier.height(FilterFieldHeight),
                     )
                 }
                 FilterDivider()
                 // Read-only tax display
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        "Fees (character)",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                    )
+                FilterControl("Fees") {
                     Text(
                         "Tax ${String.format(
                             Locale.US,
                             "%.2f",
                             salesTaxPct,
-                        )}%  |  Broker ${String.format(Locale.US, "%.2f", brokerFeePct)}%",
+                        )}%  ·  Broker ${String.format(Locale.US, "%.2f", brokerFeePct)}%",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
                     )
                 }
-                FilterDivider()
-                Column(verticalArrangement = Arrangement.Bottom) {
-                    Spacer(Modifier.height(19.dp))
+                Spacer(Modifier.width(12.dp))
+                FilterActionSlot {
                     Button(
                         onClick = {
                             if (buyRegionId == sellRegionId) {
@@ -1338,8 +1328,8 @@ private fun InterRegionTab(
                     }
                 }
                 if (isAnalyzing) {
-                    Column(verticalArrangement = Arrangement.Bottom) {
-                        Spacer(Modifier.height(19.dp))
+                    Spacer(Modifier.width(8.dp))
+                    FilterActionSlot {
                         OutlinedButton(
                             onClick = { analyzeJob?.cancel() },
                             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
@@ -1352,8 +1342,8 @@ private fun InterRegionTab(
                     }
                 }
                 if (statusMsg.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.Bottom) {
-                        Spacer(Modifier.height(19.dp))
+                    Spacer(Modifier.width(12.dp))
+                    FilterActionSlot {
                         Text(
                             statusMsg,
                             style = MaterialTheme.typography.labelSmall,
@@ -1375,7 +1365,7 @@ private fun InterRegionTab(
         // ── Results ────────────────────────────────────────────────
         if (results.isEmpty() && !isAnalyzing) {
             AnalysisEmptyState(
-                icon = { Icon(Icons.AutoMirrored.Filled.CompareArrows, null, Modifier.size(52.dp), tint = Color.Gray) },
+                icon = Icons.AutoMirrored.Filled.CompareArrows,
                 primary = "Select regions and click Analyze",
                 secondary = "Finds items priced low in the buy region that sell for more in the sell region",
             )
@@ -1535,6 +1525,16 @@ private fun InterRegionTab(
     }
 }
 
+// ─── Filter bar design tokens ──────────────────────────────────────────────
+// A single fixed control height + shape shared by every dropdown chip and text field so a
+// row of mixed controls (pickers, numeric inputs, checkboxes) lines up pixel-for-pixel instead
+// of drifting like Material's default OutlinedTextField (56.dp) vs. a hand-rolled chip (~38.dp).
+
+private val FilterFieldHeight = 36.dp
+private val FilterFieldShape = RoundedCornerShape(8.dp)
+private val FilterLabelHeight = 16.dp
+private val FilterLabelGap = 4.dp
+
 // ─── Filter bar container ─────────────────────────────────────────────────
 
 @Composable
@@ -1546,8 +1546,8 @@ private fun FilterBar(content: @Composable ColumnScope.() -> Unit) {
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
                 content = content,
             )
         }
@@ -1566,13 +1566,13 @@ private fun ChipSurface(
 ) {
     Surface(
         onClick = onClick,
-        shape = MaterialTheme.shapes.extraSmall,
+        shape = FilterFieldShape,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        modifier = modifier.width(width),
+        modifier = modifier.width(width).height(FilterFieldHeight),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
+            modifier = Modifier.padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             content = content,
         )
@@ -1580,20 +1580,88 @@ private fun ChipSurface(
 }
 
 // ─── Label + control column wrapper ──────────────────────────────────────
+// Every control — chip, text field, checkbox, switch — is centered in a fixed-height slot
+// below a fixed-height label row, so an entire FlowRow of unrelated control types shares one
+// visual baseline without per-call-site alignment hacks.
 
 @Composable
 private fun FilterControl(
     label: String,
-    content: @Composable () -> Unit,
+    content: @Composable BoxScope.() -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(FilterLabelGap)) {
         Text(
             label,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+            maxLines = 1,
+            modifier = Modifier.height(FilterLabelHeight),
         )
+        Box(modifier = Modifier.height(FilterFieldHeight), contentAlignment = Alignment.CenterStart, content = content)
+    }
+}
+
+// ─── Unlabeled slot (buttons, status text) aligned to the same baseline as FilterControl ───
+
+@Composable
+private fun FilterActionSlot(content: @Composable () -> Unit) {
+    Column {
+        Spacer(Modifier.height(FilterLabelHeight + FilterLabelGap))
         content()
     }
+}
+
+// ─── Compact text field matching ChipSurface's exact height/shape/border ──────────────────
+// Material3's OutlinedTextField defaults to a 56.dp min height with no low-level way to shrink
+// it for a dense toolbar, so numeric filters use this BasicTextField instead — same visual
+// language as the dropdown chips (border, shape, background) plus a focus-state outline.
+
+@Composable
+private fun CompactTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    width: Dp,
+    enabled: Boolean = true,
+    placeholder: String? = null,
+) {
+    val colors = MaterialTheme.colorScheme
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    val borderColor =
+        when {
+            isFocused -> colors.primary
+            else -> colors.outline.copy(alpha = 0.35f)
+        }
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        enabled = enabled,
+        singleLine = true,
+        interactionSource = interactionSource,
+        textStyle =
+            MaterialTheme.typography.bodySmall.copy(
+                color = if (enabled) colors.onSurface else colors.onSurface.copy(alpha = 0.4f),
+            ),
+        cursorBrush = SolidColor(colors.primary),
+        modifier = Modifier.width(width).height(FilterFieldHeight),
+        decorationBox = { innerField ->
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .clip(FilterFieldShape)
+                        .background(colors.surfaceVariant.copy(alpha = if (enabled) 0.5f else 0.25f))
+                        .border(if (isFocused) 1.5.dp else 1.dp, borderColor, FilterFieldShape)
+                        .padding(horizontal = 10.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                if (value.isEmpty() && placeholder != null) {
+                    Text(placeholder, style = MaterialTheme.typography.bodySmall, color = colors.onSurface.copy(alpha = 0.35f))
+                }
+                innerField()
+            }
+        },
+    )
 }
 
 // ─── Checkbox + numeric field, styled to match every other FilterControl-based control ────
@@ -1611,14 +1679,7 @@ private fun CheckboxParamField(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = checked, onCheckedChange = onCheckedChange, modifier = Modifier.size(24.dp))
             Spacer(Modifier.width(4.dp))
-            OutlinedTextField(
-                value = value,
-                onValueChange = onValueChange,
-                enabled = checked,
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.width(fieldWidth),
-            )
+            CompactTextField(value = value, onValueChange = onValueChange, width = fieldWidth, enabled = checked)
         }
     }
 }
@@ -1628,9 +1689,23 @@ private fun CheckboxParamField(
 @Composable
 private fun FilterDivider() {
     VerticalDivider(
-        modifier = Modifier.height(36.dp).padding(horizontal = 4.dp),
+        modifier = Modifier.height(FilterFieldHeight).padding(horizontal = 4.dp),
         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
     )
+}
+
+// ─── Route arrow between buy-side and sell-side pickers (Inter-Region only) ────────────────
+
+@Composable
+private fun RouteArrow() {
+    Box(modifier = Modifier.height(FilterFieldHeight).padding(horizontal = 2.dp), contentAlignment = Alignment.Center) {
+        Icon(
+            Icons.AutoMirrored.Filled.ArrowForward,
+            null,
+            Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+        )
+    }
 }
 
 // ─── Region picker ────────────────────────────────────────────────────────
@@ -1641,6 +1716,7 @@ private fun RegionPicker(
     selectedRegionId: Int,
     width: Dp = 160.dp,
     label: String = "Region",
+    accentColor: Color? = null,
     onSelect: (Int) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -1667,6 +1743,15 @@ private fun RegionPicker(
                 expanded = true
                 searchQuery = ""
             }, width = width) {
+                if (accentColor != null) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(6.dp)
+                                .background(accentColor, androidx.compose.foundation.shape.CircleShape),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                }
                 Text(
                     selectedName,
                     style = MaterialTheme.typography.bodySmall,
@@ -2007,14 +2092,7 @@ private fun ParamField(
     onValue: (String) -> Unit,
 ) {
     FilterControl(label) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValue,
-            modifier = Modifier.width(width),
-            textStyle = MaterialTheme.typography.bodySmall,
-            singleLine = true,
-            shape = MaterialTheme.shapes.extraSmall,
-        )
+        CompactTextField(value = value, onValueChange = onValue, width = width)
     }
 }
 
@@ -2322,14 +2400,25 @@ private fun MarginText(
 
 @Composable
 private fun AnalysisEmptyState(
-    icon: @Composable () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     primary: String,
     secondary: String,
 ) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            icon()
-            Text(primary, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(
+                modifier =
+                    Modifier
+                        .size(72.dp)
+                        .background(
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                            androidx.compose.foundation.shape.CircleShape,
+                        ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(icon, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f))
+            }
+            Text(primary, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
             Text(secondary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
         }
     }
