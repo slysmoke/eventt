@@ -52,6 +52,7 @@ import org.eventt.features.market.MarketBrowserScreen
 import org.eventt.features.orders.OrdersScreen
 import org.eventt.features.overlay.OverlayWindow
 import org.eventt.features.settings.SettingsScreen
+import org.eventt.features.tools.ToolsScreen
 import org.eventt.features.wallet.WalletScreen
 import org.eventt.features.watchlist.WatchlistScreen
 import org.eventt.ui.common.RequestProgressDialog
@@ -75,6 +76,7 @@ enum class AppScreen(
     WATCHLIST("Watchlist", Icons.Default.Visibility),
     ALERTS("Alerts", Icons.Default.Notifications),
     CONTRACTS("Contracts", Icons.Default.Description),
+    TOOLS("Tools", Icons.Default.Build),
     SETTINGS("Settings", Icons.Default.Settings),
 }
 
@@ -790,6 +792,7 @@ private fun ScreenContent(
                             AppScreen.WATCHLIST -> WatchlistScreen()
                             AppScreen.ALERTS -> PriceAlertsScreen()
                             AppScreen.CONTRACTS -> ContractTrackerScreen(charId = selectedCharId)
+                            AppScreen.TOOLS -> ToolsScreen(context = selectedContext)
                             AppScreen.SETTINGS -> SettingsScreen()
                         }
                     }

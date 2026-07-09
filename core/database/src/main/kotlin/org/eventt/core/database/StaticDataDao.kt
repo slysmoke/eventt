@@ -85,6 +85,17 @@ object StaticDataDao {
             }
         }
 
+    /** Exact (case-insensitive) name match — for parsing EVE's clipboard-exported item lists. */
+    fun getTypeByExactName(name: String): StaticTypeModel? =
+        DatabaseManager.transaction {
+            prepareStatement("SELECT * FROM static_types WHERE lower(name) = lower(?)").use { stmt ->
+                stmt.setString(1, name)
+                stmt.executeQuery().use { rs ->
+                    if (rs.next()) rs.mapResultSetToType() else null
+                }
+            }
+        }
+
     // Targeted single-column update — used by StaticDataImporter to backfill packaged volume
     // (resolved from ESI per-type, for ships only) without needing a full row's worth of data.
     fun updatePackagedVolume(

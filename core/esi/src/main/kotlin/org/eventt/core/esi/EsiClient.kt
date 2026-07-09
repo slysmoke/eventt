@@ -1,5 +1,7 @@
 package org.eventt.core.esi
 
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
@@ -362,6 +364,91 @@ object EsiClient {
         return response.body?.string() ?: "[]"
     }
 
+    @Serializable
+    data class FittingItemDto(
+        @SerialName("type_id") val typeId: Int,
+        val quantity: Int,
+        val flag: String,
+    )
+
+    @Serializable
+    data class FittingRequestDto(
+        val name: String,
+        val description: String,
+        @SerialName("ship_type_id") val shipTypeId: Int,
+        val items: List<FittingItemDto>,
+    )
+
+    @Serializable
+    private data class FittingResponseDto(
+        @SerialName("fitting_id") val fittingId: Int,
+    )
+
+    /**
+     * POST /characters/{id}/fittings/ — saves a ship fitting (used by the Cargo Splitter tool to
+     * push a computed split as an in-game-visible fitting). Mirrors getRaw()'s auth + 401-retry-once
+     * + RequestQueueManager wrapping, but for a write; unlike postRaw() (unauthenticated, no queue),
+     * this is the auth'd POST path, and unlike getRaw() writes are never served from/saved to cache.
+     * Returns the new fitting_id on success; throws IOException on failure.
+     */
+    fun postCharacterFitting(
+        characterId: Int,
+        fitting: FittingRequestDto,
+    ): Int {
+        val endpoint = "/characters/$characterId/fittings/"
+        val url = "$esiBaseUrl$endpoint?datasource=$ESI_DATASOURCE"
+        val bodyJson = json.encodeToString(FittingRequestDto.serializer(), fitting)
+
+        val queuedRequest =
+            QueuedRequest(
+                endpoint = url,
+                description = "POST $endpoint (${fitting.name})",
+                source = RequestSource.SERVER,
+                status = RequestStatus.QUEUED,
+            )
+        RequestQueueManager.enqueue(queuedRequest)
+        RequestQueueManager.markInProgress(queuedRequest.id)
+
+        try {
+            var token =
+                SsoAuthManager.ensureTokenFresh(characterId)
+                    ?: throw IOException("Could not refresh access token for character $characterId")
+
+            fun buildRequest(bearer: String): Request =
+                Request
+                    .Builder()
+                    .url(url)
+                    .header("Authorization", "Bearer $bearer")
+                    .post(bodyJson.toRequestBody("application/json; charset=utf-8".toMediaType()))
+                    .build()
+
+            val client = EveHttpClient.getClient()
+            var response = client.newCall(buildRequest(token)).execute()
+
+            // 401 Unauthorized — refresh token and retry once
+            if (response.code == 401) {
+                response.close()
+                token =
+                    SsoAuthManager.ensureTokenFresh(characterId)
+                        ?: throw IOException("Token refresh failed after 401 for character $characterId")
+                response = client.newCall(buildRequest(token)).execute()
+            }
+
+            if (!response.isSuccessful) {
+                val err = "HTTP ${response.code} ${response.body?.string()}"
+                RequestQueueManager.completeRequest(queuedRequest.id, error = err)
+                throw IOException("ESI POST $endpoint failed: $err")
+            }
+
+            val respBody = response.body?.string() ?: ""
+            RequestQueueManager.completeRequest(queuedRequest.id)
+            return json.decodeFromString(FittingResponseDto.serializer(), respBody).fittingId
+        } catch (e: IOException) {
+            RequestQueueManager.completeRequest(queuedRequest.id, error = e.message)
+            throw e
+        }
+    }
+
     /**
      * Resolve up to 50 000 IDs → names via POST /universe/names/ (batches of 1000).
      * Returns map of id → name; IDs not found in ESI are omitted.
@@ -420,6 +507,23 @@ object EsiClient {
             body.parseToMap()
         } catch (e: Exception) {
             println("[ESI] getStructureInfo($structureId) failed: ${e.message}")
+            null
+        }
+    }
+
+    // Used by the Sell Pricing tool to derive "which region is this character's market in"
+    // without asking the user to pick one — {"solar_system_id": ..., "station_id": ..., ...}.
+    fun getCharacterLocation(characterId: Int): Map<String, Any?>? {
+        return try {
+            val token = SsoAuthManager.ensureTokenFresh(characterId)
+            if (token == null) {
+                println("[ESI] getCharacterLocation($characterId): no valid token")
+                return null
+            }
+            val (body, _) = getRaw("/characters/$characterId/location/", accessToken = token, characterId = characterId)
+            body.parseToMap()
+        } catch (e: Exception) {
+            println("[ESI] getCharacterLocation($characterId) failed: ${e.message}")
             null
         }
     }
