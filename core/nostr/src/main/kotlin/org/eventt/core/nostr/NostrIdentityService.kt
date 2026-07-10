@@ -4,6 +4,7 @@ import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.eventt.core.database.AppState
 import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.NostrIdentityDao
 import org.eventt.core.database.NostrIdentityModel
@@ -89,6 +90,28 @@ object NostrIdentityService {
 
     suspend fun switchActive(pubkey: String) {
         withContext(Dispatchers.IO) { NostrIdentityDao.setActive(pubkey) }
+    }
+
+    /**
+     * Keeps the active P2P Market identity in lockstep with whichever character the app's main nav
+     * has selected — including the acting character behind a corporation selection, since
+     * [AppState.selectedCharId] already resolves that. There's no manual "which character trades
+     * P2P" choice anymore (see [NostrIdentityCard][org.eventt.features.settings] in Settings,
+     * which is now read-only); this is the one place that decides it. Never returns — collect on a
+     * long-lived scope, called once from Main.kt.
+     */
+    suspend fun followAppCharacterSelection() {
+        AppState.selectedCharId.collect { charId ->
+            if (charId == null) return@collect
+            withContext(Dispatchers.IO) {
+                val character = CharacterDao.getById(charId) ?: return@withContext
+                val identity = ensureIdentityForCharacter(character)
+                if (NostrIdentityDao.getActive()?.pubkey != identity.pubkey) {
+                    NostrIdentityDao.setActive(identity.pubkey)
+                    NostrRelayManager.restart()
+                }
+            }
+        }
     }
 
     private fun persist(

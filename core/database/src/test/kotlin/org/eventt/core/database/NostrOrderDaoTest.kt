@@ -43,6 +43,7 @@ class NostrOrderDaoTest {
         minLot = 500L,
         minLotUnit = "units",
         traderChar = "Some Character",
+        traderCharId = null,
         expiration = System.currentTimeMillis() / 1000 + 14L * 24 * 3600,
         rawEventJson = "{}",
         isMine = true,

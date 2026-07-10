@@ -109,7 +109,7 @@ object SsoAuthManager {
 
     @Volatile
     private var codeVerifier: String? = null
-    private val lock = Object()
+    private val lock = Any()
 
     data class AuthResult(
         val success: Boolean,

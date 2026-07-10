@@ -21,7 +21,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -49,10 +48,11 @@ import java.io.File
 import javax.swing.JFileChooser
 
 /**
- * One P2P Market identity per EVE character, auto-generated the first time this card loads — the
- * radio selection is "which character is currently trading P2P," not "which raw key," since a
- * character-scoped key is what makes the trader_char shown to counterparties actually trustworthy
- * (it's the name of the character that owns the signing key, not free-text someone typed in).
+ * One P2P Market identity per EVE character, auto-generated the first time this card loads. Which
+ * one is *active* is no longer a manual choice here — it always follows whichever character (or
+ * acting character, if a corporation is selected) is currently picked in the app's main nav, kept
+ * in sync by [org.eventt.core.nostr.NostrIdentityService.followAppCharacterSelection]. This card
+ * is now just visibility into that (which key belongs to which character) plus export/import.
  */
 @Composable
 internal fun NostrIdentityCard() {
@@ -79,7 +79,8 @@ internal fun NostrIdentityCard() {
                 Text("P2P Market Identity (Nostr)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             }
             Text(
-                "Each character gets its own P2P Market identity automatically. Pick which one is currently trading; export/import moves a key to another machine.",
+                "Each character gets its own P2P Market identity automatically. The active one always follows whichever " +
+                    "character you have selected in the app (even via a corporation) — export/import moves a key to another machine.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -90,18 +91,15 @@ internal fun NostrIdentityCard() {
             } else {
                 characters.forEach { character ->
                     val characterIdentity = identitiesByCharacter[character.id]
+                    val isActive = characterIdentity != null && characterIdentity.pubkey == activePubkey
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = characterIdentity != null && characterIdentity.pubkey == activePubkey,
-                            onClick = {
-                                val pubkey = characterIdentity?.pubkey ?: return@RadioButton
-                                scope.launch(Dispatchers.IO) {
-                                    NostrIdentityService.switchActive(pubkey)
-                                    withContext(Dispatchers.Main) { activePubkey = pubkey }
-                                }
-                            },
+                        Icon(
+                            Icons.Default.Podcasts,
+                            contentDescription = if (isActive) "Currently active" else null,
+                            modifier = Modifier.size(18.dp),
+                            tint = if (isActive) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0f),
                         )
-                        Column(modifier = Modifier.weight(1f).padding(start = 4.dp)) {
+                        Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
                             Text(character.name, style = MaterialTheme.typography.bodyMedium)
                             Text(
                                 characterIdentity?.pubkey?.take(12)?.plus("…") ?: "…",
@@ -140,7 +138,11 @@ internal fun NostrIdentityCard() {
                                     val imported = content?.let { NostrIdentityService.importPrivateKeyForCharacter(it, character) }
                                     withContext(Dispatchers.Main) {
                                         importError =
-                                            if (imported == null) "Couldn't import key for ${character.name} — file unreadable or not a valid key." else null
+                                            if (imported == null) {
+                                                "Couldn't import key for ${character.name} — file unreadable or not a valid key."
+                                            } else {
+                                                null
+                                            }
                                     }
                                     reload()
                                 }
@@ -218,7 +220,7 @@ internal fun NostrRelaysCard() {
                     val url = newRelayInput.trim()
                     if (url.isNotEmpty()) {
                         scope.launch(Dispatchers.IO) {
-                            NostrRelayDao.upsert(url)
+                            NostrRelayDao.upsert(NostrRelayManager.normalizeUrl(url))
                             reload()
                         }
                         newRelayInput = ""

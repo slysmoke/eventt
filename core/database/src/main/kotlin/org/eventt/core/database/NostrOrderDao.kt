@@ -14,6 +14,7 @@ data class NostrOrderModel(
     val minLot: Long,
     val minLotUnit: String,
     val traderChar: String,
+    val traderCharId: Int?,
     val expiration: Long,
     val rawEventJson: String,
     val isMine: Boolean,
@@ -32,9 +33,9 @@ object NostrOrderDao {
                 """
                 INSERT INTO nostr_orders (
                     order_uuid, pubkey, event_id, created_at, side, type_id, region_id, price,
-                    qty_total, qty_remaining, min_lot, min_lot_unit, trader_char, expiration,
+                    qty_total, qty_remaining, min_lot, min_lot_unit, trader_char, trader_char_id, expiration,
                     raw_event_json, is_mine, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now')*1000)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now')*1000)
                 ON CONFLICT(order_uuid, pubkey) DO UPDATE SET
                     event_id = excluded.event_id,
                     created_at = excluded.created_at,
@@ -47,6 +48,7 @@ object NostrOrderDao {
                     min_lot = excluded.min_lot,
                     min_lot_unit = excluded.min_lot_unit,
                     trader_char = excluded.trader_char,
+                    trader_char_id = excluded.trader_char_id,
                     expiration = excluded.expiration,
                     raw_event_json = excluded.raw_event_json,
                     is_mine = excluded.is_mine,
@@ -67,9 +69,10 @@ object NostrOrderDao {
                 stmt.setLong(11, order.minLot)
                 stmt.setString(12, order.minLotUnit)
                 stmt.setString(13, order.traderChar)
-                stmt.setLong(14, order.expiration)
-                stmt.setString(15, order.rawEventJson)
-                stmt.setInt(16, if (order.isMine) 1 else 0)
+                order.traderCharId?.let { stmt.setInt(14, it) } ?: stmt.setNull(14, java.sql.Types.INTEGER)
+                stmt.setLong(15, order.expiration)
+                stmt.setString(16, order.rawEventJson)
+                stmt.setInt(17, if (order.isMine) 1 else 0)
                 stmt.executeUpdate() > 0
             }
         }
@@ -81,11 +84,20 @@ object NostrOrderDao {
     ): List<NostrOrderModel> =
         DatabaseManager.transaction {
             val nowSec = System.currentTimeMillis() / 1000
-            val conditions = mutableListOf("expiration > ?")
+            val conditions = mutableListOf("expiration > ?", "qty_remaining > 0")
             val params = mutableListOf<Any>(nowSec)
-            typeId?.let { conditions += "type_id = ?"; params += it }
-            regionId?.let { conditions += "region_id = ?"; params += it }
-            side?.let { conditions += "side = ?"; params += it }
+            typeId?.let {
+                conditions += "type_id = ?"
+                params += it
+            }
+            regionId?.let {
+                conditions += "region_id = ?"
+                params += it
+            }
+            side?.let {
+                conditions += "side = ?"
+                params += it
+            }
 
             prepareStatement(
                 "SELECT * FROM nostr_orders WHERE ${conditions.joinToString(" AND ")} ORDER BY updated_at DESC",
@@ -134,6 +146,7 @@ object NostrOrderDao {
             minLot = getLong("min_lot"),
             minLotUnit = getString("min_lot_unit"),
             traderChar = getString("trader_char") ?: "",
+            traderCharId = getInt("trader_char_id").takeIf { !wasNull() },
             expiration = getLong("expiration"),
             rawEventJson = getString("raw_event_json"),
             isMine = getInt("is_mine") == 1,
@@ -144,4 +157,29 @@ object NostrOrderDao {
             prepareStatement("DELETE FROM nostr_orders WHERE expiration <= strftime('%s','now')").use { it.executeUpdate() }
         }
     }
+
+    /** Appends one row to the posting-rate log — call only for genuinely new orders, never renew/cancel republishes. */
+    fun recordPost(pubkey: String) {
+        DatabaseManager.transaction {
+            prepareStatement("INSERT INTO nostr_order_posts (pubkey, posted_at) VALUES (?, strftime('%s','now'))").use { stmt ->
+                stmt.setString(1, pubkey)
+                stmt.executeUpdate()
+            }
+        }
+    }
+
+    /** Count of [pubkey]'s new-order posts within the last [windowSeconds] — see [recordPost]. */
+    fun countRecentPosts(
+        pubkey: String,
+        windowSeconds: Long,
+    ): Int =
+        DatabaseManager.transaction {
+            prepareStatement(
+                "SELECT COUNT(*) FROM nostr_order_posts WHERE pubkey = ? AND posted_at > strftime('%s','now') - ?",
+            ).use { stmt ->
+                stmt.setString(1, pubkey)
+                stmt.setLong(2, windowSeconds)
+                stmt.executeQuery().use { rs -> if (rs.next()) rs.getInt(1) else 0 }
+            }
+        }
 }

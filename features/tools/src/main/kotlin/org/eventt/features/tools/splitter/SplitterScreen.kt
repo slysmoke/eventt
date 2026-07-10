@@ -147,7 +147,8 @@ fun SplitterScreen(context: ViewContext?) {
                     val regionSell = regionSellByType[item.typeId]
                     val price = regionSell ?: globalPrices[item.typeId]
                     if (regionId != null && regionSell == null) {
-                        priceWarnings += ParseWarning(item.name, "no live sell orders in your region — used ESI's global average price instead")
+                        priceWarnings +=
+                            ParseWarning(item.name, "no live sell orders in your region — used ESI's global average price instead")
                     }
                     if (price == null) {
                         priceWarnings += ParseWarning(item.name, "no price data found anywhere — valued at 0 ISK")
@@ -245,7 +246,9 @@ fun SplitterScreen(context: ViewContext?) {
                         selected = algorithm == SplitAlgorithm.FILL_FIRST,
                         onClick = {
                             algorithm = SplitAlgorithm.FILL_FIRST
-                            scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SplitterSettings.ALGORITHM, SplitAlgorithm.FILL_FIRST.name) }
+                            scope.launch(
+                                Dispatchers.IO,
+                            ) { StaticDataDao.setSetting(SplitterSettings.ALGORITHM, SplitAlgorithm.FILL_FIRST.name) }
                         },
                         label = { Text("Fill First" + if (recommended == SplitAlgorithm.FILL_FIRST) " (recommended)" else "") },
                     )
@@ -253,7 +256,9 @@ fun SplitterScreen(context: ViewContext?) {
                         selected = algorithm == SplitAlgorithm.BALANCED,
                         onClick = {
                             algorithm = SplitAlgorithm.BALANCED
-                            scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SplitterSettings.ALGORITHM, SplitAlgorithm.BALANCED.name) }
+                            scope.launch(
+                                Dispatchers.IO,
+                            ) { StaticDataDao.setSetting(SplitterSettings.ALGORITHM, SplitAlgorithm.BALANCED.name) }
                         },
                         label = { Text("Balanced" + if (recommended == SplitAlgorithm.BALANCED) " (recommended)" else "") },
                     )

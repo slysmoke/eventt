@@ -11,11 +11,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -23,6 +27,8 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -43,6 +49,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.CharacterDao
+import org.eventt.core.database.NostrOrderDao
 import org.eventt.core.database.NostrOrderModel
 import org.eventt.core.database.NostrReservationDao
 import org.eventt.core.database.NostrReservationModel
@@ -57,13 +64,22 @@ import org.eventt.core.nostr.OrderDraft
 import org.eventt.core.nostr.OrderFilter
 import org.eventt.core.nostr.OrderRepository
 import org.eventt.core.nostr.OrderSide
+import org.eventt.core.nostr.PostOrderResult
 import org.eventt.core.nostr.ReservationService
 import org.eventt.ui.common.SearchField
+import java.time.Instant
 import java.util.Locale
 
 private data class MyOrderRowData(
     val order: NostrOrderModel,
     val typeName: String,
+)
+
+private data class SellerReservationRowData(
+    val reservation: NostrReservationModel,
+    val typeName: String,
+    val regionName: String?,
+    val price: Double?,
 )
 
 private enum class MyOrdersSortColumn { PRICE, QTY, EXPIRY }
@@ -77,9 +93,9 @@ fun MyOrdersScreen() {
     var myOrderRows by remember { mutableStateOf<List<MyOrderRowData>>(emptyList()) }
     var myOrdersSortColumn by remember { mutableStateOf(MyOrdersSortColumn.EXPIRY) }
     var myOrdersSortDirection by remember { mutableStateOf(SortDirection.ASC) }
-    var incomingRequests by remember { mutableStateOf<List<NostrReservationModel>>(emptyList()) }
-    var acceptedReservations by remember { mutableStateOf<List<NostrReservationModel>>(emptyList()) }
+    var sellerReservations by remember { mutableStateOf<List<SellerReservationRowData>>(emptyList()) }
 
+    var showPostForm by remember { mutableStateOf(false) }
     var side by remember { mutableStateOf(OrderSide.SELL) }
     var itemQuery by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf<StaticTypeModel?>(null) }
@@ -142,8 +158,22 @@ fun MyOrdersScreen() {
 
     suspend fun reloadReservations() {
         val all = withContext(Dispatchers.IO) { NostrReservationDao.listForRole("seller") }
-        incomingRequests = all.filter { it.status == "sent" }
-        acceptedReservations = all.filter { it.status == "accepted" }
+        val relevant = all.filter { it.status == "sent" || it.status == "accepted" }
+        sellerReservations =
+            withContext(Dispatchers.IO) {
+                relevant
+                    .map { reservation ->
+                        val order = NostrOrderDao.getByCoordinate(reservation.orderUuid, reservation.sellerPubkey)
+                        SellerReservationRowData(
+                            reservation = reservation,
+                            typeName =
+                                order?.let { StaticDataDao.getTypeById(it.typeId)?.name }
+                                    ?: "Order ${reservation.orderUuid.take(8)}… (expired/purged)",
+                            regionName = order?.let { StaticDataDao.getRegionById(it.regionId)?.name },
+                            price = order?.price,
+                        )
+                    }.sortedWith(compareBy({ it.reservation.status != "sent" }, { -it.reservation.requestedAt }))
+            }
     }
     LaunchedEffect(Unit) {
         reloadReservations()
@@ -181,7 +211,7 @@ fun MyOrdersScreen() {
                 return@launch
             }
             val traderName = identity.characterId?.let { CharacterDao.getById(it)?.name } ?: identity.label
-            val posted =
+            val result =
                 OrderRepository.postNewOrder(
                     OrderDraft(
                         side = side,
@@ -192,102 +222,130 @@ fun MyOrdersScreen() {
                         minLot = minLot!!,
                         minLotUnit = minLotUnit,
                         traderChar = traderName,
+                        traderCharId = identity.characterId,
                     ),
                 )
             withContext(Dispatchers.Main) {
                 isPosting = false
-                if (posted == null) {
-                    formError = "No P2P Market identity set up yet — pick a character in Settings first."
-                } else {
-                    itemQuery = ""
-                    selectedType = null
-                    priceText = ""
-                    qtyText = ""
+                when (result) {
+                    is PostOrderResult.Posted -> {
+                        itemQuery = ""
+                        selectedType = null
+                        priceText = ""
+                        qtyText = ""
+                        showPostForm = false
+                    }
+                    PostOrderResult.NoIdentity -> formError = "No P2P Market identity set up yet — pick a character in Settings first."
+                    PostOrderResult.RateLimited ->
+                        formError = "You've posted too many new orders recently — try again in a bit."
                 }
             }
         }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Post a new order", style = MaterialTheme.typography.titleMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = side == OrderSide.SELL, onClick = { side = OrderSide.SELL }, label = { Text("Selling") })
-                    FilterChip(selected = side == OrderSide.BUY, onClick = { side = OrderSide.BUY }, label = { Text("Buying") })
-                }
-                SearchField(
-                    query = itemQuery,
-                    onQueryChange = { q ->
-                        itemQuery = q
-                        selectedType = null
-                        if (q.length >= 2) {
-                            scope.launch(Dispatchers.IO) { itemSearchResults = StaticDataDao.searchMarketTypes(q, limit = 10) }
-                        } else {
-                            itemSearchResults = emptyList()
-                        }
-                    },
-                    placeholder = "Search item...",
-                )
-                if (itemSearchResults.isNotEmpty()) {
-                    LazyColumn(modifier = Modifier.heightIn(max = 140.dp)) {
-                        items(itemSearchResults, key = { it.typeId }) { type ->
-                            Row(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            selectedType = type
-                                            itemQuery = type.name
-                                            itemSearchResults = emptyList()
-                                            priceText = ""
-                                        }.padding(8.dp),
-                            ) {
-                                Text(type.name, style = MaterialTheme.typography.bodyMedium)
+        if (!showPostForm) {
+            OutlinedButton(onClick = { showPostForm = true }, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.Add, null, Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Post new order")
+            }
+        } else {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("Post a new order", style = MaterialTheme.typography.titleMedium)
+                        IconButton(onClick = { showPostForm = false }) { Icon(Icons.Default.Close, "Collapse", Modifier.size(18.dp)) }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = side == OrderSide.SELL, onClick = { side = OrderSide.SELL }, label = { Text("Selling") })
+                        FilterChip(selected = side == OrderSide.BUY, onClick = { side = OrderSide.BUY }, label = { Text("Buying") })
+                    }
+                    SearchField(
+                        query = itemQuery,
+                        onQueryChange = { q ->
+                            itemQuery = q
+                            selectedType = null
+                            if (q.length >= 2) {
+                                scope.launch(Dispatchers.IO) { itemSearchResults = StaticDataDao.searchMarketTypes(q, limit = 10) }
+                            } else {
+                                itemSearchResults = emptyList()
+                            }
+                        },
+                        placeholder = "Search item...",
+                    )
+                    if (itemSearchResults.isNotEmpty()) {
+                        LazyColumn(modifier = Modifier.heightIn(max = 140.dp)) {
+                            items(itemSearchResults, key = { it.typeId }) { type ->
+                                Row(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                selectedType = type
+                                                itemQuery = type.name
+                                                itemSearchResults = emptyList()
+                                                priceText = ""
+                                            }.padding(8.dp),
+                                ) {
+                                    Text(type.name, style = MaterialTheme.typography.bodyMedium)
+                                }
                             }
                         }
                     }
-                }
-                RegionDropdown(allRegions, regionId) { regionId = it }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = priceText,
-                        onValueChange = { priceText = it },
-                        label = { Text("Price / unit (ISK)") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                    OutlinedTextField(
-                        value = qtyText,
-                        onValueChange = { qtyText = it },
-                        label = { Text("Total quantity") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = minLotText,
-                        onValueChange = { minLotText = it },
-                        label = { Text("Min lot") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                    FilterChip(selected = minLotUnit == MinLotUnit.UNITS, onClick = { minLotUnit = MinLotUnit.UNITS }, label = { Text("units") })
-                    FilterChip(selected = minLotUnit == MinLotUnit.ISK, onClick = { minLotUnit = MinLotUnit.ISK }, label = { Text("ISK") })
-                }
-                Text(
-                    tradingAs?.let { "Trading as: $it" } ?: "No character selected — pick one in Settings first.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (tradingAs != null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
-                )
-                formError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-                Button(onClick = { submit() }, enabled = !isPosting) {
-                    if (isPosting) {
-                        CircularProgressIndicator(Modifier.height(16.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.height(4.dp))
+                    RegionDropdown(allRegions, regionId) { regionId = it }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = priceText,
+                            onValueChange = { priceText = it },
+                            label = { Text("Price / unit (ISK)") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedTextField(
+                            value = qtyText,
+                            onValueChange = { qtyText = it },
+                            label = { Text("Total quantity") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
                     }
-                    Text(if (isPosting) "Posting…" else "Post order")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = minLotText,
+                            onValueChange = { minLotText = it },
+                            label = { Text("Min lot") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        FilterChip(
+                            selected = minLotUnit == MinLotUnit.UNITS,
+                            onClick = { minLotUnit = MinLotUnit.UNITS },
+                            label = { Text("units") },
+                        )
+                        FilterChip(
+                            selected = minLotUnit == MinLotUnit.ISK,
+                            onClick = { minLotUnit = MinLotUnit.ISK },
+                            label = { Text("ISK") },
+                        )
+                    }
+                    Text(
+                        tradingAs?.let { "Trading as: $it" } ?: "No character selected — pick one in Settings first.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (tradingAs != null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                    )
+                    formError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                    Button(onClick = { submit() }, enabled = !isPosting) {
+                        if (isPosting) {
+                            CircularProgressIndicator(Modifier.height(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.height(4.dp))
+                        }
+                        Text(if (isPosting) "Posting…" else "Post order")
+                    }
                 }
             }
         }
@@ -297,58 +355,58 @@ fun MyOrdersScreen() {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
 
-        if (incomingRequests.isNotEmpty()) {
-            Spacer(Modifier.height(16.dp))
-            Text("Incoming requests", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                incomingRequests.forEach { reservation ->
-                    ReservationRow(reservation) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = {
-                                scope.launch(Dispatchers.IO) {
-                                    val ok = ReservationService.respond(reservation, accept = true)
-                                    actionError = if (ok) null else "Couldn't accept — is your P2P Market identity still set up?"
-                                    reloadReservations()
-                                }
-                            }) { Text("Accept") }
-                            OutlinedButton(onClick = {
-                                scope.launch(Dispatchers.IO) {
-                                    val ok = ReservationService.respond(reservation, accept = false)
-                                    actionError = if (ok) null else "Couldn't decline — is your P2P Market identity still set up?"
-                                    reloadReservations()
-                                }
-                            }) { Text("Decline") }
-                        }
-                    }
-                }
+        Spacer(Modifier.height(16.dp))
+        Text(
+            if (sellerReservations.isEmpty()) "Incoming buy requests" else "Incoming buy requests (${sellerReservations.size})",
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Text(
+            "When someone clicks Buy on one of your orders, their request shows up here for you to accept or decline.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(8.dp))
+        if (sellerReservations.isEmpty()) {
+            Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                Text("No incoming requests yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-        }
-
-        if (acceptedReservations.isNotEmpty()) {
-            Spacer(Modifier.height(16.dp))
-            Text("Accepted — awaiting completion", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                acceptedReservations.forEach { reservation ->
-                    ReservationRow(reservation) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = {
-                                scope.launch(Dispatchers.IO) {
-                                    val ok = ReservationService.markCompleted(reservation)
-                                    actionError = if (ok) null else "Couldn't publish the completion receipt — is your P2P Market identity still set up?"
-                                    reloadReservations()
-                                }
-                            }) { Text("Mark completed") }
-                            OutlinedButton(onClick = {
-                                scope.launch(Dispatchers.IO) {
-                                    val ok = ReservationService.release(reservation)
-                                    actionError = if (ok) null else "Couldn't release — is your P2P Market identity still set up?"
-                                    reloadReservations()
-                                }
-                            }) { Text("Release (buyer no-show)") }
-                        }
-                    }
+        } else {
+            ReservationsTableHeader()
+            HorizontalDivider()
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                sellerReservations.forEach { row ->
+                    SellerReservationTableRow(
+                        row,
+                        onAccept = {
+                            scope.launch(Dispatchers.IO) {
+                                val ok = ReservationService.respond(row.reservation, accept = true)
+                                actionError = if (ok) null else "Couldn't accept — is your P2P Market identity still set up?"
+                                reloadReservations()
+                            }
+                        },
+                        onDecline = {
+                            scope.launch(Dispatchers.IO) {
+                                val ok = ReservationService.respond(row.reservation, accept = false)
+                                actionError = if (ok) null else "Couldn't decline — is your P2P Market identity still set up?"
+                                reloadReservations()
+                            }
+                        },
+                        onMarkCompleted = {
+                            scope.launch(Dispatchers.IO) {
+                                val ok = ReservationService.markCompleted(row.reservation)
+                                actionError =
+                                    if (ok) null else "Couldn't publish the completion receipt — is your P2P Market identity still set up?"
+                                reloadReservations()
+                            }
+                        },
+                        onRelease = {
+                            scope.launch(Dispatchers.IO) {
+                                val ok = ReservationService.release(row.reservation)
+                                actionError = if (ok) null else "Couldn't release — is your P2P Market identity still set up?"
+                                reloadReservations()
+                            }
+                        },
+                    )
                 }
             }
         }
@@ -387,33 +445,104 @@ fun MyOrdersScreen() {
 }
 
 @Composable
-private fun ReservationRow(
-    reservation: NostrReservationModel,
-    actions: @Composable () -> Unit,
+private fun ReservationsTableHeader() {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Item", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        Text("Region", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(120.dp))
+        Text("Price", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(130.dp))
+        Text("Qty", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(60.dp))
+        Text("Buyer", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(150.dp))
+        Text("Status", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(150.dp))
+        Text("Requested", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(110.dp))
+        Text("", modifier = Modifier.width(240.dp))
+    }
+}
+
+@Composable
+private fun SellerReservationTableRow(
+    row: SellerReservationRowData,
+    onAccept: () -> Unit,
+    onDecline: () -> Unit,
+    onMarkCompleted: () -> Unit,
+    onRelease: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Qty ${reservation.qty} · order ${reservation.orderUuid.take(8)}…", style = MaterialTheme.typography.bodyMedium)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "From: " + reservation.buyerChar.ifBlank { "${reservation.buyerPubkey.take(12)}…" },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (reservation.buyerChar.isNotBlank()) TraderInfoButton(reservation.buyerChar)
-            }
+    val reservation = row.reservation
+    val nowSec = System.currentTimeMillis() / 1000
+
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(row.typeName, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (reservation.note.isNotBlank()) {
-                Text(reservation.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            reservation.holdUntil?.let {
                 Text(
-                    "Held until ${java.time.Instant.ofEpochSecond(it)}",
+                    reservation.note,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-            HorizontalDivider()
-            actions()
+            if (reservation.status == "accepted") {
+                reservation.holdUntil?.let {
+                    Text("Held until ${Instant.ofEpochSecond(it)}", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+        Text(
+            row.regionName ?: "—",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.width(120.dp),
+        )
+        Text(
+            row.price?.let { String.format(Locale.US, "%,.2f", it) } ?: "—",
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.width(130.dp),
+        )
+        Text("${reservation.qty}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(60.dp))
+        Row(modifier = Modifier.width(150.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                reservation.buyerChar.ifBlank { "${reservation.buyerPubkey.take(12)}…" },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (reservation.buyerChar.isNotBlank()) TraderInfoButton(reservation.buyerChar, reservation.buyerCharacterId)
+        }
+        Text(
+            if (reservation.status == "sent") "Awaiting your response" else "Accepted — awaiting completion",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(150.dp),
+        )
+        Text(
+            "${formatDurationShort(nowSec - reservation.requestedAt)} ago",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.width(110.dp),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.width(240.dp)) {
+            if (reservation.status == "sent") {
+                Button(onClick = onAccept) { Text("Accept") }
+                OutlinedButton(onClick = onDecline) { Text("Decline") }
+            } else {
+                Button(onClick = onMarkCompleted) { Text("Mark completed") }
+                OutlinedButton(onClick = onRelease) { Text("Release") }
+            }
         }
     }
 }
@@ -433,7 +562,7 @@ private fun MyOrdersTableHeader(
         Text("Item", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
         SortHeaderCell(
             "Price",
-            Modifier.width(110.dp),
+            Modifier.width(130.dp),
             active = sortColumn == MyOrdersSortColumn.PRICE,
             direction = sortDirection,
         ) { onSort(MyOrdersSortColumn.PRICE, SortDirection.DESC) }
@@ -445,7 +574,7 @@ private fun MyOrdersTableHeader(
         ) { onSort(MyOrdersSortColumn.QTY, SortDirection.DESC) }
         SortHeaderCell(
             "Expires",
-            Modifier.width(90.dp),
+            Modifier.width(110.dp),
             active = sortColumn == MyOrdersSortColumn.EXPIRY,
             direction = sortDirection,
         ) { onSort(MyOrdersSortColumn.EXPIRY, SortDirection.ASC) }
@@ -470,10 +599,20 @@ private fun MyOrderTableRow(
             Text(row.typeName, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             ExpiringSoonLabel(order.expiration)
         }
-        Text(String.format(Locale.US, "%,.2f", order.price), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(110.dp))
+        Text(
+            String.format(Locale.US, "%,.2f", order.price),
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.width(130.dp),
+        )
         Text("${order.qtyRemaining}/${order.qtyTotal}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(90.dp))
-        val daysLeft = ((order.expiration - System.currentTimeMillis() / 1000) / (24 * 3600)).coerceAtLeast(0)
-        Text("${daysLeft}d left", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(90.dp))
+        Text(
+            formatDurationShort(order.expiration - System.currentTimeMillis() / 1000) + " left",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(110.dp),
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(170.dp)) {
             OutlinedButton(onClick = onRenew) { Text("Renew") }
             OutlinedButton(onClick = onCancel) { Text("Cancel") }

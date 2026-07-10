@@ -126,7 +126,19 @@ class PricingServiceTest {
         val results =
             listOf(
                 PricingResult(1, "Tritanium", 100, 4.0, 5.2, 5.05, 5.0, 5.0, usedMarketPrice = true, salesTaxPct = 8.0, brokerFeePct = 3.0),
-                PricingResult(2, "Pyerite", 50, null, null, null, null, null, usedMarketPrice = false, salesTaxPct = 8.0, brokerFeePct = 3.0),
+                PricingResult(
+                    2,
+                    "Pyerite",
+                    50,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    usedMarketPrice = false,
+                    salesTaxPct = 8.0,
+                    brokerFeePct = 3.0,
+                ),
                 PricingResult(
                     3,
                     "Mexallon",

@@ -5,12 +5,41 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.DatabaseManager
 import org.eventt.core.http.EveHttpClient
 import org.eventt.core.marketlogs.MarketLogWatcher
 import org.eventt.core.model.AppPaths
+import org.eventt.core.model.CharacterModel
+import org.eventt.core.nostr.NostrIdentityService
 import org.eventt.core.nostr.NostrRelayManager
 import org.eventt.ui.EventtApp
+
+// Fake ESI character ID (outside EVE's real ID range) used only to give the P2P Market
+// test instance (see scripts/run-p2p-test.sh) a character to hang a Nostr identity off of —
+// this instance never makes authenticated ESI calls, so there's no real SSO token behind it.
+private const val P2P_TEST_CHARACTER_ID = 900_000_001
+private const val P2P_TEST_CHARACTER_NAME = "P2P Test Trader"
+
+private fun seedP2pTestIdentityIfNeeded() {
+    if (CharacterDao.getById(P2P_TEST_CHARACTER_ID) == null) {
+        CharacterDao.insert(
+            CharacterModel(
+                id = P2P_TEST_CHARACTER_ID,
+                name = P2P_TEST_CHARACTER_NAME,
+                refreshToken = "",
+            ),
+        )
+    }
+    runBlocking {
+        NostrIdentityService.ensureIdentityForCharacter(CharacterDao.getById(P2P_TEST_CHARACTER_ID)!!)
+    }
+}
 
 fun main() {
     // ESI requires a User-Agent identifying the app on every request — must be set before
@@ -33,7 +62,14 @@ fun main() {
         println("[App] Database init failed: ${e.stackTraceToString()}")
     }
 
-    GlobalHotkeyService.start()
+    val isP2pTestInstance = System.getenv("EVENTT_DATA_DIR") != null
+    if (isP2pTestInstance) seedP2pTestIdentityIfNeeded()
+
+    // X11's XGrabKey is exclusive process-wide: a second instance grabbing the same global
+    // hotkey while the main instance already holds it raises a fatal X BadAccess error that
+    // kills the whole JVM (Xlib's default error handler calls exit(), it's not a catchable
+    // Java exception) — so the test instance skips registering it entirely.
+    if (!isP2pTestInstance) GlobalHotkeyService.start()
     // No separate startup wipe: MarketLogWatcher itself consumes (imports, then deletes) any
     // recognized export already sitting in the folder within its first couple of polls after
     // start() — including one written just before a restart, before it had a chance to be
@@ -41,10 +77,13 @@ fun main() {
     // file before the watcher ever saw it — a real data-loss bug, not just theoretical.
     MarketLogWatcher.start()
     NostrRelayManager.start()
+    // Keeps the P2P Market active identity following whichever character (or corp's acting
+    // character) is selected in the main nav — there's no separate manual picker for it anymore.
+    CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { NostrIdentityService.followAppCharacterSelection() }
 
     application {
         Window(
-            title = "EVE Night Trade Tools",
+            title = if (isP2pTestInstance) "EVE Night Trade Tools — P2P TEST" else "EVE Night Trade Tools",
             state = rememberWindowState(width = 1200.dp, height = 800.dp),
             icon = painterResource("icon.png"),
             onCloseRequest = {

@@ -2,6 +2,9 @@ package org.eventt.core.esi
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
@@ -528,19 +531,29 @@ object EsiClient {
         }
     }
 
-    fun search(
-        query: String,
-        categories: List<String>,
-        strict: Boolean = false,
-    ): Map<String, List<Int>> =
-        get<Map<String, List<Int>>>(
-            "/search/",
-            mapOf(
-                "search" to query,
-                "categories" to categories.joinToString(","),
-                "strict" to strict.toString(),
-            ),
-        )
+    /**
+     * POST /universe/ids/ — unauthenticated exact-name-to-ID resolution, still live on ESI. This
+     * replaces the old GET /search/ endpoint this app used to call for the same purpose; CCP has
+     * since removed unauthenticated /search/ entirely (it 404s now), and the authenticated
+     * replacement (/characters/{id}/search/) needs a logged-in character to search *as*, which is
+     * more than a "show me this trader in-game" button should require. Null if [characterName]
+     * doesn't resolve to exactly one character.
+     */
+    fun resolveCharacterId(characterName: String): Int? =
+        try {
+            val body = postRaw("/universe/ids/", json.encodeToString(ListSerializer(String.serializer()), listOf(characterName)))
+            json
+                .parseToJsonElement(body)
+                .jsonObject["characters"]
+                ?.jsonArray
+                ?.singleOrNull()
+                ?.jsonObject
+                ?.get("id")
+                ?.jsonPrimitive
+                ?.int
+        } catch (e: Exception) {
+            null
+        }
 
     // --- Market Group Endpoints ---
 
@@ -738,5 +751,32 @@ object EsiClient {
             .newCall(request)
             .execute()
             .use { /* 204 No Content = success */ }
+    }
+
+    /**
+     * Opens the character info ("Show Info") window in the running EVE client for
+     * [targetCharacterId], acting as [actingCharacterId] — only works while that acting
+     * character is actually logged into a running client, same constraint as
+     * [openMarketWindow]. False (rather than throwing) if there's no valid token for the acting
+     * character or the call otherwise fails, so callers can fall back to something else.
+     */
+    fun openCharacterInfoWindow(
+        actingCharacterId: Int,
+        targetCharacterId: Int,
+    ): Boolean {
+        val token = SsoAuthManager.ensureTokenFresh(actingCharacterId) ?: return false
+        val url = "$esiBaseUrl/ui/openwindow/information/?datasource=$ESI_DATASOURCE&target_id=$targetCharacterId"
+        val request =
+            Request
+                .Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer $token")
+                .post(ByteArray(0).toRequestBody(null))
+                .build()
+        return try {
+            EveHttpClient.getClient().newCall(request).execute().use { it.isSuccessful }
+        } catch (e: IOException) {
+            false
+        }
     }
 }

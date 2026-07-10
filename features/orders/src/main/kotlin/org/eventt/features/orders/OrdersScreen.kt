@@ -279,7 +279,7 @@ fun OrdersScreen(context: ViewContext?) {
                                 "/markets/$regionId/orders/",
                                 mapOf("order_type" to "all", "type_id" to typeId.toString()),
                             )
-                        if (expiry != null && (latestExpiry == null || expiry > latestExpiry!!)) {
+                        if (expiry != null && (latestExpiry == null || expiry > latestExpiry)) {
                             latestExpiry = expiry
                         }
                     } catch (_: Exception) {
@@ -777,7 +777,7 @@ fun OrdersScreen(context: ViewContext?) {
                     }
             }
 
-        TabRow(selectedTabIndex = activeTab, modifier = Modifier.fillMaxWidth()) {
+        PrimaryTabRow(selectedTabIndex = activeTab, modifier = Modifier.fillMaxWidth()) {
             Tab(selected = activeTab == 0, onClick = { activeTab = 0 }) {
                 Text("Sell (${sellOrders.size})", modifier = Modifier.padding(8.dp))
             }
@@ -1197,7 +1197,7 @@ private fun SellOrderRow(
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (isUndercut) UNDERCUT_COLOR else SELL_COLOR,
             )
-            if (isUndercut && comparison?.bestSell != null) {
+            if (isUndercut) {
                 Text(
                     "Best: ${formatIsk(comparison.bestSell)}",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
@@ -1330,7 +1330,7 @@ private fun BuyOrderRow(
         // Price column: order price + competing price below if overbid
         Column(modifier = Modifier.weight(2.4f)) {
             Text(formatIsk(order.price), style = MaterialTheme.typography.bodyMedium, color = if (isOverbid) UNDERCUT_COLOR else BUY_COLOR)
-            if (isOverbid && comparison?.bestBuy != null) {
+            if (isOverbid) {
                 Text(
                     "Best: ${formatIsk(comparison.bestBuy)}",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),

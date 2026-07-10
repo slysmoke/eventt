@@ -93,6 +93,13 @@ object DatabaseManager {
                 "ALTER TABLE order_history ADD COLUMN is_corp INTEGER DEFAULT 0",
                 "ALTER TABLE nostr_identity ADD COLUMN character_id INTEGER",
                 "ALTER TABLE nostr_reservations ADD COLUMN buyer_char TEXT DEFAULT ''",
+                // Real EVE character IDs carried over Nostr alongside the display name, so Show
+                // Info can open the right character directly instead of re-resolving a name
+                // through ESI (which can't disambiguate same-named characters, and needs a live
+                // ESI round-trip at all).
+                "ALTER TABLE nostr_orders ADD COLUMN trader_char_id INTEGER",
+                "ALTER TABLE nostr_reservations ADD COLUMN buyer_char_id INTEGER",
+                "ALTER TABLE nostr_reservations ADD COLUMN contact_char_id INTEGER",
             )
         conn.createStatement().use { stmt ->
             migrations.forEach { sql ->
@@ -515,6 +522,7 @@ object DatabaseManager {
                     min_lot INTEGER NOT NULL,
                     min_lot_unit TEXT NOT NULL,
                     trader_char TEXT DEFAULT '',
+                    trader_char_id INTEGER,
                     expiration INTEGER NOT NULL,
                     raw_event_json TEXT NOT NULL,
                     is_mine INTEGER DEFAULT 0,
@@ -537,10 +545,12 @@ object DatabaseManager {
                     qty INTEGER NOT NULL,
                     note TEXT DEFAULT '',
                     buyer_char TEXT DEFAULT '',
+                    buyer_char_id INTEGER,
                     status TEXT NOT NULL DEFAULT 'sent',
                     reserved_qty INTEGER,
                     hold_until INTEGER,
                     contact_char TEXT DEFAULT '',
+                    contact_char_id INTEGER,
                     requested_at INTEGER NOT NULL,
                     responded_at INTEGER
                 )
@@ -559,6 +569,16 @@ object DatabaseManager {
                     qty INTEGER NOT NULL,
                     created_at INTEGER NOT NULL,
                     raw_event_json TEXT NOT NULL
+                )
+                """.trimIndent(),
+                // Append-only log of new-order posts (never touched by renew/cancel republishes) —
+                // backs OrderRepository's client-side posting rate limit. nostr_orders itself can't
+                // answer "how many did this pubkey post in the last hour" because it only keeps the
+                // latest revision per order, and renewing bumps created_at without being a new post.
+                """
+                CREATE TABLE IF NOT EXISTS nostr_order_posts (
+                    pubkey TEXT NOT NULL,
+                    posted_at INTEGER NOT NULL
                 )
                 """.trimIndent(),
             )
@@ -620,6 +640,7 @@ object DatabaseManager {
                 "CREATE INDEX IF NOT EXISTS idx_nostr_reservations_order ON nostr_reservations(order_uuid)",
                 "CREATE INDEX IF NOT EXISTS idx_nostr_receipts_trade ON nostr_receipts(trade_id)",
                 "CREATE INDEX IF NOT EXISTS idx_nostr_receipts_counterparty ON nostr_receipts(counterparty_pubkey)",
+                "CREATE INDEX IF NOT EXISTS idx_nostr_order_posts_pubkey_time ON nostr_order_posts(pubkey, posted_at)",
             )
 
         // using conn parameter

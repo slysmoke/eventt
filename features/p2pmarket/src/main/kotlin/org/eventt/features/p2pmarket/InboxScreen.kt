@@ -134,7 +134,7 @@ private fun InboxTableHeader(
         Text("Status", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(260.dp))
         SortHeaderCell(
             "Requested",
-            Modifier.width(90.dp),
+            Modifier.width(110.dp),
             active = sortColumn == InboxSortColumn.REQUESTED,
             direction = sortDirection,
         ) { onSort(InboxSortColumn.REQUESTED, SortDirection.DESC) }
@@ -145,7 +145,6 @@ private fun InboxTableHeader(
 private fun InboxTableRow(row: InboxRowData) {
     val reservation = row.reservation
     val nowSec = System.currentTimeMillis() / 1000
-    val hoursAgo = ((nowSec - reservation.requestedAt) / 3600).coerceAtLeast(0)
 
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
@@ -168,10 +167,12 @@ private fun InboxTableRow(row: InboxRowData) {
             modifier = Modifier.width(260.dp),
         )
         Text(
-            "${hoursAgo}h ago",
+            "${formatDurationShort(nowSec - reservation.requestedAt)} ago",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(90.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.width(110.dp),
         )
     }
 }

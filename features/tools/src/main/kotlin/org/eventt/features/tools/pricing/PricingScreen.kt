@@ -47,9 +47,15 @@ private object PricingSettings {
 // currently active character/corp view, since who bought the stock isn't necessarily whoever
 // you're currently looking at (e.g. checking corp margins while viewing your own character).
 private sealed class CostBasisSource {
-    data class Character(val charId: Int, val name: String) : CostBasisSource()
+    data class Character(
+        val charId: Int,
+        val name: String,
+    ) : CostBasisSource()
 
-    data class Corporation(val corpId: Int, val name: String) : CostBasisSource()
+    data class Corporation(
+        val corpId: Int,
+        val name: String,
+    ) : CostBasisSource()
 
     val label: String
         get() =
@@ -96,7 +102,10 @@ fun PricingScreen(context: ViewContext?) {
             StaticDataDao.getSetting(PricingSettings.MARGIN_LIMIT_ENABLED)?.let { marginLimitEnabled = it == "true" }
 
             val characters = CharacterDao.getAll()
-            val corporations = CorporationDao.getAll().mapNotNull { m -> (m["id"] as? Int)?.let { id -> id to (m["name"] as? String ?: "") } }
+            val corporations =
+                CorporationDao.getAll().mapNotNull { m ->
+                    (m["id"] as? Int)?.let { id -> id to (m["name"] as? String ?: "") }
+                }
             allCharacters = characters
             allCorporations = corporations
 
@@ -244,7 +253,11 @@ fun PricingScreen(context: ViewContext?) {
                 Spacer(Modifier.height(12.dp))
                 Button(
                     onClick = { calculate() },
-                    enabled = !isCalculating && pasteText.isNotBlank() && actingCharId != null && (!marginLimitEnabled || costBasisSource != null),
+                    enabled =
+                        !isCalculating &&
+                            pasteText.isNotBlank() &&
+                            actingCharId != null &&
+                            (!marginLimitEnabled || costBasisSource != null),
                 ) {
                     if (isCalculating) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)

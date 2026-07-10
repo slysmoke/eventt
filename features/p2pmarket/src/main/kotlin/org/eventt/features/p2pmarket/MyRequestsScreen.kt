@@ -50,9 +50,15 @@ private data class RequestRowData(
     val price: Double?,
     val sellerLabel: String,
     val sellerCharacterName: String?,
+    val sellerCharacterId: Int?,
 )
 
 private enum class MyRequestsSortColumn { PRICE, QTY, REQUESTED }
+
+// Once completed, a request belongs on Inbox only (see InboxScreen) — everything before that
+// (still pending, accepted-but-not-yet-completed, or resolved without completing) stays visible
+// here so there's always somewhere to see it.
+private val VISIBLE_STATUSES = listOf("sent", "accepted", "declined", "cancelled", "released")
 
 @Composable
 fun MyRequestsScreen() {
@@ -74,7 +80,7 @@ fun MyRequestsScreen() {
     }
 
     suspend fun reload() {
-        val raw = withContext(Dispatchers.IO) { NostrReservationDao.listForRole("buyer") }
+        val raw = withContext(Dispatchers.IO) { NostrReservationDao.listForRole("buyer", VISIBLE_STATUSES) }
         requests =
             withContext(Dispatchers.IO) {
                 raw.map { reservation ->
@@ -82,11 +88,14 @@ fun MyRequestsScreen() {
                     val sellerCharacterName = order?.traderChar?.ifBlank { null }
                     RequestRowData(
                         reservation = reservation,
-                        typeName = order?.let { StaticDataDao.getTypeById(it.typeId)?.name } ?: "Order ${reservation.orderUuid.take(8)}… (expired/purged)",
+                        typeName =
+                            order?.let { StaticDataDao.getTypeById(it.typeId)?.name }
+                                ?: "Order ${reservation.orderUuid.take(8)}… (expired/purged)",
                         regionName = order?.let { StaticDataDao.getRegionById(it.regionId)?.name },
                         price = order?.price,
                         sellerLabel = sellerCharacterName ?: "${reservation.sellerPubkey.take(12)}…",
                         sellerCharacterName = sellerCharacterName,
+                        sellerCharacterId = order?.traderCharId,
                     )
                 }
             }
@@ -116,12 +125,21 @@ fun MyRequestsScreen() {
             HorizontalDivider()
             LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 items(displayedRequests, key = { it.reservation.tradeId }) { row ->
-                    RequestTableRow(row, onMarkCompleted = {
-                        scope.launch(Dispatchers.IO) {
-                            ReservationService.markCompleted(row.reservation)
-                            reload()
-                        }
-                    })
+                    RequestTableRow(
+                        row,
+                        onMarkCompleted = {
+                            scope.launch(Dispatchers.IO) {
+                                ReservationService.markCompleted(row.reservation)
+                                reload()
+                            }
+                        },
+                        onCancel = {
+                            scope.launch(Dispatchers.IO) {
+                                ReservationService.cancel(row.reservation)
+                                reload()
+                            }
+                        },
+                    )
                 }
             }
         }
@@ -143,7 +161,7 @@ private fun MyRequestsTableHeader(
         Text("Region", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(130.dp))
         SortHeaderCell(
             "Price",
-            Modifier.width(110.dp),
+            Modifier.width(130.dp),
             active = sortColumn == MyRequestsSortColumn.PRICE,
             direction = sortDirection,
         ) { onSort(MyRequestsSortColumn.PRICE, SortDirection.DESC) }
@@ -157,7 +175,7 @@ private fun MyRequestsTableHeader(
         Text("Status", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(150.dp))
         SortHeaderCell(
             "Requested",
-            Modifier.width(90.dp),
+            Modifier.width(110.dp),
             active = sortColumn == MyRequestsSortColumn.REQUESTED,
             direction = sortDirection,
         ) { onSort(MyRequestsSortColumn.REQUESTED, SortDirection.DESC) }
@@ -169,6 +187,7 @@ private fun MyRequestsTableHeader(
 private fun RequestTableRow(
     row: RequestRowData,
     onMarkCompleted: () -> Unit,
+    onCancel: () -> Unit,
 ) {
     val reservation = row.reservation
     val nowSec = System.currentTimeMillis() / 1000
@@ -181,10 +200,9 @@ private fun RequestTableRow(
             reservation.status == "declined" -> "Declined"
             reservation.status == "completed" -> "Completed"
             reservation.status == "released" -> "Released by seller"
+            reservation.status == "cancelled" -> "Cancelled"
             else -> reservation.status
         }
-    val hoursAgo = ((nowSec - reservation.requestedAt) / 3600).coerceAtLeast(0)
-
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -221,7 +239,9 @@ private fun RequestTableRow(
         Text(
             row.price?.let { String.format(Locale.US, "%,.2f", it) } ?: "—",
             style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.width(110.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.width(130.dp),
         )
         Text("${reservation.qty}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(70.dp))
         Row(modifier = Modifier.width(160.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -232,7 +252,7 @@ private fun RequestTableRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            row.sellerCharacterName?.let { TraderInfoButton(it) }
+            row.sellerCharacterName?.let { TraderInfoButton(it, row.sellerCharacterId) }
         }
         Text(
             statusLabel,
@@ -240,10 +260,19 @@ private fun RequestTableRow(
             color = if (reservation.status == "declined") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.width(150.dp),
         )
-        Text("${hoursAgo}h ago", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(90.dp))
+        Text(
+            "${formatDurationShort(nowSec - reservation.requestedAt)} ago",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.width(110.dp),
+        )
         Box(modifier = Modifier.width(150.dp)) {
             if (reservation.status == "accepted") {
                 OutlinedButton(onClick = onMarkCompleted) { Text("Mark completed") }
+            } else if (reservation.status == "sent") {
+                OutlinedButton(onClick = onCancel) { Text("Cancel request") }
             }
         }
     }

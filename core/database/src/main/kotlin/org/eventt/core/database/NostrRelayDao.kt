@@ -101,4 +101,25 @@ object NostrRelayDao {
             }
         }
     }
+
+    /**
+     * [url] is the primary key, so any row whose stored form doesn't match how relay clients
+     * normalize URLs (e.g. missing trailing slash) becomes permanently invisible to
+     * [updateStatus]'s `WHERE url = ?` — the connection status update just silently no-ops. `OR
+     * IGNORE` skips the rename if [newUrl] already exists as its own row (both forms present),
+     * rather than throwing on the primary-key conflict.
+     */
+    fun renameUrl(
+        oldUrl: String,
+        newUrl: String,
+    ) {
+        if (oldUrl == newUrl) return
+        DatabaseManager.transaction {
+            prepareStatement("UPDATE OR IGNORE nostr_relays SET url = ? WHERE url = ?").use { stmt ->
+                stmt.setString(1, newUrl)
+                stmt.setString(2, oldUrl)
+                stmt.executeUpdate()
+            }
+        }
+    }
 }

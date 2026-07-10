@@ -4,15 +4,18 @@ import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
+import com.vitorpamplona.quartz.nip01Core.signers.EventTemplate
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSigner
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerInternal
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
 import com.vitorpamplona.quartz.nip01Core.tags.people.PTag
+import com.vitorpamplona.quartz.nip13Pow.miner.PoWMiner
 import com.vitorpamplona.quartz.nip17Dm.NIP17Factory
 import com.vitorpamplona.quartz.nip17Dm.messages.ChatMessageEvent
 import com.vitorpamplona.quartz.nip19Bech32.Nip19Parser
 import com.vitorpamplona.quartz.nip19Bech32.entities.NSec
 import com.vitorpamplona.quartz.nip19Bech32.toNsec
+import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealedRumorEvent
 import com.vitorpamplona.quartz.nip59Giftwrap.wraps.GiftWrapEvent
 
 /**
@@ -30,7 +33,11 @@ object QuartzGateway {
             val trimmed = nsecOrHex.trim()
             val privKeyHex =
                 if (trimmed.startsWith("nsec1")) {
-                    Nip19Parser.parseAll(trimmed).filterIsInstance<NSec>().first().hex
+                    Nip19Parser
+                        .parseAll(trimmed)
+                        .filterIsInstance<NSec>()
+                        .first()
+                        .hex
                 } else {
                     trimmed
                 }
@@ -46,13 +53,28 @@ object QuartzGateway {
 
     fun signerFor(keyPair: KeyPair): NostrSignerSync = NostrSignerSync(keyPair)
 
+    /**
+     * [powDifficulty] > 0 mines a NIP-13 nonce tag (leading zero bits of the resulting event id)
+     * before signing — makes the published event costlier to reject-and-retry-spam, and keeps us
+     * publishable on relays that enforce a minimum-PoW acceptance policy. 0 (the default) skips
+     * mining entirely; only order events opt into it, so DMs/receipts aren't slowed down.
+     */
     fun signEvent(
         signer: NostrSignerSync,
         createdAt: Long,
         kind: Int,
         tags: Array<Array<String>>,
         content: String,
-    ): Event = signer.sign(createdAt, kind, tags, content)
+        powDifficulty: Int = 0,
+    ): Event {
+        val minedTags =
+            if (powDifficulty > 0) {
+                PoWMiner.run(EventTemplate<Event>(createdAt, kind, tags, content), signer.pubKey, powDifficulty).tags
+            } else {
+                tags
+            }
+        return signer.sign(createdAt, kind, minedTags, content)
+    }
 
     /** The suspend-capable signer NIP17Factory needs — wraps the same keypair as [signerFor]. */
     fun asyncSignerFor(keyPair: KeyPair): NostrSigner = NostrSignerInternal(keyPair)
@@ -78,9 +100,17 @@ object QuartzGateway {
     /** The gift wrap's own (unencrypted) recipient tag — used to route without decrypting anything. */
     fun giftWrapRecipient(event: Event): String? = (event as? GiftWrapEvent)?.recipientPubKey()
 
-    /** Decrypts+unseals a gift wrap addressed to [signer]'s identity. Null on any failure (not ours, or malformed). */
+    /**
+     * Decrypts+unseals a gift wrap addressed to [signer]'s identity. NIP-59 is two layers:
+     * unwrapping the gift wrap (kind 1059) only yields the "seal" (kind 13), whose own [content]
+     * is still NIP-44 ciphertext — it must be unsealed in turn to reach the plaintext rumor.
+     * Null on any failure at either layer (not ours, or malformed).
+     */
     suspend fun unwrapGiftWrap(
         event: Event,
         signer: NostrSigner,
-    ): Event? = (event as? GiftWrapEvent)?.unwrapOrNull(signer)
+    ): Event? {
+        val seal = (event as? GiftWrapEvent)?.unwrapOrNull(signer) as? SealedRumorEvent ?: return null
+        return seal.unsealOrNull(signer)
+    }
 }

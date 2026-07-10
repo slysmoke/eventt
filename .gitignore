@@ -63,3 +63,6 @@ fabric.properties
 
 # Compose
 compose_resources/
+
+# P2P Market test instance data (scripts/run-p2p-test.sh)
+.p2p-test-data/

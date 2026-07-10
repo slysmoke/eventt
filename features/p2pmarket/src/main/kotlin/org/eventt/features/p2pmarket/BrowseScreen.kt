@@ -171,7 +171,7 @@ private fun BrowseTableHeader(
         Text("Region", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(130.dp))
         SortHeaderCell(
             "Price",
-            Modifier.width(110.dp),
+            Modifier.width(130.dp),
             active = sortColumn == BrowseSortColumn.PRICE,
             direction = sortDirection,
         ) { onSort(BrowseSortColumn.PRICE, SortDirection.DESC) }
@@ -190,7 +190,7 @@ private fun BrowseTableHeader(
         Text("Trader", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(160.dp))
         SortHeaderCell(
             "Expires",
-            Modifier.width(90.dp),
+            Modifier.width(110.dp),
             active = sortColumn == BrowseSortColumn.EXPIRY,
             direction = sortDirection,
         ) { onSort(BrowseSortColumn.EXPIRY, SortDirection.ASC) }
@@ -233,7 +233,13 @@ private fun BrowseTableRow(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.width(130.dp),
         )
-        Text(String.format(Locale.US, "%,.2f", order.price), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(110.dp))
+        Text(
+            String.format(Locale.US, "%,.2f", order.price),
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.width(130.dp),
+        )
         Text("${order.qtyRemaining}/${order.qtyTotal}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(80.dp))
         Box(modifier = Modifier.width(100.dp)) {
             row.savings?.let { s ->
@@ -254,7 +260,7 @@ private fun BrowseTableRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
-                if (order.traderChar.isNotBlank()) TraderInfoButton(order.traderChar)
+                if (order.traderChar.isNotBlank()) TraderInfoButton(order.traderChar, order.traderCharId)
             }
             if (row.confirmedTrades > 0) {
                 Text(
@@ -264,10 +270,15 @@ private fun BrowseTableRow(
                 )
             }
         }
-        Box(modifier = Modifier.width(90.dp)) {
+        Box(modifier = Modifier.width(110.dp)) {
             val remainingSeconds = order.expiration - System.currentTimeMillis() / 1000
-            val daysLeft = (remainingSeconds / (24 * 3600)).coerceAtLeast(0)
-            Text("${daysLeft}d left", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "${formatDurationShort(remainingSeconds)} left",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
         Box(modifier = Modifier.width(90.dp)) {
             if (!isOwnOrder) {
@@ -327,6 +338,11 @@ private fun RequestReservationDialog(
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(value = qtyText, onValueChange = { qtyText = it }, label = { Text("Quantity") }, singleLine = true)
+                Text(
+                    "Total: ${qty?.let { String.format(Locale.US, "%,.2f", it * order.price) } ?: "—"} ISK",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Note (optional)") }, singleLine = true)
                 error?.let {

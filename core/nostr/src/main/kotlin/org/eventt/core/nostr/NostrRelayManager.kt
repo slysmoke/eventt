@@ -23,12 +23,20 @@ import okhttp3.OkHttpClient
 import org.eventt.core.database.NostrOrderDao
 import org.eventt.core.database.NostrOrderModel
 import org.eventt.core.database.NostrRelayDao
+import org.eventt.core.database.NostrReservationModel
 import java.util.concurrent.TimeUnit
 
 sealed class NostrRelayEvent {
-    data class OrderUpdated(val order: ParsedOrder) : NostrRelayEvent()
+    data class OrderUpdated(
+        val order: ParsedOrder,
+    ) : NostrRelayEvent()
 
     data object ReservationActivity : NostrRelayEvent()
+
+    /** A brand-new incoming buy request landed (not a duplicate re-delivery) — drives the notification banner. */
+    data class IncomingBuyRequest(
+        val reservation: NostrReservationModel,
+    ) : NostrRelayEvent()
 
     data object RelayStatusChanged : NostrRelayEvent()
 }
@@ -40,11 +48,12 @@ private const val GIFT_WRAP_KIND = 1059
 
 private val DEFAULT_RELAYS =
     listOf(
-        "wss://relay.damus.io",
         "wss://nos.lol",
-        "wss://relay.nostr.band",
         "wss://nostr.wine",
         "wss://relay.primal.net",
+        "wss://relay.snort.social",
+        "wss://relay.nostr.info",
+        "wss://relay.wellorder.net",
     )
 
 /**
@@ -63,131 +72,194 @@ object NostrRelayManager {
 
     fun start() {
         if (scope != null) return
+        connect()
+    }
+
+    /**
+     * The DM/order/receipt subscriptions below are all keyed to the pubkey that was active when
+     * they were opened — switching the active P2P Market identity in Settings doesn't change
+     * which pubkey the running subscriptions listen for, so incoming DMs addressed to the newly
+     * active character would otherwise be silently missed until the app restarts. Call this after
+     * [NostrIdentityService.switchActive] to tear down and reconnect under the new identity.
+     */
+    fun restart() {
+        log("restart() called")
+        stop()
+        connect()
+    }
+
+    private fun connect() {
         val s = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         scope = s
         s.launch {
-            NostrRelayDao.seedDefaultsIfEmpty(DEFAULT_RELAYS)
+            try {
+                log("connect() starting")
+                NostrRelayDao.seedDefaultsIfEmpty(DEFAULT_RELAYS)
+                log("relay defaults seeded")
+                normalizeStoredRelayUrls()
+                log("relay urls normalized")
 
-            // No identity yet (first run, nothing generated/imported) — nothing useful to connect
-            // for until Settings creates one; NostrIdentityService itself doesn't require a
-            // running relay connection, so this is a clean early-out, not a broken dependency.
-            val identity = NostrIdentityService.getActiveIdentity() ?: return@launch
-            val myPubkey = identity.pubkey
+                // No identity yet (first run, nothing generated/imported) — nothing useful to connect
+                // for until Settings creates one; NostrIdentityService itself doesn't require a
+                // running relay connection, so this is a clean early-out, not a broken dependency.
+                val identity = NostrIdentityService.getActiveIdentity()
+                log("active identity = ${identity?.pubkey}")
+                if (identity == null) return@launch
+                val myPubkey = identity.pubkey
 
-            val httpClient =
-                OkHttpClient.Builder()
-                    .callTimeout(0, TimeUnit.MILLISECONDS)
-                    .pingInterval(25, TimeUnit.SECONDS)
-                    .build()
-            val websocketBuilder: WebsocketBuilder = BasicOkHttpWebSocket.Builder { httpClient }
-            val c = NostrClient(websocketBuilder, s)
-            client = c
-            c.addConnectionListener(
-                object : RelayConnectionListener {
-                    override fun onConnected(
-                        relay: IRelayClient,
-                        subs: Int,
-                        needsAuth: Boolean,
-                    ) {
-                        NostrRelayDao.updateStatus(relay.url.url, "connected", null)
-                        _events.tryEmit(NostrRelayEvent.RelayStatusChanged)
-                    }
+                val httpClient =
+                    OkHttpClient
+                        .Builder()
+                        .callTimeout(0, TimeUnit.MILLISECONDS)
+                        .pingInterval(25, TimeUnit.SECONDS)
+                        .build()
+                val websocketBuilder: WebsocketBuilder = BasicOkHttpWebSocket.Builder { httpClient }
+                val c = NostrClient(websocketBuilder, s)
+                client = c
+                c.addConnectionListener(
+                    object : RelayConnectionListener {
+                        override fun onConnected(
+                            relay: IRelayClient,
+                            pingMillis: Int,
+                            compressed: Boolean,
+                        ) {
+                            log("onConnected ${relay.url.url}")
+                            NostrRelayDao.updateStatus(relay.url.url, "connected", null)
+                            _events.tryEmit(NostrRelayEvent.RelayStatusChanged)
+                        }
 
-                    override fun onDisconnected(relay: IRelayClient) {
-                        NostrRelayDao.updateStatus(relay.url.url, "disconnected", null)
-                        _events.tryEmit(NostrRelayEvent.RelayStatusChanged)
-                    }
+                        override fun onDisconnected(relay: IRelayClient) {
+                            log("onDisconnected ${relay.url.url}")
+                            NostrRelayDao.updateStatus(relay.url.url, "disconnected", null)
+                            _events.tryEmit(NostrRelayEvent.RelayStatusChanged)
+                        }
 
-                    override fun onCannotConnect(
-                        relay: IRelayClient,
-                        reason: String,
-                    ) {
-                        NostrRelayDao.updateStatus(relay.url.url, "error", reason)
-                        _events.tryEmit(NostrRelayEvent.RelayStatusChanged)
-                    }
-                },
-            )
-            c.connect()
+                        override fun onCannotConnect(
+                            relay: IRelayClient,
+                            errorMessage: String,
+                        ) {
+                            log("onCannotConnect ${relay.url.url} reason=$errorMessage")
+                            NostrRelayDao.updateStatus(relay.url.url, "error", errorMessage)
+                            _events.tryEmit(NostrRelayEvent.RelayStatusChanged)
+                        }
+                    },
+                )
+                log("calling c.connect()")
+                c.connect()
+                log("c.connect() returned")
 
-            val relayUrls = NostrRelayDao.getAll().filter { it.enabled }.mapNotNull { it.url.normalizeRelayUrlOrNull() }
-            if (relayUrls.isEmpty()) return@launch
+                val relayUrls = NostrRelayDao.getAll().filter { it.enabled }.mapNotNull { it.url.normalizeRelayUrlOrNull() }
+                log("relayUrls = $relayUrls")
+                if (relayUrls.isEmpty()) return@launch
 
-            val filter = Filter(null, null, listOf(ORDER_KIND), mapOf("t" to listOf("eve-otc")), null, null, null, null, null)
-            c.subscribe(
-                ORDERS_SUBSCRIPTION_ID,
-                relayUrls.associateWith { listOf(filter) },
-                object : SubscriptionListener {
-                    override fun onEvent(
-                        event: Event,
-                        isLive: Boolean,
-                        relay: NormalizedRelayUrl,
-                        forFilters: List<Filter>?,
-                    ) {
-                        val parsed = NostrEventFactory.parseOrderEvent(event) ?: return
-                        val isNewer =
-                            NostrOrderDao.upsertIfNewer(
-                                NostrOrderModel(
-                                    orderUuid = parsed.orderUuid,
-                                    pubkey = parsed.pubkey,
-                                    eventId = parsed.eventId,
-                                    createdAt = parsed.createdAt,
-                                    side = parsed.side.name.lowercase(),
-                                    typeId = parsed.typeId,
-                                    regionId = parsed.regionId,
-                                    price = parsed.price,
-                                    qtyTotal = parsed.qtyTotal,
-                                    qtyRemaining = parsed.qtyRemaining,
-                                    minLot = parsed.minLot,
-                                    minLotUnit = parsed.minLotUnit.name.lowercase(),
-                                    traderChar = parsed.traderChar,
-                                    expiration = parsed.expiration,
-                                    rawEventJson = event.toJson(),
-                                    isMine = parsed.pubkey == myPubkey,
-                                ),
-                            )
-                        if (isNewer) _events.tryEmit(NostrRelayEvent.OrderUpdated(parsed))
-                    }
-                },
-            )
+                val filter = Filter(null, null, listOf(ORDER_KIND), mapOf("t" to listOf("eve-otc")), null, null, null, null, null)
+                c.subscribe(
+                    ORDERS_SUBSCRIPTION_ID,
+                    relayUrls.associateWith { listOf(filter) },
+                    object : SubscriptionListener {
+                        override fun onEvent(
+                            event: Event,
+                            isLive: Boolean,
+                            relay: NormalizedRelayUrl,
+                            forFilters: List<Filter>?,
+                        ) {
+                            val parsed = NostrEventFactory.parseOrderEvent(event) ?: return
+                            val isNewer =
+                                NostrOrderDao.upsertIfNewer(
+                                    NostrOrderModel(
+                                        orderUuid = parsed.orderUuid,
+                                        pubkey = parsed.pubkey,
+                                        eventId = parsed.eventId,
+                                        createdAt = parsed.createdAt,
+                                        side = parsed.side.name.lowercase(),
+                                        typeId = parsed.typeId,
+                                        regionId = parsed.regionId,
+                                        price = parsed.price,
+                                        qtyTotal = parsed.qtyTotal,
+                                        qtyRemaining = parsed.qtyRemaining,
+                                        minLot = parsed.minLot,
+                                        minLotUnit = parsed.minLotUnit.name.lowercase(),
+                                        traderChar = parsed.traderChar,
+                                        traderCharId = parsed.traderCharId,
+                                        expiration = parsed.expiration,
+                                        rawEventJson = event.toJson(),
+                                        isMine = parsed.pubkey == myPubkey,
+                                    ),
+                                )
+                            if (isNewer) _events.tryEmit(NostrRelayEvent.OrderUpdated(parsed))
+                        }
+                    },
+                )
 
-            val dmFilter = Filter(null, null, listOf(GIFT_WRAP_KIND), mapOf("p" to listOf(myPubkey)), null, null, null, null, null)
-            c.subscribe(
-                DMS_SUBSCRIPTION_ID,
-                relayUrls.associateWith { listOf(dmFilter) },
-                object : SubscriptionListener {
-                    override fun onEvent(
-                        event: Event,
-                        isLive: Boolean,
-                        relay: NormalizedRelayUrl,
-                        forFilters: List<Filter>?,
-                    ) {
-                        // unwrapGiftWrap/handleIncomingDm are both suspend — this callback isn't,
-                        // so hop onto the manager's own scope rather than blocking the relay client.
-                        s.launch {
-                            val unwrapped = QuartzGateway.unwrapGiftWrap(event, QuartzGateway.asyncSignerFor(identity.keyPair)) ?: return@launch
-                            ReservationService.handleIncomingDm(unwrapped.pubKey, unwrapped.content)
+                val dmFilter = Filter(null, null, listOf(GIFT_WRAP_KIND), mapOf("p" to listOf(myPubkey)), null, null, null, null, null)
+                log("subscribing DMs for p=$myPubkey")
+                c.subscribe(
+                    DMS_SUBSCRIPTION_ID,
+                    relayUrls.associateWith { listOf(dmFilter) },
+                    object : SubscriptionListener {
+                        override fun onEvent(
+                            event: Event,
+                            isLive: Boolean,
+                            relay: NormalizedRelayUrl,
+                            forFilters: List<Filter>?,
+                        ) {
+                            log("DM onEvent id=${event.id} from relay=${relay.url} isLive=$isLive")
+                            // unwrapGiftWrap/handleIncomingDm are both suspend — this callback isn't,
+                            // so hop onto the manager's own scope rather than blocking the relay client.
+                            s.launch {
+                                val unwrapped = QuartzGateway.unwrapGiftWrap(event, QuartzGateway.asyncSignerFor(identity.keyPair))
+                                if (unwrapped == null) {
+                                    log("DM unwrap FAILED (not ours or malformed) for event ${event.id}")
+                                    return@launch
+                                }
+                                log("DM unwrapped from=${unwrapped.pubKey} content=${unwrapped.content.take(120)}")
+                                val newRequest = ReservationService.handleIncomingDm(unwrapped.pubKey, unwrapped.content)
+                                _events.tryEmit(NostrRelayEvent.ReservationActivity)
+                                if (newRequest != null) _events.tryEmit(NostrRelayEvent.IncomingBuyRequest(newRequest))
+                            }
+                        }
+                    },
+                )
+
+                val receiptFilter = Filter(null, null, listOf(RECEIPT_KIND), mapOf("p" to listOf(myPubkey)), null, null, null, null, null)
+                c.subscribe(
+                    RECEIPTS_SUBSCRIPTION_ID,
+                    relayUrls.associateWith { listOf(receiptFilter) },
+                    object : SubscriptionListener {
+                        override fun onEvent(
+                            event: Event,
+                            isLive: Boolean,
+                            relay: NormalizedRelayUrl,
+                            forFilters: List<Filter>?,
+                        ) {
+                            ReceiptService.handleIncomingReceipt(event)
                             _events.tryEmit(NostrRelayEvent.ReservationActivity)
                         }
-                    }
-                },
-            )
+                    },
+                )
+                log("all subscriptions set up")
+            } catch (e: Throwable) {
+                log("EXCEPTION during connect(): ${e::class.simpleName}: ${e.message}")
+                e.printStackTrace()
+            }
+        }
+    }
 
-            val receiptFilter = Filter(null, null, listOf(RECEIPT_KIND), mapOf("p" to listOf(myPubkey)), null, null, null, null, null)
-            c.subscribe(
-                RECEIPTS_SUBSCRIPTION_ID,
-                relayUrls.associateWith { listOf(receiptFilter) },
-                object : SubscriptionListener {
-                    override fun onEvent(
-                        event: Event,
-                        isLive: Boolean,
-                        relay: NormalizedRelayUrl,
-                        forFilters: List<Filter>?,
-                    ) {
-                        ReceiptService.handleIncomingReceipt(event)
-                        _events.tryEmit(NostrRelayEvent.ReservationActivity)
-                    }
-                },
-            )
+    // TEMP diagnostic — remove once the "relays stuck on Not yet connected" bug is found.
+    private fun log(msg: String) = println("[NostrRelay] $msg")
+
+    /** Normalized form of [url] (e.g. adds the trailing slash relay clients expect) — use this before [NostrRelayDao.upsert] so newly added relays don't hit the same stuck-status bug as [normalizeStoredRelayUrls] repairs for existing ones. */
+    fun normalizeUrl(url: String): String = url.normalizeRelayUrlOrNull()?.url ?: url
+
+    /**
+     * One-time repair for rows seeded/added before URLs were stored in normalized form — those
+     * rows' primary key never matches the normalized URL [updateStatus] is called with, so their
+     * connection status silently never updates (see [NostrRelayDao.renameUrl]).
+     */
+    private fun normalizeStoredRelayUrls() {
+        NostrRelayDao.getAll().forEach { relay ->
+            val normalized = normalizeUrl(relay.url)
+            if (normalized != relay.url) NostrRelayDao.renameUrl(relay.url, normalized)
         }
     }
 

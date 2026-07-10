@@ -135,7 +135,7 @@ fun WalletScreen(context: ViewContext?) {
         Spacer(modifier = Modifier.height(8.dp))
 
         // Tabs
-        TabRow(selectedTabIndex = activeTab) {
+        PrimaryTabRow(selectedTabIndex = activeTab) {
             Tab(selected = activeTab == 0, onClick = { activeTab = 0 }, text = { Text("Transactions") })
             Tab(selected = activeTab == 1, onClick = { activeTab = 1 }, text = { Text("Journal") })
             Tab(selected = activeTab == 2, onClick = { activeTab = 2 }, text = { Text("P&L") })
@@ -783,7 +783,7 @@ private suspend fun loadWalletData(
         try {
             val walletBalance =
                 if (isCorp) {
-                    EsiClient.getCorporationWallet(corporationId!!, actingCharId).values.sum()
+                    EsiClient.getCorporationWallet(corporationId, actingCharId).values.sum()
                 } else {
                     EsiClient.getCharacterWallet(characterId!!)
                 }
@@ -794,7 +794,7 @@ private suspend fun loadWalletData(
 
         try {
             val journalEntries =
-                if (isCorp) EsiClient.getCorporationJournal(corporationId!!, actingCharId) else EsiClient.getCharacterJournal(characterId!!)
+                if (isCorp) EsiClient.getCorporationJournal(corporationId, actingCharId) else EsiClient.getCharacterJournal(characterId!!)
             journalEntries.forEach { entry ->
                 try {
                     WalletDao.insertJournalEntry(
@@ -826,7 +826,7 @@ private suspend fun loadWalletData(
         try {
             val txList =
                 if (isCorp) {
-                    EsiClient.getCorporationTransactions(corporationId!!, actingCharId)
+                    EsiClient.getCorporationTransactions(corporationId, actingCharId)
                 } else {
                     EsiClient.getCharacterTransactions(characterId!!)
                 }

@@ -10,16 +10,24 @@ data class NostrReservationModel(
     val qty: Long,
     val note: String,
     val buyerChar: String,
+    val buyerCharacterId: Int?,
     val status: String,
     val reservedQty: Long?,
     val holdUntil: Long?,
     val contactChar: String,
+    val contactCharacterId: Int?,
     val requestedAt: Long,
     val respondedAt: Long?,
 )
 
 object NostrReservationDao {
-    /** No-op if [tradeId] already exists — relays/DM re-delivery must not clobber a response that already landed. */
+    /**
+     * No-op if [tradeId] already exists — relays/DM re-delivery must not clobber a response that
+     * already landed (and the same gift-wrapped request routinely arrives twice, once per relay
+     * that carried it). Returns true only when this call actually inserted the row, so callers
+     * (e.g. the incoming-request notification) can tell a genuinely new request apart from a
+     * duplicate re-delivery of one already seen.
+     */
     fun insertRequestIfAbsent(
         tradeId: String,
         orderUuid: String,
@@ -30,14 +38,15 @@ object NostrReservationDao {
         qty: Long,
         note: String,
         buyerChar: String,
+        buyerCharacterId: Int?,
         requestedAt: Long,
-    ) {
+    ): Boolean =
         DatabaseManager.transaction {
             prepareStatement(
                 """
                 INSERT OR IGNORE INTO nostr_reservations
-                (trade_id, order_uuid, order_pubkey, buyer_pubkey, seller_pubkey, role, qty, note, buyer_char, requested_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (trade_id, order_uuid, order_pubkey, buyer_pubkey, seller_pubkey, role, qty, note, buyer_char, buyer_char_id, requested_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent(),
             ).use { stmt ->
                 stmt.setString(1, tradeId)
@@ -49,33 +58,43 @@ object NostrReservationDao {
                 stmt.setLong(7, qty)
                 stmt.setString(8, note)
                 stmt.setString(9, buyerChar)
-                stmt.setLong(10, requestedAt)
-                stmt.executeUpdate()
+                buyerCharacterId?.let { stmt.setInt(10, it) } ?: stmt.setNull(10, java.sql.Types.INTEGER)
+                stmt.setLong(11, requestedAt)
+                stmt.executeUpdate() > 0
             }
         }
-    }
 
+    /**
+     * Only applies while the reservation is still awaiting a response (`status = 'sent'`) — gift
+     * -wrapped DMs get replayed as relay backlog on every reconnect (seen firsthand: dozens of
+     * historical DMs redelivered on startup), and without this guard a replayed "accepted"/
+     * "declined" response would unconditionally stomp a status the buyer has since moved past
+     * (e.g. reverting "completed" back to "accepted" on every restart).
+     */
     fun updateResponse(
         tradeId: String,
         accepted: Boolean,
         reservedQty: Long?,
         holdUntil: Long?,
         contactChar: String,
+        contactCharacterId: Int?,
         respondedAt: Long,
     ) {
         DatabaseManager.transaction {
             prepareStatement(
                 """
-                UPDATE nostr_reservations SET status = ?, reserved_qty = ?, hold_until = ?, contact_char = ?, responded_at = ?
-                WHERE trade_id = ?
+                UPDATE nostr_reservations
+                SET status = ?, reserved_qty = ?, hold_until = ?, contact_char = ?, contact_char_id = ?, responded_at = ?
+                WHERE trade_id = ? AND status = 'sent'
                 """.trimIndent(),
             ).use { stmt ->
                 stmt.setString(1, if (accepted) "accepted" else "declined")
                 reservedQty?.let { stmt.setLong(2, it) } ?: stmt.setNull(2, java.sql.Types.INTEGER)
                 holdUntil?.let { stmt.setLong(3, it) } ?: stmt.setNull(3, java.sql.Types.INTEGER)
                 stmt.setString(4, contactChar)
-                stmt.setLong(5, respondedAt)
-                stmt.setString(6, tradeId)
+                contactCharacterId?.let { stmt.setInt(5, it) } ?: stmt.setNull(5, java.sql.Types.INTEGER)
+                stmt.setLong(6, respondedAt)
+                stmt.setString(7, tradeId)
                 stmt.executeUpdate()
             }
         }
@@ -111,7 +130,9 @@ object NostrReservationDao {
                 if (statuses.isNullOrEmpty()) {
                     "SELECT * FROM nostr_reservations WHERE role = ? ORDER BY requested_at DESC"
                 } else {
-                    "SELECT * FROM nostr_reservations WHERE role = ? AND status IN (${statuses.joinToString(",") { "?" }}) ORDER BY requested_at DESC"
+                    "SELECT * FROM nostr_reservations WHERE role = ? AND status IN (${statuses.joinToString(
+                        ",",
+                    ) { "?" }}) ORDER BY requested_at DESC"
                 }
             prepareStatement(sql).use { stmt ->
                 stmt.setString(1, role)
@@ -135,10 +156,12 @@ object NostrReservationDao {
             qty = getLong("qty"),
             note = getString("note") ?: "",
             buyerChar = getString("buyer_char") ?: "",
+            buyerCharacterId = getInt("buyer_char_id").takeIf { !wasNull() },
             status = getString("status"),
             reservedQty = getLong("reserved_qty").takeIf { !wasNull() },
             holdUntil = getLong("hold_until").takeIf { !wasNull() },
             contactChar = getString("contact_char") ?: "",
+            contactCharacterId = getInt("contact_char_id").takeIf { !wasNull() },
             requestedAt = getLong("requested_at"),
             respondedAt = getLong("responded_at").takeIf { !wasNull() },
         )

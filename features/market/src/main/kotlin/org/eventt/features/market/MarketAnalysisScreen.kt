@@ -319,7 +319,7 @@ fun MarketAnalysisScreen() {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        TabRow(selectedTabIndex = selectedTab) {
+        PrimaryTabRow(selectedTabIndex = selectedTab) {
             Tab(
                 selected = selectedTab == 0,
                 onClick = { selectedTab = 0 },
@@ -1004,7 +1004,13 @@ private fun InterRegionTab(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                RegionPicker(allRegions, buyRegionId, width = 158.dp, label = "Buy Region", accentColor = MaterialTheme.colorScheme.primary) {
+                RegionPicker(
+                    allRegions,
+                    buyRegionId,
+                    width = 158.dp,
+                    label = "Buy Region",
+                    accentColor = MaterialTheme.colorScheme.primary,
+                ) {
                     buyRegionId = it
                     scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_BUY_REGION, it.toString()) } }
                 }

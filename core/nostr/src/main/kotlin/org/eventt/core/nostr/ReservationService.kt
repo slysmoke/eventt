@@ -25,6 +25,9 @@ data class ReservationRequest(
     val qty: Long,
     val note: String = "",
     @SerialName("buyer_char") val buyerChar: String = "",
+    // The buyer's real EVE character ID, when known — see OrderDraft.traderCharId for why this
+    // travels over Nostr instead of being resolved from the name on the viewing side.
+    @SerialName("buyer_char_id") val buyerCharId: Int? = null,
 )
 
 @Serializable
@@ -35,6 +38,13 @@ data class ReservationResponse(
     @SerialName("reserved_qty") val reservedQty: Long? = null,
     @SerialName("hold_until") val holdUntil: Long? = null,
     @SerialName("contact_char") val contactChar: String = "",
+    @SerialName("contact_char_id") val contactCharId: Int? = null,
+)
+
+@Serializable
+data class ReservationCancel(
+    val type: String = "reservation_cancel",
+    @SerialName("trade_id") val tradeId: String,
 )
 
 /**
@@ -45,7 +55,14 @@ data class ReservationResponse(
  * request/response has been seen once, the DB is the source of truth, not the relay.
  */
 object ReservationService {
-    private val json = Json { ignoreUnknownKeys = true }
+    // encodeDefaults=true is required — every payload's "type" field relies on its default value
+    // for the discriminator sent over the wire, and Json's own default (encodeDefaults=false)
+    // drops fields equal to their default, silently stripping "type" from every message.
+    private val json =
+        Json {
+            ignoreUnknownKeys = true
+            encodeDefaults = true
+        }
 
     /** Null if there's no active identity to send from. */
     suspend fun sendRequest(
@@ -67,6 +84,7 @@ object ReservationService {
                 qty = qty,
                 note = note,
                 buyerChar = buyerChar,
+                buyerCharId = identity.characterId,
             )
         if (!sendDm(identity, order.pubkey, json.encodeToString(payload))) return null
 
@@ -81,6 +99,7 @@ object ReservationService {
                 qty = qty,
                 note = note,
                 buyerChar = buyerChar,
+                buyerCharacterId = identity.characterId,
                 requestedAt = System.currentTimeMillis() / 1000,
             )
         }
@@ -108,6 +127,7 @@ object ReservationService {
         val reservedQty = if (accept) reservation.qty else null
         val holdUntil = if (accept) nowSec + holdHours * 3600 else null
         val contactChar = if (accept) order.traderChar else ""
+        val contactCharId = if (accept) order.traderCharId else null
         val payload =
             ReservationResponse(
                 tradeId = reservation.tradeId,
@@ -115,11 +135,12 @@ object ReservationService {
                 reservedQty = reservedQty,
                 holdUntil = holdUntil,
                 contactChar = contactChar,
+                contactCharId = contactCharId,
             )
         if (!sendDm(identity, reservation.buyerPubkey, json.encodeToString(payload))) return false
 
         withContext(Dispatchers.IO) {
-            NostrReservationDao.updateResponse(reservation.tradeId, accept, reservedQty, holdUntil, contactChar, nowSec)
+            NostrReservationDao.updateResponse(reservation.tradeId, accept, reservedQty, holdUntil, contactChar, contactCharId, nowSec)
         }
         if (accept) {
             OrderRepository.setRemainingQty(order, (order.qtyRemaining - reservation.qty).coerceAtLeast(0))
@@ -136,6 +157,23 @@ object ReservationService {
     suspend fun markCompleted(reservation: NostrReservationModel): Boolean {
         if (!ReceiptService.publish(reservation)) return false
         withContext(Dispatchers.IO) { NostrReservationDao.updateStatus(reservation.tradeId, "completed") }
+        return true
+    }
+
+    /**
+     * Buyer withdraws a still-pending request before the seller has responded — notifies the
+     * seller so their copy drops out of Incoming requests too. Resolves the identity that
+     * actually sent the original request (not necessarily the currently active one) the same
+     * way [respond] resolves the seller's. Once accepted, qty is already held on the seller's
+     * order, so a buyer backing out past this point should go through [release] instead.
+     */
+    suspend fun cancel(reservation: NostrReservationModel): Boolean {
+        if (reservation.status != "sent") return false
+        val identity = NostrIdentityService.getIdentityByPubkey(reservation.buyerPubkey) ?: return false
+        val payload = ReservationCancel(tradeId = reservation.tradeId)
+        if (!sendDm(identity, reservation.sellerPubkey, json.encodeToString(payload))) return false
+
+        withContext(Dispatchers.IO) { NostrReservationDao.updateStatus(reservation.tradeId, "cancelled") }
         return true
     }
 
@@ -157,34 +195,50 @@ object ReservationService {
         return restored != null
     }
 
-    /** Called by [NostrRelayManager] for every DM it unwraps — routes it to the right local-DB update. */
+    /**
+     * Called by [NostrRelayManager] for every DM it unwraps — routes it to the right local-DB
+     * update. Returns the freshly-inserted reservation only for a genuinely new incoming buy
+     * request (not a duplicate re-delivery of one already seen, and not any other message type) —
+     * that's the one case [NostrRelayManager] turns into a notification, so it needs to tell a new
+     * request apart from the same gift wrap arriving twice via two different relays.
+     */
     suspend fun handleIncomingDm(
         fromPubkey: String,
         content: String,
-    ) {
+    ): NostrReservationModel? {
         val type =
-            runCatching { json.parseToJsonElement(content).jsonObject["type"]?.jsonPrimitive?.content }.getOrNull()
-                ?: return
+            runCatching {
+                json
+                    .parseToJsonElement(content)
+                    .jsonObject["type"]
+                    ?.jsonPrimitive
+                    ?.content
+            }.getOrNull()
+                ?: return null
         when (type) {
             "reservation_request" -> {
-                val req = runCatching { json.decodeFromString<ReservationRequest>(content) }.getOrNull() ?: return
-                withContext(Dispatchers.IO) {
-                    NostrReservationDao.insertRequestIfAbsent(
-                        tradeId = req.tradeId,
-                        orderUuid = req.orderId,
-                        orderPubkey = req.orderPubkey,
-                        buyerPubkey = fromPubkey,
-                        sellerPubkey = req.orderPubkey,
-                        role = "seller",
-                        qty = req.qty,
-                        note = req.note,
-                        buyerChar = req.buyerChar,
-                        requestedAt = System.currentTimeMillis() / 1000,
-                    )
-                }
+                val req = runCatching { json.decodeFromString<ReservationRequest>(content) }.getOrNull() ?: return null
+                val isNew =
+                    withContext(Dispatchers.IO) {
+                        NostrReservationDao.insertRequestIfAbsent(
+                            tradeId = req.tradeId,
+                            orderUuid = req.orderId,
+                            orderPubkey = req.orderPubkey,
+                            buyerPubkey = fromPubkey,
+                            sellerPubkey = req.orderPubkey,
+                            role = "seller",
+                            qty = req.qty,
+                            note = req.note,
+                            buyerChar = req.buyerChar,
+                            buyerCharacterId = req.buyerCharId,
+                            requestedAt = System.currentTimeMillis() / 1000,
+                        )
+                    }
+                if (!isNew) return null
+                return withContext(Dispatchers.IO) { NostrReservationDao.getByTradeId(req.tradeId) }
             }
             "reservation_response" -> {
-                val resp = runCatching { json.decodeFromString<ReservationResponse>(content) }.getOrNull() ?: return
+                val resp = runCatching { json.decodeFromString<ReservationResponse>(content) }.getOrNull() ?: return null
                 withContext(Dispatchers.IO) {
                     NostrReservationDao.updateResponse(
                         resp.tradeId,
@@ -192,11 +246,17 @@ object ReservationService {
                         resp.reservedQty,
                         resp.holdUntil,
                         resp.contactChar,
+                        resp.contactCharId,
                         System.currentTimeMillis() / 1000,
                     )
                 }
             }
+            "reservation_cancel" -> {
+                val cancel = runCatching { json.decodeFromString<ReservationCancel>(content) }.getOrNull() ?: return null
+                withContext(Dispatchers.IO) { NostrReservationDao.updateStatus(cancel.tradeId, "cancelled") }
+            }
         }
+        return null
     }
 
     private suspend fun sendDm(

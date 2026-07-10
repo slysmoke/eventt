@@ -1,26 +1,30 @@
 package org.eventt.features.p2pmarket
 
 import org.eventt.core.esi.EsiClient
-import java.awt.Desktop
-import java.net.URI
+import org.eventt.core.nostr.NostrIdentityService
 
 /**
- * Opens the EVE client's own "Show Info" window for a character by name, via the `showinfo:` URI
- * the game client registers as a protocol handler on the OS (same mechanism as clicking a showinfo
- * link on the EVE forums/wiki). Best-effort only — silently does nothing if the name doesn't
- * resolve to exactly one character or no handler is registered (e.g. the EVE client isn't
- * installed on this machine); this is a convenience shortcut, not a critical path.
+ * Opens the character info ("Show Info") window for a trader in the running EVE client, via ESI's
+ * `/ui/openwindow/information/` (the same "open this window in my running client" API
+ * [org.eventt.core.esi.EsiClient.openMarketWindow] already uses for market windows). There's no OS
+ * -level fallback — `showinfo:` links only resolve inside the EVE client's own browser/chat, never
+ * as a protocol handler an external app can invoke, so this only ever works while the acting
+ * character has a valid ESI token *and* is actually logged into a running client right now. Silently
+ * does nothing otherwise; this is a convenience shortcut, not a critical path.
  */
 object CharacterInfoLauncher {
-    fun openShowInfo(characterName: String) {
-        val characterId =
-            runCatching {
-                EsiClient.search(characterName, listOf("character"), strict = true)["character"]?.singleOrNull()
-            }.getOrNull() ?: return
-        runCatching {
-            if (Desktop.isDesktopSupported()) {
-                Desktop.getDesktop().browse(URI("showinfo:1377//$characterId"))
-            }
-        }
+    /**
+     * [knownCharacterId] is the trader's real EVE character ID when the order/reservation that
+     * carried it over Nostr included one — skips ESI name resolution entirely in that case. Falls
+     * back to resolving [characterName] via ESI when it's null (e.g. an order from another client
+     * that doesn't send an ID yet).
+     */
+    suspend fun openShowInfo(
+        characterName: String,
+        knownCharacterId: Int? = null,
+    ): Boolean {
+        val targetCharacterId = knownCharacterId ?: runCatching { EsiClient.resolveCharacterId(characterName) }.getOrNull() ?: return false
+        val actingCharacterId = NostrIdentityService.getActiveIdentity()?.characterId ?: return false
+        return runCatching { EsiClient.openCharacterInfoWindow(actingCharacterId, targetCharacterId) }.getOrDefault(false)
     }
 }

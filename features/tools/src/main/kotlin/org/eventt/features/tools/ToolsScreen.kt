@@ -1,8 +1,8 @@
 package org.eventt.features.tools
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -24,7 +24,7 @@ private enum class ToolsTab(
 fun ToolsScreen(context: ViewContext?) {
     var tab by remember { mutableStateOf(ToolsTab.SPLITTER) }
     Column {
-        TabRow(selectedTabIndex = tab.ordinal) {
+        PrimaryTabRow(selectedTabIndex = tab.ordinal) {
             ToolsTab.entries.forEach { t ->
                 Tab(selected = tab == t, onClick = { tab = t }, text = { Text(t.label) })
             }

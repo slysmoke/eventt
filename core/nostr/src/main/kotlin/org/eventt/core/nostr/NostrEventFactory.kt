@@ -14,6 +14,11 @@ const val ORDER_KIND = 30735
 
 private const val TWO_WEEKS_SECONDS = 14L * 24 * 3600
 
+// Leading zero bits required of the mined event id — cheap enough to stay near-instant
+// (order of tens of milliseconds) while still satisfying relays with a low minimum-PoW policy.
+// Temporarily 0 (disabled) — QuartzGateway.signEvent skips mining entirely at 0.
+private const val ORDER_POW_DIFFICULTY = 0
+
 enum class OrderSide { BUY, SELL }
 
 enum class MinLotUnit { UNITS, ISK }
@@ -27,6 +32,11 @@ data class OrderDraft(
     val minLot: Long,
     val minLotUnit: MinLotUnit,
     val traderChar: String,
+    // The trader's real EVE character ID, when the posting identity is backed by one — carried
+    // over Nostr alongside the display name so viewers' Show Info button can open the right
+    // character directly instead of re-resolving trader_char through ESI (which can't
+    // disambiguate two characters sharing a name, and needs a network round-trip at all).
+    val traderCharId: Int? = null,
 )
 
 data class ParsedOrder(
@@ -43,6 +53,7 @@ data class ParsedOrder(
     val minLot: Long,
     val minLotUnit: MinLotUnit,
     val traderChar: String,
+    val traderCharId: Int?,
     val expiration: Long,
 )
 
@@ -64,8 +75,22 @@ object NostrEventFactory {
             signer,
             createdAt,
             ORDER_KIND,
-            buildTags(orderUuid, draft.side, draft.typeId, draft.regionId, draft.price, draft.qtyTotal, draft.qtyTotal, draft.minLot, draft.minLotUnit, draft.traderChar, createdAt + TWO_WEEKS_SECONDS),
+            buildTags(
+                orderUuid,
+                draft.side,
+                draft.typeId,
+                draft.regionId,
+                draft.price,
+                draft.qtyTotal,
+                draft.qtyTotal,
+                draft.minLot,
+                draft.minLotUnit,
+                draft.traderChar,
+                draft.traderCharId,
+                createdAt + TWO_WEEKS_SECONDS,
+            ),
             "",
+            powDifficulty = ORDER_POW_DIFFICULTY,
         )
 
     /**
@@ -97,9 +122,11 @@ object NostrEventFactory {
                 previous.minLot,
                 previous.minLotUnit,
                 previous.traderChar,
+                previous.traderCharId,
                 expirationAt,
             ),
             "",
+            powDifficulty = ORDER_POW_DIFFICULTY,
         )
     }
 
@@ -114,28 +141,33 @@ object NostrEventFactory {
         minLot: Long,
         minLotUnit: MinLotUnit,
         traderChar: String,
+        traderCharId: Int?,
         expirationAt: Long,
-    ): Array<Array<String>> =
-        TagArrayBuilder<Event>()
-            .add(DTag(orderUuid).toTagArray())
-            .add(arrayOf("t", "eve-otc"))
-            .add(arrayOf("t", "side:${side.name.lowercase()}"))
-            .add(arrayOf("t", "type:$typeId"))
-            .add(arrayOf("t", "region:$regionId"))
-            .expiration(expirationAt)
-            .add(arrayOf("price", price.toString()))
-            .add(arrayOf("qty_total", qtyTotal.toString()))
-            .add(arrayOf("qty_remaining", qtyRemaining.toString()))
-            .add(arrayOf("min_lot", minLot.toString()))
-            .add(arrayOf("min_lot_unit", minLotUnit.name.lowercase()))
-            .add(arrayOf("trader_char", traderChar))
-            .build()
+    ): Array<Array<String>> {
+        val builder =
+            TagArrayBuilder<Event>()
+                .add(DTag(orderUuid).toTagArray())
+                .add(arrayOf("t", "eve-otc"))
+                .add(arrayOf("t", "side:${side.name.lowercase()}"))
+                .add(arrayOf("t", "type:$typeId"))
+                .add(arrayOf("t", "region:$regionId"))
+                .expiration(expirationAt)
+                .add(arrayOf("price", price.toString()))
+                .add(arrayOf("qty_total", qtyTotal.toString()))
+                .add(arrayOf("qty_remaining", qtyRemaining.toString()))
+                .add(arrayOf("min_lot", minLot.toString()))
+                .add(arrayOf("min_lot_unit", minLotUnit.name.lowercase()))
+                .add(arrayOf("trader_char", traderChar))
+        traderCharId?.let { builder.add(arrayOf("trader_char_id", it.toString())) }
+        return builder.build()
+    }
 
     /** Defensive parse — a malformed/unknown-shape event from another client is skipped (null), never crashes the app. */
     fun parseOrderEvent(event: Event): ParsedOrder? {
         if (event.kind != ORDER_KIND) return null
         return runCatching {
             val tagsByName = event.tags.filter { it.size >= 2 }.groupBy({ it[0] }, { it[1] })
+
             fun tag(name: String) = tagsByName[name]?.firstOrNull()
             val tTags = tagsByName["t"].orEmpty()
 
@@ -153,6 +185,7 @@ object NostrEventFactory {
                 minLot = requireNotNull(tag("min_lot")).toLong(),
                 minLotUnit = MinLotUnit.valueOf(requireNotNull(tag("min_lot_unit")).uppercase()),
                 traderChar = tag("trader_char") ?: "",
+                traderCharId = tag("trader_char_id")?.toIntOrNull(),
                 expiration = requireNotNull(event.expiration()),
             )
         }.getOrNull()

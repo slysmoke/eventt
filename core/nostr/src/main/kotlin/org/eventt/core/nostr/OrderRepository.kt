@@ -15,6 +15,23 @@ data class OrderFilter(
     val side: OrderSide? = null,
 )
 
+// Client-side posting limit — this app's own guard against one identity flooding Browse with
+// new orders. It can't stop spam posted by other Nostr clients, but it does stop this one from
+// being (or becoming) the source of it.
+private const val MAX_NEW_ORDERS_PER_WINDOW = 10
+private const val POST_RATE_WINDOW_SECONDS = 3600L
+
+sealed class PostOrderResult {
+    data class Posted(
+        val order: ParsedOrder,
+    ) : PostOrderResult()
+
+    data object NoIdentity : PostOrderResult()
+
+    /** Hit [MAX_NEW_ORDERS_PER_WINDOW] new-order posts within [POST_RATE_WINDOW_SECONDS]. */
+    data object RateLimited : PostOrderResult()
+}
+
 private fun NostrOrderModel.toParsedOrder(): ParsedOrder =
     ParsedOrder(
         orderUuid = orderUuid,
@@ -30,6 +47,7 @@ private fun NostrOrderModel.toParsedOrder(): ParsedOrder =
         minLot = minLot,
         minLotUnit = MinLotUnit.valueOf(minLotUnit.uppercase()),
         traderChar = traderChar,
+        traderCharId = traderCharId,
         expiration = expiration,
     )
 
@@ -50,11 +68,15 @@ object OrderRepository {
             NostrRelayManager.events.collect { emit(query()) }
         }
 
-    /** Null if there's no active identity to sign with. */
-    suspend fun postNewOrder(draft: OrderDraft): ParsedOrder? {
-        val identity = NostrIdentityService.getActiveIdentity() ?: return null
+    suspend fun postNewOrder(draft: OrderDraft): PostOrderResult {
+        val identity = NostrIdentityService.getActiveIdentity() ?: return PostOrderResult.NoIdentity
+        val recentPosts = withContext(Dispatchers.IO) { NostrOrderDao.countRecentPosts(identity.pubkey, POST_RATE_WINDOW_SECONDS) }
+        if (recentPosts >= MAX_NEW_ORDERS_PER_WINDOW) return PostOrderResult.RateLimited
+
         val event = NostrEventFactory.buildOrderEvent(QuartzGateway.signerFor(identity.keyPair), draft)
-        return persistAndPublish(event, identity.pubkey)
+        val parsed = persistAndPublish(event, identity.pubkey) ?: return PostOrderResult.NoIdentity
+        withContext(Dispatchers.IO) { NostrOrderDao.recordPost(identity.pubkey) }
+        return PostOrderResult.Posted(parsed)
     }
 
     /** Refreshes the expiration to +2 weeks from now, keeping the current qty_remaining. Null if [order] isn't ours. */
@@ -106,6 +128,7 @@ object OrderRepository {
                     minLot = parsed.minLot,
                     minLotUnit = parsed.minLotUnit.name.lowercase(),
                     traderChar = parsed.traderChar,
+                    traderCharId = parsed.traderCharId,
                     expiration = parsed.expiration,
                     rawEventJson = event.toJson(),
                     isMine = parsed.pubkey == myPubkey,

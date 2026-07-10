@@ -34,11 +34,16 @@ import org.eventt.core.database.AppState
 import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.CorporationDao
 import org.eventt.core.database.DatabaseManager
+import org.eventt.core.database.NostrOrderDao
+import org.eventt.core.database.NostrReservationModel
+import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.ViewContext
 import org.eventt.core.everef.EveRefService
 import org.eventt.core.model.CharacterModel
 import org.eventt.core.model.PriceAlertModel
 import org.eventt.core.model.RequestStatus
+import org.eventt.core.nostr.NostrRelayEvent
+import org.eventt.core.nostr.NostrRelayManager
 import org.eventt.core.queue.RequestQueueManager
 import org.eventt.core.staticdata.CitadelService
 import org.eventt.core.staticdata.StaticDataImporter
@@ -52,7 +57,9 @@ import org.eventt.features.market.MarketAnalysisScreen
 import org.eventt.features.market.MarketBrowserScreen
 import org.eventt.features.orders.OrdersScreen
 import org.eventt.features.overlay.OverlayWindow
+import org.eventt.features.p2pmarket.CountBadge
 import org.eventt.features.p2pmarket.P2pMarketScreen
+import org.eventt.features.p2pmarket.rememberPendingBuyRequestCount
 import org.eventt.features.settings.SettingsScreen
 import org.eventt.features.tools.ToolsScreen
 import org.eventt.features.wallet.WalletScreen
@@ -71,6 +78,7 @@ enum class AppScreen(
     DASHBOARD("Dashboard", Icons.Default.Dashboard),
     CHARACTERS("Characters", Icons.Default.Person),
     MARKET("Market", Icons.Default.Store),
+    P2P_MARKET("P2P Market", Icons.AutoMirrored.Filled.CompareArrows),
     ANALYSIS("Analysis", Icons.Default.Analytics),
     ASSETS("Assets", Icons.Default.Inventory),
     WALLET("Wallet", Icons.Default.AccountBalance),
@@ -79,7 +87,6 @@ enum class AppScreen(
     ALERTS("Alerts", Icons.Default.Notifications),
     CONTRACTS("Contracts", Icons.Default.Description),
     TOOLS("Tools", Icons.Default.Build),
-    P2P_MARKET("P2P Market", Icons.AutoMirrored.Filled.CompareArrows),
     SETTINGS("Settings", Icons.Default.Settings),
 }
 
@@ -153,6 +160,25 @@ fun EventtApp() {
         // from which queue was updated most recently.
         LaunchedEffect(selectedScreen) { GlobalHotkeyService.activeScreen = selectedScreen }
 
+        // P2P Market incoming-request notifications — shown regardless of which tab is currently
+        // open, since a new buy request otherwise stays invisible until you happen to check My
+        // Orders yourself. Enriched with the item name (an extra DB round-trip) before display
+        // rather than showing the bare reservation, since "Voidraven Blueprint x2" means something
+        // to look at and "trade_id 9c5061b6…" doesn't.
+        var incomingRequestNotices by remember { mutableStateOf<List<IncomingRequestNotice>>(emptyList()) }
+        LaunchedEffect(Unit) {
+            NostrRelayManager.events.collect { event ->
+                if (event !is NostrRelayEvent.IncomingBuyRequest) return@collect
+                val reservation = event.reservation
+                val typeName =
+                    withContext(Dispatchers.IO) {
+                        val order = NostrOrderDao.getByCoordinate(reservation.orderUuid, reservation.sellerPubkey)
+                        order?.let { StaticDataDao.getTypeById(it.typeId)?.name } ?: "an order"
+                    }
+                incomingRequestNotices = incomingRequestNotices + IncomingRequestNotice(reservation, typeName)
+            }
+        }
+
         Scaffold(
             topBar = {
                 TopBar(
@@ -194,6 +220,18 @@ fun EventtApp() {
                             AlertNotificationBanner(
                                 alert = alert,
                                 onDismiss = { AlertMonitor.dismiss(alert) },
+                            )
+                        }
+
+                        // P2P Market incoming-request notification banners
+                        incomingRequestNotices.forEach { notice ->
+                            IncomingRequestBanner(
+                                notice = notice,
+                                onView = {
+                                    selectedScreen = AppScreen.P2P_MARKET
+                                    incomingRequestNotices = incomingRequestNotices - notice
+                                },
+                                onDismiss = { incomingRequestNotices = incomingRequestNotices - notice },
                             )
                         }
 
@@ -584,7 +622,7 @@ private fun Sidebar(
                     onClick = { onScreenSelected(screen) },
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(
@@ -598,7 +636,11 @@ private fun Sidebar(
                             text = screen.label,
                             color = contentColor,
                             style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.weight(1f),
                         )
+                        if (screen == AppScreen.P2P_MARKET) {
+                            CountBadge(rememberPendingBuyRequestCount())
+                        }
                     }
                 }
             }
@@ -706,6 +748,53 @@ private fun formatAlertPrice(v: Double): String =
         v >= 1_000 -> String.format(Locale.US, "%.1fK ISK", v / 1_000)
         else -> String.format(Locale.US, "%,.2f ISK", v)
     }
+
+private data class IncomingRequestNotice(
+    val reservation: NostrReservationModel,
+    val typeName: String,
+)
+
+@Composable
+private fun IncomingRequestBanner(
+    notice: IncomingRequestNotice,
+    onView: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Surface(
+        color = Color(0xFF1B3A4B),
+        tonalElevation = 4.dp,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.CompareArrows,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = Color(0xFF4FC3F7),
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "New P2P Market buy request",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                )
+                Text(
+                    "${notice.reservation.buyerChar.ifBlank { "Someone" }} wants ${notice.reservation.qty}x ${notice.typeName}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.75f),
+                )
+            }
+            TextButton(onClick = onView) { Text("View") }
+            IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                Icon(Icons.Default.Close, null, Modifier.size(14.dp), tint = Color.White.copy(alpha = 0.6f))
+            }
+        }
+    }
+}
 
 @Composable
 private fun EveRefSyncBanner(state: EveRefService.SyncState) {

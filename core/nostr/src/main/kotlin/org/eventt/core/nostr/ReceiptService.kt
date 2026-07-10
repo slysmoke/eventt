@@ -66,6 +66,7 @@ object ReceiptService {
         if (event.kind != RECEIPT_KIND) return
         runCatching {
             val tagsByName = event.tags.filter { it.size >= 2 }.groupBy({ it[0] }, { it[1] })
+
             fun tag(name: String) = requireNotNull(tagsByName[name]?.firstOrNull())
             NostrReceiptDao.insertIfAbsent(
                 eventId = event.id,

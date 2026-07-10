@@ -75,7 +75,6 @@ class NostrReceiptDaoTest {
         NostrReceiptDao.listForTrade("trade-1") shouldHaveSize 1
     }
 
-
     @Test
     fun `countConfirmedTrades only counts trades with this pubkey, not unrelated ones`() {
         receipt("event-a1", "trade-1", "buyer-pk", "seller-pk", "buyer")

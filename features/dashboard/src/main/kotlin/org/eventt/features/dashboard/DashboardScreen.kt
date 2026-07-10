@@ -60,7 +60,7 @@ fun DashboardScreen(
             if (acting != null) {
                 try {
                     walletBalance =
-                        if (isCorp) EsiClient.getCorporationWallet(corpId!!, acting).values.sum() else EsiClient.getCharacterWallet(acting)
+                        if (isCorp) EsiClient.getCorporationWallet(corpId, acting).values.sum() else EsiClient.getCharacterWallet(acting)
                 } catch (e: Exception) {
                     println("Dashboard: wallet ESI error: ${e.message}")
                 }
@@ -69,7 +69,7 @@ fun DashboardScreen(
                     val journalEntries =
                         if (isCorp) {
                             EsiClient.getCorporationJournal(
-                                corpId!!,
+                                corpId,
                                 acting,
                             )
                         } else {
@@ -105,7 +105,7 @@ fun DashboardScreen(
 
                 try {
                     val txList =
-                        if (isCorp) EsiClient.getCorporationTransactions(corpId!!, acting) else EsiClient.getCharacterTransactions(acting)
+                        if (isCorp) EsiClient.getCorporationTransactions(corpId, acting) else EsiClient.getCharacterTransactions(acting)
                     val typeNames =
                         txList
                             .mapNotNull { (it["type_id"] as? Number)?.toInt() }
