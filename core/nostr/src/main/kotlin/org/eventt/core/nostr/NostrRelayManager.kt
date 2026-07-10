@@ -152,7 +152,7 @@ object NostrRelayManager {
                 log("relayUrls = $relayUrls")
                 if (relayUrls.isEmpty()) return@launch
 
-                val filter = Filter(null, null, listOf(ORDER_KIND), mapOf("t" to listOf("eve-otc")), null, null, null, null, null)
+                val filter = Filter(null, null, listOf(ORDER_KIND), mapOf("t" to listOf("eventt-p2pmarket")), null, null, null, null, null)
                 c.subscribe(
                     ORDERS_SUBSCRIPTION_ID,
                     relayUrls.associateWith { listOf(filter) },
@@ -278,6 +278,17 @@ object NostrRelayManager {
      */
     fun notifyReservationActivity() {
         _events.tryEmit(NostrRelayEvent.ReservationActivity)
+    }
+
+    /**
+     * Same idea as [notifyReservationActivity] but for orders — a locally-initiated post/renew/
+     * cancel (see [OrderRepository]) needs to reach [OrderRepository.browse]'s collectors right
+     * away, not whenever (if ever) the relay happens to echo our own just-published event back to
+     * us. Without this, a freshly posted or cancelled order only showed up in "My active orders"
+     * after some unrelated event forced a re-query (e.g. switching tabs and back).
+     */
+    fun notifyOrderUpdated(order: ParsedOrder) {
+        _events.tryEmit(NostrRelayEvent.OrderUpdated(order))
     }
 
     /** No-op (silently) if the relay connection isn't up yet — callers can't usefully retry a publish mid-outage in Phase 1. */

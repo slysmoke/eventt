@@ -38,6 +38,7 @@ import org.eventt.core.database.NostrReservationModel
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.nostr.NostrRelayEvent
 import org.eventt.core.nostr.NostrRelayManager
+import org.eventt.core.nostr.OrderSide
 import org.eventt.core.nostr.ReservationService
 import java.time.Instant
 import java.util.Locale
@@ -47,9 +48,15 @@ private data class SellerReservationRowData(
     val typeName: String,
     val regionName: String?,
     val price: Double?,
+    // Null for a purged/expired order — falls back to neutral labeling (see SellerReservationTableRow).
+    val orderSide: OrderSide?,
 )
 
-/** Incoming buy requests on your own orders — accept/decline, then mark completed or release once accepted. */
+/**
+ * Incoming requests on your own orders — accept/decline, then mark completed or release once
+ * accepted. "Incoming" is deliberately not "incoming buy requests": your own order can be a SELL
+ * or a BUY, so someone requesting it might be offering to buy from you *or* to sell to you.
+ */
 @Composable
 fun IncomingRequestsScreen() {
     val scope = rememberCoroutineScope()
@@ -71,6 +78,7 @@ fun IncomingRequestsScreen() {
                                     ?: "Order ${reservation.orderUuid.take(8)}… (expired/purged)",
                             regionName = order?.let { StaticDataDao.getRegionById(it.regionId)?.name },
                             price = order?.price,
+                            orderSide = order?.side?.let { runCatching { OrderSide.valueOf(it.uppercase()) }.getOrNull() },
                         )
                     }.sortedWith(compareBy({ it.reservation.status != "sent" }, { -it.reservation.requestedAt }))
             }
@@ -84,11 +92,12 @@ fun IncomingRequestsScreen() {
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text(
-            if (sellerReservations.isEmpty()) "Incoming buy requests" else "Incoming buy requests (${sellerReservations.size})",
+            if (sellerReservations.isEmpty()) "Incoming requests" else "Incoming requests (${sellerReservations.size})",
             style = MaterialTheme.typography.titleMedium,
         )
         Text(
-            "When someone clicks Buy on one of your orders, their request shows up here for you to accept or decline.",
+            "When someone requests one of your orders, it shows up here for you to accept or decline — check the " +
+                "SELL/BUY tag to see whether they're offering to buy from you or sell to you.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -156,7 +165,7 @@ private fun ReservationsTableHeader() {
         Text("Region", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(120.dp))
         Text("Price", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(130.dp))
         Text("Qty", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(60.dp))
-        Text("Buyer", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(150.dp))
+        Text("Requester", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(150.dp))
         Text("Status", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(150.dp))
         Text("Requested", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(110.dp))
         Text("", modifier = Modifier.width(260.dp))
@@ -180,7 +189,10 @@ private fun SellerReservationTableRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(row.typeName, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.orderSide?.let { OrderSideBadge(it) }
+                Text(row.typeName, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             if (reservation.note.isNotBlank()) {
                 Text(
                     reservation.note,
@@ -212,15 +224,24 @@ private fun SellerReservationTableRow(
             modifier = Modifier.width(130.dp),
         )
         Text("${reservation.qty}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(60.dp))
-        Row(modifier = Modifier.width(150.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                reservation.buyerChar.ifBlank { "${reservation.buyerPubkey.take(12)}…" },
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (reservation.buyerChar.isNotBlank()) TraderInfoButton(reservation.buyerChar, reservation.buyerCharacterId)
+        Column(modifier = Modifier.width(150.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    reservation.buyerChar.ifBlank { "${reservation.buyerPubkey.take(12)}…" },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (reservation.buyerChar.isNotBlank()) TraderInfoButton(reservation.buyerChar, reservation.buyerCharacterId)
+            }
+            row.orderSide?.let {
+                Text(
+                    "wants to ${if (requesterRole(it) == "Buyer") "buy" else "sell"}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         Text(
             if (reservation.status == "sent") "Awaiting your response" else "Accepted — awaiting completion",

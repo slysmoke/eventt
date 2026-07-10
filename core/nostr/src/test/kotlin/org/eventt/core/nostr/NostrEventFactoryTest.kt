@@ -86,7 +86,7 @@ class NostrEventFactoryTest {
                 ORDER_KIND,
                 arrayOf(
                     arrayOf("d", "order-abc"),
-                    arrayOf("t", "eve-otc"),
+                    arrayOf("t", "eventt-p2pmarket"),
                     arrayOf("t", "side:sell"),
                     arrayOf("t", "type:44992"),
                     arrayOf("t", "region:10000002"),

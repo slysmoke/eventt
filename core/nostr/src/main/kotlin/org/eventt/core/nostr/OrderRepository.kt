@@ -135,6 +135,10 @@ object OrderRepository {
                 ),
             )
         }
+        // The DB write alone doesn't make this visible anywhere — browse()'s Flow only re-queries
+        // when a NostrRelayEvent fires, and publish() below doesn't emit one itself (only an
+        // incoming relay echo of this same event would, which may be slow or may never happen).
+        NostrRelayManager.notifyOrderUpdated(parsed)
         // Fire-and-forget from the caller's perspective — the local DB write above already made
         // the poster's own order visible to them immediately, without waiting on any relay.
         NostrRelayManager.publish(event)

@@ -14,6 +14,8 @@ A desktop trading toolkit for [EVE Online](https://www.eveonline.com/), built wi
 - **Watchlist** — track items with sparklines
 - **Alerts** — price alerts with in-app notifications
 - **Contracts** — contract tracker
+- **Tools** — cargo splitter and sell-pricing calculator
+- **P2P Market** — peer-to-peer OTC trading over [Nostr](https://nostr.com/): post buy/sell orders, negotiate reservations over encrypted DMs, and settle in-game outside the ESI market
 - **Settings** — tax rates, data source, and app preferences
 
 A global hotkey (Ctrl+Z) cycles through your queued orders, opens the in-game market window, and copies an overbid/undercut price to your clipboard.
@@ -47,7 +49,13 @@ Two separate downloads are published for macOS — `eventt-macos-x64.dmg` for In
 
 ## Auth & data storage
 
-Login uses EVE SSO's OAuth2 Authorization Code flow with PKCE — no client secret is embedded in the app. Character access/refresh tokens are encrypted at rest (AES-256-GCM) with a local, per-machine key, both stored under `~/.eve-trader/`.
+Login uses EVE SSO's OAuth2 Authorization Code flow with PKCE — no client secret is embedded in the app. Character access/refresh tokens are encrypted at rest (AES-256-GCM) with a local, per-machine key, both stored in the OS's standard per-user app-data directory (`%APPDATA%\eventt` on Windows, `~/Library/Application Support/eventt` on macOS, `$XDG_DATA_HOME/eventt` or `~/.local/share/eventt` on Linux). Older installs used `~/.eve-trader/` or `~/.eventt/` directly in the home folder — data there is picked up automatically on first launch after upgrading.
+
+## P2P Market
+
+Off-market player-to-player trading, built on [Nostr](https://nostr.com/) instead of a central server: orders are NIP-33 addressable events published to a handful of public relays (configurable in Settings), and buy/sell negotiation happens over NIP-17 encrypted DMs. Each EVE character gets its own signing identity automatically, generated the first time you open the P2P Market tab with that character selected — nothing to configure beyond that.
+
+For testing both sides of a trade locally, `./scripts/run-p2p-test.sh` launches a second, isolated instance of the app (its own database and Nostr identity, seeded with a throwaway test character) so you can post an order in one window and answer it from the other.
 
 ## Building & running
 
@@ -84,8 +92,8 @@ The app checks the repo's latest GitHub Release on startup and offers a one-clic
 
 Modules are organized under `core/`, `features/`, and `ui/`:
 
-- **`core/`**: model, database, http, cache, auth, esi, queue, staticdata, image, everef
-- **`features/`**: characters, market, assets, wallet, orders, dashboard, alerts, contracts, watchlist, settings, overlay
+- **`core/`**: model, database, http, cache, auth, esi, queue, staticdata, image, everef, marketlogs, nostr
+- **`features/`**: characters, market, assets, wallet, orders, dashboard, alerts, contracts, watchlist, settings, overlay, tools, p2pmarket
 - **`ui/`**: theme (Material 3 + EVE color palette), common (shared Compose components)
 
 ```

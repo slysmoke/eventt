@@ -15,16 +15,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -70,11 +67,14 @@ private data class MyOrderRowData(
 
 private enum class MyOrdersSortColumn { PRICE, QTY, EXPIRY }
 
+// Remembers the last region you posted in across posts, tab switches, and restarts — re-picking
+// the same region (usually a home trade hub) for every single order got old fast.
+private const val LAST_REGION_SETTING_KEY = "p2pmarket.last_region_id"
+
 @Composable
 fun MyOrdersScreen() {
     val scope = rememberCoroutineScope()
 
-    var allRegions by remember { mutableStateOf<List<StaticRegionModel>>(emptyList()) }
     var myOrders by remember { mutableStateOf<List<NostrOrderModel>>(emptyList()) }
     var myOrderRows by remember { mutableStateOf<List<MyOrderRowData>>(emptyList()) }
     var myOrdersSortColumn by remember { mutableStateOf(MyOrdersSortColumn.EXPIRY) }
@@ -86,7 +86,11 @@ fun MyOrdersScreen() {
     var selectedType by remember { mutableStateOf<StaticTypeModel?>(null) }
     var itemSearchResults by remember { mutableStateOf<List<StaticTypeModel>>(emptyList()) }
     var regionId by remember { mutableStateOf<Int?>(null) }
+    var regionQuery by remember { mutableStateOf("") }
+    var regionSearchResults by remember { mutableStateOf<List<StaticRegionModel>>(emptyList()) }
     var priceText by remember { mutableStateOf("") }
+    var isSuggestingPrice by remember { mutableStateOf(false) }
+    var priceSuggestionNote by remember { mutableStateOf<String?>(null) }
     var qtyText by remember { mutableStateOf("") }
     var minLotText by remember { mutableStateOf("1") }
     var minLotUnit by remember { mutableStateOf(MinLotUnit.UNITS) }
@@ -95,7 +99,14 @@ fun MyOrdersScreen() {
     var formError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        allRegions = withContext(Dispatchers.IO) { StaticDataDao.getAllRegions() }
+        val savedRegion =
+            withContext(Dispatchers.IO) {
+                StaticDataDao.getSetting(LAST_REGION_SETTING_KEY)?.toIntOrNull()?.let { StaticDataDao.getRegionById(it) }
+            }
+        savedRegion?.let {
+            regionId = it.regionId
+            regionQuery = it.name
+        }
     }
     LaunchedEffect(Unit) {
         OrderRepository.browse(OrderFilter()).collect { orders ->
@@ -129,14 +140,30 @@ fun MyOrdersScreen() {
                 id.characterId?.let { withContext(Dispatchers.IO) { CharacterDao.getById(it)?.name } } ?: id.label
             }
     }
-    // Only pre-fills when empty — mirrors PriceAlertsScreen's convention so a manually-edited
-    // price is never silently clobbered by a later item/region change.
-    LaunchedEffect(selectedType, regionId, side) {
-        val type = selectedType
-        val region = regionId
-        if (type != null && region != null && priceText.isEmpty()) {
-            val recommended = withContext(Dispatchers.IO) { SavingsBadgeService.recommendedPrice(type.typeId, region, side) }
-            recommended?.let { priceText = String.format(Locale.US, "%.2f", it) }
+
+    // On-demand only (via the price field's suggest button) — never auto-fills, so it can never
+    // silently clobber a price you've already typed in, and always reflects whichever side
+    // (Selling/Buying) is currently selected instead of going stale after the first fill.
+    fun suggestPrice() {
+        val type = selectedType ?: return
+        isSuggestingPrice = true
+        scope.launch(Dispatchers.IO) {
+            val charId = NostrIdentityService.getActiveIdentity()?.characterId
+            val salesTaxPct = charId?.let { StaticDataDao.getCharSalesTax(it) } ?: 8.0
+            val brokerFeePct = charId?.let { StaticDataDao.getCharBrokersFee(it) } ?: 3.0
+            val recommended = SavingsBadgeService.recommendedPrice(type.typeId, side, salesTaxPct, brokerFeePct)
+            withContext(Dispatchers.Main) {
+                if (recommended != null) {
+                    priceText = String.format(Locale.US, "%.2f", recommended.price)
+                    val feeLabel = if (side == OrderSide.SELL) "sales tax" else "broker fee"
+                    val basePrice = String.format(Locale.US, "%,.2f", recommended.basePrice)
+                    val adjustmentPct = String.format(Locale.US, "%.1f", recommended.adjustmentPct)
+                    priceSuggestionNote = "Based on $basePrice ISK (The Forge) − $adjustmentPct% ($feeLabel)"
+                } else {
+                    priceSuggestionNote = "No Forge market data for this item yet"
+                }
+                isSuggestingPrice = false
+            }
         }
     }
 
@@ -190,6 +217,7 @@ fun MyOrdersScreen() {
                         itemQuery = ""
                         selectedType = null
                         priceText = ""
+                        priceSuggestionNote = null
                         qtyText = ""
                         showPostForm = false
                     }
@@ -201,7 +229,7 @@ fun MyOrdersScreen() {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         if (!showPostForm) {
             OutlinedButton(onClick = { showPostForm = true }, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.Add, null, Modifier.size(16.dp))
@@ -210,7 +238,7 @@ fun MyOrdersScreen() {
             }
         } else {
             Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -223,45 +251,101 @@ fun MyOrdersScreen() {
                         FilterChip(selected = side == OrderSide.SELL, onClick = { side = OrderSide.SELL }, label = { Text("Selling") })
                         FilterChip(selected = side == OrderSide.BUY, onClick = { side = OrderSide.BUY }, label = { Text("Buying") })
                     }
-                    SearchField(
-                        query = itemQuery,
-                        onQueryChange = { q ->
-                            itemQuery = q
-                            selectedType = null
-                            if (q.length >= 2) {
-                                scope.launch(Dispatchers.IO) { itemSearchResults = StaticDataDao.searchMarketTypes(q, limit = 10) }
-                            } else {
-                                itemSearchResults = emptyList()
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            SearchField(
+                                query = itemQuery,
+                                onQueryChange = { q ->
+                                    itemQuery = q
+                                    selectedType = null
+                                    if (q.length >= 2) {
+                                        scope.launch(Dispatchers.IO) {
+                                            itemSearchResults = StaticDataDao.searchMarketTypes(q, limit = 10)
+                                        }
+                                    } else {
+                                        itemSearchResults = emptyList()
+                                    }
+                                },
+                                placeholder = "Search item...",
+                            )
+                            if (itemSearchResults.isNotEmpty()) {
+                                LazyColumn(modifier = Modifier.heightIn(max = 140.dp)) {
+                                    items(itemSearchResults, key = { it.typeId }) { type ->
+                                        Row(
+                                            modifier =
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        selectedType = type
+                                                        itemQuery = type.name
+                                                        itemSearchResults = emptyList()
+                                                        priceText = ""
+                                                    }.padding(8.dp),
+                                        ) {
+                                            Text(type.name, style = MaterialTheme.typography.bodyMedium)
+                                        }
+                                    }
+                                }
                             }
-                        },
-                        placeholder = "Search item...",
-                    )
-                    if (itemSearchResults.isNotEmpty()) {
-                        LazyColumn(modifier = Modifier.heightIn(max = 140.dp)) {
-                            items(itemSearchResults, key = { it.typeId }) { type ->
-                                Row(
-                                    modifier =
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                selectedType = type
-                                                itemQuery = type.name
-                                                itemSearchResults = emptyList()
-                                                priceText = ""
-                                            }.padding(8.dp),
-                                ) {
-                                    Text(type.name, style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            SearchField(
+                                query = regionQuery,
+                                onQueryChange = { q ->
+                                    regionQuery = q
+                                    regionId = null
+                                    if (q.length >= 2) {
+                                        scope.launch(Dispatchers.IO) { regionSearchResults = StaticDataDao.searchRegions(q, limit = 10) }
+                                    } else {
+                                        regionSearchResults = emptyList()
+                                    }
+                                },
+                                placeholder = "Search region...",
+                            )
+                            if (regionSearchResults.isNotEmpty()) {
+                                LazyColumn(modifier = Modifier.heightIn(max = 140.dp)) {
+                                    items(regionSearchResults, key = { it.regionId }) { region ->
+                                        Row(
+                                            modifier =
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        regionId = region.regionId
+                                                        regionQuery = region.name
+                                                        regionSearchResults = emptyList()
+                                                        scope.launch(Dispatchers.IO) {
+                                                            StaticDataDao.setSetting(LAST_REGION_SETTING_KEY, region.regionId.toString())
+                                                        }
+                                                    }.padding(8.dp),
+                                        ) {
+                                            Text(region.name, style = MaterialTheme.typography.bodyMedium)
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
-                    RegionDropdown(allRegions, regionId) { regionId = it }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = priceText,
-                            onValueChange = { priceText = it },
+                            onValueChange = {
+                                priceText = it
+                                priceSuggestionNote = null
+                            },
                             label = { Text("Price / unit (ISK)") },
                             singleLine = true,
+                            trailingIcon = {
+                                IconButton(onClick = ::suggestPrice, enabled = selectedType != null && !isSuggestingPrice) {
+                                    if (isSuggestingPrice) {
+                                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    } else {
+                                        Icon(
+                                            Icons.Default.Lightbulb,
+                                            contentDescription = "Suggest price (The Forge, minus sales tax/broker fee)",
+                                        )
+                                    }
+                                }
+                            },
                             modifier = Modifier.weight(1f),
                         )
                         OutlinedTextField(
@@ -271,6 +355,9 @@ fun MyOrdersScreen() {
                             singleLine = true,
                             modifier = Modifier.weight(1f),
                         )
+                    }
+                    priceSuggestionNote?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
@@ -326,7 +413,7 @@ fun MyOrdersScreen() {
             MyOrdersTableHeader(myOrdersSortColumn, myOrdersSortDirection, onSort = ::toggleMyOrdersSort)
             HorizontalDivider()
             LazyColumn(
-                modifier = Modifier.height((sortedRows.size * 48).coerceAtMost(500).dp),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 items(sortedRows, key = { "${it.order.orderUuid}:${it.order.pubkey}" }) { row ->
@@ -389,7 +476,9 @@ private fun MyOrderTableRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(order.side.uppercase(), style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(60.dp))
+        Box(modifier = Modifier.width(60.dp)) {
+            OrderSideBadge(OrderSide.valueOf(order.side.uppercase()))
+        }
         Column(modifier = Modifier.weight(1f)) {
             Text(row.typeName, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             ExpiringSoonLabel(order.expiration)
@@ -418,31 +507,6 @@ private fun MyOrderTableRow(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(200.dp)) {
             OutlinedButton(onClick = onRenew, contentPadding = COMPACT_BUTTON_PADDING) { Text("Renew") }
             OutlinedButton(onClick = onCancel, contentPadding = COMPACT_BUTTON_PADDING) { Text("Cancel") }
-        }
-    }
-}
-
-@Composable
-private fun RegionDropdown(
-    regions: List<StaticRegionModel>,
-    selectedRegionId: Int?,
-    onSelect: (Int) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val selectedName = regions.find { it.regionId == selectedRegionId }?.name ?: "Select region…"
-
-    Box {
-        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) { Text(selectedName) }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            regions.forEach { region ->
-                DropdownMenuItem(
-                    text = { Text(region.name) },
-                    onClick = {
-                        onSelect(region.regionId)
-                        expanded = false
-                    },
-                )
-            }
         }
     }
 }

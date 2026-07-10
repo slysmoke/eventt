@@ -35,6 +35,7 @@ import org.eventt.core.database.NostrReservationModel
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.nostr.NostrRelayEvent
 import org.eventt.core.nostr.NostrRelayManager
+import org.eventt.core.nostr.OrderSide
 import org.eventt.core.nostr.ReservationService
 import java.time.Instant
 import java.util.Locale
@@ -48,9 +49,11 @@ private data class RequestRowData(
     val typeName: String,
     val regionName: String?,
     val price: Double?,
-    val sellerLabel: String,
-    val sellerCharacterName: String?,
-    val sellerCharacterId: Int?,
+    val counterpartyLabel: String,
+    val counterpartyCharacterName: String?,
+    val counterpartyCharacterId: Int?,
+    // Null for a purged/expired order — falls back to neutral labeling (see RequestTableRow).
+    val orderSide: OrderSide?,
 )
 
 private enum class MyRequestsSortColumn { PRICE, QTY, REQUESTED }
@@ -85,7 +88,7 @@ fun MyRequestsScreen() {
             withContext(Dispatchers.IO) {
                 raw.map { reservation ->
                     val order = NostrOrderDao.getByCoordinate(reservation.orderUuid, reservation.orderPubkey)
-                    val sellerCharacterName = order?.traderChar?.ifBlank { null }
+                    val counterpartyCharacterName = order?.traderChar?.ifBlank { null }
                     RequestRowData(
                         reservation = reservation,
                         typeName =
@@ -93,9 +96,10 @@ fun MyRequestsScreen() {
                                 ?: "Order ${reservation.orderUuid.take(8)}… (expired/purged)",
                         regionName = order?.let { StaticDataDao.getRegionById(it.regionId)?.name },
                         price = order?.price,
-                        sellerLabel = sellerCharacterName ?: "${reservation.sellerPubkey.take(12)}…",
-                        sellerCharacterName = sellerCharacterName,
-                        sellerCharacterId = order?.traderCharId,
+                        counterpartyLabel = counterpartyCharacterName ?: "${reservation.sellerPubkey.take(12)}…",
+                        counterpartyCharacterName = counterpartyCharacterName,
+                        counterpartyCharacterId = order?.traderCharId,
+                        orderSide = order?.side?.let { runCatching { OrderSide.valueOf(it.uppercase()) }.getOrNull() },
                     )
                 }
             }
@@ -171,7 +175,12 @@ private fun MyRequestsTableHeader(
             active = sortColumn == MyRequestsSortColumn.QTY,
             direction = sortDirection,
         ) { onSort(MyRequestsSortColumn.QTY, SortDirection.DESC) }
-        Text("Seller", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(160.dp))
+        Text(
+            "Counterparty",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.width(160.dp),
+        )
         Text("Status", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(150.dp))
         SortHeaderCell(
             "Requested",
@@ -209,7 +218,17 @@ private fun RequestTableRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(row.typeName, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.orderSide?.let { OrderSideBadge(it) }
+                Text(row.typeName, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            row.orderSide?.let {
+                Text(
+                    "You're ${if (requesterRole(it) == "Buyer") "buying" else "selling"}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             if (reservation.note.isNotBlank()) {
                 Text(
                     reservation.note,
@@ -246,13 +265,13 @@ private fun RequestTableRow(
         Text("${reservation.qty}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(70.dp))
         Row(modifier = Modifier.width(160.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                row.sellerLabel,
+                row.counterpartyLabel,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            row.sellerCharacterName?.let { TraderInfoButton(it, row.sellerCharacterId) }
+            row.counterpartyCharacterName?.let { TraderInfoButton(it, row.counterpartyCharacterId) }
         }
         Text(
             statusLabel,

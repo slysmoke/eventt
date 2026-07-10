@@ -147,7 +147,7 @@ object NostrEventFactory {
         val builder =
             TagArrayBuilder<Event>()
                 .add(DTag(orderUuid).toTagArray())
-                .add(arrayOf("t", "eve-otc"))
+                .add(arrayOf("t", "eventt-p2pmarket"))
                 .add(arrayOf("t", "side:${side.name.lowercase()}"))
                 .add(arrayOf("t", "type:$typeId"))
                 .add(arrayOf("t", "region:$regionId"))

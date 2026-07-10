@@ -74,13 +74,20 @@ fun BrowseScreen() {
     var sortColumn by remember { mutableStateOf(BrowseSortColumn.EXPIRY) }
     var sortDirection by remember { mutableStateOf(SortDirection.ASC) }
     var activeIdentityPubkey by remember { mutableStateOf<String?>(null) }
+    // The viewer's own effective sales tax rate — BUY orders' savings badge needs it (see
+    // SavingsBadgeService.computeSavings); defaults to the 8% base rate with no active identity.
+    var viewerSalesTaxPct by remember { mutableStateOf(8.0) }
 
     // Refreshed every time this tab is (re)entered, so switching the active character in Settings
     // immediately changes which order(s) are treated as "yours" here — order.isMine is a stale,
     // stored-at-post-time flag (true for any of your characters, forever), not a live "can I
     // request this with my CURRENTLY active identity" check, which is what the button needs.
     LaunchedEffect(Unit) {
-        activeIdentityPubkey = withContext(Dispatchers.IO) { NostrIdentityService.getActiveIdentity()?.pubkey }
+        withContext(Dispatchers.IO) {
+            val identity = NostrIdentityService.getActiveIdentity()
+            activeIdentityPubkey = identity?.pubkey
+            viewerSalesTaxPct = identity?.characterId?.let { StaticDataDao.getCharSalesTax(it) } ?: 8.0
+        }
     }
 
     fun toggleSort(
@@ -98,7 +105,7 @@ fun BrowseScreen() {
     LaunchedEffect(sideFilter) {
         OrderRepository.browse(OrderFilter(side = sideFilter)).collect { orders = it }
     }
-    LaunchedEffect(orders) {
+    LaunchedEffect(orders, viewerSalesTaxPct) {
         rows =
             withContext(Dispatchers.IO) {
                 orders.map { order ->
@@ -107,7 +114,7 @@ fun BrowseScreen() {
                         order = order,
                         typeName = StaticDataDao.getTypeById(order.typeId)?.name ?: "Type #${order.typeId}",
                         regionName = StaticDataDao.getRegionById(order.regionId)?.name ?: "Region #${order.regionId}",
-                        savings = SavingsBadgeService.computeSavings(order.typeId, order.regionId, side, order.price),
+                        savings = SavingsBadgeService.computeSavings(order.typeId, order.regionId, side, order.price, viewerSalesTaxPct),
                         confirmedTrades = ReputationAggregator.confirmedTradeCount(order.pubkey),
                     )
                 }
@@ -222,7 +229,10 @@ private fun BrowseTableRow(
             tint = if (side == OrderSide.SELL) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
         )
         Column(modifier = Modifier.weight(1f)) {
-            Text(row.typeName, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OrderSideBadge(side)
+                Text(row.typeName, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             ExpiringSoonLabel(order.expiration)
         }
         Text(
@@ -262,6 +272,11 @@ private fun BrowseTableRow(
                 )
                 if (order.traderChar.isNotBlank()) TraderInfoButton(order.traderChar, order.traderCharId)
             }
+            Text(
+                "(${orderOwnerRole(side)})",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             if (row.confirmedTrades > 0) {
                 Text(
                     "${row.confirmedTrades} confirmed",
@@ -282,8 +297,17 @@ private fun BrowseTableRow(
         }
         Box(modifier = Modifier.width(110.dp)) {
             if (!isOwnOrder) {
+                // A SELL order is fulfilled by buying it; a BUY order is fulfilled by selling into
+                // it — the button must say which one *you'd* be doing, not just "Request", or
+                // it's ambiguous which direction the trade goes in a mixed sell/buy list.
                 OutlinedButton(onClick = { showRequestDialog = true }, enabled = !requestSent, contentPadding = COMPACT_BUTTON_PADDING) {
-                    Text(if (requestSent) "Sent" else "Request")
+                    val label =
+                        when {
+                            requestSent -> "Sent"
+                            side == OrderSide.SELL -> "Buy"
+                            else -> "Sell"
+                        }
+                    Text(label)
                 }
             }
         }
@@ -292,6 +316,7 @@ private fun BrowseTableRow(
     if (showRequestDialog) {
         RequestReservationDialog(
             order = order,
+            side = side,
             error = requestError,
             onDismiss = {
                 showRequestDialog = false
@@ -317,6 +342,7 @@ private fun BrowseTableRow(
 @Composable
 private fun RequestReservationDialog(
     order: NostrOrderModel,
+    side: OrderSide,
     error: String?,
     onDismiss: () -> Unit,
     onSend: (qty: Long, note: String) -> Unit,
@@ -328,7 +354,7 @@ private fun RequestReservationDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Request reservation") },
+        title = { Text(if (side == OrderSide.SELL) "Request to buy" else "Offer to sell") },
         text = {
             Column {
                 Text(

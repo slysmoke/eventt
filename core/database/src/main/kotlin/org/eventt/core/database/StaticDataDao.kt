@@ -491,9 +491,45 @@ object StaticDataDao {
         }
     }
 
+    // ESI's /universe/regions/ includes non-market noise alongside the ~68 real k-space regions
+    // (plus Pochven and its two neighboring regions, all under 10001000-10001999): wormhole
+    // "regions" (11000000-11999999, one per class — no NPC stations, nothing to trade against),
+    // and CCP-internal test/reward regions (ADR01-05 at 12000000+, VR-01-05 at 14000000+, GPMR-01
+    // at 19000000) that regular players can't even reach. None of them have a market, so they're
+    // pure clutter in any region picker — this excludes all of it with a single id boundary.
+    private const val MAX_REAL_REGION_ID = 10_002_000
+
     fun getAllRegions(): List<StaticRegionModel> =
         DatabaseManager.transaction {
-            prepareStatement("SELECT * FROM static_regions ORDER BY name").use { stmt ->
+            prepareStatement("SELECT * FROM static_regions WHERE region_id < ? ORDER BY name").use { stmt ->
+                stmt.setInt(1, MAX_REAL_REGION_ID)
+                stmt.executeQuery().use { rs ->
+                    val list = mutableListOf<StaticRegionModel>()
+                    while (rs.next()) {
+                        list.add(StaticRegionModel(regionId = rs.getInt("region_id"), name = rs.getString("name")))
+                    }
+                    list
+                }
+            }
+        }
+
+    /** Same [MAX_REAL_REGION_ID] noise filter as [getAllRegions], narrowed to a name search for autocomplete. */
+    fun searchRegions(
+        query: String,
+        limit: Int = 10,
+    ): List<StaticRegionModel> =
+        DatabaseManager.transaction {
+            prepareStatement(
+                """SELECT * FROM static_regions WHERE region_id < ? AND name LIKE ?
+                   ORDER BY CASE WHEN lower(name) = lower(?) THEN 0
+                                 WHEN lower(name) LIKE lower(?) || '%' THEN 1
+                                 ELSE 2 END, name LIMIT ?""",
+            ).use { stmt ->
+                stmt.setInt(1, MAX_REAL_REGION_ID)
+                stmt.setString(2, "%$query%")
+                stmt.setString(3, query)
+                stmt.setString(4, query)
+                stmt.setInt(5, limit)
                 stmt.executeQuery().use { rs ->
                     val list = mutableListOf<StaticRegionModel>()
                     while (rs.next()) {

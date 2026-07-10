@@ -68,7 +68,7 @@ class QuartzSpikeTest {
         val tags =
             TagArrayBuilder<Event>()
                 .add(DTag(orderId).toTagArray())
-                .add(arrayOf("t", "eve-otc"))
+                .add(arrayOf("t", "eventt-p2pmarket"))
                 .add(arrayOf("t", "side:sell"))
                 .add(arrayOf("t", "type:44992"))
                 .add(arrayOf("t", "region:10000002"))
