@@ -101,6 +101,14 @@ data class RegionOpportunity(
     // one, so that shortcut would overstate total profit.
     val profitableTotalProfit: Double = 0.0,
     val priceChange7d: Double = Double.NaN,
+    // How today's price compares to a typical day this week — different question from
+    // priceChange7d (which is "is the price trending up/down"), this is "is today's price
+    // unusually cheap/expensive right now." Buy compares against the 7-day average of the buy
+    // region's daily *lowest* (the cheapest you could realistically have bought at recently);
+    // sell compares against the 7-day average of the sell region's daily *average* (a fill price,
+    // not just the best ask). See compute7dAvgDeviation.
+    val buyVsAvg7dPct: Double = Double.NaN,
+    val sellVsAvg7dPct: Double = Double.NaN,
 )
 
 // ─── Sort / trade-type enums ───────────────────────────────────────────────
@@ -286,6 +294,8 @@ private object S {
     const val IR_CAT_TOP = "analysis.r.catTop"
     const val IR_CAT_SUB = "analysis.r.catSub"
     const val IR_MARGIN = "analysis.r.margin"
+    const val IR_MARGIN_LIMIT_ENABLED = "analysis.r.marginLimitEnabled"
+    const val IR_MARGIN_LIMIT_PCT = "analysis.r.marginLimitPct"
     const val IR_ISK_PER_M3 = "analysis.r.iskPerM3"
     const val IR_MAX_CARGO = "analysis.r.maxCargo"
     const val IR_MIN_PROFIT = "analysis.r.minProfit"
@@ -470,12 +480,14 @@ private fun StationTradingTab(
                     }
                 }
             }
-            // Row 2: numeric filters + behavior toggles + analyze action, right-aligned
+            // Row 2: numeric filters + behavior toggles + analyze action — no weight() on the
+            // inner FlowRow, so it sizes to its natural (wrapped) width instead of stretching to
+            // fill the row and shoving Copy Vol/Fees/Analyze off to the far right edge, detached
+            // from the filter fields they belong with.
             Row(verticalAlignment = Alignment.Top) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.weight(1f),
                 ) {
                     ParamField("Margin %", minMargin, 68.dp) {
                         minMargin = it
@@ -910,6 +922,12 @@ private fun InterRegionTab(
     var selectedSubGroup by remember { mutableStateOf<StaticMarketGroupModel?>(null) }
     var subGroups by remember { mutableStateOf<List<StaticMarketGroupModel>>(emptyList()) }
     var minMargin by remember { mutableStateOf("5") }
+    // Sanity-check the destination price against a cost-based ceiling instead of trusting
+    // whatever the (possibly thin/stale) market shows — see where it's applied in
+    // computeRegionOpportunityForType. Off by default: it's a "let me check if this profit is
+    // real" toggle you switch on, not a permanent constraint.
+    var marginLimitEnabled by remember { mutableStateOf(false) }
+    var marginLimitPct by remember { mutableStateOf("30") }
     var iskPerM3 by remember { mutableStateOf("1000") }
     var maxCargoM3 by remember { mutableStateOf("10000") }
     var minNetProfit by remember { mutableStateOf("5000000") }
@@ -937,6 +955,8 @@ private fun InterRegionTab(
                 InterRegionTradeType.entries.find { it.name == name }?.let { tradeType = it }
             }
             S.get(S.IR_MARGIN)?.let { minMargin = it }
+            S.get(S.IR_MARGIN_LIMIT_ENABLED)?.let { marginLimitEnabled = it == "true" }
+            S.get(S.IR_MARGIN_LIMIT_PCT)?.let { marginLimitPct = it }
             S.get(S.IR_ISK_PER_M3)?.let { iskPerM3 = it }
             S.get(S.IR_MAX_CARGO)?.let { maxCargoM3 = it }
             S.get(S.IR_MIN_PROFIT)?.let { minNetProfit = it }
@@ -1056,17 +1076,37 @@ private fun InterRegionTab(
                     }
                 }
             }
-            // Row 2: numeric filters + behavior toggles + analyze action, right-aligned
+            // Row 2: numeric filters + behavior toggles + analyze action — no weight() on the
+            // inner FlowRow, so it sizes to its natural (wrapped) width instead of stretching to
+            // fill the row and shoving Copy Vol/Fees/Analyze off to the far right edge, detached
+            // from the filter fields they belong with.
             Row(verticalAlignment = Alignment.Top) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.weight(1f),
                 ) {
                     ParamField("Margin %", minMargin, 68.dp) {
                         minMargin = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MARGIN, it) } }
                     }
+                    // Same idea as Tools > Sell Pricing's "Apply margin limit" — caps the assumed
+                    // sell price at buyPrice * (1 + this %), so a thin/unreliable destination
+                    // market can't inflate the shown profit past what a realistic, cost-based
+                    // margin would actually be.
+                    CheckboxParamField(
+                        label = "Margin Limit %",
+                        checked = marginLimitEnabled,
+                        onCheckedChange = {
+                            marginLimitEnabled = it
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MARGIN_LIMIT_ENABLED, it.toString()) } }
+                        },
+                        value = marginLimitPct,
+                        onValueChange = { v ->
+                            marginLimitPct = v
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MARGIN_LIMIT_PCT, v) } }
+                        },
+                        fieldEnabled = true,
+                    )
                     ParamField("ISK/m³", iskPerM3, 88.dp) {
                         iskPerM3 = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_ISK_PER_M3, it) } }
@@ -1096,6 +1136,7 @@ private fun InterRegionTab(
                             volCapPct = v
                             scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_VOL_CAP_PCT, v) } }
                         },
+                        fieldEnabled = true,
                     )
                     FilterControl("Skip Orders") {
                         Checkbox(
@@ -1156,6 +1197,7 @@ private fun InterRegionTab(
                                     val maxCargoM3D = maxCargoM3.toDoubleOrNull() ?: Double.MAX_VALUE
                                     val minMarginD = minMargin.toDoubleOrNull() ?: 0.0
                                     val minNetD = minNetProfit.toDoubleOrNull() ?: 0.0
+                                    val marginLimitD = marginLimitPct.toDoubleOrNull() ?: 0.0
                                     val brokerFeeD = brokerFeePct
                                     val salesTaxD = salesTaxPct
                                     val buyStSnap = buyStationId
@@ -1277,6 +1319,8 @@ private fun InterRegionTab(
                                                                         buyStSnap,
                                                                         sellStSnap,
                                                                         histSrc,
+                                                                        marginLimitEnabled = marginLimitEnabled,
+                                                                        marginLimitPct = marginLimitD,
                                                                         buyStationSystemId = buySystemId,
                                                                         buyDistanceFromStation = buyDistances,
                                                                         sellStationSystemId = sellSystemId,
@@ -1680,12 +1724,19 @@ private fun CheckboxParamField(
     value: String,
     onValueChange: (String) -> Unit,
     fieldWidth: Dp = 68.dp,
+    // Station Trading's "Vol %" checkbox genuinely means cap-on/cap-off, so disabling the field
+    // when unchecked (the default here) is correct. Inter-Region reuses this same component but
+    // the checkbox instead picks which side ("Src"/"Dst") the vol% applies to — with the default
+    // `enabled = checked`, the "Dst vol %" state (unchecked) could never be edited, since checking
+    // the box just relabels it to "Src vol %" rather than unlocking "Dst". Callers where the field
+    // should stay editable regardless of the checkbox pass `enabled = true` explicitly.
+    fieldEnabled: Boolean = checked,
 ) {
     FilterControl(label) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = checked, onCheckedChange = onCheckedChange, modifier = Modifier.size(24.dp))
             Spacer(Modifier.width(4.dp))
-            CompactTextField(value = value, onValueChange = onValueChange, width = fieldWidth, enabled = checked)
+            CompactTextField(value = value, onValueChange = onValueChange, width = fieldWidth, enabled = fieldEnabled)
         }
     }
 }
@@ -2279,8 +2330,16 @@ private fun RegionRow(
             color = if (isActiveInGame) STATION_ACTIVE_IN_GAME else Color.Unspecified,
             fontWeight = if (isActiveInGame) FontWeight.Bold else FontWeight.Normal,
         )
-        PriceText(opp.buyPrice, Color(0xFFFF6B6B), Modifier.width(95.dp))
-        PriceText(opp.sellPrice, Color(0xFF69DB7C), Modifier.width(95.dp))
+        Column(Modifier.width(95.dp)) {
+            PriceText(opp.buyPrice, Color(0xFFFF6B6B), Modifier.fillMaxWidth())
+            // Paying more than a typical recent day is the bad direction when you're the buyer.
+            Avg7dDeviationText(opp.buyVsAvg7dPct, higherIsBetter = false)
+        }
+        Column(Modifier.width(95.dp)) {
+            PriceText(opp.sellPrice, Color(0xFF69DB7C), Modifier.fillMaxWidth())
+            // Selling for more than a typical recent day is the good direction here.
+            Avg7dDeviationText(opp.sellVsAvg7dPct, higherIsBetter = true)
+        }
         MarginText(opp.marginPct, Modifier.width(65.dp))
         Text(
             formatVolume(opp.itemVolumeM3),
@@ -2381,6 +2440,29 @@ private fun TrendText(
         style = MaterialTheme.typography.bodySmall,
         color = color,
         modifier = modifier,
+    )
+}
+
+/**
+ * Small "vs 7d avg" line shown under a Buy/Sell price cell — see [compute7dAvgDeviation].
+ * [higherIsBetter] flips which direction (above/below the 7-day average) counts as the good
+ * (green) one: paying more than usual is bad for a buy price, selling for more than usual is good
+ * for a sell price. Renders nothing while there's no history yet, rather than a placeholder dash —
+ * this is a secondary annotation under the price, not its own column that needs to hold a slot.
+ */
+@Composable
+private fun Avg7dDeviationText(
+    deviationPct: Double,
+    higherIsBetter: Boolean,
+) {
+    if (deviationPct.isNaN()) return
+    val positive = deviationPct >= 0
+    val good = if (higherIsBetter) positive else !positive
+    val color = if (good) Color(0xFF69DB7C) else Color(0xFFFF6B6B)
+    Text(
+        "${if (positive) "+" else ""}${String.format(Locale.US, "%.1f", deviationPct)}% vs 7d",
+        style = MaterialTheme.typography.labelSmall,
+        color = color,
     )
 }
 
@@ -2521,10 +2603,8 @@ private fun computeOpportunityForType(
 
     val type = StaticDataDao.getTypeById(typeId) ?: return null
     val history = fetchHistory(typeId, regionId, historySource)
-    // Divide by 30 calendar days, not by the count of trading days in history.
-    // ESI omits days with no trades, so history.size < 30 for illiquid items.
-    val avgDailyVol = history.sumOf { it.volume } / 30L
-    if (avgDailyVol < minDailyVol && minDailyVol > 0) return null
+    val medianDailyVol = medianDailyVolume(history)
+    if (medianDailyVol < minDailyVol && minDailyVol > 0) return null
 
     return StationOpportunity(
         typeId = typeId,
@@ -2534,10 +2614,10 @@ private fun computeOpportunityForType(
         grossProfit = grossProfit,
         netProfit = netProfit,
         marginPct = marginPct,
-        dailyVolume = avgDailyVol,
+        dailyVolume = medianDailyVol,
         sellOrderCount = sells.size,
         buyOrderCount = buys.size,
-        estimatedDailyProfit = netProfit * avgDailyVol.coerceAtLeast(1),
+        estimatedDailyProfit = netProfit * medianDailyVol.coerceAtLeast(1),
         priceChange7d = compute7dChange(history),
     )
 }
@@ -2662,6 +2742,11 @@ private fun computeRegionOpportunityForType(
     sellStationSystemId: Int? = null,
     sellDistanceFromStation: Map<Int, Int> = emptyMap(),
     locationSystemCache: java.util.concurrent.ConcurrentHashMap<Long, Int?>? = null,
+    // See the comment where this is applied to sellPrice below — off by default, this is an
+    // opt-in sanity check you switch on to see what profit looks like at a conservative,
+    // cost-based sell price rather than whatever the (possibly thin/unreliable) market shows.
+    marginLimitEnabled: Boolean = false,
+    marginLimitPct: Double = 0.0,
 ): RegionOpportunity? {
     fun Map<String, Any?>.price() = (get("price") as? Number)?.toDouble() ?: 0.0
 
@@ -2715,11 +2800,19 @@ private fun computeRegionOpportunityForType(
                     }
                 }
         } ?: return null
-    val sellPrice =
+    val rawSellPrice =
         when (tradeType) {
             InterRegionTradeType.SELL_TO_BUY, InterRegionTradeType.BUY_TO_BUY -> dstBuy
             InterRegionTradeType.SELL_TO_SELL, InterRegionTradeType.BUY_TO_SELL, InterRegionTradeType.SAFE_BUY_TO_SELL -> dstSell
         } ?: return null
+    // A single stale/outlier order can make the destination's best price look far better than
+    // it actually is to trade at — a thin market's "best sell" might be one listing nobody's
+    // going to pay, and its "best buy" one lowball nobody's going to fill either. Capping the
+    // assumed sell price at cost + marginLimitPct turns that into "what would this be worth at a
+    // realistic, cost-based margin" instead of trusting whatever number the order book happened
+    // to have — every profit figure below is computed from this, not the raw market price.
+    val sellPrice =
+        if (marginLimitEnabled) minOf(rawSellPrice, buyPrice * (1.0 + marginLimitPct / 100.0)) else rawSellPrice
 
     if (sellPrice <= buyPrice) return null
 
@@ -2767,8 +2860,8 @@ private fun computeRegionOpportunityForType(
 
     val sellHistory = fetchHistory(typeId, sellRegionId, historySource)
     val buyHistory = fetchHistory(typeId, buyRegionId, historySource)
-    val volSell = sellHistory.sumOf { it.volume } / 30L
-    val volBuy = buyHistory.sumOf { it.volume } / 30L
+    val volSell = medianDailyVolume(sellHistory)
+    val volBuy = medianDailyVolume(buyHistory)
 
     return RegionOpportunity(
         typeId = typeId,
@@ -2787,6 +2880,8 @@ private fun computeRegionOpportunityForType(
         dailyVolume = volSell,
         dailyVolumeSrc = volBuy,
         priceChange7d = compute7dChange(sellHistory),
+        buyVsAvg7dPct = compute7dAvgDeviation(buyHistory, buyPrice) { it.lowest },
+        sellVsAvg7dPct = compute7dAvgDeviation(sellHistory, sellPrice) { it.average },
     )
 }
 
@@ -2800,6 +2895,44 @@ private fun compute7dChange(history: List<org.eventt.core.model.MarketHistoryMod
     val oldest = recent.last().average
     if (oldest <= 0.0) return Double.NaN
     return (latest - oldest) / oldest * 100.0
+}
+
+/**
+ * Median daily volume over the last [windowDays] calendar days — sturdier than the mean against a
+ * single freak day (a one-off wholesale dump/buyout shouldn't make "typical daily volume" look
+ * bigger than it really is). Same missing-days-are-zero-volume-days handling as the average
+ * calculation it replaces: ESI omits days with no trades entirely rather than returning a
+ * zero-volume row, so [history] can have fewer than [windowDays] entries for illiquid items —
+ * those missing days are padded in as explicit zeros before taking the median, or a thin item
+ * that only traded on 2 of the last 30 days would show its median as "whatever those 2 busy days
+ * happened to be," not the mostly-quiet volume it actually has.
+ */
+private fun medianDailyVolume(
+    history: List<org.eventt.core.model.MarketHistoryModel>,
+    windowDays: Int = 30,
+): Long {
+    val missingDays = (windowDays - history.size).coerceAtLeast(0)
+    val volumes = (history.map { it.volume } + List(missingDays) { 0L }).sorted()
+    if (volumes.isEmpty()) return 0L
+    val mid = volumes.size / 2
+    return if (volumes.size % 2 == 0) (volumes[mid - 1] + volumes[mid]) / 2 else volumes[mid]
+}
+
+/**
+ * How far [currentPrice] sits from the average of the last 7 days' [selector] value — "is this
+ * price unusually cheap/expensive right now," as opposed to [compute7dChange]'s day-over-day
+ * trend. Positive = currentPrice is above the 7-day average. NaN with no history yet.
+ */
+private fun compute7dAvgDeviation(
+    history: List<org.eventt.core.model.MarketHistoryModel>,
+    currentPrice: Double,
+    selector: (org.eventt.core.model.MarketHistoryModel) -> Double,
+): Double {
+    val recent = history.take(7)
+    if (recent.isEmpty()) return Double.NaN
+    val avg7d = recent.map(selector).average()
+    if (avg7d <= 0.0) return Double.NaN
+    return (currentPrice - avg7d) / avg7d * 100.0
 }
 
 private fun fetchHistory(
