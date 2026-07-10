@@ -774,7 +774,11 @@ object EsiClient {
                 .post(ByteArray(0).toRequestBody(null))
                 .build()
         return try {
-            EveHttpClient.getClient().newCall(request).execute().use { it.isSuccessful }
+            EveHttpClient
+                .getClient()
+                .newCall(request)
+                .execute()
+                .use { it.isSuccessful }
         } catch (e: IOException) {
             false
         }

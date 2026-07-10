@@ -103,6 +103,7 @@ object ReservationService {
                 requestedAt = System.currentTimeMillis() / 1000,
             )
         }
+        NostrRelayManager.notifyReservationActivity()
         return tradeId
     }
 
@@ -145,6 +146,7 @@ object ReservationService {
         if (accept) {
             OrderRepository.setRemainingQty(order, (order.qtyRemaining - reservation.qty).coerceAtLeast(0))
         }
+        NostrRelayManager.notifyReservationActivity()
         return true
     }
 
@@ -157,6 +159,7 @@ object ReservationService {
     suspend fun markCompleted(reservation: NostrReservationModel): Boolean {
         if (!ReceiptService.publish(reservation)) return false
         withContext(Dispatchers.IO) { NostrReservationDao.updateStatus(reservation.tradeId, "completed") }
+        NostrRelayManager.notifyReservationActivity()
         return true
     }
 
@@ -174,6 +177,7 @@ object ReservationService {
         if (!sendDm(identity, reservation.sellerPubkey, json.encodeToString(payload))) return false
 
         withContext(Dispatchers.IO) { NostrReservationDao.updateStatus(reservation.tradeId, "cancelled") }
+        NostrRelayManager.notifyReservationActivity()
         return true
     }
 
@@ -191,6 +195,7 @@ object ReservationService {
         val restored = OrderRepository.setRemainingQty(order, order.qtyRemaining + reservation.qty)
         if (restored != null) {
             withContext(Dispatchers.IO) { NostrReservationDao.updateStatus(reservation.tradeId, "released") }
+            NostrRelayManager.notifyReservationActivity()
         }
         return restored != null
     }

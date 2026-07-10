@@ -49,37 +49,23 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.CharacterDao
-import org.eventt.core.database.NostrOrderDao
 import org.eventt.core.database.NostrOrderModel
-import org.eventt.core.database.NostrReservationDao
-import org.eventt.core.database.NostrReservationModel
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.model.StaticRegionModel
 import org.eventt.core.model.StaticTypeModel
 import org.eventt.core.nostr.MinLotUnit
 import org.eventt.core.nostr.NostrIdentityService
-import org.eventt.core.nostr.NostrRelayEvent
-import org.eventt.core.nostr.NostrRelayManager
 import org.eventt.core.nostr.OrderDraft
 import org.eventt.core.nostr.OrderFilter
 import org.eventt.core.nostr.OrderRepository
 import org.eventt.core.nostr.OrderSide
 import org.eventt.core.nostr.PostOrderResult
-import org.eventt.core.nostr.ReservationService
 import org.eventt.ui.common.SearchField
-import java.time.Instant
 import java.util.Locale
 
 private data class MyOrderRowData(
     val order: NostrOrderModel,
     val typeName: String,
-)
-
-private data class SellerReservationRowData(
-    val reservation: NostrReservationModel,
-    val typeName: String,
-    val regionName: String?,
-    val price: Double?,
 )
 
 private enum class MyOrdersSortColumn { PRICE, QTY, EXPIRY }
@@ -93,7 +79,6 @@ fun MyOrdersScreen() {
     var myOrderRows by remember { mutableStateOf<List<MyOrderRowData>>(emptyList()) }
     var myOrdersSortColumn by remember { mutableStateOf(MyOrdersSortColumn.EXPIRY) }
     var myOrdersSortDirection by remember { mutableStateOf(SortDirection.ASC) }
-    var sellerReservations by remember { mutableStateOf<List<SellerReservationRowData>>(emptyList()) }
 
     var showPostForm by remember { mutableStateOf(false) }
     var side by remember { mutableStateOf(OrderSide.SELL) }
@@ -108,7 +93,6 @@ fun MyOrdersScreen() {
     var tradingAs by remember { mutableStateOf<String?>(null) }
     var isPosting by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
-    var actionError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         allRegions = withContext(Dispatchers.IO) { StaticDataDao.getAllRegions() }
@@ -153,32 +137,6 @@ fun MyOrdersScreen() {
         if (type != null && region != null && priceText.isEmpty()) {
             val recommended = withContext(Dispatchers.IO) { SavingsBadgeService.recommendedPrice(type.typeId, region, side) }
             recommended?.let { priceText = String.format(Locale.US, "%.2f", it) }
-        }
-    }
-
-    suspend fun reloadReservations() {
-        val all = withContext(Dispatchers.IO) { NostrReservationDao.listForRole("seller") }
-        val relevant = all.filter { it.status == "sent" || it.status == "accepted" }
-        sellerReservations =
-            withContext(Dispatchers.IO) {
-                relevant
-                    .map { reservation ->
-                        val order = NostrOrderDao.getByCoordinate(reservation.orderUuid, reservation.sellerPubkey)
-                        SellerReservationRowData(
-                            reservation = reservation,
-                            typeName =
-                                order?.let { StaticDataDao.getTypeById(it.typeId)?.name }
-                                    ?: "Order ${reservation.orderUuid.take(8)}… (expired/purged)",
-                            regionName = order?.let { StaticDataDao.getRegionById(it.regionId)?.name },
-                            price = order?.price,
-                        )
-                    }.sortedWith(compareBy({ it.reservation.status != "sent" }, { -it.reservation.requestedAt }))
-            }
-    }
-    LaunchedEffect(Unit) {
-        reloadReservations()
-        NostrRelayManager.events.collect { event ->
-            if (event is NostrRelayEvent.ReservationActivity) reloadReservations()
         }
     }
 
@@ -350,67 +308,6 @@ fun MyOrdersScreen() {
             }
         }
 
-        actionError?.let {
-            Spacer(Modifier.height(12.dp))
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-        }
-
-        Spacer(Modifier.height(16.dp))
-        Text(
-            if (sellerReservations.isEmpty()) "Incoming buy requests" else "Incoming buy requests (${sellerReservations.size})",
-            style = MaterialTheme.typography.titleMedium,
-        )
-        Text(
-            "When someone clicks Buy on one of your orders, their request shows up here for you to accept or decline.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(8.dp))
-        if (sellerReservations.isEmpty()) {
-            Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                Text("No incoming requests yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        } else {
-            ReservationsTableHeader()
-            HorizontalDivider()
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                sellerReservations.forEach { row ->
-                    SellerReservationTableRow(
-                        row,
-                        onAccept = {
-                            scope.launch(Dispatchers.IO) {
-                                val ok = ReservationService.respond(row.reservation, accept = true)
-                                actionError = if (ok) null else "Couldn't accept — is your P2P Market identity still set up?"
-                                reloadReservations()
-                            }
-                        },
-                        onDecline = {
-                            scope.launch(Dispatchers.IO) {
-                                val ok = ReservationService.respond(row.reservation, accept = false)
-                                actionError = if (ok) null else "Couldn't decline — is your P2P Market identity still set up?"
-                                reloadReservations()
-                            }
-                        },
-                        onMarkCompleted = {
-                            scope.launch(Dispatchers.IO) {
-                                val ok = ReservationService.markCompleted(row.reservation)
-                                actionError =
-                                    if (ok) null else "Couldn't publish the completion receipt — is your P2P Market identity still set up?"
-                                reloadReservations()
-                            }
-                        },
-                        onRelease = {
-                            scope.launch(Dispatchers.IO) {
-                                val ok = ReservationService.release(row.reservation)
-                                actionError = if (ok) null else "Couldn't release — is your P2P Market identity still set up?"
-                                reloadReservations()
-                            }
-                        },
-                    )
-                }
-            }
-        }
-
         Spacer(Modifier.height(16.dp))
         Text("My active orders", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))
@@ -445,109 +342,6 @@ fun MyOrdersScreen() {
 }
 
 @Composable
-private fun ReservationsTableHeader() {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text("Item", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-        Text("Region", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(120.dp))
-        Text("Price", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(130.dp))
-        Text("Qty", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(60.dp))
-        Text("Buyer", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(150.dp))
-        Text("Status", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(150.dp))
-        Text("Requested", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(110.dp))
-        Text("", modifier = Modifier.width(240.dp))
-    }
-}
-
-@Composable
-private fun SellerReservationTableRow(
-    row: SellerReservationRowData,
-    onAccept: () -> Unit,
-    onDecline: () -> Unit,
-    onMarkCompleted: () -> Unit,
-    onRelease: () -> Unit,
-) {
-    val reservation = row.reservation
-    val nowSec = System.currentTimeMillis() / 1000
-
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(row.typeName, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (reservation.note.isNotBlank()) {
-                Text(
-                    reservation.note,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            if (reservation.status == "accepted") {
-                reservation.holdUntil?.let {
-                    Text("Held until ${Instant.ofEpochSecond(it)}", style = MaterialTheme.typography.labelSmall)
-                }
-            }
-        }
-        Text(
-            row.regionName ?: "—",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.width(120.dp),
-        )
-        Text(
-            row.price?.let { String.format(Locale.US, "%,.2f", it) } ?: "—",
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.width(130.dp),
-        )
-        Text("${reservation.qty}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(60.dp))
-        Row(modifier = Modifier.width(150.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                reservation.buyerChar.ifBlank { "${reservation.buyerPubkey.take(12)}…" },
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (reservation.buyerChar.isNotBlank()) TraderInfoButton(reservation.buyerChar, reservation.buyerCharacterId)
-        }
-        Text(
-            if (reservation.status == "sent") "Awaiting your response" else "Accepted — awaiting completion",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(150.dp),
-        )
-        Text(
-            "${formatDurationShort(nowSec - reservation.requestedAt)} ago",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.width(110.dp),
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.width(240.dp)) {
-            if (reservation.status == "sent") {
-                Button(onClick = onAccept) { Text("Accept") }
-                OutlinedButton(onClick = onDecline) { Text("Decline") }
-            } else {
-                Button(onClick = onMarkCompleted) { Text("Mark completed") }
-                OutlinedButton(onClick = onRelease) { Text("Release") }
-            }
-        }
-    }
-}
-
-@Composable
 private fun MyOrdersTableHeader(
     sortColumn: MyOrdersSortColumn,
     sortDirection: SortDirection,
@@ -572,13 +366,14 @@ private fun MyOrdersTableHeader(
             active = sortColumn == MyOrdersSortColumn.QTY,
             direction = sortDirection,
         ) { onSort(MyOrdersSortColumn.QTY, SortDirection.DESC) }
+        Text("Value", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(130.dp))
         SortHeaderCell(
             "Expires",
             Modifier.width(110.dp),
             active = sortColumn == MyOrdersSortColumn.EXPIRY,
             direction = sortDirection,
         ) { onSort(MyOrdersSortColumn.EXPIRY, SortDirection.ASC) }
-        Spacer(Modifier.width(170.dp))
+        Spacer(Modifier.width(200.dp))
     }
 }
 
@@ -608,14 +403,21 @@ private fun MyOrderTableRow(
         )
         Text("${order.qtyRemaining}/${order.qtyTotal}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(90.dp))
         Text(
+            String.format(Locale.US, "%,.2f", order.qtyRemaining * order.price),
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.width(130.dp),
+        )
+        Text(
             formatDurationShort(order.expiration - System.currentTimeMillis() / 1000) + " left",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.width(110.dp),
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(170.dp)) {
-            OutlinedButton(onClick = onRenew) { Text("Renew") }
-            OutlinedButton(onClick = onCancel) { Text("Cancel") }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(200.dp)) {
+            OutlinedButton(onClick = onRenew, contentPadding = COMPACT_BUTTON_PADDING) { Text("Renew") }
+            OutlinedButton(onClick = onCancel, contentPadding = COMPACT_BUTTON_PADDING) { Text("Cancel") }
         }
     }
 }

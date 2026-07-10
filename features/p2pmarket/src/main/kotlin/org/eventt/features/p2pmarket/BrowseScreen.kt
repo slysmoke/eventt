@@ -194,7 +194,7 @@ private fun BrowseTableHeader(
             active = sortColumn == BrowseSortColumn.EXPIRY,
             direction = sortDirection,
         ) { onSort(BrowseSortColumn.EXPIRY, SortDirection.ASC) }
-        Spacer(Modifier.width(90.dp))
+        Spacer(Modifier.width(110.dp))
     }
 }
 
@@ -280,9 +280,9 @@ private fun BrowseTableRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Box(modifier = Modifier.width(90.dp)) {
+        Box(modifier = Modifier.width(110.dp)) {
             if (!isOwnOrder) {
-                OutlinedButton(onClick = { showRequestDialog = true }, enabled = !requestSent) {
+                OutlinedButton(onClick = { showRequestDialog = true }, enabled = !requestSent, contentPadding = COMPACT_BUTTON_PADDING) {
                     Text(if (requestSent) "Sent" else "Request")
                 }
             }

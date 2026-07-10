@@ -1,6 +1,7 @@
 package org.eventt.features.p2pmarket
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -16,6 +17,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 enum class SortDirection { ASC, DESC }
+
+// Table-row action buttons sit in fixed-width cells; Material3's default ButtonDefaults padding
+// (24dp horizontal) is generous enough that two side-by-side buttons wrap their text within those
+// cells. This trims it down to fit "Cancel"/"Decline"/"Request"-length labels on one line without
+// widening every table beyond reason.
+internal val COMPACT_BUTTON_PADDING = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
 
 /** Clickable column header for a hand-rolled table — click toggles [onClick]'s owning sort state, arrow shows current direction only when this column is the active sort. */
 @Composable

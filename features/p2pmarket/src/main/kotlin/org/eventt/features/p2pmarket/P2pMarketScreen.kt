@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.MoveToInbox
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -32,6 +33,7 @@ private enum class P2pMarketTab(
 ) {
     BROWSE("Browse"),
     MY_ORDERS("My Orders"),
+    INCOMING_REQUESTS("Incoming Requests"),
     MY_REQUESTS("My Requests"),
     INBOX("Inbox"),
 }
@@ -67,7 +69,7 @@ fun P2pMarketScreen() {
             P2pMarketTab.entries.forEach { t ->
                 val badgeCount =
                     when (t) {
-                        P2pMarketTab.MY_ORDERS -> pendingIncoming
+                        P2pMarketTab.INCOMING_REQUESTS -> pendingIncoming
                         P2pMarketTab.MY_REQUESTS -> awaitingCompletion
                         else -> 0
                     }
@@ -85,6 +87,7 @@ fun P2pMarketScreen() {
                             when (t) {
                                 P2pMarketTab.BROWSE -> Icons.Default.Search
                                 P2pMarketTab.MY_ORDERS -> Icons.AutoMirrored.Filled.List
+                                P2pMarketTab.INCOMING_REQUESTS -> Icons.Default.MoveToInbox
                                 P2pMarketTab.MY_REQUESTS -> Icons.AutoMirrored.Filled.Send
                                 P2pMarketTab.INBOX -> Icons.Default.Inbox
                             },
@@ -98,6 +101,7 @@ fun P2pMarketScreen() {
         when (tab) {
             P2pMarketTab.BROWSE -> BrowseScreen()
             P2pMarketTab.MY_ORDERS -> MyOrdersScreen()
+            P2pMarketTab.INCOMING_REQUESTS -> IncomingRequestsScreen()
             P2pMarketTab.MY_REQUESTS -> MyRequestsScreen()
             P2pMarketTab.INBOX -> InboxScreen()
         }

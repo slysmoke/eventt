@@ -31,6 +31,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
@@ -97,7 +98,7 @@ internal fun NostrIdentityCard() {
                             Icons.Default.Podcasts,
                             contentDescription = if (isActive) "Currently active" else null,
                             modifier = Modifier.size(18.dp),
-                            tint = if (isActive) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0f),
+                            tint = if (isActive) MaterialTheme.colorScheme.tertiary else Color.Transparent,
                         )
                         Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
                             Text(character.name, style = MaterialTheme.typography.bodyMedium)

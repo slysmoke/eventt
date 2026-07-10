@@ -270,6 +270,16 @@ object NostrRelayManager {
         scope = null
     }
 
+    /**
+     * Lets a locally-initiated reservation change (accept/decline/cancel/release/mark-completed —
+     * see [ReservationService]) notify the same listeners an incoming DM would. Without this,
+     * screens/badges driven by [events] only refreshed when some *other* DM happened to arrive
+     * afterward, since none of those local mutations otherwise touch this event stream themselves.
+     */
+    fun notifyReservationActivity() {
+        _events.tryEmit(NostrRelayEvent.ReservationActivity)
+    }
+
     /** No-op (silently) if the relay connection isn't up yet — callers can't usefully retry a publish mid-outage in Phase 1. */
     suspend fun publish(event: Event) {
         withContext(Dispatchers.IO) {
