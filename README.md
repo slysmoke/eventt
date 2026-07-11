@@ -14,11 +14,12 @@ A desktop trading toolkit for [EVE Online](https://www.eveonline.com/), built wi
 - **Watchlist** — track items with sparklines
 - **Alerts** — price alerts with in-app notifications
 - **Contracts** — contract tracker
-- **Tools** — cargo splitter and sell-pricing calculator
+- **Tools** — cargo splitter and a sell-pricing calculator that scopes prices to your character's current docked station
 - **P2P Market** — peer-to-peer OTC trading over [Nostr](https://nostr.com/): post buy/sell orders, negotiate reservations over encrypted DMs, and settle in-game outside the ESI market
+- **Trade Calc** — a small always-on-top overlay for quick station-trading margin math: reads SELL/BUY prices from a copied order row or an EVE order-book export, and shows broker/tax fees, profit margin, and real buy-out/sell-out totals walked from the actual order book
 - **Settings** — tax rates, data source, and app preferences
 
-A global hotkey (Ctrl+Z) cycles through your queued orders, opens the in-game market window, and copies an overbid/undercut price to your clipboard.
+Two global hotkeys work even when EVE has focus: **Ctrl+Z** cycles through your queued orders, opens the in-game market window, and copies an overbid/undercut price to your clipboard; **Ctrl+M** opens the Trade Calc overlay at your cursor.
 
 ## Requirements
 
@@ -66,7 +67,14 @@ For testing both sides of a trade locally, `./scripts/run-p2p-test.sh` launches 
 ./gradlew :module:test       # Run tests for a specific module (e.g. :core:database:test)
 ```
 
-Targets JVM 21 / Kotlin 1.9.22. No linter configured; code style is `kotlin.code.style=official`.
+Targets JVM 21 / Kotlin 1.9.22, code style `kotlin.code.style=official`. Linting is enforced via ktlint and detekt:
+
+```bash
+./gradlew ktlintCheck         # Style check (ktlintFormat to auto-fix)
+./gradlew detekt              # Static analysis
+```
+
+Both also run as part of `./gradlew check` and gate CI.
 
 ## Packaging
 
@@ -105,3 +113,7 @@ Main.kt → DatabaseManager.initialize() → EventtApp (Compose)
 ```
 
 See `CLAUDE.md` for a deeper dive into caching, the request queue, threading, and other internal patterns.
+
+## License
+
+[MIT](LICENSE)
