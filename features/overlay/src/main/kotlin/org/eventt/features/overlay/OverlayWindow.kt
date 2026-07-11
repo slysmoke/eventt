@@ -4,7 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -50,7 +52,11 @@ fun OverlayWindow(onClose: () -> Unit) {
     val windowState =
         rememberWindowState(
             width = 290.dp,
-            height = 290.dp,
+            // Grown from the original 290 to fit the Buy out/Sell out section added later — this
+            // is an undecorated, non-resizable window, so anything taller than this is otherwise
+            // silently clipped rather than scrolled. The body below is also independently
+            // scrollable as a safety net against any further growth (long station names, etc.).
+            height = 400.dp,
             position =
                 if (pendingPosition != null) {
                     WindowPosition(x = pendingPosition.first.dp, y = pendingPosition.second.dp)
@@ -85,13 +91,18 @@ private fun OverlayContent(
 ) {
     var sellPrice by remember { mutableStateOf<Double?>(null) }
     var buyPrice by remember { mutableStateOf<Double?>(null) }
-    var sellVol by remember { mutableStateOf(0L) }
-    var buyVol by remember { mutableStateOf(0L) }
     var sellLoc by remember { mutableStateOf("") }
     var buyLoc by remember { mutableStateOf("") }
     var sellSource by remember { mutableStateOf<PriceSource?>(null) }
     var buySource by remember { mutableStateOf<PriceSource?>(null) }
     var bookItemName by remember { mutableStateOf<String?>(null) }
+
+    // Every known order on each side (price to volume) — one entry from a manual clipboard copy
+    // (just that row), the whole book from a Marketlogs order-book import. Buy out/Sell out below
+    // sum over these instead of guessing off a single price, since a real buyout has to walk
+    // every order's own price and volume, not just the best one.
+    var sellBook by remember { mutableStateOf<List<Pair<Double, Long>>>(emptyList()) }
+    var buyBook by remember { mutableStateOf<List<Pair<Double, Long>>>(emptyList()) }
 
     // Tax rates come from the currently active character's own configured fees (Settings ›
     // Character Fees) instead of a manual slider here — one less place to keep in sync.
@@ -123,14 +134,14 @@ private fun OverlayContent(
                 val p = ClipboardParser.parse(text) ?: continue
                 if (p.isBuy) {
                     buyPrice = p.price
-                    buyVol = p.volume
                     buyLoc = p.location
                     buySource = PriceSource.CLIPBOARD
+                    buyBook = listOf(p.price to p.volume)
                 } else {
                     sellPrice = p.price
-                    sellVol = p.volume
                     sellLoc = p.location
                     sellSource = PriceSource.CLIPBOARD
+                    sellBook = listOf(p.price to p.volume)
                 }
             }
         }
@@ -141,19 +152,24 @@ private fun OverlayContent(
     LaunchedEffect(Unit) {
         MarketLogWatcher.events.collect { event ->
             if (event is MarketLogEvent.OrderBookImported) {
-                val bestSell = event.sellRows.filter { it.jumps == 0 }.minByOrNull { it.price } ?: event.sellRows.minByOrNull { it.price }
-                val bestBuy = event.buyRows.filter { it.jumps == 0 }.maxByOrNull { it.price } ?: event.buyRows.maxByOrNull { it.price }
+                // Prefer orders actually in this system (0 jumps); only fall back to the whole
+                // region if none are local — same scoping for the best price as for the buyout/
+                // sellout totals below, so they describe the same population of orders.
+                val sellRowsUsed = event.sellRows.filter { it.jumps == 0 }.ifEmpty { event.sellRows }
+                val buyRowsUsed = event.buyRows.filter { it.jumps == 0 }.ifEmpty { event.buyRows }
+                val bestSell = sellRowsUsed.minByOrNull { it.price }
+                val bestBuy = buyRowsUsed.maxByOrNull { it.price }
                 bestSell?.let {
                     sellPrice = it.price
-                    sellVol = it.volRemaining.toLong()
                     sellLoc = StaticDataDao.getStationById(it.stationId)?.name ?: it.stationId.toString()
                     sellSource = PriceSource.FILE
+                    sellBook = sellRowsUsed.map { row -> row.price to row.volRemaining.toLong() }
                 }
                 bestBuy?.let {
                     buyPrice = it.price
-                    buyVol = it.volRemaining.toLong()
                     buyLoc = StaticDataDao.getStationById(it.stationId)?.name ?: it.stationId.toString()
                     buySource = PriceSource.FILE
+                    buyBook = buyRowsUsed.map { row -> row.price to row.volRemaining.toLong() }
                 }
                 bookItemName = StaticDataDao.getTypeName(event.typeId) ?: "Unknown (${event.typeId})"
             }
@@ -166,14 +182,13 @@ private fun OverlayContent(
         Box(
             modifier =
                 Modifier
-                    .fillMaxWidth()
-                    .wrapContentHeight()
+                    .fillMaxSize()
                     .clip(shape)
                     .background(OVERLAY_BG)
                     .border(1.dp, OVERLAY_BORDER, shape),
         ) {
-            Column {
-                // ─── Header / drag handle ─────────────────────────────────
+            Column(modifier = Modifier.fillMaxSize()) {
+                // ─── Header / drag handle — stays fixed, never scrolls ─────
                 Row(
                     modifier =
                         Modifier
@@ -231,92 +246,109 @@ private fun OverlayContent(
                     }
                 }
 
-                bookItemName?.let {
-                    Text(
-                        it,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = ACCENT,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-                    )
-                }
+                // ─── Body — scrolls independently of the header above, so content taller than
+                // the (fixed, non-resizable) window is reachable instead of silently clipped ────
+                Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                    bookItemName?.let {
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ACCENT,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                        )
+                    }
 
-                // ─── Prices ───────────────────────────────────────────────
-                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                    PriceRow(
-                        label = "SELL",
-                        price = sellPrice,
-                        location = sellLoc,
-                        color = SELL_COLOR,
-                        source = sellSource,
-                        onSet = {
-                            val p = ClipboardParser.parse(ClipboardParser.readClipboard()) ?: return@PriceRow
-                            sellPrice = p.price
-                            sellVol = p.volume
-                            sellLoc = p.location
-                            sellSource = PriceSource.CLIPBOARD
-                        },
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    PriceRow(
-                        label = "BUY ",
-                        price = buyPrice,
-                        location = buyLoc,
-                        color = BUY_COLOR,
-                        source = buySource,
-                        onSet = {
-                            val p = ClipboardParser.parse(ClipboardParser.readClipboard()) ?: return@PriceRow
-                            buyPrice = p.price
-                            buyVol = p.volume
-                            buyLoc = p.location
-                            buySource = PriceSource.CLIPBOARD
-                        },
-                    )
-                }
-
-                // ─── Profit / margin ──────────────────────────────────────
-                if (sellPrice != null && buyPrice != null) {
-                    HorizontalDivider(color = OVERLAY_BORDER)
-                    val sp = sellPrice!!
-                    val bp = buyPrice!!
-                    val bf = brokerFeePct / 100.0
-                    val st = salesTaxPct / 100.0
-
-                    // Station-trading formulas:
-                    // Post a buy order → pay broker fee on buy
-                    // Post a sell order → pay broker fee + sales tax on sell
-                    val costPerUnit = bp * (1.0 + bf)
-                    val revenuePerUnit = sp * (1.0 - bf - st)
-                    val profitPerUnit = revenuePerUnit - costPerUnit
-                    val margin = if (sp > 0) profitPerUnit / sp * 100.0 else 0.0
-                    val profitColor = if (profitPerUnit > 0) BUY_COLOR else SELL_COLOR
-
+                    // ─── Prices ───────────────────────────────────────────
                     Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                        CalcRow("Broker (buy)", fmtIsk(bp * bf), DIM_TEXT)
-                        CalcRow("Broker (sell)", fmtIsk(sp * bf), DIM_TEXT)
-                        CalcRow("Sales tax", fmtIsk(sp * st), DIM_TEXT)
-                        Spacer(Modifier.height(4.dp))
-                        CalcRow("Profit/unit", fmtIsk(profitPerUnit), profitColor, bold = true)
-                        CalcRow("Margin", "%.1f%%".format(margin), profitColor, bold = true)
-                        Spacer(Modifier.height(4.dp))
-                        // Instant-fill reference prices: crossing the spread by 10% guarantees a
-                        // fill even if the book moves a tick before the order lands, unlike
-                        // matching the going price exactly.
-                        CalcRow("Buy out (+10%)", fmtIsk(sp * 1.1), DIM_TEXT)
-                        CalcRow("Sell out (−10%)", fmtIsk(bp * 0.9), DIM_TEXT)
+                        PriceRow(
+                            label = "SELL",
+                            price = sellPrice,
+                            location = sellLoc,
+                            color = SELL_COLOR,
+                            source = sellSource,
+                            onSet = {
+                                val p = ClipboardParser.parse(ClipboardParser.readClipboard()) ?: return@PriceRow
+                                sellPrice = p.price
+                                sellLoc = p.location
+                                sellSource = PriceSource.CLIPBOARD
+                                sellBook = listOf(p.price to p.volume)
+                            },
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        PriceRow(
+                            label = "BUY ",
+                            price = buyPrice,
+                            location = buyLoc,
+                            color = BUY_COLOR,
+                            source = buySource,
+                            onSet = {
+                                val p = ClipboardParser.parse(ClipboardParser.readClipboard()) ?: return@PriceRow
+                                buyPrice = p.price
+                                buyLoc = p.location
+                                buySource = PriceSource.CLIPBOARD
+                                buyBook = listOf(p.price to p.volume)
+                            },
+                        )
+                    }
 
-                        val tradableVol = minOf(sellVol, buyVol).takeIf { it > 0 }
-                        if (tradableVol != null) {
-                            Spacer(Modifier.height(2.dp))
-                            CalcRow(
-                                label = "× ${fmtVol(tradableVol)} units",
-                                value = fmtIsk(profitPerUnit * tradableVol),
-                                valueColor = profitColor,
-                            )
+                    // ─── Profit / margin ──────────────────────────────────
+                    if (sellPrice != null && buyPrice != null) {
+                        HorizontalDivider(color = OVERLAY_BORDER)
+                        val sp = sellPrice!!
+                        val bp = buyPrice!!
+                        val bf = brokerFeePct / 100.0
+                        val st = salesTaxPct / 100.0
+
+                        // Station-trading formulas:
+                        // Post a buy order → pay broker fee on buy
+                        // Post a sell order → pay broker fee + sales tax on sell
+                        val costPerUnit = bp * (1.0 + bf)
+                        val revenuePerUnit = sp * (1.0 - bf - st)
+                        val profitPerUnit = revenuePerUnit - costPerUnit
+                        val margin = if (sp > 0) profitPerUnit / sp * 100.0 else 0.0
+                        val profitColor = if (profitPerUnit > 0) BUY_COLOR else SELL_COLOR
+
+                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                            CalcRow("Broker (buy)", fmtIsk(bp * bf), DIM_TEXT)
+                            CalcRow("Broker (sell)", fmtIsk(sp * bf), DIM_TEXT)
+                            CalcRow("Sales tax", fmtIsk(sp * st), DIM_TEXT)
+                            Spacer(Modifier.height(4.dp))
+                            CalcRow("Profit/unit", fmtIsk(profitPerUnit), profitColor, bold = true)
+                            CalcRow("Margin", "%.1f%%".format(margin), profitColor, bold = true)
                         }
                     }
-                }
+
+                    // ─── Sell wall / Buy wall ──────────────────────────────
+                    // What it actually costs to clear the sell wall (Buy out — you're buying),
+                    // or actually pays to clear the buy wall (Sell out — you're selling) — walked
+                    // order-by-order (each at its own price and volume) rather than a flat markup
+                    // off the single best price. Grouped and labeled by which book the numbers
+                    // come from (sell wall, then buy wall — same order as the SELL/BUY rows
+                    // above), not by which action they name, so adjacent rows read consistently.
+                    if (sellBook.isNotEmpty() || buyBook.isNotEmpty()) {
+                        HorizontalDivider(color = OVERLAY_BORDER)
+                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                            if (sellBook.isNotEmpty()) {
+                                val vol = sellBook.sumOf { it.second }
+                                val cost = sellBook.sumOf { it.first * it.second }
+                                CalcRow("Sell wall: buy out (${fmtVol(vol)} units)", fmtIsk(cost), DIM_TEXT)
+                                avgTopPrice(sellBook, cheapestFirst = true)?.let {
+                                    CalcRow("Sell wall: avg (top 5%)", fmtIsk(it), DIM_TEXT)
+                                }
+                            }
+                            if (buyBook.isNotEmpty()) {
+                                val vol = buyBook.sumOf { it.second }
+                                val revenue = buyBook.sumOf { it.first * it.second }
+                                CalcRow("Buy wall: sell out (${fmtVol(vol)} units)", fmtIsk(revenue), DIM_TEXT)
+                                avgTopPrice(buyBook, cheapestFirst = false)?.let {
+                                    CalcRow("Buy wall: avg (top 5%)", fmtIsk(it), DIM_TEXT)
+                                }
+                            }
+                        }
+                    }
+                } // scrollable body Column
             }
         }
     } // outer fillMaxSize Box
@@ -411,6 +443,23 @@ private fun CalcRow(
             fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
         )
     }
+}
+
+// Volume-weighted average price across the closest 5% of order rows by count (rounded up, min 1)
+// — cheapest rows for sell, priciest for buy. A more realistic "quick fill" reference than either
+// the single best price (only ever true for the very first unit) or the full Buy out/Sell out
+// total (walks the entire book, unrealistically deep for one trade).
+private fun avgTopPrice(
+    levels: List<Pair<Double, Long>>,
+    cheapestFirst: Boolean,
+): Double? {
+    if (levels.isEmpty()) return null
+    val sorted = if (cheapestFirst) levels.sortedBy { it.first } else levels.sortedByDescending { it.first }
+    // Integer ceiling division (5% = 5/100) instead of Math.ceil, to sidestep float rounding.
+    val topCount = ((sorted.size * 5 + 99) / 100).coerceAtLeast(1)
+    val top = sorted.take(topCount)
+    val vol = top.sumOf { it.second }
+    return if (vol > 0) top.sumOf { it.first * it.second } / vol else top.map { it.first }.average()
 }
 
 // ─── Formatters ───────────────────────────────────────────────────────────
