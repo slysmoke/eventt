@@ -11,14 +11,14 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           java-version: '21'
           distribution: 'temurin'
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.gradle/caches
@@ -88,15 +88,15 @@ jobs:
     name: Build (${{ matrix.platform }})
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           java-version: '21'
           distribution: 'temurin'
           architecture: ${{ matrix.javaArch }}
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.gradle/caches
@@ -184,7 +184,7 @@ jobs:
             -DestinationPath eventt-windows.zip
 
       - name: Upload zip artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: eventt-${{ matrix.platform }}
           path: eventt-${{ matrix.platform }}.zip
@@ -202,7 +202,7 @@ jobs:
           cp "$src" "eventt-${{ matrix.platform }}.${{ matrix.installerExt }}"
 
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: eventt-${{ matrix.platform }}-installer
           path: eventt-${{ matrix.platform }}.${{ matrix.installerExt }}
@@ -219,7 +219,7 @@ jobs:
         run: cp app/build/libs/eventt-*.jar "eventt-${{ matrix.platform }}.jar"
 
       - name: Upload jar artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: eventt-${{ matrix.platform }}-jar
           path: eventt-${{ matrix.platform }}.jar
@@ -235,10 +235,10 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
