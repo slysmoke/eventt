@@ -83,7 +83,6 @@ object NostrRelayManager {
      * [NostrIdentityService.switchActive] to tear down and reconnect under the new identity.
      */
     fun restart() {
-        log("restart() called")
         stop()
         connect()
     }
@@ -93,17 +92,13 @@ object NostrRelayManager {
         scope = s
         s.launch {
             try {
-                log("connect() starting")
                 NostrRelayDao.seedDefaultsIfEmpty(DEFAULT_RELAYS)
-                log("relay defaults seeded")
                 normalizeStoredRelayUrls()
-                log("relay urls normalized")
 
                 // No identity yet (first run, nothing generated/imported) — nothing useful to connect
                 // for until Settings creates one; NostrIdentityService itself doesn't require a
                 // running relay connection, so this is a clean early-out, not a broken dependency.
                 val identity = NostrIdentityService.getActiveIdentity()
-                log("active identity = ${identity?.pubkey}")
                 if (identity == null) return@launch
                 val myPubkey = identity.pubkey
 
@@ -123,13 +118,11 @@ object NostrRelayManager {
                             pingMillis: Int,
                             compressed: Boolean,
                         ) {
-                            log("onConnected ${relay.url.url}")
                             NostrRelayDao.updateStatus(relay.url.url, "connected", null)
                             _events.tryEmit(NostrRelayEvent.RelayStatusChanged)
                         }
 
                         override fun onDisconnected(relay: IRelayClient) {
-                            log("onDisconnected ${relay.url.url}")
                             NostrRelayDao.updateStatus(relay.url.url, "disconnected", null)
                             _events.tryEmit(NostrRelayEvent.RelayStatusChanged)
                         }
@@ -138,18 +131,14 @@ object NostrRelayManager {
                             relay: IRelayClient,
                             errorMessage: String,
                         ) {
-                            log("onCannotConnect ${relay.url.url} reason=$errorMessage")
                             NostrRelayDao.updateStatus(relay.url.url, "error", errorMessage)
                             _events.tryEmit(NostrRelayEvent.RelayStatusChanged)
                         }
                     },
                 )
-                log("calling c.connect()")
                 c.connect()
-                log("c.connect() returned")
 
                 val relayUrls = NostrRelayDao.getAll().filter { it.enabled }.mapNotNull { it.url.normalizeRelayUrlOrNull() }
-                log("relayUrls = $relayUrls")
                 if (relayUrls.isEmpty()) return@launch
 
                 val filter = Filter(null, null, listOf(ORDER_KIND), mapOf("t" to listOf("eventt-p2pmarket")), null, null, null, null, null)
@@ -192,7 +181,6 @@ object NostrRelayManager {
                 )
 
                 val dmFilter = Filter(null, null, listOf(GIFT_WRAP_KIND), mapOf("p" to listOf(myPubkey)), null, null, null, null, null)
-                log("subscribing DMs for p=$myPubkey")
                 c.subscribe(
                     DMS_SUBSCRIPTION_ID,
                     relayUrls.associateWith { listOf(dmFilter) },
@@ -203,16 +191,11 @@ object NostrRelayManager {
                             relay: NormalizedRelayUrl,
                             forFilters: List<Filter>?,
                         ) {
-                            log("DM onEvent id=${event.id} from relay=${relay.url} isLive=$isLive")
                             // unwrapGiftWrap/handleIncomingDm are both suspend — this callback isn't,
                             // so hop onto the manager's own scope rather than blocking the relay client.
                             s.launch {
-                                val unwrapped = QuartzGateway.unwrapGiftWrap(event, QuartzGateway.asyncSignerFor(identity.keyPair))
-                                if (unwrapped == null) {
-                                    log("DM unwrap FAILED (not ours or malformed) for event ${event.id}")
-                                    return@launch
-                                }
-                                log("DM unwrapped from=${unwrapped.pubKey} content=${unwrapped.content.take(120)}")
+                                val unwrapped =
+                                    QuartzGateway.unwrapGiftWrap(event, QuartzGateway.asyncSignerFor(identity.keyPair)) ?: return@launch
                                 val newRequest = ReservationService.handleIncomingDm(unwrapped.pubKey, unwrapped.content)
                                 _events.tryEmit(NostrRelayEvent.ReservationActivity)
                                 if (newRequest != null) _events.tryEmit(NostrRelayEvent.IncomingBuyRequest(newRequest))
@@ -237,16 +220,11 @@ object NostrRelayManager {
                         }
                     },
                 )
-                log("all subscriptions set up")
             } catch (e: Throwable) {
-                log("EXCEPTION during connect(): ${e::class.simpleName}: ${e.message}")
-                e.printStackTrace()
+                println("[NostrRelay] connect() failed: ${e::class.simpleName}: ${e.message}")
             }
         }
     }
-
-    // TEMP diagnostic — remove once the "relays stuck on Not yet connected" bug is found.
-    private fun log(msg: String) = println("[NostrRelay] $msg")
 
     /** Normalized form of [url] (e.g. adds the trailing slash relay clients expect) — use this before [NostrRelayDao.upsert] so newly added relays don't hit the same stuck-status bug as [normalizeStoredRelayUrls] repairs for existing ones. */
     fun normalizeUrl(url: String): String = url.normalizeRelayUrlOrNull()?.url ?: url
