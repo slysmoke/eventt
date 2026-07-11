@@ -7,6 +7,8 @@ import io.mockk.every
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
 import org.eventt.core.esi.EsiClient
+import org.eventt.core.model.eveSigFigStep
+import org.eventt.core.model.formatEveSigFigPrice
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test

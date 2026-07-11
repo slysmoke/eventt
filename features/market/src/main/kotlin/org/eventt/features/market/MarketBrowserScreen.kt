@@ -50,6 +50,8 @@ import org.eventt.core.model.StaticTypeModel
 import org.eventt.core.model.WatchlistEntryModel
 import org.eventt.core.staticdata.StaticDataImporter
 import org.eventt.ui.common.*
+import org.eventt.ui.common.formatPriceAbbr
+import org.eventt.ui.common.formatVolume
 import java.util.Locale
 import kotlin.math.floor
 import kotlin.math.log10
@@ -558,8 +560,8 @@ private fun TypeMarketHeader(
                 modifier = Modifier.padding(10.dp),
                 horizontalArrangement = Arrangement.spacedBy(24.dp),
             ) {
-                SpreadItem("Best Sell", formatPrice(bestSell), Color(0xFFFF6B6B))
-                SpreadItem("Best Buy", formatPrice(bestBuy), Color(0xFF69DB7C))
+                SpreadItem("Best Sell", formatPriceAbbr(bestSell), Color(0xFFFF6B6B))
+                SpreadItem("Best Buy", formatPriceAbbr(bestBuy), Color(0xFF69DB7C))
                 SpreadItem("Spread", "${String.format(Locale.US, "%.2f", spread ?: 0.0)}%", Color(0xFFFF8C00))
                 SpreadItem("Sell Orders", sellOrders.size.toString(), MaterialTheme.colorScheme.onSurface)
                 SpreadItem("Buy Orders", buyOrders.size.toString(), MaterialTheme.colorScheme.onSurface)
@@ -824,7 +826,7 @@ private fun OrderRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                formatPrice(order.price),
+                formatPriceAbbr(order.price),
                 style = MaterialTheme.typography.bodySmall,
                 color = priceColor,
                 fontWeight = FontWeight.SemiBold,
@@ -836,7 +838,7 @@ private fun OrderRow(
                 modifier = Modifier.width(120.dp),
             )
             Text(
-                formatPrice(order.price * order.volumeRemaining),
+                formatPriceAbbr(order.price * order.volumeRemaining),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                 modifier = Modifier.width(90.dp),
@@ -976,9 +978,9 @@ private fun HistoryChartView(
         val orderCount = filteredHistory.sumOf { it.orderCount }
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard("Avg Price", formatPrice(avgPrice), Modifier.weight(1f))
-            StatCard("Highest", formatPrice(highestPrice), Modifier.weight(1f))
-            StatCard("Lowest", formatPrice(lowestPrice), Modifier.weight(1f))
+            StatCard("Avg Price", formatPriceAbbr(avgPrice), Modifier.weight(1f))
+            StatCard("Highest", formatPriceAbbr(highestPrice), Modifier.weight(1f))
+            StatCard("Lowest", formatPriceAbbr(lowestPrice), Modifier.weight(1f))
             StatCard("Total Vol", formatVolume(totalVolume), Modifier.weight(1f))
             StatCard("Vol/Day", formatVolPerDay(totalVolume, historyDays), Modifier.weight(1f))
             StatCard("Orders", formatVolume(orderCount), Modifier.weight(1f))
@@ -1072,7 +1074,7 @@ private fun PriceLineChart(
             val y = valY(tick)
             if (y < tPad - 2 || y > tPad + chartH + 2) return@forEach
             drawLine(gridColor, Offset(lPad, y), Offset(lPad + chartW, y), 0.5f)
-            val lm = textMeasurer.measure(formatPrice(tick), TextStyle(fontSize = 10.sp, color = labelColor))
+            val lm = textMeasurer.measure(formatPriceAbbr(tick), TextStyle(fontSize = 10.sp, color = labelColor))
             drawText(lm, topLeft = Offset(lPad - lm.size.width - 5.dp.toPx(), y - lm.size.height / 2f))
         }
 
@@ -1121,7 +1123,7 @@ private fun PriceLineChart(
             drawCircle(Color.White, 2.5f, Offset(x, y))
 
             val lm1 = textMeasurer.measure(dates.getOrElse(idx) { "" }, TextStyle(fontSize = 10.sp, color = Color(0xFF999999)))
-            val lm2 = textMeasurer.measure(formatPrice(v), TextStyle(fontSize = 12.sp, color = color, fontWeight = FontWeight.SemiBold))
+            val lm2 = textMeasurer.measure(formatPriceAbbr(v), TextStyle(fontSize = 12.sp, color = color, fontWeight = FontWeight.SemiBold))
             val pad = 7.dp.toPx()
             val gap2 = 2.dp.toPx()
             val ttW = maxOf(lm1.size.width, lm2.size.width) + pad * 2
@@ -1441,21 +1443,9 @@ private fun expiryColor(
         Color.Gray
     }
 
-private fun formatPrice(price: Double): String =
-    when {
-        price >= 1_000_000_000 -> String.format(Locale.US, "%.2fB", price / 1_000_000_000)
-        price >= 1_000_000 -> String.format(Locale.US, "%.2fM", price / 1_000_000)
-        price >= 1_000 -> String.format(Locale.US, "%,.2f", price)
-        else -> String.format(Locale.US, "%.4f", price)
-    }
+// Deprecated local formatPrice removed. Use formatPriceAbbr from FormatUtils.
 
-private fun formatVolume(vol: Long): String =
-    when {
-        vol >= 1_000_000_000 -> String.format(Locale.US, "%.1fB", vol / 1_000_000_000.0)
-        vol >= 1_000_000 -> String.format(Locale.US, "%.1fM", vol / 1_000_000.0)
-        vol >= 1_000 -> String.format(Locale.US, "%.1fK", vol / 1_000.0)
-        else -> vol.toString()
-    }
+// Deprecated local formatVolume removed. Use formatVolume(vol) from FormatUtils.
 
 private fun <T> List<T>.averageOf(selector: (T) -> Double): Double {
     if (isEmpty()) return 0.0
@@ -1565,7 +1555,7 @@ private fun AddToAlertDialog(
                             null
                         ) {
                             Text(
-                                "Best Sell: ${formatPrice(bestSell)}",
+                                "Best Sell: ${formatPriceAbbr(bestSell)}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Color(0xFFFF6B6B),
                             )
@@ -1574,7 +1564,7 @@ private fun AddToAlertDialog(
                             null
                         ) {
                             Text(
-                                "Best Buy: ${formatPrice(bestBuy)}",
+                                "Best Buy: ${formatPriceAbbr(bestBuy)}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Color(0xFF69DB7C),
                             )

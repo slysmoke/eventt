@@ -53,8 +53,11 @@ import org.eventt.core.everef.EveRefService
 import org.eventt.core.model.StaticMarketGroupModel
 import org.eventt.core.model.StaticRegionModel
 import org.eventt.core.model.StaticStationModel
+import org.eventt.core.model.eveSigFigStep
 import org.eventt.core.staticdata.JumpGraphService
 import org.eventt.ui.common.ensureVisible
+import org.eventt.ui.common.formatPriceAbbr
+import org.eventt.ui.common.formatVolume
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 import java.util.Locale
@@ -2266,13 +2269,13 @@ private fun StationRow(
         PriceText(opp.netProfit, Color(0xFF69DB7C), Modifier.width(95.dp))
         TrendText(opp.priceChange7d, Modifier.width(65.dp))
         Text(
-            if (effVol > 0) fVol(effVol) else "—",
+            if (effVol > 0) formatVolume(effVol) else "—",
             style = MaterialTheme.typography.bodySmall,
             color = Color.Gray,
             modifier = Modifier.width(75.dp),
         )
         Text(
-            if (opp.netProfit * effVol > 0) fPrice(opp.netProfit * effVol) else "—",
+            if (opp.netProfit * effVol > 0) formatPriceAbbr(opp.netProfit * effVol) else "—",
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.width(95.dp),
         )
@@ -2351,13 +2354,13 @@ private fun RegionRow(
         PriceText(opp.netProfit, Color(0xFF69DB7C), Modifier.width(95.dp), bold = true)
         TrendText(opp.priceChange7d, Modifier.width(65.dp))
         Text(
-            if (effVol > 0) fVol(effVol) else "—",
+            if (effVol > 0) formatVolume(effVol) else "—",
             style = MaterialTheme.typography.bodySmall,
             color = Color.Gray,
             modifier = Modifier.width(70.dp),
         )
         Text(
-            if (qtyToBuy > 0) fVol(qtyToBuy) else "—",
+            if (qtyToBuy > 0) formatVolume(qtyToBuy) else "—",
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.width(85.dp),
@@ -2410,7 +2413,7 @@ private fun PriceText(
     bold: Boolean = false,
 ) {
     Text(
-        fPrice(value),
+        formatPriceAbbr(value),
         style = MaterialTheme.typography.bodySmall,
         color = color,
         fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal,
@@ -3033,25 +3036,3 @@ private fun copyToClipboard(text: String) {
 }
 
 // ─── Format helpers ───────────────────────────────────────────────────────
-
-private fun fPrice(v: Double): String =
-    when {
-        v >= 1_000_000_000 -> String.format(Locale.US, "%.2fB", v / 1_000_000_000)
-        v >= 1_000_000 -> String.format(Locale.US, "%.2fM", v / 1_000_000)
-        v >= 1_000 -> String.format(Locale.US, "%.1fK", v / 1_000)
-        else -> String.format(Locale.US, "%.2f", v)
-    }
-
-private fun formatVolume(m3: Double): String =
-    when {
-        m3 >= 1_000.0 -> String.format(Locale.US, "%.1fk", m3 / 1_000.0)
-        m3 >= 10.0 -> String.format(Locale.US, "%.0f", m3)
-        else -> String.format(Locale.US, "%.2f", m3)
-    }
-
-private fun fVol(v: Long): String =
-    when {
-        v >= 1_000_000 -> String.format(Locale.US, "%.1fM", v / 1_000_000.0)
-        v >= 1_000 -> String.format(Locale.US, "%.1fK", v / 1_000.0)
-        else -> v.toString()
-    }

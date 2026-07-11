@@ -7,35 +7,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import org.eventt.core.esi.EsiClient
+import org.eventt.core.model.eveSigFigStep
+import org.eventt.core.model.formatEveSigFigPrice
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
-import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.math.floor
-import kotlin.math.log10
-import kotlin.math.pow
 import kotlin.math.round
-
-/**
- * EVE price rounding: 4 significant figures, minimum 0.01 ISK precision.
- * Returns the step size for the given price (e.g. 43.15M → 10_000, 45.56 → 0.01, 135.5 → 0.1).
- */
-fun eveSigFigStep(price: Double): Double {
-    if (price <= 0) return 0.01
-    val magnitude = floor(log10(price))
-    return maxOf(0.01, 10.0.pow(magnitude - 3))
-}
-
-/**
- * Format a price for EVE's order-modification dialog using 4-sigfig precision.
- * Uses the correct number of decimal places for the price magnitude.
- */
-fun formatEveSigFigPrice(price: Double): String {
-    if (price <= 0) return "0.01"
-    val step = eveSigFigStep(price)
-    val decimals = maxOf(0, -floor(log10(step)).toInt())
-    return String.format(Locale.US, "%.${decimals}f", price)
-}
 
 data class PendingOrder(
     val charId: Int,

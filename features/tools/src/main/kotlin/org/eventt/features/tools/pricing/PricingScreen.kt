@@ -24,6 +24,7 @@ import org.eventt.core.model.CharacterModel
 import org.eventt.features.tools.ParseWarning
 import org.eventt.features.tools.ToolsInputParser
 import org.eventt.ui.common.ContentCard
+import org.eventt.ui.common.formatPriceSimple
 import java.awt.Toolkit
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.StringSelection
@@ -31,7 +32,6 @@ import java.util.Locale
 
 // Comma-grouped, fixed 2-decimal ISK amount — unlike the K/M/B abbreviations used for rough
 // totals elsewhere in the app, per-unit sell-order prices need full precision to be usable as-is.
-private fun formatPrice(v: Double): String = String.format(Locale.US, "%,.2f", v)
 
 private val PositiveMarginColor = Color(0xFF69DB7C)
 
@@ -361,23 +361,23 @@ fun PricingScreen(context: ViewContext?) {
                                 Text(r.name, modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodySmall)
                                 Text("${r.quantity}", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                                 Text(
-                                    r.costBasis?.let { formatPrice(it) } ?: "—",
+                                    r.costBasis?.let { formatPriceSimple(it) } ?: "—",
                                     modifier = Modifier.weight(1f),
                                     style = MaterialTheme.typography.bodySmall,
                                 )
                                 Text(
-                                    r.targetPrice?.let { formatPrice(it) } ?: "—",
+                                    r.targetPrice?.let { formatPriceSimple(it) } ?: "—",
                                     modifier = Modifier.weight(1f),
                                     style = MaterialTheme.typography.bodySmall,
                                 )
                                 Text(
-                                    r.marketLowestSell?.let { formatPrice(it) } ?: "—",
+                                    r.marketLowestSell?.let { formatPriceSimple(it) } ?: "—",
                                     modifier = Modifier.weight(1f),
                                     style = MaterialTheme.typography.bodySmall,
                                 )
                                 Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        r.finalPrice?.let { formatPrice(it) } ?: "—",
+                                        r.finalPrice?.let { formatPriceSimple(it) } ?: "—",
                                         style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.Bold,
                                     )

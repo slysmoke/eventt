@@ -36,6 +36,8 @@ import org.eventt.core.esi.EsiClient
 import org.eventt.core.marketlogs.MarketLogEvent
 import org.eventt.core.marketlogs.MarketLogOrderRow
 import org.eventt.core.marketlogs.MarketLogWatcher
+import org.eventt.core.model.eveSigFigStep
+import org.eventt.core.model.formatEveSigFigPrice
 import org.eventt.ui.common.EmptyState
 import org.eventt.ui.common.EsiRefreshButton
 import org.eventt.ui.common.LoadingOverlay

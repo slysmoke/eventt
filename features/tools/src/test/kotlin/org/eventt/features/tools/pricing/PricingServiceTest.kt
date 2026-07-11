@@ -2,7 +2,7 @@ package org.eventt.features.tools.pricing
 
 import io.kotest.matchers.doubles.plusOrMinus
 import io.kotest.matchers.shouldBe
-import org.eventt.features.orders.eveSigFigStep
+import org.eventt.core.model.eveSigFigStep
 import org.junit.jupiter.api.Test
 import kotlin.math.round
 

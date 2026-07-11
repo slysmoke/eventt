@@ -2,8 +2,8 @@ package org.eventt.features.tools.pricing
 
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.esi.EsiClient
+import org.eventt.core.model.eveSigFigStep
 import org.eventt.features.orders.CostBasisService
-import org.eventt.features.orders.eveSigFigStep
 import org.eventt.features.tools.ResolvedItem
 import kotlin.math.round
 

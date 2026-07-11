@@ -278,14 +278,14 @@ private fun WatchlistRow(
 
         // Buy price
         Text(
-            price?.let { formatPrice(it.bestBuyPrice) } ?: "—",
+            price?.let { formatPriceAbbr(it.bestBuyPrice) } ?: "—",
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.weight(1f),
         )
 
         // Sell price
         Text(
-            price?.let { formatPrice(it.bestSellPrice) } ?: "—",
+            price?.let { formatPriceAbbr(it.bestSellPrice) } ?: "—",
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.weight(1f),
         )
@@ -426,11 +426,3 @@ private suspend fun refreshEntryPrice(entry: WatchlistEntryModel) {
 
     WatchlistDao.insertPriceSnapshot(snapshot)
 }
-
-private fun formatPrice(price: Double): String =
-    when {
-        price >= 1_000_000_000 -> String.format(Locale.US, "%.1fB", price / 1_000_000_000)
-        price >= 1_000_000 -> String.format(Locale.US, "%.1fM", price / 1_000_000)
-        price >= 1_000 -> String.format(Locale.US, "%.1fK", price / 1_000)
-        else -> String.format(Locale.US, "%,.2f", price)
-    }

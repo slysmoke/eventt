@@ -7,24 +7,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import org.eventt.core.esi.EsiClient
+import org.eventt.core.model.eveSigFigStep
+import org.eventt.core.model.formatEveSigFigPrice
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
-import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.math.floor
-import kotlin.math.log10
 import kotlin.math.round
 
-// eveSigFigStep (EVE price rounding: 4 significant figures, minimum 0.01 ISK precision) lives in
-// InterRegionQueue.kt (internal, module-visible) — was duplicated here too until MarketAnalysisScreen
-// needed a third copy for Safe Buy→Sell pricing, at which point this one was dropped in favor of
-// reusing that single internal copy.
-private fun formatEveSigFigPrice(price: Double): String {
-    if (price <= 0) return "0.01"
-    val step = eveSigFigStep(price)
-    val decimals = maxOf(0, -floor(log10(step)).toInt())
-    return String.format(Locale.US, "%.${decimals}f", price)
-}
+// Both eveSigFigStep (EVE price rounding: 4 significant figures, minimum 0.01 ISK precision)
+// and formatEveSigFigPrice live in InterRegionQueue.kt (internal, module-visible) to avoid duplication.
 
 data class PendingStationItem(
     val charId: Int,

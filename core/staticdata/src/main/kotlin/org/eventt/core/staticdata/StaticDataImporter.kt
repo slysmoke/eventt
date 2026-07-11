@@ -153,15 +153,17 @@ object StaticDataImporter {
     private val types = mutableListOf<StaticTypeModel>()
     private var typeCount = 0
 
+    private fun JsonObject.getEnglishName(): String? =
+        this["name"]
+            ?.jsonObject
+            ?.get("en")
+            ?.jsonPrimitive
+            ?.content
+
     internal fun parseTypeLine(line: String): StaticTypeModel? {
         val obj = Json.parseToJsonElement(line).jsonObject
         val typeId = obj["_key"]?.jsonPrimitive?.intOrNull ?: return null
-        val name =
-            obj["name"]
-                ?.jsonObject
-                ?.get("en")
-                ?.jsonPrimitive
-                ?.content ?: return null
+        val name = obj.getEnglishName() ?: return null
         return StaticTypeModel(
             typeId = typeId,
             name = name,
@@ -188,12 +190,7 @@ object StaticDataImporter {
     internal fun parseGroupLine(line: String): StaticGroupModel? {
         val obj = Json.parseToJsonElement(line).jsonObject
         val groupId = obj["_key"]?.jsonPrimitive?.intOrNull ?: return null
-        val name =
-            obj["name"]
-                ?.jsonObject
-                ?.get("en")
-                ?.jsonPrimitive
-                ?.content ?: return null
+        val name = obj.getEnglishName() ?: return null
         val categoryId = obj["categoryID"]?.jsonPrimitive?.intOrNull ?: 0
         return StaticGroupModel(groupId = groupId, name = name, categoryId = categoryId)
     }
@@ -203,12 +200,7 @@ object StaticDataImporter {
     internal fun parseCategoryLine(line: String): StaticCategoryModel? {
         val obj = Json.parseToJsonElement(line).jsonObject
         val catId = obj["_key"]?.jsonPrimitive?.intOrNull ?: return null
-        val name =
-            obj["name"]
-                ?.jsonObject
-                ?.get("en")
-                ?.jsonPrimitive
-                ?.content ?: return null
+        val name = obj.getEnglishName() ?: return null
         return StaticCategoryModel(categoryId = catId, name = name)
     }
 
@@ -217,12 +209,7 @@ object StaticDataImporter {
     internal fun parseMarketGroupLine(line: String): StaticMarketGroupModel? {
         val obj = Json.parseToJsonElement(line).jsonObject
         val mgId = obj["_key"]?.jsonPrimitive?.intOrNull ?: return null
-        val name =
-            obj["name"]
-                ?.jsonObject
-                ?.get("en")
-                ?.jsonPrimitive
-                ?.content ?: return null
+        val name = obj.getEnglishName() ?: return null
         val parentId = obj["parentGroupID"]?.jsonPrimitive?.intOrNull
         return StaticMarketGroupModel(marketGroupId = mgId, name = name, parentGroupId = parentId)
     }
@@ -232,12 +219,7 @@ object StaticDataImporter {
     internal fun parseRegionLine(line: String): StaticRegionModel? {
         val obj = Json.parseToJsonElement(line).jsonObject
         val regionId = obj["_key"]?.jsonPrimitive?.intOrNull ?: return null
-        val name =
-            obj["name"]
-                ?.jsonObject
-                ?.get("en")
-                ?.jsonPrimitive
-                ?.content ?: return null
+        val name = obj.getEnglishName() ?: return null
         return StaticRegionModel(regionId = regionId, name = name)
     }
 
@@ -246,12 +228,7 @@ object StaticDataImporter {
     internal fun parseSystemLine(line: String): StaticSystemModel? {
         val obj = Json.parseToJsonElement(line).jsonObject
         val systemId = obj["_key"]?.jsonPrimitive?.intOrNull ?: return null
-        val name =
-            obj["name"]
-                ?.jsonObject
-                ?.get("en")
-                ?.jsonPrimitive
-                ?.content ?: return null
+        val name = obj.getEnglishName() ?: return null
         val regionId = obj["regionID"]?.jsonPrimitive?.intOrNull ?: 0
         return StaticSystemModel(systemId = systemId, name = name, regionId = regionId)
     }
