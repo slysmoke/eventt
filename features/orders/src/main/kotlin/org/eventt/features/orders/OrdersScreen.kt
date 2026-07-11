@@ -158,10 +158,16 @@ private fun ActiveOrderDao.ActiveOrderRecord.toCharacterOrder(): CharacterOrder 
         issuedByCharId = issuedByCharId,
     )
 
-/** Best competing prices for a (typeId, regionId) pair, excluding the character's own orders. */
+/**
+ * Best competing prices for a (typeId, locationId) pair, excluding the character's own orders.
+ * bestSell is scoped to that exact station — buyers browsing a station's sell listings never see
+ * ones sitting elsewhere in the region, so only same-station supply actually competes with a sell
+ * order. bestBuy stays region-wide (same value across every station in the region): buy orders
+ * carry a range and compete across the whole region regardless of where they're placed.
+ */
 internal data class MarketComparison(
-    val bestSell: Double?, // lowest sell from others — null means no sell competition
-    val bestBuy: Double?, // highest buy from others — null means no buy competition
+    val bestSell: Double?, // lowest sell from others at the same station — null means no sell competition there
+    val bestBuy: Double?, // highest region-wide buy from others — null means no buy competition
 )
 
 /** Net margin (%) of buying at [buyPrice] (cost includes buy broker fee) and reselling at [sellPrice] (revenue net of sales tax + sell broker fee). */
@@ -212,7 +218,7 @@ fun OrdersScreen(context: ViewContext?) {
     // Market comparison data — loaded after orders, shown as overbid indicators.
     // Refreshed on order load and via the manual "Refresh Prices" button (no auto-refresh:
     // that used to reset the Ctrl+Z hotkey cycle position every 60s — see PendingOrdersQueue.update).
-    var marketComparisons by remember { mutableStateOf<Map<Pair<Int, Int>, MarketComparison>>(emptyMap()) }
+    var marketComparisons by remember { mutableStateOf<Map<Pair<Int, Long>, MarketComparison>>(emptyMap()) }
     var isLoadingMarket by remember { mutableStateOf(false) }
     var marketComparisonsExpiresAt by remember { mutableStateOf<Long?>(null) }
 
@@ -244,38 +250,44 @@ fun OrdersScreen(context: ViewContext?) {
         scope.launch(Dispatchers.IO) {
             withContext(Dispatchers.Main) { isLoadingMarket = true }
             try {
-                val uniquePairs =
+                // One ESI call per (typeId, regionId) still covers every station in that region —
+                // sell competition is then split out per station below, entirely from that same
+                // response, so this doesn't cost any extra requests.
+                val uniqueRegionPairs =
                     activeOrders
                         .filter { it.regionId > 0 && it.state == "active" }
                         .map { it.typeId to it.regionId }
                         .toSet()
 
-                val result = mutableMapOf<Pair<Int, Int>, MarketComparison>()
+                val result = mutableMapOf<Pair<Int, Long>, MarketComparison>()
                 // Latest of the per-pair ESI cache expiries — waiting for every pair to have
                 // actually gone stale (rather than just the first one) means each click of
                 // "Refresh Prices" does real work for every pair instead of mostly re-checking
                 // ones that are still cached, which is what made frequent clicks feel like a
                 // burst of requests.
                 var latestExpiry: Long? = null
-                for ((typeId, regionId) in uniquePairs) {
+                for ((typeId, regionId) in uniqueRegionPairs) {
                     try {
-                        val ownIds =
-                            activeOrders
-                                .filter { it.typeId == typeId && it.regionId == regionId }
-                                .map { it.orderId }
-                                .toSet()
+                        val ownOrdersForPair = activeOrders.filter { it.typeId == typeId && it.regionId == regionId }
+                        val ownIds = ownOrdersForPair.map { it.orderId }.toSet()
                         val all = EsiClient.getMarketRegionOrders(regionId, "all", typeId)
-                        val bestSell =
-                            all
-                                .filter { !(it["is_buy_order"] as? Boolean ?: false) && (it["order_id"] as? Number)?.toLong() !in ownIds }
-                                .mapNotNull { (it["price"] as? Number)?.toDouble() }
-                                .minOrNull()
+                        val sellersElsewhere =
+                            all.filter { !(it["is_buy_order"] as? Boolean ?: false) && (it["order_id"] as? Number)?.toLong() !in ownIds }
                         val bestBuy =
                             all
                                 .filter { (it["is_buy_order"] as? Boolean ?: false) && (it["order_id"] as? Number)?.toLong() !in ownIds }
                                 .mapNotNull { (it["price"] as? Number)?.toDouble() }
                                 .maxOrNull()
-                        result[typeId to regionId] = MarketComparison(bestSell, bestBuy)
+                        // One entry per station this character actually has an active order at —
+                        // bestSell only counts other sellers at that same station.
+                        ownOrdersForPair.map { it.locationId }.toSet().forEach { locationId ->
+                            val bestSell =
+                                sellersElsewhere
+                                    .filter { (it["location_id"] as? Number)?.toLong() == locationId }
+                                    .mapNotNull { (it["price"] as? Number)?.toDouble() }
+                                    .minOrNull()
+                            result[typeId to locationId] = MarketComparison(bestSell, bestBuy)
+                        }
                         val expiry =
                             EsiClient.getEndpointExpiry(
                                 "/markets/$regionId/orders/",
@@ -475,7 +487,7 @@ fun OrdersScreen(context: ViewContext?) {
 
     // Hotkey action: open market window in-game + copy overbid price to clipboard
     fun triggerOrderAction(order: CharacterOrder) {
-        val comp = marketComparisons[order.typeId to order.regionId]
+        val comp = marketComparisons[order.typeId to order.locationId]
         val overbidPrice =
             if (order.isBuyOrder) {
                 comp?.bestBuy?.let { base ->
@@ -608,7 +620,7 @@ fun OrdersScreen(context: ViewContext?) {
             tabFiltered
                 .filter { it.state == "active" }
                 .map { order ->
-                    val comp = marketComparisons[order.typeId to order.regionId]
+                    val comp = marketComparisons[order.typeId to order.locationId]
                     val isBeaten =
                         if (order.isBuyOrder) {
                             comp?.bestBuy != null && comp.bestBuy > order.price
@@ -680,7 +692,7 @@ fun OrdersScreen(context: ViewContext?) {
                 val queueSize = tabActive.size
                 val beatenCount =
                     tabActive.count { o ->
-                        val comp = marketComparisons[o.typeId to o.regionId]
+                        val comp = marketComparisons[o.typeId to o.locationId]
                         if (o.isBuyOrder) {
                             comp?.bestBuy?.let { it > o.price } ?: false
                         } else {
@@ -918,7 +930,7 @@ private fun SellOrdersTable(
     inventory: Map<Int, CostBasisService.InventoryItem>,
     taxConfig: CostBasisService.TaxConfig,
     historyCostBasis: Map<Int, Double>,
-    comparisons: Map<Pair<Int, Int>, MarketComparison>,
+    comparisons: Map<Pair<Int, Long>, MarketComparison>,
     selectedOrderId: Long?,
     activeOrderId: Long?,
     // Non-null only in corp view: issuedByCharId -> name, shown as a "Character" column.
@@ -959,7 +971,7 @@ private fun SellOrdersTable(
         }
         LazyColumn(state = listState) {
             items(orders, key = { it.orderId }) { order ->
-                val comp = comparisons[order.typeId to order.regionId]
+                val comp = comparisons[order.typeId to order.locationId]
                 SellOrderRow(
                     order = order,
                     inv = inventory[order.typeId],
@@ -986,7 +998,7 @@ private fun BuyOrdersTable(
     sortDir: SortDir,
     onSort: (SortCol) -> Unit,
     taxConfig: CostBasisService.TaxConfig,
-    comparisons: Map<Pair<Int, Int>, MarketComparison>,
+    comparisons: Map<Pair<Int, Long>, MarketComparison>,
     selectedOrderId: Long?,
     activeOrderId: Long?,
     issuerNames: Map<Int, String>?,
@@ -1026,7 +1038,7 @@ private fun BuyOrdersTable(
         }
         LazyColumn(state = listState) {
             items(orders, key = { it.orderId }) { order ->
-                val comp = comparisons[order.typeId to order.regionId]
+                val comp = comparisons[order.typeId to order.locationId]
                 BuyOrderRow(
                     order = order,
                     taxConfig = taxConfig,

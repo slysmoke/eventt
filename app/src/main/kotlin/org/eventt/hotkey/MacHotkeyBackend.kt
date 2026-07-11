@@ -10,7 +10,7 @@ import com.sun.jna.Structure
 import com.sun.jna.ptr.PointerByReference
 
 /**
- * Global Ctrl+Z hotkey on macOS via the Carbon Event Manager's RegisterEventHotKey - one of the
+ * Global hotkey on macOS via the Carbon Event Manager's RegisterEventHotKey - one of the
  * few Carbon APIs still functional on modern/Apple Silicon macOS, and (unlike a CGEventTap) it
  * does not require the Accessibility permission prompt.
  *
@@ -24,7 +24,10 @@ class MacHotkeyBackend : HotkeyBackend {
     private var handlerRef: Pointer? = null
     private var callback: HotKeyEventHandler? = null
 
-    override fun start(onTrigger: () -> Unit): Boolean {
+    override fun start(
+        key: HotkeyKey,
+        onTrigger: () -> Unit,
+    ): Boolean {
         val lib =
             try {
                 CarbonLib.INSTANCE
@@ -54,7 +57,7 @@ class MacHotkeyBackend : HotkeyBackend {
                                 null,
                                 out,
                             )
-                        if (status == 0 && EventHotKeyID(out).id == HOTKEY_ID) {
+                        if (status == 0 && EventHotKeyID(out).id == key.id) {
                             onTrigger()
                         }
                     }
@@ -80,10 +83,10 @@ class MacHotkeyBackend : HotkeyBackend {
         val hotKeyId =
             EventHotKeyID().apply {
                 signature = HOTKEY_SIGNATURE
-                id = HOTKEY_ID
+                id = key.id
             }
         val hotKeyOutRef = PointerByReference()
-        val registerStatus = lib.RegisterEventHotKey(KEY_CODE_Z, MOD_CONTROL, hotKeyId, eventTarget, 0, hotKeyOutRef)
+        val registerStatus = lib.RegisterEventHotKey(key.macVkCode, MOD_CONTROL, hotKeyId, eventTarget, 0, hotKeyOutRef)
         if (registerStatus != 0) {
             println("[Hotkey][macOS] RegisterEventHotKey failed: status=$registerStatus")
             handlerRef?.let { lib.RemoveEventHandler(it) }
@@ -92,7 +95,7 @@ class MacHotkeyBackend : HotkeyBackend {
         }
         hotKeyRef = hotKeyOutRef.value
 
-        println("[Hotkey][macOS] Global hotkey active: Ctrl+Z")
+        println("[Hotkey][macOS] Global hotkey active: ${key.label}")
         return true
     }
 
@@ -106,13 +109,11 @@ class MacHotkeyBackend : HotkeyBackend {
 
     private companion object {
         const val HOTKEY_SIGNATURE = 0x45564554 // 'EVET' - app-specific signature
-        const val HOTKEY_ID = 1
         const val EVENT_CLASS_KEYBOARD = 0x6B657962 // 'keyb'
         const val EVENT_HOTKEY_PRESSED = 5
         const val EVENT_PARAM_DIRECT_OBJECT = 0x2D2D2D2D // '----'
         const val TYPE_EVENT_HOTKEY_ID = 0x686B6964 // 'hkid'
         const val MOD_CONTROL = 4096 // controlKey
-        const val KEY_CODE_Z = 0x06 // kVK_ANSI_Z
     }
 }
 

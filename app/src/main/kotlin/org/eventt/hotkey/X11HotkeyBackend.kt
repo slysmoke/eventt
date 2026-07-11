@@ -8,7 +8,7 @@ import com.sun.jna.Pointer
 import com.sun.jna.Structure
 
 /**
- * Global Ctrl+Z hotkey via raw Xlib (XGrabKey), for Linux X11 sessions and Wayland sessions
+ * Global hotkey via raw Xlib (XGrabKey), for Linux X11 sessions and Wayland sessions
  * running an X11 app through XWayland. Needs only libX11 at runtime (no libXtst/libXt/libXi,
  * unlike JNativeHook, since XGrabKey is core Xlib rather than the XTest extension).
  */
@@ -18,7 +18,10 @@ class X11HotkeyBackend : HotkeyBackend {
 
     @Volatile private var running = false
 
-    override fun start(onTrigger: () -> Unit): Boolean {
+    override fun start(
+        key: HotkeyKey,
+        onTrigger: () -> Unit,
+    ): Boolean {
         val lib =
             try {
                 X11Lib.INSTANCE
@@ -34,15 +37,15 @@ class X11HotkeyBackend : HotkeyBackend {
         }
 
         val root = lib.XDefaultRootWindow(disp)
-        val keysym = lib.XStringToKeysym("z")
+        val keysym = lib.XStringToKeysym(key.x11KeyString)
         if (keysym.toLong() == 0L) {
-            println("[Hotkey][X11] XStringToKeysym('z') failed")
+            println("[Hotkey][X11] XStringToKeysym('${key.x11KeyString}') failed")
             lib.XCloseDisplay(disp)
             return false
         }
         val keycode = lib.XKeysymToKeycode(disp, keysym).toInt() and 0xFF
         if (keycode == 0) {
-            println("[Hotkey][X11] XKeysymToKeycode failed for 'z'")
+            println("[Hotkey][X11] XKeysymToKeycode failed for '${key.x11KeyString}'")
             lib.XCloseDisplay(disp)
             return false
         }
@@ -74,7 +77,7 @@ class X11HotkeyBackend : HotkeyBackend {
                 start()
             }
 
-        println("[Hotkey][X11] Global hotkey active: Ctrl+Z (X11/XWayland)")
+        println("[Hotkey][X11] Global hotkey active: ${key.label} (X11/XWayland)")
         return true
     }
 

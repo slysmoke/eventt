@@ -41,6 +41,7 @@ private object PricingSettings {
     const val MARGIN_LIMIT_ENABLED = "tools.pricing.marginLimitEnabled"
     const val SOURCE_TYPE = "tools.pricing.sourceType"
     const val SOURCE_ID = "tools.pricing.sourceId"
+    const val ACTING_CHAR_ID = "tools.pricing.actingCharId"
 }
 
 // Who to pull purchase-price history from for the cost-basis calculation — independent of the
@@ -68,7 +69,11 @@ private sealed class CostBasisSource {
 @Composable
 fun PricingScreen(context: ViewContext?) {
     val scope = rememberCoroutineScope()
-    val actingCharId = context?.actingCharId
+    // The global left-nav selection — only used as a default; the acting character actually used
+    // for fees/region/station is [pricingActingCharId] below, which can diverge from it (e.g. when
+    // pricing a corp's stock, you may want to act as a different corp-mate than the one currently
+    // selected app-wide).
+    val globalActingCharId = context?.actingCharId
 
     var pasteText by remember { mutableStateOf("") }
     var marginText by remember { mutableStateOf("30") }
@@ -76,10 +81,16 @@ fun PricingScreen(context: ViewContext?) {
 
     var salesTaxPct by remember { mutableStateOf(8.0) }
     var brokerFeePct by remember { mutableStateOf(3.0) }
+    var stationInfo by remember { mutableStateOf<ActingLocation?>(null) }
 
     var allCharacters by remember { mutableStateOf<List<CharacterModel>>(emptyList()) }
     var allCorporations by remember { mutableStateOf<List<Pair<Int, String>>>(emptyList()) }
     var costBasisSource by remember { mutableStateOf<CostBasisSource?>(null) }
+    // Who to use for fees/region/station — locked to the cost-basis character when that's a single
+    // character (no ambiguity), or freely pickable among the corp's locally-known members when the
+    // cost-basis source is a whole corporation, via the dropdown below. Falls back to the app-wide
+    // selection until a cost-basis source is chosen.
+    var pricingActingCharId by remember { mutableStateOf(context?.actingCharId) }
 
     fun persistCostBasisSource(source: CostBasisSource) {
         scope.launch(Dispatchers.IO) {
@@ -95,6 +106,27 @@ fun PricingScreen(context: ViewContext?) {
             }
         }
     }
+
+    fun persistActingChar(id: Int?) {
+        scope.launch(Dispatchers.IO) {
+            StaticDataDao.setSetting(PricingSettings.ACTING_CHAR_ID, id?.toString() ?: "")
+        }
+    }
+
+    // Default acting character for a freshly picked cost-basis source: the character itself when
+    // it's a single character, otherwise the app-wide selection if it happens to be a member of
+    // that corp, otherwise just the first locally-known member.
+    fun defaultActingCharFor(
+        source: CostBasisSource,
+        characters: List<CharacterModel>,
+    ): Int? =
+        when (source) {
+            is CostBasisSource.Character -> source.charId
+            is CostBasisSource.Corporation -> {
+                val members = characters.filter { it.corporationId == source.corpId }
+                globalActingCharId?.takeIf { id -> members.any { it.id == id } } ?: members.firstOrNull()?.id
+            }
+        }
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
@@ -117,20 +149,44 @@ fun PricingScreen(context: ViewContext?) {
                     "corporation" -> corporations.find { it.first == savedId }?.let { CostBasisSource.Corporation(it.first, it.second) }
                     else -> null
                 }
-            costBasisSource =
+            val source =
                 restored ?: when (val ctx = context) {
                     is ViewContext.Character -> characters.find { it.id == ctx.charId }?.let { CostBasisSource.Character(it.id, it.name) }
                     is ViewContext.Corporation -> CostBasisSource.Corporation(ctx.corporationId, ctx.corporationName)
                     else -> null
                 }
+            costBasisSource = source
+
+            val savedActingId = StaticDataDao.getSetting(PricingSettings.ACTING_CHAR_ID)?.toIntOrNull()
+            pricingActingCharId =
+                source?.let { s ->
+                    when (s) {
+                        is CostBasisSource.Character -> s.charId
+                        is CostBasisSource.Corporation -> {
+                            val members = characters.filter { it.corporationId == s.corpId }
+                            savedActingId?.takeIf { id -> members.any { it.id == id } } ?: defaultActingCharFor(s, characters)
+                        }
+                    }
+                } ?: context?.actingCharId
         }
     }
 
-    LaunchedEffect(actingCharId) {
-        val cid = actingCharId ?: return@LaunchedEffect
+    // Before any cost-basis source is chosen, keep following the app-wide selection — once a
+    // source is picked, [pricingActingCharId] becomes independently managed (see onSelect below).
+    LaunchedEffect(globalActingCharId) {
+        if (costBasisSource == null) pricingActingCharId = globalActingCharId
+    }
+
+    LaunchedEffect(pricingActingCharId) {
+        val cid =
+            pricingActingCharId ?: run {
+                stationInfo = null
+                return@LaunchedEffect
+            }
         withContext(Dispatchers.IO) {
             salesTaxPct = StaticDataDao.getCharSalesTax(cid)
             brokerFeePct = StaticDataDao.getCharBrokersFee(cid)
+            stationInfo = PricingService.resolveActingLocation(cid)
         }
     }
 
@@ -151,7 +207,7 @@ fun PricingScreen(context: ViewContext?) {
                     items = resolved,
                     characterId = (source as? CostBasisSource.Character)?.charId,
                     corporationId = (source as? CostBasisSource.Corporation)?.corpId,
-                    actingCharId = actingCharId,
+                    actingCharId = pricingActingCharId,
                     marginPct = margin,
                     marginLimitEnabled = marginLimitEnabled,
                 )
@@ -207,7 +263,33 @@ fun PricingScreen(context: ViewContext?) {
                     onSelect = {
                         costBasisSource = it
                         persistCostBasisSource(it)
+                        pricingActingCharId = defaultActingCharFor(it, allCharacters)
+                        persistActingChar(pricingActingCharId)
                     },
+                )
+                val corpSource = costBasisSource as? CostBasisSource.Corporation
+                if (corpSource != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text("Acting character (determines station, region & fees)", style = MaterialTheme.typography.labelMedium)
+                    Spacer(Modifier.height(4.dp))
+                    ActingCharacterDropdown(
+                        members = allCharacters.filter { it.corporationId == corpSource.corpId },
+                        selectedId = pricingActingCharId,
+                        onSelect = {
+                            pricingActingCharId = it
+                            persistActingChar(it)
+                        },
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    when {
+                        pricingActingCharId == null -> "Select a character to determine your current station."
+                        stationInfo != null -> "Selling from: ${stationInfo!!.locationName}"
+                        else -> "Could not determine a docked station for this character — station-scoped pricing will be skipped."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -238,8 +320,9 @@ fun PricingScreen(context: ViewContext?) {
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "The market's current lowest sell order is always undercut by one price tick when it's cheaper " +
-                        "than your margin target — market region is read from your character's current location.",
+                    "The market's current lowest sell order at your station is always undercut by one price tick " +
+                        "when it's cheaper than your margin target — orders sitting at other stations in the region " +
+                        "don't count.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -256,7 +339,7 @@ fun PricingScreen(context: ViewContext?) {
                     enabled =
                         !isCalculating &&
                             pasteText.isNotBlank() &&
-                            actingCharId != null &&
+                            pricingActingCharId != null &&
                             (!marginLimitEnabled || costBasisSource != null),
                 ) {
                     if (isCalculating) {
@@ -264,14 +347,6 @@ fun PricingScreen(context: ViewContext?) {
                         Spacer(Modifier.width(8.dp))
                     }
                     Text("Calculate")
-                }
-                if (actingCharId == null) {
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "Select a character to determine your current market region.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
                 if (marginLimitEnabled && costBasisSource == null) {
                     Spacer(Modifier.height(4.dp))
@@ -432,6 +507,46 @@ fun PricingScreen(context: ViewContext?) {
                         minLines = 4,
                     )
                 }
+            }
+        }
+    }
+}
+
+// Restricted to one corp's locally-known members — picks who actually undocks and lists the
+// order, since that determines the region/station/fees, separately from whose purchase history
+// the cost basis is pooled from above.
+@Composable
+private fun ActingCharacterDropdown(
+    members: List<CharacterModel>,
+    selectedId: Int?,
+    onSelect: (Int) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedName = members.find { it.id == selectedId }?.name
+
+    Box {
+        OutlinedButton(onClick = { expanded = true }, enabled = members.isNotEmpty()) {
+            Icon(Icons.Default.Person, null, Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(selectedName ?: "No local corp members")
+            Spacer(Modifier.width(4.dp))
+            Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null, Modifier.size(16.dp))
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            members.sortedBy { it.name }.forEach { c ->
+                DropdownMenuItem(
+                    text = { Text(c.name) },
+                    onClick = {
+                        onSelect(c.id)
+                        expanded = false
+                    },
+                    leadingIcon =
+                        if (c.id == selectedId) {
+                            { Icon(Icons.Default.Check, null, Modifier.size(14.dp)) }
+                        } else {
+                            null
+                        },
+                )
             }
         }
     }

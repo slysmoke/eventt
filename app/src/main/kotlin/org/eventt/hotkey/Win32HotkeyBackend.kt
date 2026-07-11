@@ -9,7 +9,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
- * Global Ctrl+Z hotkey on Windows via jna-platform's User32.RegisterHotKey.
+ * Global hotkey on Windows via jna-platform's User32.RegisterHotKey.
  *
  * Registering with hWnd = NULL binds the hotkey to the *calling thread's* message queue, so a
  * dedicated thread both registers it and runs the GetMessage loop that receives WM_HOTKEY.
@@ -26,7 +26,10 @@ class Win32HotkeyBackend : HotkeyBackend {
 
     @Volatile private var registered: Boolean = false
 
-    override fun start(onTrigger: () -> Unit): Boolean {
+    override fun start(
+        key: HotkeyKey,
+        onTrigger: () -> Unit,
+    ): Boolean {
         val user32 =
             try {
                 User32.INSTANCE
@@ -35,13 +38,14 @@ class Win32HotkeyBackend : HotkeyBackend {
                 return false
             }
 
+        val id = HOTKEY_ID_BASE + key.id
         val started = CountDownLatch(1)
 
         thread =
             Thread({
                 try {
                     threadId = Kernel32.INSTANCE.GetCurrentThreadId()
-                    registered = user32.RegisterHotKey(null, HOTKEY_ID, MOD_CONTROL, VK_Z)
+                    registered = user32.RegisterHotKey(null, id, MOD_CONTROL, key.win32VkCode)
                 } catch (e: Throwable) {
                     println("[Hotkey][Win32] Failed to register hotkey: ${e.message}")
                     registered = false
@@ -54,26 +58,26 @@ class Win32HotkeyBackend : HotkeyBackend {
                 while (true) {
                     val ret = user32.GetMessage(msg, null, 0, 0)
                     if (ret <= 0) break // WM_QUIT or error
-                    if (msg.message == WM_HOTKEY && msg.wParam.toInt() == HOTKEY_ID) {
+                    if (msg.message == WM_HOTKEY && msg.wParam.toInt() == id) {
                         onTrigger()
                     }
                     user32.TranslateMessage(msg)
                     user32.DispatchMessage(msg)
                 }
-                user32.UnregisterHotKey(null, HOTKEY_ID)
-            }, "win32-hotkey").apply {
+                user32.UnregisterHotKey(null, id)
+            }, "win32-hotkey-${key.id}").apply {
                 isDaemon = true
                 start()
             }
 
         val gotResponse = started.await(2, TimeUnit.SECONDS)
         if (!gotResponse || !registered) {
-            println("[Hotkey][Win32] RegisterHotKey failed (Ctrl+Z likely already bound by another app)")
+            println("[Hotkey][Win32] RegisterHotKey failed (${key.label} likely already bound by another app)")
             thread = null
             return false
         }
 
-        println("[Hotkey][Win32] Global hotkey active: Ctrl+Z")
+        println("[Hotkey][Win32] Global hotkey active: ${key.label}")
         return true
     }
 
@@ -88,9 +92,8 @@ class Win32HotkeyBackend : HotkeyBackend {
     }
 
     private companion object {
-        const val HOTKEY_ID = 0xC0DE
+        const val HOTKEY_ID_BASE = 0xC0DE
         const val MOD_CONTROL = 0x0002
-        const val VK_Z = 0x5A
         const val WM_HOTKEY = 0x0312
         const val WM_QUIT = 0x0012
     }

@@ -75,4 +75,24 @@ class ClipboardParserTest {
 
         order!!.location shouldBe ""
     }
+
+    @Test
+    fun `parses a PLEX sell row (3 fields, no station) into a ParsedOrder`() {
+        val order = ClipboardParser.parse("164\t4,705,000.00 ISK\t88d 23h 14m 37s")
+
+        order!!.price should (4_705_000.00 plusOrMinus 0.0001)
+        order.volume shouldBe 164L
+        order.location shouldBe ""
+        order.isBuy shouldBe false
+    }
+
+    @Test
+    fun `parses a PLEX buy row (4 fields, no station) and flags it as a buy`() {
+        val order = ClipboardParser.parse("75\t4,550,000.00 ISK\t1\t6d 23h 59m 28s")
+
+        order!!.price should (4_550_000.00 plusOrMinus 0.0001)
+        order.volume shouldBe 75L
+        order.location shouldBe ""
+        order.isBuy shouldBe true
+    }
 }

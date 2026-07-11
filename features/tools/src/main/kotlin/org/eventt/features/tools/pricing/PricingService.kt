@@ -7,14 +7,25 @@ import org.eventt.features.orders.CostBasisService
 import org.eventt.features.tools.ResolvedItem
 import kotlin.math.round
 
+// Where a character is currently docked — sell prices are scoped to this exact location (not the
+// whole region), since only sell orders sitting in the same station you're undocking from are
+// ones you can actually undercut/compete against without hauling.
+data class ActingLocation(
+    val regionId: Int,
+    val locationId: Long,
+    val locationName: String,
+)
+
 /**
  * Sell-pricing tool: for each pasted item, look up the FIFO purchase cost, apply a margin, and
- * always undercut the current market's lowest sell order by one EVE price tick (matching how
- * Orders' hotkey undercut works) whenever that's cheaper than the margin target — this isn't
- * optional. The [marginLimitEnabled] switch controls the final *price* only: off means always
- * hand back the market-undercut price regardless of cost basis. Cost basis itself is still looked
- * up whenever a source is available either way, so the resulting Margin column (cost basis vs.
- * finalPrice, net of fees) stays populated and informative even with the limit off.
+ * always undercut the current market's lowest sell order — scoped to the station your acting
+ * character is currently docked at, not the whole region, since that's the only competing supply
+ * you can actually list against without hauling — by one EVE price tick (matching how Orders'
+ * hotkey undercut works) whenever that's cheaper than the margin target — this isn't optional.
+ * The [marginLimitEnabled] switch controls the final *price* only: off means always hand back the
+ * market-undercut price regardless of cost basis. Cost basis itself is still looked up whenever a
+ * source is available either way, so the resulting Margin column (cost basis vs. finalPrice, net
+ * of fees) stays populated and informative even with the limit off.
  */
 object PricingService {
     fun computePrices(
@@ -27,9 +38,13 @@ object PricingService {
     ): Pair<List<PricingResult>, List<PricingWarning>> {
         val warnings = mutableListOf<PricingWarning>()
 
-        val regionId = actingCharId?.let { resolveRegionId(it) }
-        if (regionId == null) {
-            warnings += PricingWarning("(region)", "could not determine your character's current region from ESI — market lookups skipped")
+        val location = actingCharId?.let { resolveActingLocation(it) }
+        if (location == null) {
+            warnings +=
+                PricingWarning(
+                    "(location)",
+                    "could not determine your character's current docked station from ESI — market lookups skipped",
+                )
         }
 
         // Sales tax + broker fee both come off a completed sale, so the margin target must be
@@ -52,14 +67,15 @@ object PricingService {
             }
 
         val marketBestSellByType: Map<Int, Double?> =
-            if (regionId == null) {
+            if (location == null) {
                 emptyMap()
             } else {
                 items.associate { item ->
                     item.typeId to
                         try {
                             EsiClient
-                                .getMarketRegionOrders(regionId, orderType = "sell", typeId = item.typeId)
+                                .getMarketRegionOrders(location.regionId, orderType = "sell", typeId = item.typeId)
+                                .filter { (it["location_id"] as? Number)?.toLong() == location.locationId }
                                 .mapNotNull { (it["price"] as? Number)?.toDouble() }
                                 .minOrNull()
                         } catch (e: Exception) {
@@ -72,8 +88,8 @@ object PricingService {
             items.map { item ->
                 val marketLow = marketBestSellByType[item.typeId]
                 val marketUndercut = marketLow?.let { undercutPrice(it) }
-                if (regionId != null && marketLow == null) {
-                    warnings += PricingWarning(item.name, "no sell orders found in your current region")
+                if (location != null && marketLow == null) {
+                    warnings += PricingWarning(item.name, "no sell orders found at ${location.locationName}")
                 }
 
                 val cb = fifo?.avgCostBasisForType(item.typeId)
@@ -115,6 +131,32 @@ object PricingService {
         val location = EsiClient.getCharacterLocation(actingCharId) ?: return null
         val systemId = (location["solar_system_id"] as? Number)?.toInt() ?: return null
         return StaticDataDao.getSystemRegionId(systemId)
+    }
+
+    // Docked location only — null while in space, since there's no "current station" to scope
+    // sell prices to at that point. Also used by PricingScreen to show the station next to the
+    // character picker so it's obvious where prices are being read from.
+    fun resolveActingLocation(actingCharId: Int): ActingLocation? {
+        val raw = EsiClient.getCharacterLocation(actingCharId) ?: return null
+        val systemId = (raw["solar_system_id"] as? Number)?.toInt() ?: return null
+        val regionId = StaticDataDao.getSystemRegionId(systemId) ?: return null
+        val stationId = (raw["station_id"] as? Number)?.toLong()
+        val structureId = (raw["structure_id"] as? Number)?.toLong()
+        val locationId = stationId ?: structureId ?: return null
+        val name =
+            when {
+                stationId != null ->
+                    StaticDataDao.getStationById(stationId)?.name
+                        ?: EsiClient.resolveNames(listOf(stationId.toInt()))[stationId.toInt()]
+                structureId != null ->
+                    try {
+                        EsiClient.getStructureInfo(structureId, actingCharId)?.get("name") as? String
+                    } catch (e: Exception) {
+                        null
+                    }
+                else -> null
+            } ?: "Unknown location ($locationId)"
+        return ActingLocation(regionId, locationId, name)
     }
 
     // Rounds to the nearest EVE price tick, then steps one tick below it — the same "beat the

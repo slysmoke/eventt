@@ -43,15 +43,23 @@ private val ACCENT = Color(0xFF4A90D9)
 fun OverlayWindow(onClose: () -> Unit) {
     val prefs = remember { Preferences.userRoot().node("org/eve/trader/overlay") }
 
+    // Opened via the Ctrl+M hotkey: place it at the cursor instead of wherever it was last
+    // dragged to — that's the whole point of that hotkey. Opened via the top-bar button (no
+    // pending position): keep the normal drag-persisted spot.
+    val pendingPosition = remember { OverlayController.consumePendingOpenPosition() }
     val windowState =
         rememberWindowState(
             width = 290.dp,
             height = 290.dp,
             position =
-                WindowPosition(
-                    x = prefs.getInt("x", 120).dp,
-                    y = prefs.getInt("y", 120).dp,
-                ),
+                if (pendingPosition != null) {
+                    WindowPosition(x = pendingPosition.first.dp, y = pendingPosition.second.dp)
+                } else {
+                    WindowPosition(
+                        x = prefs.getInt("x", 120).dp,
+                        y = prefs.getInt("y", 120).dp,
+                    )
+                },
         )
 
     Window(
@@ -291,6 +299,12 @@ private fun OverlayContent(
                         Spacer(Modifier.height(4.dp))
                         CalcRow("Profit/unit", fmtIsk(profitPerUnit), profitColor, bold = true)
                         CalcRow("Margin", "%.1f%%".format(margin), profitColor, bold = true)
+                        Spacer(Modifier.height(4.dp))
+                        // Instant-fill reference prices: crossing the spread by 10% guarantees a
+                        // fill even if the book moves a tick before the order lands, unlike
+                        // matching the going price exactly.
+                        CalcRow("Buy out (+10%)", fmtIsk(sp * 1.1), DIM_TEXT)
+                        CalcRow("Sell out (−10%)", fmtIsk(bp * 0.9), DIM_TEXT)
 
                         val tradableVol = minOf(sellVol, buyVol).takeIf { it > 0 }
                         if (tradableVol != null) {

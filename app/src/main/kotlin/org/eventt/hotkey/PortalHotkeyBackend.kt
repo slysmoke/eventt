@@ -18,7 +18,6 @@ import java.util.concurrent.TimeUnit
 
 private const val BUS_NAME = "org.freedesktop.portal.Desktop"
 private const val OBJECT_PATH = "/org/freedesktop/portal/desktop"
-private const val SHORTCUT_ID = "cycle-queue"
 
 // Public (not Kotlin `private`/file-private): both this interface (proxied via java.lang.reflect.Proxy,
 // which tolerates non-public interfaces fine) and, more importantly, its nested Activated class
@@ -66,11 +65,11 @@ interface PortalRequest : DBusInterface {
 }
 
 /**
- * Global Ctrl+Z hotkey via the Wayland xdg-desktop-portal GlobalShortcuts interface (D-Bus).
+ * Global hotkey via the Wayland xdg-desktop-portal GlobalShortcuts interface (D-Bus).
  *
  * Unlike the other backends, the *compositor* - not this app - decides which physical key combo
- * triggers the shortcut: it shows a system dialog letting the user assign one to "Cycle EVE
- * Trader order/trade queue" the first time BindShortcuts runs. This first version doesn't persist
+ * triggers the shortcut: it shows a system dialog letting the user assign one to whatever label
+ * this hotkey was given the first time BindShortcuts runs. This first version doesn't persist
  * the session (`restore_token`), so that assignment may need to be repeated on each app launch on
  * portal-supporting compositors - a known rough edge, not a bug.
  *
@@ -83,7 +82,11 @@ class PortalHotkeyBackend : HotkeyBackend {
     private var connection: DBusConnection? = null
     private var sigHandlerCloser: AutoCloseable? = null
 
-    override fun start(onTrigger: () -> Unit): Boolean {
+    override fun start(
+        key: HotkeyKey,
+        onTrigger: () -> Unit,
+    ): Boolean {
+        val shortcutId = "eventt-hotkey-${key.id}"
         val conn =
             try {
                 DBusConnectionBuilder.forSessionBus().build()
@@ -120,7 +123,7 @@ class PortalHotkeyBackend : HotkeyBackend {
             }
 
             val shortcut =
-                ShortcutDescription(SHORTCUT_ID, mapOf("description" to Variant("Cycle EVE Night Trade Tools order/trade queue")))
+                ShortcutDescription(shortcutId, mapOf("description" to Variant("EVE Night Trade Tools: ${key.label}")))
             val bound =
                 callAndAwaitResponse(conn, "bind") { token ->
                     globalShortcuts.BindShortcuts(sessionHandle, listOf(shortcut), "", mapOf("handle_token" to Variant(token)))
@@ -133,13 +136,15 @@ class PortalHotkeyBackend : HotkeyBackend {
 
             val handler =
                 DBusSigHandler<GlobalShortcuts.Activated> { signal ->
-                    if (signal.sessionHandle == sessionHandle && signal.shortcutId == SHORTCUT_ID) {
+                    if (signal.sessionHandle == sessionHandle && signal.shortcutId == shortcutId) {
                         onTrigger()
                     }
                 }
             sigHandlerCloser = conn.addSigHandler(GlobalShortcuts.Activated::class.java, BUS_NAME, handler)
 
-            println("[Hotkey][Portal] Global shortcut session bound - assign a key combo via the system dialog if prompted")
+            println(
+                "[Hotkey][Portal] Global shortcut session bound for ${key.label} - assign a key combo via the system dialog if prompted",
+            )
             true
         } catch (e: Throwable) {
             println("[Hotkey][Portal] Failed to set up GlobalShortcuts portal: ${e.message}")

@@ -56,6 +56,7 @@ import org.eventt.features.dashboard.DashboardScreen
 import org.eventt.features.market.MarketAnalysisScreen
 import org.eventt.features.market.MarketBrowserScreen
 import org.eventt.features.orders.OrdersScreen
+import org.eventt.features.overlay.OverlayController
 import org.eventt.features.overlay.OverlayWindow
 import org.eventt.features.p2pmarket.CountBadge
 import org.eventt.features.p2pmarket.P2pMarketScreen
@@ -142,10 +143,12 @@ fun EventtApp() {
         AlertMonitor.start(coroutineScope)
     }
 
-    // Trade overlay window — independent of the main theme, lives at the app level
-    var showOverlay by remember { mutableStateOf(false) }
+    // Trade overlay window — independent of the main theme, lives at the app level. Shared with
+    // the global Ctrl+M hotkey (app/GlobalHotkeyService) via OverlayController rather than local
+    // state, since the hotkey fires from a native thread with no access to this composable.
+    val showOverlay by OverlayController.isOpen.collectAsState()
     if (showOverlay) {
-        OverlayWindow(onClose = { showOverlay = false })
+        OverlayWindow(onClose = { OverlayController.close() })
     }
 
     MaterialTheme(
@@ -188,7 +191,7 @@ fun EventtApp() {
                     eveColors = eveColors,
                     onShowProgress = { showProgressDialog = true },
                     overlayActive = showOverlay,
-                    onToggleOverlay = { showOverlay = !showOverlay },
+                    onToggleOverlay = { OverlayController.toggle() },
                 )
             },
             content = { padding ->
