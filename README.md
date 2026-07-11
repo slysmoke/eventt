@@ -112,7 +112,7 @@ Main.kt → DatabaseManager.initialize() → EventtApp (Compose)
 :core:auth  → :core:{database, http, model}
 ```
 
-See `CLAUDE.md` for a deeper dive into caching, the request queue, threading, and other internal patterns.
+
 
 ## License
 
