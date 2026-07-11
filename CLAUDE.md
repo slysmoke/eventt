@@ -17,7 +17,7 @@ EVE Night Trade Tools is a desktop trading application for EVE Online, built wit
 ./gradlew createDistributable
 ```
 
-Targets JVM 21, Kotlin 1.9.22. No linter configured; code style is `kotlin.code.style=official`.
+Targets JVM 21, Kotlin 2.4.0, code style `kotlin.code.style=official`. Linting is enforced via ktlint and detekt (`./gradlew ktlintCheck detekt`); both gate CI.
 
 ## Architecture
 

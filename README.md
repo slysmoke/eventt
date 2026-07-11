@@ -67,7 +67,7 @@ For testing both sides of a trade locally, `./scripts/run-p2p-test.sh` launches 
 ./gradlew :module:test       # Run tests for a specific module (e.g. :core:database:test)
 ```
 
-Targets JVM 21 / Kotlin 1.9.22, code style `kotlin.code.style=official`. Linting is enforced via ktlint and detekt:
+Targets JVM 21 / Kotlin 2.4.0, code style `kotlin.code.style=official`. Linting is enforced via ktlint and detekt:
 
 ```bash
 ./gradlew ktlintCheck         # Style check (ktlintFormat to auto-fix)
