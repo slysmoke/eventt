@@ -2918,7 +2918,11 @@ internal fun medianDailyVolume(
     // windowDays calendar days (ESI just omits no-trade days rather than rows LIMIT-ed by date) —
     // so missing-day padding has to be based on the actual calendar span covered, not row count,
     // or a handful of old trades scattered over months gets treated as "no gaps" and never zeroed.
-    val cutoffDate = java.time.LocalDate.now().minusDays(windowDays.toLong()).toString()
+    val cutoffDate =
+        java.time.LocalDate
+            .now()
+            .minusDays(windowDays.toLong())
+            .toString()
     val recentVolumes = history.filter { it.date.take(10) >= cutoffDate }.map { it.volume }
     val missingDays = (windowDays - recentVolumes.size).coerceAtLeast(0)
     val volumes = (recentVolumes + List(missingDays) { 0L }).sorted()
