@@ -2910,7 +2910,7 @@ private fun compute7dChange(history: List<org.eventt.core.model.MarketHistoryMod
  * that only traded on 2 of the last 30 days would show its median as "whatever those 2 busy days
  * happened to be," not the mostly-quiet volume it actually has.
  */
-private fun medianDailyVolume(
+internal fun medianDailyVolume(
     history: List<org.eventt.core.model.MarketHistoryModel>,
     windowDays: Int = 30,
 ): Long {
