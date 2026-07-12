@@ -25,6 +25,9 @@ jobs:
           key: gradle-linux-${{ hashFiles('**/*.gradle.kts', 'gradle/libs.versions.toml') }}
           restore-keys: gradle-linux-
 
+      - name: Run ktlint format
+        run: ./gradlew ktlintFormat
+
       - name: Run tests
         run: ./gradlew test
 
