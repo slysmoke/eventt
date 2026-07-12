@@ -2914,8 +2914,14 @@ private fun medianDailyVolume(
     history: List<org.eventt.core.model.MarketHistoryModel>,
     windowDays: Int = 30,
 ): Long {
-    val missingDays = (windowDays - history.size).coerceAtLeast(0)
-    val volumes = (history.map { it.volume } + List(missingDays) { 0L }).sorted()
+    // history is "last N trading-day rows", which for a thin item can reach back far more than
+    // windowDays calendar days (ESI just omits no-trade days rather than rows LIMIT-ed by date) —
+    // so missing-day padding has to be based on the actual calendar span covered, not row count,
+    // or a handful of old trades scattered over months gets treated as "no gaps" and never zeroed.
+    val cutoffDate = java.time.LocalDate.now().minusDays(windowDays.toLong()).toString()
+    val recentVolumes = history.filter { it.date.take(10) >= cutoffDate }.map { it.volume }
+    val missingDays = (windowDays - recentVolumes.size).coerceAtLeast(0)
+    val volumes = (recentVolumes + List(missingDays) { 0L }).sorted()
     if (volumes.isEmpty()) return 0L
     val mid = volumes.size / 2
     return if (volumes.size % 2 == 0) (volumes[mid - 1] + volumes[mid]) / 2 else volumes[mid]
