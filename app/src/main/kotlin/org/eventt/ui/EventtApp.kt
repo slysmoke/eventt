@@ -64,7 +64,6 @@ import org.eventt.features.p2pmarket.rememberPendingBuyRequestCount
 import org.eventt.features.settings.SettingsScreen
 import org.eventt.features.tools.ToolsScreen
 import org.eventt.features.wallet.WalletScreen
-import org.eventt.features.watchlist.WatchlistScreen
 import org.eventt.ui.common.RequestProgressDialog
 import org.eventt.ui.theme.*
 import org.eventt.update.UpdateChecker
@@ -84,7 +83,6 @@ enum class AppScreen(
     ASSETS("Assets", Icons.Default.Inventory),
     WALLET("Wallet", Icons.Default.AccountBalance),
     ORDERS("Orders", Icons.Default.ShoppingCart),
-    WATCHLIST("Watchlist", Icons.Default.Visibility),
     ALERTS("Alerts", Icons.Default.Notifications),
     CONTRACTS("Contracts", Icons.Default.Description),
     TOOLS("Tools", Icons.Default.Build),
@@ -891,7 +889,6 @@ private fun ScreenContent(
                             AppScreen.ASSETS -> AssetViewerScreen(context = selectedContext)
                             AppScreen.WALLET -> WalletScreen(context = selectedContext)
                             AppScreen.ORDERS -> OrdersScreen(context = selectedContext)
-                            AppScreen.WATCHLIST -> WatchlistScreen()
                             AppScreen.ALERTS -> PriceAlertsScreen()
                             AppScreen.CONTRACTS -> ContractTrackerScreen(charId = selectedCharId)
                             AppScreen.TOOLS -> ToolsScreen(context = selectedContext)

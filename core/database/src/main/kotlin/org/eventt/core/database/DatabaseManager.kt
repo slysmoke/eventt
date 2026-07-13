@@ -247,36 +247,6 @@ object DatabaseManager {
                     PRIMARY KEY (type_id, region_id, date)
                 )
                 """.trimIndent(),
-                // Watchlist
-                """
-                CREATE TABLE IF NOT EXISTS watchlist (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    type_id INTEGER NOT NULL,
-                    type_name TEXT DEFAULT '',
-                    watchlist_name TEXT DEFAULT 'Default',
-                    station_id INTEGER DEFAULT 0,
-                    region_id INTEGER DEFAULT 0,
-                    sort_order INTEGER DEFAULT 0
-                )
-                """.trimIndent(),
-                // Watchlist Price Snapshots
-                """
-                CREATE TABLE IF NOT EXISTS watchlist_prices (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    type_id INTEGER NOT NULL,
-                    station_id INTEGER DEFAULT 0,
-                    best_buy_price REAL DEFAULT 0.0,
-                    best_sell_price REAL DEFAULT 0.0,
-                    spread REAL DEFAULT 0.0,
-                    spread_percent REAL DEFAULT 0.0,
-                    volume_24h INTEGER DEFAULT 0,
-                    change_percent_24h REAL DEFAULT 0.0,
-                    change_percent_7d REAL DEFAULT 0.0,
-                    change_percent_30d REAL DEFAULT 0.0,
-                    sparkline_data TEXT DEFAULT '[]',
-                    captured_at INTEGER DEFAULT (strftime('%s', 'now') * 1000)
-                )
-                """.trimIndent(),
                 // Price Alerts
                 """
                 CREATE TABLE IF NOT EXISTS price_alerts (
@@ -613,10 +583,6 @@ object DatabaseManager {
                 "CREATE INDEX IF NOT EXISTS idx_assets_character ON assets(character_id)",
                 "CREATE INDEX IF NOT EXISTS idx_assets_corporation ON assets(corporation_id)",
                 "CREATE INDEX IF NOT EXISTS idx_market_history_source_date ON market_history(source, date)",
-                "CREATE INDEX IF NOT EXISTS idx_watchlist_type ON watchlist(type_id)",
-                "CREATE INDEX IF NOT EXISTS idx_watchlist_name ON watchlist(watchlist_name)",
-                "CREATE INDEX IF NOT EXISTS idx_watchlist_prices_lookup ON watchlist_prices(type_id, station_id)",
-                "CREATE INDEX IF NOT EXISTS idx_watchlist_prices_time ON watchlist_prices(captured_at)",
                 "CREATE INDEX IF NOT EXISTS idx_price_alerts_type ON price_alerts(type_id)",
                 "CREATE INDEX IF NOT EXISTS idx_price_alerts_enabled ON price_alerts(enabled)",
                 "CREATE INDEX IF NOT EXISTS idx_contracts_status ON contracts(status)",

@@ -41,13 +41,11 @@ import kotlinx.coroutines.withContext
 import org.eventt.core.database.AlertDao
 import org.eventt.core.database.MarketDao
 import org.eventt.core.database.StaticDataDao
-import org.eventt.core.database.WatchlistDao
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.MarketHistoryModel
 import org.eventt.core.model.PriceAlertModel
 import org.eventt.core.model.StaticMarketGroupModel
 import org.eventt.core.model.StaticTypeModel
-import org.eventt.core.model.WatchlistEntryModel
 import org.eventt.core.staticdata.StaticDataImporter
 import org.eventt.ui.common.*
 import org.eventt.ui.common.formatPriceAbbr
@@ -98,7 +96,6 @@ fun MarketBrowserScreen() {
     var topGroups by remember { mutableStateOf<List<StaticMarketGroupModel>>(emptyList()) }
     var expandedGroups by remember { mutableStateOf(setOf<Int>()) }
     var isSdeImporting by remember { mutableStateOf(false) }
-    var showAddToWatchlist by remember { mutableStateOf(false) }
     var showAddToAlert by remember { mutableStateOf(false) }
     var contextMenuOrder by remember { mutableStateOf<MarketOrder?>(null) }
 
@@ -256,7 +253,6 @@ fun MarketBrowserScreen() {
                             orderBook = orderBook,
                             showOrderBook = showOrderBook,
                             onToggleView = { showOrderBook = !showOrderBook },
-                            onAddToWatchlist = { showAddToWatchlist = true },
                             onAddToAlert = { showAddToAlert = true },
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -315,15 +311,6 @@ fun MarketBrowserScreen() {
                 }
             }
         }
-    }
-
-    // Add to Watchlist dialog
-    if (showAddToWatchlist && selectedType != null) {
-        AddToWatchlistDialog(
-            type = selectedType!!,
-            onDismiss = { showAddToWatchlist = false },
-            onAdded = { showAddToWatchlist = false },
-        )
     }
 
     // Add to Alert dialog (from header button)
@@ -483,7 +470,6 @@ private fun TypeMarketHeader(
     orderBook: Pair<List<MarketOrder>, List<MarketOrder>>,
     showOrderBook: Boolean,
     onToggleView: () -> Unit,
-    onAddToWatchlist: () -> Unit,
     onAddToAlert: () -> Unit,
 ) {
     val (sellOrders, buyOrders) = orderBook
@@ -535,11 +521,6 @@ private fun TypeMarketHeader(
             Spacer(modifier = Modifier.width(4.dp))
             FilterChip(selected = !showOrderBook, onClick = onToggleView, label = { Text("History") })
             Spacer(modifier = Modifier.width(8.dp))
-            OutlinedButton(onClick = onAddToWatchlist, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
-                Icon(Icons.Default.Visibility, null, modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Watchlist", style = MaterialTheme.typography.labelSmall)
-            }
             OutlinedButton(onClick = onAddToAlert, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
                 Icon(Icons.Default.Notifications, null, modifier = Modifier.size(14.dp))
                 Spacer(modifier = Modifier.width(4.dp))
@@ -1464,63 +1445,6 @@ private fun formatVolPerDay(
         perDay >= 1 -> String.format(Locale.US, "%.1f", perDay)
         else -> String.format(Locale.US, "%.2f", perDay)
     }
-}
-
-// ─── Add to Watchlist Dialog ────────────────────────────────────────────
-
-@Composable
-private fun AddToWatchlistDialog(
-    type: StaticTypeModel,
-    onDismiss: () -> Unit,
-    onAdded: () -> Unit,
-) {
-    val scope = rememberCoroutineScope()
-    var watchlistName by remember { mutableStateOf("Default") }
-    val watchlists =
-        remember {
-            try {
-                WatchlistDao.getAllWatchlists().keys.toList()
-            } catch (e: Exception) {
-                listOf("Default")
-            }
-        }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add to Watchlist") },
-        text = {
-            Column {
-                Text(type.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Select watchlist:", style = MaterialTheme.typography.labelMedium)
-                Spacer(modifier = Modifier.height(4.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    items(watchlists) { name ->
-                        FilterChip(
-                            selected = watchlistName == name,
-                            onClick = { watchlistName = name },
-                            label = { Text(name) },
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(onClick = {
-                scope.launch(Dispatchers.IO) {
-                    WatchlistDao.insert(
-                        WatchlistEntryModel(
-                            typeId = type.typeId,
-                            typeName = type.name,
-                            watchlistName = watchlistName,
-                        ),
-                    )
-                    withContext(Dispatchers.Main) { onAdded() }
-                }
-            }) { Text("Add") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
 }
 
 // ─── Add to Alert Dialog ────────────────────────────────────────────────

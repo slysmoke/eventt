@@ -82,7 +82,6 @@ dependencies {
     implementation(project(":features:dashboard"))
     implementation(project(":features:alerts"))
     implementation(project(":features:contracts"))
-    implementation(project(":features:watchlist"))
     implementation(project(":features:settings"))
     implementation(project(":features:overlay"))
     implementation(project(":features:tools"))

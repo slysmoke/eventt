@@ -262,34 +262,6 @@ data class ContractItemModel(
     val estimatedPrice: Double = 0.0,
 )
 
-// ─── Watchlist ──────────────────────────────────────────────────────────────
-
-@Serializable
-data class WatchlistEntryModel(
-    val id: Int = 0,
-    val typeId: Int,
-    val typeName: String = "",
-    val watchlistName: String = "Default",
-    val stationId: Long = 0,
-    val regionId: Int = 0,
-    val sortOrder: Int = 0,
-)
-
-@Serializable
-data class WatchlistPriceSnapshot(
-    val typeId: Int,
-    val stationId: Long,
-    val bestBuyPrice: Double = 0.0,
-    val bestSellPrice: Double = 0.0,
-    val spread: Double = 0.0,
-    val spreadPercent: Double = 0.0,
-    val volume24h: Long = 0,
-    val changePercent24h: Double = 0.0,
-    val changePercent7d: Double = 0.0,
-    val changePercent30d: Double = 0.0,
-    val sparklineData: List<Pair<String, Double>> = emptyList(),
-)
-
 // ─── Price Alerts ───────────────────────────────────────────────────────────
 
 @Serializable
@@ -363,7 +335,6 @@ data class DashboardSummary(
     val activeContractCount: Int = 0,
     val triggeredAlertCount: Int = 0,
     val runningJobCount: Int = 0,
-    val watchlistCount: Int = 0,
     val characterCount: Int = 0,
     val corporationCount: Int = 0,
 )
