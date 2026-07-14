@@ -13,18 +13,6 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 sealed class MarketLogEvent {
-    data class MyOrdersImported(
-        val charId: Int,
-        val rows: List<MarketLogOrderRow>,
-        val sourceFile: String,
-    ) : MarketLogEvent()
-
-    // No corp id is present in the export itself — only the exporting character's own id per row.
-    data class CorpOrdersImported(
-        val rows: List<MarketLogOrderRow>,
-        val sourceFile: String,
-    ) : MarketLogEvent()
-
     data class OrderBookImported(
         val typeId: Int,
         val regionId: Int,
@@ -100,15 +88,6 @@ object MarketLogWatcher {
 
         var handled = true
         when (MarketLogParser.detectKind(lines[0])) {
-            MarketLogFileKind.MY_ORDERS -> {
-                val rows = MarketLogParser.parseOrderLog(lines)
-                val charId = rows.firstOrNull()?.charId
-                if (charId != null) _events.tryEmit(MarketLogEvent.MyOrdersImported(charId, rows, file.name))
-            }
-            MarketLogFileKind.CORP_ORDERS -> {
-                val rows = MarketLogParser.parseOrderLog(lines)
-                _events.tryEmit(MarketLogEvent.CorpOrdersImported(rows, file.name))
-            }
             MarketLogFileKind.ORDER_BOOK -> {
                 val rows = MarketLogParser.parseOrderBook(lines)
                 val typeId = rows.firstOrNull()?.typeId

@@ -4,23 +4,6 @@ import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 
 // Fixtures transcribed verbatim from real EVE Marketlogs export files.
-private const val MY_ORDERS_HEADER =
-    "orderID,typeID,charID,charName,regionID,regionName,solarSystemID,solarSystemName,stationID,stationName," +
-        "range,bid,price,volEntered,volRemaining,minVolume,issueDate,orderState,duration,escrow,isCorp," +
-        "accountID,accountOwnerID,accountKey,"
-private const val MY_ORDERS_ROW =
-    "7372477240,33904,2113351129,Sasha Winston,10000002,The Forge,30000142,Jita,60003760," +
-        "Jita IV - Moon 4 - Caldari Navy Assembly Plant,-1,True,310500000.0,2,2.0,1,2026-07-09 02:57:41.000,0," +
-        "90,621000000.0,False,78024504,2113351129,1000,"
-
-private const val CORP_ORDERS_HEADER =
-    "orderID,typeID,charID,charName,regionID,regionName,stationID,stationName,range,bid,price,volEntered," +
-        "volRemaining,issueDate,orderState,minVolume,accountID,duration,isCorp,solarSystemID,solarSystemName,escrow,keyID,"
-private const val CORP_ORDERS_ROW =
-    "7374839444,40519,2113351129,Sasha Winston,10000002,The Forge,60003760," +
-        "Jita IV - Moon 4 - Caldari Navy Assembly Plant,32767,True,1.0,1,1.0,2026-07-09 03:20:53.000,0,1," +
-        "81257669,1,True,30000142,Jita,1.0,1000,"
-
 private const val ORDER_BOOK_HEADER =
     "price,volRemaining,typeID,range,orderID,volEntered,minVolume,bid,issueDate,duration,stationID,regionID,solarSystemID,jumps,"
 private const val ORDER_BOOK_ROW =
@@ -30,16 +13,6 @@ private const val ORDER_BOOK_ROW_2 =
 
 class MarketLogParserTest {
     // ─── detectKind ─────────────────────────────────────────────────────────
-
-    @Test
-    fun `detectKind recognizes the My Orders header`() {
-        MarketLogParser.detectKind(MY_ORDERS_HEADER) shouldBe MarketLogFileKind.MY_ORDERS
-    }
-
-    @Test
-    fun `detectKind recognizes the Corporation Orders header`() {
-        MarketLogParser.detectKind(CORP_ORDERS_HEADER) shouldBe MarketLogFileKind.CORP_ORDERS
-    }
 
     @Test
     fun `detectKind recognizes the order book header`() {
@@ -56,51 +29,6 @@ class MarketLogParserTest {
     @Test
     fun `reformatIssueDate converts the export's space-separated date to ISO-with-T`() {
         MarketLogParser.reformatIssueDate("2026-07-09 02:57:41.000") shouldBe "2026-07-09T02:57:41Z"
-    }
-
-    // ─── parseOrderLog (My Orders) ──────────────────────────────────────────
-
-    @Test
-    fun `parseOrderLog parses a My Orders row by header name`() {
-        val rows = MarketLogParser.parseOrderLog(listOf(MY_ORDERS_HEADER, MY_ORDERS_ROW))
-        rows.size shouldBe 1
-        val row = rows.single()
-        row.orderId shouldBe 7372477240L
-        row.typeId shouldBe 33904
-        row.charId shouldBe 2113351129
-        row.charName shouldBe "Sasha Winston"
-        row.regionId shouldBe 10000002
-        row.stationId shouldBe 60003760L
-        row.isBuyOrder shouldBe true // bid="True"
-        row.price shouldBe 310500000.0
-        row.volEntered shouldBe 2
-        row.volRemaining shouldBe 2 // "2.0" -> Int
-        row.minVolume shouldBe 1
-        row.issuedIso shouldBe "2026-07-09T02:57:41Z"
-        row.orderState shouldBe 0
-        row.duration shouldBe 90
-        row.escrow shouldBe 621000000.0
-        row.isCorp shouldBe false
-    }
-
-    // ─── parseOrderLog (Corporation Orders) ─────────────────────────────────
-
-    @Test
-    fun `parseOrderLog parses a Corporation Orders row despite its different column order`() {
-        val rows = MarketLogParser.parseOrderLog(listOf(CORP_ORDERS_HEADER, CORP_ORDERS_ROW))
-        rows.size shouldBe 1
-        val row = rows.single()
-        row.orderId shouldBe 7374839444L
-        row.typeId shouldBe 40519
-        row.charId shouldBe 2113351129
-        row.regionId shouldBe 10000002
-        row.stationId shouldBe 60003760L
-        row.isBuyOrder shouldBe true
-        row.price shouldBe 1.0
-        row.volEntered shouldBe 1
-        row.volRemaining shouldBe 1
-        row.issuedIso shouldBe "2026-07-09T03:20:53Z"
-        row.isCorp shouldBe true // keyID column present -> treated as a corp-file row regardless of isCorp text
     }
 
     // ─── parseOrderBook ─────────────────────────────────────────────────────
@@ -127,15 +55,15 @@ class MarketLogParserTest {
     // ─── robustness ─────────────────────────────────────────────────────────
 
     @Test
-    fun `parseOrderLog tolerates blank lines and returns empty list for a header-only file`() {
-        MarketLogParser.parseOrderLog(listOf(MY_ORDERS_HEADER)) shouldBe emptyList()
-        MarketLogParser.parseOrderLog(listOf(MY_ORDERS_HEADER, "", MY_ORDERS_ROW, "")).size shouldBe 1
+    fun `parseOrderBook tolerates blank lines and returns empty list for a header-only file`() {
+        MarketLogParser.parseOrderBook(listOf(ORDER_BOOK_HEADER)) shouldBe emptyList()
+        MarketLogParser.parseOrderBook(listOf(ORDER_BOOK_HEADER, "", ORDER_BOOK_ROW, "")).size shouldBe 1
     }
 
     @Test
-    fun `parseOrderLog skips a malformed row instead of throwing`() {
+    fun `parseOrderBook skips a malformed row instead of throwing`() {
         val malformed = "not,enough,columns"
-        val rows = MarketLogParser.parseOrderLog(listOf(MY_ORDERS_HEADER, MY_ORDERS_ROW, malformed))
+        val rows = MarketLogParser.parseOrderBook(listOf(ORDER_BOOK_HEADER, ORDER_BOOK_ROW, malformed))
         rows.size shouldBe 1
     }
 }

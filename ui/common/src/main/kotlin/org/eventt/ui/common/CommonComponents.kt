@@ -170,6 +170,9 @@ fun EsiRefreshButton(
     modifier: Modifier = Modifier,
     // When set, renders as a text button (e.g. "Refresh Orders") instead of a bare icon.
     label: String? = null,
+    // Extra disable condition beyond this button's own isLoading/cooldown — e.g. a sibling
+    // refresh that touches the same data is in flight.
+    enabled: Boolean = true,
 ) {
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
 
@@ -192,7 +195,7 @@ fun EsiRefreshButton(
         }
 
     if (label != null) {
-        TextButton(onClick = onClick, modifier = modifier, enabled = !isLoading && !coolingDown) {
+        TextButton(onClick = onClick, modifier = modifier, enabled = enabled && !isLoading && !coolingDown) {
             if (isLoading) {
                 CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(6.dp))
@@ -211,7 +214,7 @@ fun EsiRefreshButton(
             )
             Spacer(Modifier.width(2.dp))
         }
-        IconButton(onClick = onClick, enabled = !isLoading && !coolingDown) {
+        IconButton(onClick = onClick, enabled = enabled && !isLoading && !coolingDown) {
             if (isLoading) {
                 CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
             } else {

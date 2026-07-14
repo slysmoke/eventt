@@ -106,6 +106,10 @@ object DatabaseManager {
                 // against its last-seen price on every refresh, and accumulated here.
                 "ALTER TABLE active_orders ADD COLUMN relist_count INTEGER DEFAULT 0",
                 "ALTER TABLE active_orders ADD COLUMN relist_fees_paid REAL DEFAULT 0.0",
+                // Server "as of" time (ESI Last-Modified) behind this row's price/relist stats —
+                // lets a relist bump be rejected as stale if it's reporting a snapshot older than
+                // one already applied, instead of trusting whichever caller happens to run last.
+                "ALTER TABLE active_orders ADD COLUMN price_updated_at INTEGER DEFAULT 0",
             )
         conn.createStatement().use { stmt ->
             migrations.forEach { sql ->

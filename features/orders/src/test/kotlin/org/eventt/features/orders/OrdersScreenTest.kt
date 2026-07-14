@@ -173,4 +173,98 @@ class OrdersScreenTest {
         effectiveOrderState(sellOrder(volumeTotal = 10, volumeRemaining = 10, state = "expired")) shouldBe "expired"
         effectiveOrderState(sellOrder(volumeTotal = 10, volumeRemaining = 10, state = "cancelled")) shouldBe "cancelled"
     }
+
+    private fun activeOrder(
+        price: Double,
+        volumeRemaining: Int = 5,
+    ) = CharacterOrder(
+        orderId = 1L,
+        typeId = TYPE_ID,
+        typeName = "Tritanium",
+        locationId = 60003760L,
+        regionId = 10000002,
+        stationName = "Jita IV - Moon 4",
+        price = price,
+        volumeTotal = 10,
+        volumeRemaining = volumeRemaining,
+        isBuyOrder = false,
+        duration = 90,
+        issued = "2024-01-01T00:00:00Z",
+        state = "active",
+    )
+
+    private fun priorRecord(
+        price: Double,
+        relistCount: Int,
+        relistFeesPaid: Double,
+        priceUpdatedAt: Long,
+    ) = org.eventt.core.database.ActiveOrderDao.ActiveOrderRecord(
+        orderId = 1L,
+        typeId = TYPE_ID,
+        typeName = "Tritanium",
+        locationId = 60003760L,
+        regionId = 10000002,
+        stationName = "Jita IV - Moon 4",
+        price = price,
+        volumeTotal = 10,
+        volumeRemaining = 7,
+        isBuyOrder = false,
+        duration = 90,
+        issued = "2024-01-01T00:00:00Z",
+        state = "active",
+        issuedByCharId = null,
+        characterId = 1,
+        corporationId = null,
+        relistCount = relistCount,
+        relistFeesPaid = relistFeesPaid,
+        priceUpdatedAt = priceUpdatedAt,
+    )
+
+    @Test
+    fun `mergeRelistStats keeps the already-applied newer price when the fetch is older than the last relist`() {
+        // A relist to 110 was applied as of t=1000; this fetch's snapshot is from t=900 and still
+        // carries the pre-relist price 100 — accepting it would revert the row and make the fresher
+        // public order book re-detect (and re-charge) the same relist.
+        val prior = mapOf(1L to priorRecord(price = 110.0, relistCount = 1, relistFeesPaid = 50.0, priceUpdatedAt = 1_000L))
+
+        val merged = mergeRelistStats(prior, listOf(activeOrder(price = 100.0)), fetchAsOf = 900L).single()
+
+        merged.price shouldBe 110.0
+        merged.relistCount shouldBe 1
+        merged.relistFeesPaid shouldBe 50.0
+        merged.priceUpdatedAt shouldBe 1_000L
+        merged.volumeRemaining shouldBe 5 // fresh volume is taken even when the price is kept
+    }
+
+    @Test
+    fun `mergeRelistStats keeps the newer price when the fetch age is unknown`() {
+        val prior = mapOf(1L to priorRecord(price = 110.0, relistCount = 1, relistFeesPaid = 50.0, priceUpdatedAt = 1_000L))
+
+        mergeRelistStats(prior, listOf(activeOrder(price = 100.0)), fetchAsOf = null).single().price shouldBe 110.0
+    }
+
+    @Test
+    fun `mergeRelistStats accepts the fetched price when the fetch is genuinely newer`() {
+        val prior = mapOf(1L to priorRecord(price = 110.0, relistCount = 1, relistFeesPaid = 50.0, priceUpdatedAt = 1_000L))
+
+        val merged = mergeRelistStats(prior, listOf(activeOrder(price = 120.0)), fetchAsOf = 2_000L).single()
+
+        merged.price shouldBe 120.0
+        merged.relistCount shouldBe 1 // stats still only carried, never bumped here
+    }
+
+    @Test
+    fun `mergeRelistStats accepts the fetched price when no relist was ever applied`() {
+        val prior = mapOf(1L to priorRecord(price = 100.0, relistCount = 0, relistFeesPaid = 0.0, priceUpdatedAt = 0L))
+
+        mergeRelistStats(prior, listOf(activeOrder(price = 105.0)), fetchAsOf = null).single().price shouldBe 105.0
+    }
+
+    @Test
+    fun `mergeRelistStats leaves a brand-new order untouched`() {
+        val merged = mergeRelistStats(emptyMap(), listOf(activeOrder(price = 100.0)), fetchAsOf = null).single()
+
+        merged.relistCount shouldBe 0
+        merged.price shouldBe 100.0
+    }
 }

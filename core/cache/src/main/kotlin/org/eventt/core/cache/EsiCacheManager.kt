@@ -127,32 +127,39 @@ object EsiCacheManager {
         return EsiCacheDao.get(endpoint, params)?.expiresAt
     }
 
-    fun parseExpiresHeader(expiresHeader: String): Long =
-        try {
-            val formats =
-                listOf(
-                    java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME,
-                    java.time.format.DateTimeFormatter
-                        .ofPattern("EEE, dd MMM yyyy HH:mm:ss zzz"),
-                )
-            val temporalAccessor =
-                formats.firstNotNullOfOrNull { fmt ->
-                    try {
-                        fmt.parse(expiresHeader)
-                    } catch (_: Exception) {
-                        null
-                    }
+    // The server's own "as of" time for a cached response — lets a caller tell a genuinely newer
+    // fetch apart from one that's merely serving (or revalidated into) an older cached snapshot,
+    // e.g. one cached response arriving after another that's actually more recent.
+    fun getLastModifiedMillis(
+        endpoint: String,
+        params: Map<String, String>? = null,
+    ): Long? {
+        val key = "$endpoint|${computeHash(params)}"
+        val raw = mem[key]?.lastModified ?: EsiCacheDao.get(endpoint, params)?.lastModified ?: return null
+        return parseHttpDate(raw)
+    }
+
+    private fun parseHttpDate(raw: String): Long? {
+        val formats =
+            listOf(
+                java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME,
+                java.time.format.DateTimeFormatter
+                    .ofPattern("EEE, dd MMM yyyy HH:mm:ss zzz"),
+            )
+        val temporalAccessor =
+            formats.firstNotNullOfOrNull { fmt ->
+                try {
+                    fmt.parse(raw)
+                } catch (_: Exception) {
+                    null
                 }
-            if (temporalAccessor != null) {
-                java.time.Instant
-                    .from(temporalAccessor)
-                    .toEpochMilli()
-            } else {
-                System.currentTimeMillis() + DEFAULT_TTL_MS
-            }
-        } catch (_: Exception) {
-            System.currentTimeMillis() + DEFAULT_TTL_MS
-        }
+            } ?: return null
+        return java.time.Instant
+            .from(temporalAccessor)
+            .toEpochMilli()
+    }
+
+    fun parseExpiresHeader(expiresHeader: String): Long = parseHttpDate(expiresHeader) ?: (System.currentTimeMillis() + DEFAULT_TTL_MS)
 
     fun parseCacheControl(cacheControl: String): Long? {
         val match = "max-age=(\\d+)".toRegex().find(cacheControl)

@@ -144,7 +144,9 @@ object EsiClient {
                     }
                 }
             val expiry = if (serverExpiry > 0) serverExpiry else System.currentTimeMillis() + 5 * 60 * 1000L
-            EsiCacheManager.save(endpoint, baseParams, merged.toString(), expiry)
+            // Keep the server's Last-Modified on the merged entry too, so consumers can tell how
+            // old the data behind this endpoint actually is (see getEndpointLastModifiedMillis).
+            EsiCacheManager.save(endpoint, baseParams, merged.toString(), expiry, lastModified = firstPageLastModified)
         }
 
         return allResults
@@ -723,6 +725,16 @@ object EsiClient {
     ): Long? {
         val fullParams = (params ?: emptyMap()).toMutableMap().apply { put("datasource", ESI_DATASOURCE) }
         return EsiCacheManager.getExpiry(endpoint, fullParams)
+    }
+
+    // The server's own "as of" time for this endpoint's cached response — see
+    // EsiCacheManager.getLastModifiedMillis.
+    fun getEndpointLastModifiedMillis(
+        endpoint: String,
+        params: Map<String, String>? = null,
+    ): Long? {
+        val fullParams = (params ?: emptyMap()).toMutableMap().apply { put("datasource", ESI_DATASOURCE) }
+        return EsiCacheManager.getLastModifiedMillis(endpoint, fullParams)
     }
 
     // Forces the next call to this endpoint to hit ESI live instead of serving a cached response

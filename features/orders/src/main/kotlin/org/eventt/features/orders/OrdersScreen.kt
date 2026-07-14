@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -23,7 +24,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.ActiveOrderDao
@@ -33,9 +36,6 @@ import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.ViewContext
 import org.eventt.core.database.WalletDao
 import org.eventt.core.esi.EsiClient
-import org.eventt.core.marketlogs.MarketLogEvent
-import org.eventt.core.marketlogs.MarketLogOrderRow
-import org.eventt.core.marketlogs.MarketLogWatcher
 import org.eventt.core.model.eveSigFigStep
 import org.eventt.core.model.formatEveSigFigPrice
 import org.eventt.ui.common.EmptyState
@@ -63,8 +63,11 @@ private const val DEFAULT_REGION_ID = 10000002 // The Forge (Jita) — fallback 
 private val beatenFilterIcon: @Composable () -> Unit = {
     Icon(Icons.Default.ArrowDownward, contentDescription = null, modifier = Modifier.size(16.dp))
 }
+private val overbidFilterIcon: @Composable () -> Unit = {
+    Icon(Icons.Default.ArrowUpward, contentDescription = null, modifier = Modifier.size(16.dp))
+}
 
-private data class CharacterOrder(
+internal data class CharacterOrder(
     val orderId: Long,
     val typeId: Int,
     val typeName: String,
@@ -86,6 +89,8 @@ private data class CharacterOrder(
     // ActiveOrderDao rather than re-derived, since it depends on price history we don't re-fetch.
     val relistCount: Int = 0,
     val relistFeesPaid: Double = 0.0,
+    // Server "as of" time behind relistCount/relistFeesPaid — see ActiveOrderDao.bumpRelistStats.
+    val priceUpdatedAt: Long = 0,
 ) {
     val total: Double get() = price * volumeRemaining
     val timeLeftSeconds: Long get() {
@@ -106,22 +111,6 @@ private data class CharacterOrder(
     }
     val issuedFormatted: String get() = issued.take(16).replace("T", " ")
 }
-
-// Adapts a Marketlogs-file-derived order row into the same key set ESI's own orders response
-// uses, so it flows through parseOrder() unchanged — no separate model/parsing path needed.
-private fun MarketLogOrderRow.toEsiOrderMap(): Map<String, Any?> =
-    mapOf(
-        "order_id" to orderId,
-        "type_id" to typeId,
-        "location_id" to stationId,
-        "region_id" to regionId,
-        "price" to price,
-        "volume_total" to volEntered,
-        "volume_remain" to volRemaining,
-        "is_buy_order" to isBuyOrder,
-        "duration" to duration,
-        "issued" to issuedIso,
-    )
 
 // Mirrors CharacterOrder into the local active-orders cache so the screen has something to show
 // instantly on the next launch, instead of an empty table until ESI's live fetch completes.
@@ -148,6 +137,7 @@ private fun CharacterOrder.toActiveOrderRecord(
         corporationId = corporationId,
         relistCount = relistCount,
         relistFeesPaid = relistFeesPaid,
+        priceUpdatedAt = priceUpdatedAt,
     )
 
 private fun ActiveOrderDao.ActiveOrderRecord.toCharacterOrder(): CharacterOrder =
@@ -168,33 +158,38 @@ private fun ActiveOrderDao.ActiveOrderRecord.toCharacterOrder(): CharacterOrder 
         issuedByCharId = issuedByCharId,
         relistCount = relistCount,
         relistFeesPaid = relistFeesPaid,
+        priceUpdatedAt = priceUpdatedAt,
     )
 
-// Diffs freshly-parsed orders against the last-known snapshot to detect relists (price changed
-// since we last saw this order) and accumulate their cost -- the only signal available, since the
-// wallet journal can't be linked to a specific order and only refreshes hourly. A brand-new order
-// (not in `previous`) starts at zero: its first sighting is the listing, not a modification.
-private fun mergeRelistStats(
+// Carries relist stats forward from the last-known snapshot onto the freshly-fetched orders —
+// relist detection itself happens only in fetchMarketComparisons's own-order diff (against the
+// live public order book, ~5min ESI cache) — not here. /characters/{id}/orders/ and
+// /corporations/{corp}/orders/ cache for ~25-30min (see fetchMarketComparisons below), so a price
+// diff against *this* endpoint's response is as likely to be stale cache catching up as a real
+// relist: comparing here double-counted relists that fetchMarketComparisons had already caught
+// sooner, or miscounted a cache-lag revert as a brand-new one on every character/corp switch.
+//
+// The same staleness also means this fetch's *price* can lag a relist that bumpRelistStats already
+// applied (priceUpdatedAt = the server time it was detected at). Accepting that older price would
+// revert the row, and the fresher public book would then re-detect the same relist and charge the
+// fee again — on every restart/screen-open until the endpoint's cache caught up. So when the
+// fetch's own Last-Modified ([fetchAsOf], null = unknown) isn't newer than the applied update,
+// keep the already-known price; fresh volume/state are taken either way.
+internal fun mergeRelistStats(
     previous: Map<Long, ActiveOrderDao.ActiveOrderRecord>,
     fresh: List<CharacterOrder>,
-    brokerFeePct: Double,
-    relistDiscountPct: Double,
+    fetchAsOf: Long?,
 ): List<CharacterOrder> =
     fresh.map { order ->
         val prior = previous[order.orderId] ?: return@map order
-        if (prior.price == order.price) {
-            order.copy(relistCount = prior.relistCount, relistFeesPaid = prior.relistFeesPaid)
-        } else {
-            val fee =
-                OrderFeeService.computeModificationFee(
-                    prior.price,
-                    order.price,
-                    order.volumeRemaining,
-                    brokerFeePct,
-                    relistDiscountPct,
-                )
-            order.copy(relistCount = prior.relistCount + 1, relistFeesPaid = prior.relistFeesPaid + fee)
-        }
+        val fetchIsOlder =
+            prior.priceUpdatedAt > 0 && (fetchAsOf == null || fetchAsOf <= prior.priceUpdatedAt)
+        order.copy(
+            price = if (fetchIsOlder) prior.price else order.price,
+            relistCount = prior.relistCount,
+            relistFeesPaid = prior.relistFeesPaid,
+            priceUpdatedAt = prior.priceUpdatedAt,
+        )
     }
 
 /**
@@ -266,6 +261,12 @@ fun OrdersScreen(context: ViewContext?) {
     var fifoResult by remember { mutableStateOf<CostBasisService.FifoResult?>(null) }
     var relistDiscountPct by remember { mutableStateOf(OrderFeeService.relistDiscountPct(0)) }
     var isLoading by remember { mutableStateOf(false) }
+    // Superseded on every new loadOrders()/fetchMarketComparisons() call so switching characters
+    // (or clicking refresh again) cancels a still-running fetch instead of letting it complete
+    // later against a snapshot from a character the user has since switched away from — which
+    // used to surface as a phantom relist bump landing well after the fact.
+    var loadJob by remember { mutableStateOf<Job?>(null) }
+    var marketJob by remember { mutableStateOf<Job?>(null) }
     var refreshAvailableAt by remember { mutableStateOf<Long?>(null) }
     var activeTab by remember { mutableStateOf(0) }
     var sortCol by remember { mutableStateOf(SortCol.NAME) }
@@ -273,6 +274,9 @@ fun OrdersScreen(context: ViewContext?) {
     // Sell tab only: when on, hides every order that isn't currently beaten by a cheaper
     // competing sell order at the same station. Off (show all) by default.
     var showBeatenOnly by remember { mutableStateOf(false) }
+    // Buy tab only: when on, hides every order that isn't currently outbid by a higher
+    // competing buy order region-wide. Off (show all) by default.
+    var showOverbidOnly by remember { mutableStateOf(false) }
 
     // Market comparison data — loaded after orders, shown as overbid indicators.
     // Refreshed on order load and via the manual "Refresh Prices" button (no auto-refresh:
@@ -306,105 +310,122 @@ fun OrdersScreen(context: ViewContext?) {
 
     fun fetchMarketComparisons(activeOrders: List<CharacterOrder>) {
         if (activeOrders.isEmpty()) return
-        scope.launch(Dispatchers.IO) {
-            withContext(Dispatchers.Main) { isLoadingMarket = true }
-            try {
-                val brokerFeePct = (fifoResult?.taxConfig ?: CostBasisService.TaxConfig()).brokerFeePct
-                val activeById = activeOrders.associateBy { it.orderId }
+        marketJob?.cancel()
+        marketJob =
+            scope.launch(Dispatchers.IO) {
+                withContext(Dispatchers.Main) { isLoadingMarket = true }
+                try {
+                    val brokerFeePct = (fifoResult?.taxConfig ?: CostBasisService.TaxConfig()).brokerFeePct
+                    val activeById = activeOrders.associateBy { it.orderId }
 
-                // One ESI call per (typeId, regionId) still covers every station in that region —
-                // sell competition is then split out per station below, entirely from that same
-                // response, so this doesn't cost any extra requests.
-                val uniqueRegionPairs =
-                    activeOrders
-                        .filter { it.regionId > 0 && it.state == "active" }
-                        .map { it.typeId to it.regionId }
-                        .toSet()
+                    // One ESI call per (typeId, regionId) still covers every station in that region —
+                    // sell competition is then split out per station below, entirely from that same
+                    // response, so this doesn't cost any extra requests.
+                    val uniqueRegionPairs =
+                        activeOrders
+                            .filter { it.regionId > 0 && it.state == "active" }
+                            .map { it.typeId to it.regionId }
+                            .toSet()
 
-                val result = mutableMapOf<Pair<Int, Long>, MarketComparison>()
-                // Relists detected from the live public order book -- ~5min fresh, versus
-                // ~25-30min for /characters/{id}/orders/, so this catches a price change well
-                // before the next full loadOrders() poll would.
-                val detectedChanges = mutableMapOf<Long, CharacterOrder>()
-                // Latest of the per-pair ESI cache expiries — waiting for every pair to have
-                // actually gone stale (rather than just the first one) means each click of
-                // "Refresh Prices" does real work for every pair instead of mostly re-checking
-                // ones that are still cached, which is what made frequent clicks feel like a
-                // burst of requests.
-                var latestExpiry: Long? = null
-                for ((typeId, regionId) in uniqueRegionPairs) {
-                    try {
-                        val ownOrdersForPair = activeOrders.filter { it.typeId == typeId && it.regionId == regionId }
-                        val ownIds = ownOrdersForPair.map { it.orderId }.toSet()
-                        val all = EsiClient.getMarketRegionOrders(regionId, "all", typeId)
-                        val sellersElsewhere =
-                            all.filter { !(it["is_buy_order"] as? Boolean ?: false) && (it["order_id"] as? Number)?.toLong() !in ownIds }
-                        val bestBuy =
-                            all
-                                .filter { (it["is_buy_order"] as? Boolean ?: false) && (it["order_id"] as? Number)?.toLong() !in ownIds }
-                                .mapNotNull { (it["price"] as? Number)?.toDouble() }
-                                .maxOrNull()
-                        // One entry per station this character actually has an active order at —
-                        // bestSell only counts other sellers at that same station.
-                        ownOrdersForPair.map { it.locationId }.toSet().forEach { locationId ->
-                            val bestSell =
-                                sellersElsewhere
-                                    .filter { (it["location_id"] as? Number)?.toLong() == locationId }
-                                    .mapNotNull { (it["price"] as? Number)?.toDouble() }
-                                    .minOrNull()
-                            result[typeId to locationId] = MarketComparison(bestSell, bestBuy)
-                        }
-                        // Same response also carries this character's own orders (excluded above
-                        // for competition purposes) — compare against the last-known price to
-                        // detect a relist that happened since the last poll.
-                        all
-                            .filter { (it["order_id"] as? Number)?.toLong() in ownIds }
-                            .forEach { o ->
-                                val orderId = (o["order_id"] as? Number)?.toLong() ?: return@forEach
-                                val price = (o["price"] as? Number)?.toDouble() ?: return@forEach
-                                val volRemain = (o["volume_remain"] as? Number)?.toInt() ?: return@forEach
-                                val known = activeById[orderId] ?: return@forEach
-                                if (known.price != price) {
-                                    val fee =
-                                        OrderFeeService.computeModificationFee(
-                                            known.price,
-                                            price,
-                                            volRemain,
-                                            brokerFeePct,
-                                            relistDiscountPct,
-                                        )
-                                    ActiveOrderDao.bumpRelistStats(orderId, charId, corpId, price, fee)
-                                    detectedChanges[orderId] =
-                                        known.copy(
-                                            price = price,
-                                            volumeRemaining = volRemain,
-                                            relistCount = known.relistCount + 1,
-                                            relistFeesPaid = known.relistFeesPaid + fee,
-                                        )
-                                } else if (known.volumeRemaining != volRemain) {
-                                    detectedChanges[orderId] = known.copy(volumeRemaining = volRemain)
+                    val result = mutableMapOf<Pair<Int, Long>, MarketComparison>()
+                    // Relists detected from the live public order book -- ~5min fresh, versus
+                    // ~25-30min for /characters/{id}/orders/, so this catches a price change well
+                    // before the next full loadOrders() poll would.
+                    val detectedChanges = mutableMapOf<Long, CharacterOrder>()
+                    // Latest of the per-pair ESI cache expiries — waiting for every pair to have
+                    // actually gone stale (rather than just the first one) means each click of
+                    // "Refresh Prices" does real work for every pair instead of mostly re-checking
+                    // ones that are still cached, which is what made frequent clicks feel like a
+                    // burst of requests.
+                    var latestExpiry: Long? = null
+                    for ((typeId, regionId) in uniqueRegionPairs) {
+                        try {
+                            val ownOrdersForPair = activeOrders.filter { it.typeId == typeId && it.regionId == regionId }
+                            val ownIds = ownOrdersForPair.map { it.orderId }.toSet()
+                            val all = EsiClient.getMarketRegionOrders(regionId, "all", typeId)
+                            val sellersElsewhere =
+                                all.filter {
+                                    !(it["is_buy_order"] as? Boolean ?: false) && (it["order_id"] as? Number)?.toLong() !in ownIds
                                 }
+                            val bestBuy =
+                                all
+                                    .filter {
+                                        (it["is_buy_order"] as? Boolean ?: false) && (it["order_id"] as? Number)?.toLong() !in ownIds
+                                    }.mapNotNull { (it["price"] as? Number)?.toDouble() }
+                                    .maxOrNull()
+                            // One entry per station this character actually has an active order at —
+                            // bestSell only counts other sellers at that same station.
+                            ownOrdersForPair.map { it.locationId }.toSet().forEach { locationId ->
+                                val bestSell =
+                                    sellersElsewhere
+                                        .filter { (it["location_id"] as? Number)?.toLong() == locationId }
+                                        .mapNotNull { (it["price"] as? Number)?.toDouble() }
+                                        .minOrNull()
+                                result[typeId to locationId] = MarketComparison(bestSell, bestBuy)
                             }
-                        val expiry =
-                            EsiClient.getEndpointExpiry(
-                                "/markets/$regionId/orders/",
-                                mapOf("order_type" to "all", "type_id" to typeId.toString()),
-                            )
-                        if (expiry != null && (latestExpiry == null || expiry > latestExpiry)) {
-                            latestExpiry = expiry
+                            val pairParams = mapOf("order_type" to "all", "type_id" to typeId.toString())
+                            // The public order book's own "as of" time for this (typeId, regionId)
+                            // pair — used below to reject a price diff that's actually this
+                            // specific response lagging behind data we already know is newer,
+                            // rather than a genuine relist (e.g. right after a character switch,
+                            // where different pairs' cached responses can be minutes apart in age).
+                            val pairLastModified = EsiClient.getEndpointLastModifiedMillis("/markets/$regionId/orders/", pairParams)
+                            // Same response also carries this character's own orders (excluded above
+                            // for competition purposes) — compare against the last-known price to
+                            // detect a relist that happened since the last poll.
+                            all
+                                .filter { (it["order_id"] as? Number)?.toLong() in ownIds }
+                                .forEach { o ->
+                                    val orderId = (o["order_id"] as? Number)?.toLong() ?: return@forEach
+                                    val price = (o["price"] as? Number)?.toDouble() ?: return@forEach
+                                    val volRemain = (o["volume_remain"] as? Number)?.toInt() ?: return@forEach
+                                    val known = activeById[orderId] ?: return@forEach
+                                    // Own orders are stored under the placing character's
+                                    // character_id even in corp mode (see replaceCorpOrders) —
+                                    // charId is null there, so fall back to the order's own issuer.
+                                    val ownerCharId = charId ?: known.issuedByCharId ?: return@forEach
+                                    val stale = pairLastModified != null && pairLastModified < known.priceUpdatedAt
+                                    if (known.price != price && !stale) {
+                                        val fee =
+                                            OrderFeeService.computeModificationFee(
+                                                known.price,
+                                                price,
+                                                volRemain,
+                                                brokerFeePct,
+                                                relistDiscountPct,
+                                            )
+                                        val asOf = pairLastModified ?: System.currentTimeMillis()
+                                        ActiveOrderDao.bumpRelistStats(orderId, ownerCharId, price, fee, asOf)
+                                        detectedChanges[orderId] =
+                                            known.copy(
+                                                price = price,
+                                                volumeRemaining = volRemain,
+                                                relistCount = known.relistCount + 1,
+                                                relistFeesPaid = known.relistFeesPaid + fee,
+                                                priceUpdatedAt = asOf,
+                                            )
+                                    } else if (known.volumeRemaining != volRemain) {
+                                        detectedChanges[orderId] = known.copy(volumeRemaining = volRemain)
+                                    }
+                                }
+                            val expiry = EsiClient.getEndpointExpiry("/markets/$regionId/orders/", pairParams)
+                            if (expiry != null && (latestExpiry == null || expiry > latestExpiry)) {
+                                latestExpiry = expiry
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
                         }
-                    } catch (_: Exception) {
                     }
+                    withContext(Dispatchers.Main) {
+                        marketComparisons = result
+                        marketComparisonsExpiresAt = latestExpiry
+                        if (detectedChanges.isNotEmpty()) orders = orders.map { detectedChanges[it.orderId] ?: it }
+                    }
+                } finally {
+                    withContext(Dispatchers.Main) { isLoadingMarket = false }
                 }
-                withContext(Dispatchers.Main) {
-                    marketComparisons = result
-                    marketComparisonsExpiresAt = latestExpiry
-                    if (detectedChanges.isNotEmpty()) orders = orders.map { detectedChanges[it.orderId] ?: it }
-                }
-            } finally {
-                withContext(Dispatchers.Main) { isLoadingMarket = false }
             }
-        }
     }
 
     fun fetchInventoryMarketPrices(inventory: Map<Int, CostBasisService.InventoryItem>) {
@@ -478,120 +499,157 @@ fun OrdersScreen(context: ViewContext?) {
         val cid = charId
         val corp = corpId
         val acting = actingCharId ?: return
-        scope.launch(Dispatchers.IO) {
-            withContext(Dispatchers.Main) { isLoading = true }
-            try {
-                val taxConfig =
-                    CostBasisService.TaxConfig(
-                        salesTaxPct = StaticDataDao.getCharSalesTax(acting),
-                        brokerFeePct = StaticDataDao.getCharBrokersFee(acting),
-                    )
-                val relistDiscount = OrderFeeService.relistDiscountPct(StaticDataDao.getCharRelistSkillLevel(acting))
-
-                val raw = if (corp != null) EsiClient.getCorporationOrders(corp, acting) else EsiClient.getCharacterOrders(cid!!)
-                val freshlyParsed = raw.map { m -> parseOrder(m, if (corp != null) (m["issued_by"] as? Number)?.toInt() else null) }
-                // Diff against the last-known snapshot before overwriting it, so a price change
-                // detected here gets counted as a relist (see mergeRelistStats).
-                val previousSnapshot = ActiveOrderDao.getAll(characterId = cid, corporationId = corp).associateBy { it.orderId }
-                val parsed = mergeRelistStats(previousSnapshot, freshlyParsed, taxConfig.brokerFeePct, relistDiscount)
-                withContext(Dispatchers.Main) { orders = parsed }
-                if (corp != null) resolveIssuerNames(parsed.mapNotNull { it.issuedByCharId }.toSet())
-                ActiveOrderDao.replaceAll(cid, corp, parsed.map { it.toActiveOrderRecord(cid, corp) })
-
-                val rawHistory =
-                    if (corp != null) EsiClient.getCorporationOrdersHistory(corp, acting) else EsiClient.getCharacterOrdersHistory(cid!!)
-                val historyRecords =
-                    rawHistory.map { m ->
-                        val typeId = (m["type_id"] as? Number)?.toInt() ?: 0
-                        val locationId = (m["location_id"] as? Number)?.toLong() ?: 0L
-                        OrderHistoryDao.OrderHistoryRecord(
-                            orderId = (m["order_id"] as? Number)?.toLong() ?: 0L,
-                            typeId = typeId,
-                            typeName = StaticDataDao.getTypeName(typeId) ?: "Unknown ($typeId)",
-                            locationId = locationId,
-                            stationName = StaticDataDao.getStationById(locationId)?.name ?: locationId.toString(),
-                            price = (m["price"] as? Number)?.toDouble() ?: 0.0,
-                            volumeTotal = (m["volume_total"] as? Number)?.toInt() ?: 0,
-                            volumeRemaining = (m["volume_remain"] as? Number)?.toInt() ?: 0,
-                            isBuyOrder = (m["is_buy_order"] as? Boolean) ?: false,
-                            duration = (m["duration"] as? Number)?.toInt() ?: 0,
-                            issued = (m["issued"] as? String) ?: "",
-                            range = (m["range"] as? String) ?: "station",
-                            minVolume = (m["min_volume"] as? Number)?.toInt() ?: 1,
-                            state = (m["state"] as? String) ?: "expired",
-                            characterId = if (corp != null) null else cid,
-                            corporationId = corp,
-                            isCorp = corp != null,
-                        )
-                    }
-                OrderHistoryDao.upsertAll(historyRecords)
-                val stored = OrderHistoryDao.getAll(characterId = cid, corporationId = corp)
-                withContext(Dispatchers.Main) { historyOrders = stored }
-
-                // Sync wallet transactions to DB before recomputing FIFO.
-                // EsiClient serves from the ESI cache during cooldown, so no extra HTTP call is made.
-                // This ensures newly fulfilled orders get correct P&L once the wallet cache expires.
+        loadJob?.cancel()
+        marketJob?.cancel()
+        loadJob =
+            scope.launch(Dispatchers.IO) {
+                withContext(Dispatchers.Main) { isLoading = true }
                 try {
-                    val txList =
-                        if (corp !=
-                            null
-                        ) {
-                            EsiClient.getCorporationTransactions(corp, acting)
+                    val taxConfig =
+                        CostBasisService.TaxConfig(
+                            salesTaxPct = StaticDataDao.getCharSalesTax(acting),
+                            brokerFeePct = StaticDataDao.getCharBrokersFee(acting),
+                        )
+                    val relistDiscount = OrderFeeService.relistDiscountPct(StaticDataDao.getCharRelistSkillLevel(acting))
+
+                    // Character mode must drop is_corporation orders: /characters/{id}/orders/
+                    // returns the character's corp-wallet orders too, and letting them through
+                    // used to INSERT OR REPLACE the corp-scoped active_orders rows (order_id is
+                    // the table's PK) with zero-relist personal rows on every view switch —
+                    // wiping relist history in corp view and re-counting it from a zero baseline.
+                    val raw =
+                        if (corp != null) {
+                            EsiClient.getCorporationOrders(corp, acting)
                         } else {
-                            EsiClient.getCharacterTransactions(cid!!)
+                            EsiClient.getCharacterOrders(cid!!).filter { (it["is_corporation"] as? Boolean) != true }
                         }
-                    txList.forEach { tx ->
-                        val typeId = (tx["type_id"] as? Number)?.toInt() ?: 0
-                        val qty = (tx["quantity"] as? Number)?.toInt() ?: 0
-                        val unitPrice = (tx["unit_price"] as? Number)?.toDouble() ?: 0.0
-                        runCatching {
-                            WalletDao.insertTransaction(
-                                transactionId = (tx["transaction_id"] as? Number)?.toLong() ?: 0L,
-                                date = tx["date"] as? String ?: "",
+                    val freshlyParsed = raw.map { m -> parseOrder(m, if (corp != null) (m["issued_by"] as? Number)?.toInt() else null) }
+                    // Carry the last-known relist stats forward onto the fresh snapshot (see
+                    // mergeRelistStats — detection itself happens elsewhere), keeping the newer
+                    // price when this endpoint's response is older than an already-applied relist.
+                    val ordersEndpoint = if (corp != null) "/corporations/$corp/orders/" else "/characters/$cid/orders/"
+                    val fetchAsOf = EsiClient.getEndpointLastModifiedMillis(ordersEndpoint)
+                    val previousSnapshot = ActiveOrderDao.getAll(characterId = cid, corporationId = corp).associateBy { it.orderId }
+                    val parsed = mergeRelistStats(previousSnapshot, freshlyParsed, fetchAsOf)
+                    withContext(Dispatchers.Main) { orders = parsed }
+                    if (corp != null) {
+                        resolveIssuerNames(parsed.mapNotNull { it.issuedByCharId }.toSet())
+                        // Stored per placing character (not a flat corp-wide scope) — see
+                        // ActiveOrderDao.replaceCorpOrders for why.
+                        val byPlacer =
+                            parsed.mapNotNull { o -> o.issuedByCharId?.let { placer -> o.toActiveOrderRecord(placer, corp) } }
+                        ActiveOrderDao.replaceCorpOrders(corp, byPlacer)
+                    } else {
+                        ActiveOrderDao.replaceAll(cid!!, parsed.map { it.toActiveOrderRecord(cid, null) })
+                    }
+
+                    // Same is_corporation filter as the active fetch above: order_history's PK is
+                    // also order_id, so unfiltered corp rows would flip scope on every switch.
+                    val rawHistory =
+                        if (corp != null) {
+                            EsiClient.getCorporationOrdersHistory(corp, acting)
+                        } else {
+                            EsiClient.getCharacterOrdersHistory(cid!!).filter { (it["is_corporation"] as? Boolean) != true }
+                        }
+                    val historyRecords =
+                        rawHistory.map { m ->
+                            val typeId = (m["type_id"] as? Number)?.toInt() ?: 0
+                            val locationId = (m["location_id"] as? Number)?.toLong() ?: 0L
+                            OrderHistoryDao.OrderHistoryRecord(
+                                orderId = (m["order_id"] as? Number)?.toLong() ?: 0L,
                                 typeId = typeId,
-                                typeName = StaticDataDao.getTypeName(typeId) ?: "",
-                                quantity = qty,
-                                unitPrice = unitPrice,
-                                total = unitPrice * qty,
-                                isBuy = (tx["is_buy"] as? Boolean) ?: false,
-                                clientId = (tx["client_id"] as? Number)?.toInt() ?: 0,
-                                clientName = "",
-                                locationId = (tx["location_id"] as? Number)?.toLong() ?: 0L,
-                                locationName = "",
-                                isCorp = corp != null,
+                                typeName = StaticDataDao.getTypeName(typeId) ?: "Unknown ($typeId)",
+                                locationId = locationId,
+                                stationName = StaticDataDao.getStationById(locationId)?.name ?: locationId.toString(),
+                                price = (m["price"] as? Number)?.toDouble() ?: 0.0,
+                                volumeTotal = (m["volume_total"] as? Number)?.toInt() ?: 0,
+                                volumeRemaining = (m["volume_remain"] as? Number)?.toInt() ?: 0,
+                                isBuyOrder = (m["is_buy_order"] as? Boolean) ?: false,
+                                duration = (m["duration"] as? Number)?.toInt() ?: 0,
+                                issued = (m["issued"] as? String) ?: "",
+                                range = (m["range"] as? String) ?: "station",
+                                minVolume = (m["min_volume"] as? Number)?.toInt() ?: 1,
+                                state = (m["state"] as? String) ?: "expired",
                                 characterId = if (corp != null) null else cid,
                                 corporationId = corp,
+                                isCorp = corp != null,
                             )
                         }
+                    OrderHistoryDao.upsertAll(historyRecords)
+                    val stored = OrderHistoryDao.getAll(characterId = cid, corporationId = corp)
+                    withContext(Dispatchers.Main) { historyOrders = stored }
+
+                    // Sync wallet transactions to DB before recomputing FIFO.
+                    // EsiClient serves from the ESI cache during cooldown, so no extra HTTP call is made.
+                    // This ensures newly fulfilled orders get correct P&L once the wallet cache expires.
+                    try {
+                        val txList =
+                            if (corp !=
+                                null
+                            ) {
+                                EsiClient.getCorporationTransactions(corp, acting)
+                            } else {
+                                EsiClient.getCharacterTransactions(cid!!)
+                            }
+                        txList.forEach { tx ->
+                            val typeId = (tx["type_id"] as? Number)?.toInt() ?: 0
+                            val qty = (tx["quantity"] as? Number)?.toInt() ?: 0
+                            val unitPrice = (tx["unit_price"] as? Number)?.toDouble() ?: 0.0
+                            runCatching {
+                                WalletDao.insertTransaction(
+                                    transactionId = (tx["transaction_id"] as? Number)?.toLong() ?: 0L,
+                                    date = tx["date"] as? String ?: "",
+                                    typeId = typeId,
+                                    typeName = StaticDataDao.getTypeName(typeId) ?: "",
+                                    quantity = qty,
+                                    unitPrice = unitPrice,
+                                    total = unitPrice * qty,
+                                    isBuy = (tx["is_buy"] as? Boolean) ?: false,
+                                    clientId = (tx["client_id"] as? Number)?.toInt() ?: 0,
+                                    clientName = "",
+                                    locationId = (tx["location_id"] as? Number)?.toLong() ?: 0L,
+                                    locationName = "",
+                                    isCorp = corp != null,
+                                    characterId = if (corp != null) null else cid,
+                                    corporationId = corp,
+                                )
+                            }
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
                     }
+
+                    val fifo = CostBasisService.compute(characterId = cid, corporationId = corp, taxConfig = taxConfig)
+                    val expiry =
+                        if (corp != null) {
+                            EsiClient.getEndpointExpiry("/corporations/$corp/orders/")
+                        } else {
+                            EsiClient.getEndpointExpiry("/characters/$cid/orders/")
+                        }
+                    withContext(Dispatchers.Main) {
+                        fifoResult = fifo
+                        relistDiscountPct = relistDiscount
+                        refreshAvailableAt = expiry
+                    }
+
+                    // Load market comparison data after orders are parsed
+                    fetchMarketComparisons(parsed)
+                    fetchInventoryMarketPrices(fifo.inventory)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (_: Exception) {
+                } finally {
+                    withContext(Dispatchers.Main) { isLoading = false }
                 }
-
-                val fifo = CostBasisService.compute(characterId = cid, corporationId = corp, taxConfig = taxConfig)
-                val expiry =
-                    if (corp != null) {
-                        EsiClient.getEndpointExpiry("/corporations/$corp/orders/")
-                    } else {
-                        EsiClient.getEndpointExpiry("/characters/$cid/orders/")
-                    }
-                withContext(Dispatchers.Main) {
-                    fifoResult = fifo
-                    relistDiscountPct = relistDiscount
-                    refreshAvailableAt = expiry
-                }
-
-                // Load market comparison data after orders are parsed
-                fetchMarketComparisons(parsed)
-                fetchInventoryMarketPrices(fifo.inventory)
-            } catch (_: Exception) {
-            } finally {
-                withContext(Dispatchers.Main) { isLoading = false }
             }
-        }
     }
 
     // Hotkey action: open market window in-game + copy overbid price to clipboard
     fun triggerOrderAction(order: CharacterOrder) {
+        // Table is frozen while a refresh is in flight — orders/marketComparisons are mid-update,
+        // so acting on them now could open the market window for a price that's about to change.
+        if (isLoading || isLoadingMarket) return
         val comp = marketComparisons[order.typeId to order.locationId]
         val overbidPrice =
             if (order.isBuyOrder) {
@@ -632,66 +690,11 @@ fun OrdersScreen(context: ViewContext?) {
         }
     }
 
-    // Instant refresh from EVE's own "My Orders"/"Corporation Orders" export, bypassing ESI's
-    // ~25min orders cache. Replaces the `orders` snapshot (what Sell/Buy tables + the Ctrl+Z
-    // queue read) and the persisted active-orders cache — and also invalidates ESI's own cached
-    // response for this endpoint, so a later loadOrders() (e.g. on the next app launch) doesn't
-    // silently resurrect a pre-import, now-stale ESI response over data we already know is newer.
-    LaunchedEffect(charId, corpId) {
-        MarketLogWatcher.events.collect { event ->
-            when (event) {
-                is MarketLogEvent.MyOrdersImported -> {
-                    if (corpId == null && event.charId == charId) {
-                        val brokerFeePct = (fifoResult?.taxConfig ?: CostBasisService.TaxConfig()).brokerFeePct
-                        val freshlyParsed = event.rows.map { parseOrder(it.toEsiOrderMap(), issuedByCharId = null) }
-                        withContext(Dispatchers.IO) {
-                            val previousSnapshot = ActiveOrderDao.getAll(characterId = charId).associateBy { it.orderId }
-                            val parsed = mergeRelistStats(previousSnapshot, freshlyParsed, brokerFeePct, relistDiscountPct)
-                            withContext(Dispatchers.Main) { orders = parsed }
-                            ActiveOrderDao.replaceAll(charId, null, parsed.map { it.toActiveOrderRecord(charId, null) })
-                            EsiClient.invalidateEndpointCache("/characters/$charId/orders/")
-                        }
-                    } else {
-                        println("[MarketLogs] Ignoring My Orders export for char ${event.charId} (active: $charId)")
-                    }
-                }
-                is MarketLogEvent.CorpOrdersImported -> {
-                    val corp = corpId
-                    if (corp != null) {
-                        val mismatch =
-                            event.rows.any { row ->
-                                val rowCorp = CharacterDao.getById(row.charId)?.corporationId
-                                rowCorp != null && rowCorp != corp
-                            }
-                        if (!mismatch) {
-                            val brokerFeePct = (fifoResult?.taxConfig ?: CostBasisService.TaxConfig()).brokerFeePct
-                            val freshlyParsed = event.rows.map { parseOrder(it.toEsiOrderMap(), issuedByCharId = it.charId) }
-                            withContext(Dispatchers.IO) {
-                                val previousSnapshot = ActiveOrderDao.getAll(corporationId = corp).associateBy { it.orderId }
-                                val parsed = mergeRelistStats(previousSnapshot, freshlyParsed, brokerFeePct, relistDiscountPct)
-                                withContext(Dispatchers.Main) {
-                                    orders = parsed
-                                    resolveIssuerNames(parsed.mapNotNull { it.issuedByCharId }.toSet())
-                                }
-                                ActiveOrderDao.replaceAll(null, corp, parsed.map { it.toActiveOrderRecord(null, corp) })
-                                EsiClient.invalidateEndpointCache("/corporations/$corp/orders/")
-                            }
-                        } else {
-                            println("[MarketLogs] Ignoring Corporation Orders export — contains a member from a different corp")
-                        }
-                    }
-                }
-                is MarketLogEvent.OrderBookImported -> Unit // consumed by the overlay, not here
-            }
-        }
-    }
-
     LaunchedEffect(context) {
         val acting = actingCharId
         if (acting != null) {
             // Show the last-known snapshot immediately — instant on launch instead of an empty
-            // table while the ESI fetch below is in flight (and survives a restart for data that
-            // arrived via a Marketlogs file import, which never touches ESI's own cache).
+            // table while the ESI fetch below is in flight.
             val cachedOrders =
                 withContext(Dispatchers.IO) { ActiveOrderDao.getAll(characterId = charId, corporationId = corpId) }
             if (cachedOrders.isNotEmpty()) orders = cachedOrders.map { it.toCharacterOrder() }
@@ -872,12 +875,14 @@ fun OrdersScreen(context: ViewContext?) {
                     }
                     EsiRefreshButton(
                         isLoading = isLoadingMarket,
+                        enabled = !isLoading,
                         expiresAtMs = marketComparisonsExpiresAt,
                         onClick = { fetchMarketComparisons(orders) },
                         label = "Refresh Prices",
                     )
                     EsiRefreshButton(
                         isLoading = isLoading,
+                        enabled = !isLoadingMarket,
                         expiresAtMs = refreshAvailableAt,
                         onClick = { loadOrders() },
                         label = if (corpId != null) "Refresh Corp Orders" else "Refresh Orders",
@@ -930,7 +935,10 @@ fun OrdersScreen(context: ViewContext?) {
             }
         }
 
-        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+        // Dimmed + non-interactive (see triggerOrderAction's own guard) while a refresh is in
+        // flight — orders/marketComparisons are mid-update, so acting on a row now could target
+        // stale data.
+        Box(modifier = Modifier.weight(1f).fillMaxWidth().alpha(if (isLoading || isLoadingMarket) 0.5f else 1f)) {
             when (activeTab) {
                 2 -> {
                     if (historyOrders.isEmpty() && !isLoading) {
@@ -993,19 +1001,32 @@ fun OrdersScreen(context: ViewContext?) {
                             )
                         }
                     } else {
-                        val sorted = applySort(filtered, sortCol, sortDir)
-                        BuyOrdersTable(
-                            orders = sorted,
-                            sortCol = sortCol,
-                            sortDir = sortDir,
-                            onSort = ::onSort,
-                            taxConfig = tax,
-                            comparisons = marketComparisons,
-                            selectedOrderId = selectedOrderId,
-                            activeOrderId = activeOrderId,
-                            onSelect = { id -> selectedOrderId = if (selectedOrderId == id) null else id },
-                            onAction = { order -> triggerOrderAction(order) },
-                        )
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.End,
+                            ) {
+                                FilterChip(
+                                    selected = showOverbidOnly,
+                                    onClick = { showOverbidOnly = !showOverbidOnly },
+                                    label = { Text(if (showOverbidOnly) "Overbid only" else "All orders") },
+                                    leadingIcon = if (showOverbidOnly) overbidFilterIcon else null,
+                                )
+                            }
+                            BuyOrdersTable(
+                                orders = filtered,
+                                sortCol = sortCol,
+                                sortDir = sortDir,
+                                onSort = ::onSort,
+                                taxConfig = tax,
+                                comparisons = marketComparisons,
+                                showOverbidOnly = showOverbidOnly,
+                                selectedOrderId = selectedOrderId,
+                                activeOrderId = activeOrderId,
+                                onSelect = { id -> selectedOrderId = if (selectedOrderId == id) null else id },
+                                onAction = { order -> triggerOrderAction(order) },
+                            )
+                        }
                     }
                 }
             }
@@ -1029,22 +1050,25 @@ fun OrdersScreen(context: ViewContext?) {
 
 // ── Sorting ───────────────────────────────────────────────────────────────
 
-private fun applySort(
-    list: List<CharacterOrder>,
+// Buy-only: sorts by a value derived from market comparison, which doesn't live on CharacterOrder
+// itself -- computed once per row in computeBuyMetrics, sorted here.
+private fun sortBuyMetrics(
+    list: List<BuyOrderMetrics>,
     col: SortCol,
     dir: SortDir,
-): List<CharacterOrder> {
+): List<BuyOrderMetrics> {
     val sorted =
         when (col) {
-            SortCol.NAME -> list.sortedBy { it.typeName }
-            SortCol.PRICE -> list.sortedBy { it.price }
-            SortCol.VOLUME -> list.sortedBy { it.volumeRemaining }
-            SortCol.TOTAL -> list.sortedBy { it.total }
-            SortCol.TIME_LEFT -> list.sortedBy { it.timeLeftSeconds }
-            SortCol.ORDER_AGE -> list.sortedBy { it.orderAgeSeconds }
-            // Sell-only derived columns -- not applicable here (Buy has no cost basis / relist
-            // margin concept the same way); leave order unchanged rather than crash.
-            SortCol.COST, SortCol.RELIST, SortCol.PROFIT, SortCol.MARGIN, SortCol.BEST_MARGIN -> list
+            SortCol.NAME -> list.sortedBy { it.order.typeName }
+            SortCol.PRICE -> list.sortedBy { it.order.price }
+            SortCol.RELIST -> list.sortedBy { it.order.relistFeesPaid }
+            SortCol.MARGIN -> list.sortedBy { it.marginPct ?: Double.NEGATIVE_INFINITY }
+            SortCol.BEST_MARGIN -> list.sortedBy { it.bestMarginPct ?: Double.NEGATIVE_INFINITY }
+            SortCol.VOLUME -> list.sortedBy { it.order.volumeRemaining }
+            SortCol.TOTAL -> list.sortedBy { it.order.total }
+            SortCol.TIME_LEFT -> list.sortedBy { it.order.timeLeftSeconds }
+            SortCol.ORDER_AGE -> list.sortedBy { it.order.orderAgeSeconds }
+            SortCol.COST, SortCol.PROFIT -> list // Sell-only columns, not shown here
         }
     return if (dir == SortDir.DESC) sorted.reversed() else sorted
 }
@@ -1195,6 +1219,30 @@ private fun SellOrdersTable(
     }
 }
 
+// Every per-row derived value the Buy table shows or sorts by, computed once so sorting doesn't
+// have to re-derive it and rows don't duplicate the math.
+private data class BuyOrderMetrics(
+    val order: CharacterOrder,
+    val comparison: MarketComparison?,
+    val marginPct: Double?,
+    val bestMarginPct: Double?,
+    // Overbid: another buy order region-wide currently pays more than ours.
+    val isOverbid: Boolean,
+)
+
+private fun computeBuyMetrics(
+    order: CharacterOrder,
+    taxConfig: CostBasisService.TaxConfig,
+    comparisons: Map<Pair<Int, Long>, MarketComparison>,
+): BuyOrderMetrics {
+    val comparison = comparisons[order.typeId to order.locationId]
+    // Margin if this order fills and the item is resold at the current best sell price.
+    val marginPct = computeMarginPct(order.price, comparison?.bestSell, taxConfig)
+    val bestMarginPct = computeBestMarginPct(comparison, taxConfig)
+    val isOverbid = comparison?.bestBuy != null && comparison.bestBuy > order.price
+    return BuyOrderMetrics(order, comparison, marginPct, bestMarginPct, isOverbid)
+}
+
 @Composable
 private fun BuyOrdersTable(
     orders: List<CharacterOrder>,
@@ -1203,11 +1251,19 @@ private fun BuyOrdersTable(
     onSort: (SortCol) -> Unit,
     taxConfig: CostBasisService.TaxConfig,
     comparisons: Map<Pair<Int, Long>, MarketComparison>,
+    showOverbidOnly: Boolean,
     selectedOrderId: Long?,
     activeOrderId: Long?,
     onSelect: (Long) -> Unit,
     onAction: (CharacterOrder) -> Unit,
 ) {
+    val metrics =
+        remember(orders, taxConfig, comparisons) {
+            orders.map { computeBuyMetrics(it, taxConfig, comparisons) }
+        }
+    val visible = if (showOverbidOnly) metrics.filter { it.isOverbid } else metrics
+    val sorted = sortBuyMetrics(visible, sortCol, sortDir)
+
     Column {
         Row(
             modifier =
@@ -1219,14 +1275,14 @@ private fun BuyOrdersTable(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SortHeader("Name", SortCol.NAME, sortCol, sortDir, onSort, Modifier.weight(3f))
-            StaticHeader("Price / Best", Modifier.weight(2.4f))
-            StaticHeader("Margin", Modifier.weight(1.2f))
-            StaticHeader("Best Margin", Modifier.weight(1.4f))
+            SortHeader("Price / Best", SortCol.PRICE, sortCol, sortDir, onSort, Modifier.weight(2.4f))
+            SortHeader("Relist", SortCol.RELIST, sortCol, sortDir, onSort, Modifier.weight(1.6f))
+            SortHeader("Margin", SortCol.MARGIN, sortCol, sortDir, onSort, Modifier.weight(1.2f))
+            SortHeader("Best Margin", SortCol.BEST_MARGIN, sortCol, sortDir, onSort, Modifier.weight(1.4f))
             SortHeader("Volume", SortCol.VOLUME, sortCol, sortDir, onSort, Modifier.weight(2.5f))
             SortHeader("Total", SortCol.TOTAL, sortCol, sortDir, onSort, Modifier.weight(2f))
             SortHeader("Time Left", SortCol.TIME_LEFT, sortCol, sortDir, onSort, Modifier.weight(1.5f))
             SortHeader("Order Age", SortCol.ORDER_AGE, sortCol, sortDir, onSort, Modifier.weight(1.5f))
-            StaticHeader("Relist", Modifier.weight(1.6f))
             StaticHeader("", Modifier.width(36.dp))
         }
         HorizontalDivider()
@@ -1234,21 +1290,18 @@ private fun BuyOrdersTable(
         // The hotkey cycles activeOrderId through the list, but the highlighted row moves
         // independently of scroll position — without this, cycling can walk the active row
         // off-screen with no visual indication of where it went.
-        LaunchedEffect(activeOrderId, orders) {
-            val idx = orders.indexOfFirst { it.orderId == activeOrderId }
+        LaunchedEffect(activeOrderId, sorted) {
+            val idx = sorted.indexOfFirst { it.order.orderId == activeOrderId }
             if (idx >= 0) listState.ensureVisible(idx)
         }
         LazyColumn(state = listState) {
-            items(orders, key = { it.orderId }) { order ->
-                val comp = comparisons[order.typeId to order.locationId]
+            items(sorted, key = { it.order.orderId }) { m ->
                 BuyOrderRow(
-                    order = order,
-                    taxConfig = taxConfig,
-                    comparison = comp,
-                    isSelected = selectedOrderId == order.orderId,
-                    isActiveInGame = activeOrderId == order.orderId,
-                    onSelect = { onSelect(order.orderId) },
-                    onAction = { onAction(order) },
+                    metrics = m,
+                    isSelected = selectedOrderId == m.order.orderId,
+                    isActiveInGame = activeOrderId == m.order.orderId,
+                    onSelect = { onSelect(m.order.orderId) },
+                    onAction = { onAction(m.order) },
                 )
                 HorizontalDivider(thickness = 0.5.dp)
             }
@@ -1489,20 +1542,18 @@ private fun RelistCell(
 
 @Composable
 private fun BuyOrderRow(
-    order: CharacterOrder,
-    taxConfig: CostBasisService.TaxConfig,
-    comparison: MarketComparison?,
+    metrics: BuyOrderMetrics,
     isSelected: Boolean,
     isActiveInGame: Boolean,
     onSelect: () -> Unit,
     onAction: () -> Unit,
 ) {
-    // Overbid: another buy order pays more than ours
-    val isOverbid = comparison?.bestBuy != null && comparison.bestBuy > order.price
-    // Margin if this order fills and the item is resold at the current best sell price.
-    val marginPct = computeMarginPct(order.price, comparison?.bestSell, taxConfig)
+    val order = metrics.order
+    val comparison = metrics.comparison
+    val isOverbid = metrics.isOverbid
+    val marginPct = metrics.marginPct
     val marginColor = marginPct?.let { if (it >= 0) PROFIT_COLOR else LOSS_COLOR } ?: MaterialTheme.colorScheme.onSurfaceVariant
-    val bestMarginPct = computeBestMarginPct(comparison, taxConfig)
+    val bestMarginPct = metrics.bestMarginPct
     val bestMarginColor = bestMarginPct?.let { if (it >= 0) PROFIT_COLOR else LOSS_COLOR } ?: MaterialTheme.colorScheme.onSurfaceVariant
     val rowBg =
         when {
@@ -1535,14 +1586,20 @@ private fun BuyOrderRow(
         // Price column: order price + competing price below if overbid
         Column(modifier = Modifier.weight(2.4f)) {
             Text(formatIsk(order.price), style = MaterialTheme.typography.bodyMedium, color = if (isOverbid) UNDERCUT_COLOR else BUY_COLOR)
-            if (isOverbid) {
+            val bestBuy = comparison?.bestBuy
+            if (isOverbid && bestBuy != null) {
                 Text(
-                    "Best: ${formatIsk(comparison.bestBuy)}",
+                    "Best: ${formatIsk(bestBuy)}",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                     color = UNDERCUT_COLOR.copy(alpha = 0.8f),
                 )
             }
         }
+
+        // No "~N left" estimate here: unlike a sell order, a buy order has no committed cost
+        // basis yet to measure remaining margin against, only a speculative future resale price.
+        RelistCell(order.relistCount, order.relistFeesPaid, updatesRemaining = null, modifier = Modifier.weight(1.6f))
+
         Text(
             marginPct?.let { "%.1f%%".format(it) } ?: "—",
             modifier = Modifier.weight(1.2f),
@@ -1570,9 +1627,6 @@ private fun BuyOrderRow(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        // No "~N left" estimate here: unlike a sell order, a buy order has no committed cost
-        // basis yet to measure remaining margin against, only a speculative future resale price.
-        RelistCell(order.relistCount, order.relistFeesPaid, updatesRemaining = null, modifier = Modifier.weight(1.6f))
 
         IconButton(modifier = Modifier.size(36.dp), onClick = onAction) {
             Icon(
