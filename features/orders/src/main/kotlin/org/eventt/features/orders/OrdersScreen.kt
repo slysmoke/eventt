@@ -1998,6 +1998,10 @@ private fun OrdersSummaryBar(
                 val color = if (totalProfit >= 0) PROFIT_COLOR else LOSS_COLOR
                 SummaryItem("Expected profit", "${formatIsk(totalProfit)} ISK", color)
             }
+            val totalRelistFees = active.sumOf { it.relistFeesPaid }
+            if (totalRelistFees > 0) {
+                SummaryItem("Relist fees", "${formatIsk(totalRelistFees)} ISK", LOSS_COLOR)
+            }
         }
     }
 }
