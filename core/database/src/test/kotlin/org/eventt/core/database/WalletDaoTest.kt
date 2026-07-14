@@ -7,6 +7,9 @@ import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 private const val TOLERANCE = 0.0001
 
@@ -96,6 +99,40 @@ class WalletDaoTest {
         page2.map { it["transaction_id"] } shouldBe listOf(1L)
     }
 
+    @Test
+    fun `insertTransaction converts a UTC ESI timestamp to the local time zone`() {
+        val utcDate = "2026-07-11T23:45:00Z"
+        val expectedLocal =
+            Instant.parse(utcDate).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+
+        WalletDao.insertTransaction(
+            transactionId = 1,
+            date = utcDate,
+            typeId = 34,
+            typeName = "Tritanium",
+            quantity = 1,
+            unitPrice = 1.0,
+            total = 1.0,
+            isBuy = true,
+            clientId = 0,
+            clientName = "",
+            locationId = 0L,
+            locationName = "",
+            isCorp = false,
+            characterId = 1,
+            corporationId = null,
+        )
+
+        WalletDao.getTransactions(characterId = 1).single()["date"] shouldBe expectedLocal
+    }
+
+    @Test
+    fun `insertTransaction leaves a date with no UTC offset untouched`() {
+        insertTx(1, "2024-01-01", isBuy = false, total = 100.0)
+
+        WalletDao.getTransactions(characterId = 1).single()["date"] shouldBe "2024-01-01"
+    }
+
     private fun insertJournal(
         id: Long,
         date: String,
@@ -120,6 +157,17 @@ class WalletDaoTest {
         corporationId = null,
         divisionId = null,
     )
+
+    @Test
+    fun `insertJournalEntry converts a UTC ESI timestamp to the local time zone`() {
+        val utcDate = "2026-07-11T23:45:00Z"
+        val expectedLocal =
+            Instant.parse(utcDate).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+
+        insertJournal(1, utcDate, amount = 100.0, balance = 100.0)
+
+        WalletDao.getJournalEntries(characterId = 1).single()["date"] shouldBe expectedLocal
+    }
 
     @Test
     fun `getWalletSummary reads the balance from the most recent journal entry`() {

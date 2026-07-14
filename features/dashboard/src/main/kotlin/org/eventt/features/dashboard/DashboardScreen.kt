@@ -19,6 +19,9 @@ import kotlinx.coroutines.withContext
 import org.eventt.core.database.*
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.PriceAlertModel
+import org.eventt.core.model.toPnlWindow
+import org.eventt.features.orders.CostBasisService
+import org.eventt.features.orders.realizedPnlWindow
 import java.time.LocalDate
 import java.util.Locale
 
@@ -37,6 +40,7 @@ fun DashboardScreen(
     val actingCharId = context?.actingCharId
     var walletBalance by remember { mutableStateOf(0.0) }
     var txBreakdown by remember { mutableStateOf<List<org.eventt.core.model.DailyWalletEntry>>(emptyList()) }
+    var fifoResult by remember { mutableStateOf<CostBasisService.FifoResult?>(null) }
     var assetValue by remember { mutableStateOf(0.0) }
     var recentTx by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
     var triggeredAlerts by remember { mutableStateOf<List<PriceAlertModel>>(emptyList()) }
@@ -142,6 +146,20 @@ fun DashboardScreen(
                     println("Dashboard: transactions ESI error: ${e.message}")
                 }
             }
+
+            try {
+                val taxConfig =
+                    if (acting != null) {
+                        CostBasisService.TaxConfig(
+                            salesTaxPct = StaticDataDao.getCharSalesTax(acting),
+                            brokerFeePct = StaticDataDao.getCharBrokersFee(acting),
+                        )
+                    } else {
+                        CostBasisService.TaxConfig()
+                    }
+                fifoResult = CostBasisService.compute(characterId = charId, corporationId = corpId, taxConfig = taxConfig)
+            } catch (_: Exception) {
+            }
         }
         isLoading = false
     }
@@ -153,15 +171,14 @@ fun DashboardScreen(
         return
     }
 
-    val today = LocalDate.now().toString()
-    val week7Start = LocalDate.now().minusDays(7).toString()
-    val month30Start = LocalDate.now().minusDays(30).toString()
+    val pnlWindow = txBreakdown.toPnlWindow()
+    val todayPL = pnlWindow.todayNet
+    val week7PL = pnlWindow.net7d
+    val month30PL = pnlWindow.net30d
+    val income30d = pnlWindow.income30d
+    val spend30d = pnlWindow.expenses30d
 
-    val todayPL = txBreakdown.firstOrNull { it.date == today }?.net ?: 0.0
-    val week7PL = txBreakdown.filter { it.date >= week7Start }.sumOf { it.net }
-    val month30PL = txBreakdown.filter { it.date >= month30Start }.sumOf { it.net }
-    val income30d = txBreakdown.filter { it.date >= month30Start }.sumOf { it.income }
-    val spend30d = txBreakdown.filter { it.date >= month30Start }.sumOf { it.expenses }
+    val fifoWindow = fifoResult?.realizedPnlWindow()
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
@@ -210,13 +227,39 @@ fun DashboardScreen(
             }
         }
 
-        // P&L mini cards
+        // P&L mini cards — cash flow (gross buy/sell + tax/fees actually paid, from the wallet)
+        item {
+            Text(
+                "Cash Flow",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+            )
+        }
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 PnlMiniCard(modifier = Modifier.weight(1f), label = "P&L Today", value = todayPL, showSign = true)
                 PnlMiniCard(modifier = Modifier.weight(1f), label = "P&L 7 days", value = week7PL, showSign = true)
                 PnlMiniCard(modifier = Modifier.weight(1f), label = "Income 30d", value = income30d, forceColor = POSITIVE)
                 PnlMiniCard(modifier = Modifier.weight(1f), label = "Expenses 30d", value = spend30d, forceColor = NEGATIVE)
+            }
+        }
+
+        // P&L mini cards — FIFO cost-basis (profit only counted once a lot is actually sold)
+        if (fifoWindow != null) {
+            item {
+                Text(
+                    "Realized P&L (FIFO cost-basis)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                )
+            }
+            item {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    PnlMiniCard(modifier = Modifier.weight(1f), label = "Realized Today", value = fifoWindow.todayPnl, showSign = true)
+                    PnlMiniCard(modifier = Modifier.weight(1f), label = "Realized 7 days", value = fifoWindow.pnl7d, showSign = true)
+                    PnlMiniCard(modifier = Modifier.weight(1f), label = "Realized 30 days", value = fifoWindow.pnl30d, showSign = true)
+                    PnlMiniCard(modifier = Modifier.weight(1f), label = "Realized All-time", value = fifoWindow.pnlAll, showSign = true)
+                }
             }
         }
 

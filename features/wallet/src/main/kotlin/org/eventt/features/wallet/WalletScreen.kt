@@ -37,6 +37,9 @@ import org.eventt.core.database.ViewContext
 import org.eventt.core.database.WalletDao
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.DailyWalletEntry
+import org.eventt.core.model.toPnlWindow
+import org.eventt.features.orders.CostBasisService
+import org.eventt.features.orders.realizedPnlWindow
 import org.eventt.ui.common.*
 import java.util.Locale
 import kotlin.math.abs
@@ -51,6 +54,7 @@ fun WalletScreen(context: ViewContext?) {
     var balance by remember { mutableStateOf(0.0) }
     var dailyBreakdown by remember { mutableStateOf<List<DailyWalletEntry>>(emptyList()) }
     var pnlBreakdown by remember { mutableStateOf<List<DailyWalletEntry>>(emptyList()) }
+    var fifoResult by remember { mutableStateOf<CostBasisService.FifoResult?>(null) }
     var transactions by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
     var journal by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
@@ -68,6 +72,7 @@ fun WalletScreen(context: ViewContext?) {
                 balanceCallback = { balance = it },
                 dailyCallback = { dailyBreakdown = it },
                 pnlCallback = { pnlBreakdown = it },
+                fifoCallback = { fifoResult = it },
                 transactionsCallback = { transactions = it },
                 journalCallback = { journal = it },
                 expiryCallback = { refreshAvailableAt = it },
@@ -97,6 +102,7 @@ fun WalletScreen(context: ViewContext?) {
                                 balanceCallback = { balance = it },
                                 dailyCallback = { dailyBreakdown = it },
                                 pnlCallback = { pnlBreakdown = it },
+                                fifoCallback = { fifoResult = it },
                                 transactionsCallback = { transactions = it },
                                 journalCallback = { journal = it },
                                 expiryCallback = { refreshAvailableAt = it },
@@ -148,7 +154,7 @@ fun WalletScreen(context: ViewContext?) {
             when (activeTab) {
                 0 -> TransactionList(transactions)
                 1 -> JournalList(journal)
-                2 -> PnlChart(pnlBreakdown)
+                2 -> PnlChart(pnlBreakdown, fifoResult)
             }
         }
     }
@@ -511,7 +517,10 @@ private fun pnlColor(value: Double): Color =
     }
 
 @Composable
-private fun PnlChart(dailyBreakdown: List<DailyWalletEntry>) {
+private fun PnlChart(
+    dailyBreakdown: List<DailyWalletEntry>,
+    fifoResult: CostBasisService.FifoResult?,
+) {
     if (dailyBreakdown.isEmpty()) {
         EmptyState(
             icon = Icons.AutoMirrored.Filled.ShowChart,
@@ -521,27 +530,50 @@ private fun PnlChart(dailyBreakdown: List<DailyWalletEntry>) {
         return
     }
 
-    // dailyBreakdown arrives newest-first; chronological order is needed for period sums & the chart.
+    // dailyBreakdown arrives newest-first; chronological order is needed for the chart.
     val chronological = dailyBreakdown.reversed()
-    val last7 = chronological.takeLast(7)
-    val last30 = chronological.takeLast(30)
 
-    val todayNet = chronological.lastOrNull()?.net ?: 0.0
-    val net7 = last7.sumOf { it.net }
-    val net30 = last30.sumOf { it.net }
-    val netAll = chronological.sumOf { it.net }
-    val incomeAll = chronological.sumOf { it.income }
-    val expensesAll = chronological.sumOf { it.expenses }
-    val profitableDays = chronological.count { it.net > 0 }
+    val window = dailyBreakdown.toPnlWindow()
+    val todayNet = window.todayNet
+    val net7 = window.net7d
+    val net30 = window.net30d
+    val netAll = window.netAll
+    val incomeAll = window.incomeAll
+    val expensesAll = window.expensesAll
+    val profitableDays = window.profitableDays
     val margin = if (incomeAll > 0) netAll / incomeAll * 100 else 0.0
+    val fifoWindow = fifoResult?.realizedPnlWindow()
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        Text(
+            "Cash Flow",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+        )
+        Spacer(modifier = Modifier.height(4.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             PnlStatCard("Today", pnlSignedText(todayNet), pnlColor(todayNet), Modifier.weight(1f))
             PnlStatCard("7 Days", pnlSignedText(net7), pnlColor(net7), Modifier.weight(1f))
             PnlStatCard("30 Days", pnlSignedText(net30), pnlColor(net30), Modifier.weight(1f))
             PnlStatCard("${chronological.size}d Total", pnlSignedText(netAll), pnlColor(netAll), Modifier.weight(1f))
         }
+
+        if (fifoWindow != null) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                "Realized P&L (FIFO cost-basis)",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                PnlStatCard("Today", pnlSignedText(fifoWindow.todayPnl), pnlColor(fifoWindow.todayPnl), Modifier.weight(1f))
+                PnlStatCard("7 Days", pnlSignedText(fifoWindow.pnl7d), pnlColor(fifoWindow.pnl7d), Modifier.weight(1f))
+                PnlStatCard("30 Days", pnlSignedText(fifoWindow.pnl30d), pnlColor(fifoWindow.pnl30d), Modifier.weight(1f))
+                PnlStatCard("All-time", pnlSignedText(fifoWindow.pnlAll), pnlColor(fifoWindow.pnlAll), Modifier.weight(1f))
+            }
+        }
+
         Spacer(modifier = Modifier.height(8.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             PnlStatCard("Income", "+${formatIsk(incomeAll)}", PNL_POSITIVE, Modifier.weight(1f))
@@ -762,6 +794,7 @@ private suspend fun loadWalletData(
     balanceCallback: (Double) -> Unit,
     dailyCallback: (List<DailyWalletEntry>) -> Unit,
     pnlCallback: (List<DailyWalletEntry>) -> Unit,
+    fifoCallback: (CostBasisService.FifoResult) -> Unit,
     transactionsCallback: (List<Map<String, Any?>>) -> Unit,
     journalCallback: (List<Map<String, Any?>>) -> Unit,
     expiryCallback: (Long?) -> Unit = {},
@@ -876,6 +909,16 @@ private suspend fun loadWalletData(
         }
 
         pnlCallback(WalletDao.getTradingPnlBreakdown(characterId = characterId, corporationId = corporationId))
+
+        try {
+            val taxConfig =
+                CostBasisService.TaxConfig(
+                    salesTaxPct = StaticDataDao.getCharSalesTax(actingCharId),
+                    brokerFeePct = StaticDataDao.getCharBrokersFee(actingCharId),
+                )
+            fifoCallback(CostBasisService.compute(characterId = characterId, corporationId = corporationId, taxConfig = taxConfig))
+        } catch (_: Exception) {
+        }
 
         val expiry =
             if (isCorp) {

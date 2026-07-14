@@ -1,6 +1,11 @@
 package org.eventt.core.model
 
 import kotlinx.serialization.Serializable
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 
 // ─── Character & Corporation ───────────────────────────────────────────────
 
@@ -357,3 +362,51 @@ data class DailyWalletEntry(
     val expenses: Double = 0.0,
     val net: Double = 0.0,
 )
+
+private val LOCAL_DATE_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
+
+// ESI always reports timestamps in UTC (e.g. "2026-07-11T23:45:00Z"). Any date persisted or
+// compared against another date derived from ESI data must go through this exact conversion --
+// two dates converted independently, or one converted and one left raw, silently drift apart
+// by the local UTC offset. Strings with no UTC offset (already-local values, e.g. test
+// fixtures) pass through unchanged.
+fun String.utcToLocalDateTime(): String =
+    try {
+        Instant.parse(this).atZone(ZoneId.systemDefault()).format(LOCAL_DATE_TIME_FORMAT)
+    } catch (_: DateTimeParseException) {
+        this
+    }
+
+// Rolling P&L stats for a daily breakdown. Entries are sparse (only days with activity
+// are present), so windows must be filtered by calendar date, not by list position/count.
+data class PnlWindow(
+    val todayNet: Double,
+    val net7d: Double,
+    val net30d: Double,
+    val income30d: Double,
+    val expenses30d: Double,
+    val netAll: Double,
+    val incomeAll: Double,
+    val expensesAll: Double,
+    val profitableDays: Int,
+    val totalDays: Int,
+)
+
+fun List<DailyWalletEntry>.toPnlWindow(referenceDate: LocalDate = LocalDate.now()): PnlWindow {
+    val today = referenceDate.toString()
+    val week7Start = referenceDate.minusDays(7).toString()
+    val month30Start = referenceDate.minusDays(30).toString()
+    val last30d = filter { it.date >= month30Start }
+    return PnlWindow(
+        todayNet = firstOrNull { it.date == today }?.net ?: 0.0,
+        net7d = filter { it.date >= week7Start }.sumOf { it.net },
+        net30d = last30d.sumOf { it.net },
+        income30d = last30d.sumOf { it.income },
+        expenses30d = last30d.sumOf { it.expenses },
+        netAll = sumOf { it.net },
+        incomeAll = sumOf { it.income },
+        expensesAll = sumOf { it.expenses },
+        profitableDays = count { it.net > 0 },
+        totalDays = size,
+    )
+}

@@ -1,6 +1,8 @@
 package org.eventt.features.orders
 
 import org.eventt.core.database.WalletDao
+import org.eventt.core.model.utcToLocalDateTime
+import java.time.LocalDate
 
 object CostBasisService {
     // Sales tax and broker fee rates for a character, loaded from settings.
@@ -106,6 +108,10 @@ object CostBasisService {
     }
 
     // Returns realized P&L for a specific fulfilled sell order using date+qty matching.
+    // `issuedDate` comes from ActiveOrderDao/OrderHistoryDao, stored as the raw UTC timestamp ESI
+    // sent (its offset is needed elsewhere for exact expiry/duration math). `result`'s sell dates
+    // come from WalletDao, which converts to local time at ingestion -- so this comparison must
+    // convert issuedDate the same way, or the two sides silently drift apart by the UTC offset.
     fun pnlForOrder(
         result: FifoResult,
         typeId: Int,
@@ -113,9 +119,10 @@ object CostBasisService {
         filledQty: Int,
     ): Double? {
         if (filledQty <= 0) return null
+        val localIssuedDate = issuedDate.utcToLocalDateTime()
         val sells =
             result.realizedByType[typeId]
-                ?.filter { it.date >= issuedDate }
+                ?.filter { it.date >= localIssuedDate }
                 ?: return null
 
         var remaining = filledQty
@@ -130,4 +137,27 @@ object CostBasisService {
 
         return if (remaining < filledQty) totalProfit else null
     }
+}
+
+// FIFO cost-basis P&L rolled up by calendar window, mirroring PnlWindow's cash-flow
+// rollups so Dashboard/Wallet can show both figures side by side.
+data class RealizedPnlWindow(
+    val todayPnl: Double,
+    val pnl7d: Double,
+    val pnl30d: Double,
+    val pnlAll: Double,
+)
+
+fun CostBasisService.FifoResult.realizedPnlWindow(referenceDate: LocalDate = LocalDate.now()): RealizedPnlWindow {
+    val today = referenceDate.toString()
+    val week7Start = referenceDate.minusDays(7).toString()
+    val month30Start = referenceDate.minusDays(30).toString()
+
+    fun dayOf(sell: CostBasisService.RealizedSellTx) = sell.date.substring(0, 10)
+    return RealizedPnlWindow(
+        todayPnl = realizedSells.filter { dayOf(it) == today }.sumOf { it.profit },
+        pnl7d = realizedSells.filter { dayOf(it) >= week7Start }.sumOf { it.profit },
+        pnl30d = realizedSells.filter { dayOf(it) >= month30Start }.sumOf { it.profit },
+        pnlAll = totalRealizedPnl,
+    )
 }

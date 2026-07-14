@@ -8,6 +8,9 @@ import org.eventt.core.model.ContractModel
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 class ContractDaoTest {
     companion object {
@@ -70,6 +73,17 @@ class ContractDaoTest {
         ContractDao.bulkUpsert(listOf(contract(1), contract(2), contract(3)))
 
         ContractDao.getAll(characterId = 1) shouldHaveSize 3
+    }
+
+    @Test
+    fun `upsert converts UTC ESI contract dates to the local time zone`() {
+        val utcIssued = "2026-07-11T23:45:00Z"
+        val expectedLocal =
+            Instant.parse(utcIssued).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+
+        ContractDao.upsert(contract(1, dateIssued = utcIssued))
+
+        ContractDao.getAll(characterId = 1).single().dateIssued shouldBe expectedLocal
     }
 
     @Test

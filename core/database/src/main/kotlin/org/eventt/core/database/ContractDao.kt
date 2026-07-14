@@ -2,6 +2,7 @@ package org.eventt.core.database
 
 import org.eventt.core.model.ContractItemModel
 import org.eventt.core.model.ContractModel
+import org.eventt.core.model.utcToLocalDateTime
 
 object ContractDao {
     // ─── Contracts ────────────────────────────────────────────────────────
@@ -28,10 +29,10 @@ object ContractDao {
                 stmt.setString(9, contract.status)
                 stmt.setString(10, contract.title)
                 stmt.setString(11, contract.description)
-                stmt.setString(12, contract.dateIssued)
-                stmt.setString(13, contract.dateExpired)
-                stmt.setString(14, contract.dateAccepted)
-                stmt.setString(15, contract.dateCompleted)
+                stmt.setString(12, contract.dateIssued.utcToLocalDateTime())
+                stmt.setString(13, contract.dateExpired.utcToLocalDateTime())
+                stmt.setString(14, contract.dateAccepted?.utcToLocalDateTime())
+                stmt.setString(15, contract.dateCompleted?.utcToLocalDateTime())
                 stmt.setInt(16, contract.numDays)
                 stmt.setDouble(17, contract.price)
                 stmt.setDouble(18, contract.reward)

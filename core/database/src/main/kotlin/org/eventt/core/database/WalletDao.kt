@@ -2,6 +2,7 @@ package org.eventt.core.database
 
 import org.eventt.core.model.DailyWalletEntry
 import org.eventt.core.model.WalletSummary
+import org.eventt.core.model.utcToLocalDateTime
 
 object WalletDao {
     // ─── Transactions ─────────────────────────────────────────────────────
@@ -31,7 +32,7 @@ object WalletDao {
                 """.trimIndent(),
             ).use { stmt ->
                 stmt.setLong(1, transactionId)
-                stmt.setString(2, date)
+                stmt.setString(2, date.utcToLocalDateTime())
                 stmt.setInt(3, typeId)
                 stmt.setString(4, typeName)
                 stmt.setInt(5, quantity)
@@ -180,7 +181,7 @@ object WalletDao {
                 """.trimIndent(),
             ).use { stmt ->
                 stmt.setLong(1, entryId)
-                stmt.setString(2, date)
+                stmt.setString(2, date.utcToLocalDateTime())
                 stmt.setDouble(3, amount)
                 stmt.setDouble(4, balance)
                 stmt.setString(5, reason)

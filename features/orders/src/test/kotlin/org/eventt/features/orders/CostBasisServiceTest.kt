@@ -10,6 +10,7 @@ import io.mockk.every
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
 import org.eventt.core.database.WalletDao
+import org.eventt.core.model.utcToLocalDateTime
 import org.eventt.features.orders.CostBasisService.FifoResult
 import org.eventt.features.orders.CostBasisService.InventoryItem
 import org.eventt.features.orders.CostBasisService.RealizedSellTx
@@ -214,5 +215,25 @@ class CostBasisServiceTest {
         val profit = CostBasisService.pnlForOrder(sampleResult(), TYPE_ID, issuedDate = "2024-01-01", filledQty = 0)
 
         profit.shouldBeNull()
+    }
+
+    // ActiveOrderDao/OrderHistoryDao store `issued` as the raw UTC timestamp ESI sent (its offset
+    // is needed elsewhere for exact expiry math), while WalletDao converts sell dates to local time
+    // at ingestion -- so pnlForOrder must convert issuedDate the same way before comparing, or the
+    // two sides drift apart by the local UTC offset.
+    @Test
+    fun `pnlForOrder converts a raw UTC issuedDate to local time before comparing against WalletDao's local sell dates`() {
+        val utcIssuedDate = "2024-01-01T00:00:00Z"
+        val localIssuedDate = utcIssuedDate.utcToLocalDateTime()
+        val result =
+            FifoResult(
+                inventory = emptyMap(),
+                realizedSells = listOf(RealizedSellTx(localIssuedDate, TYPE_ID, 5, 150.0, 100.0, 50.0, 1.0)),
+                taxConfig = TaxConfig(),
+            )
+
+        val profit = CostBasisService.pnlForOrder(result, TYPE_ID, issuedDate = utcIssuedDate, filledQty = 5).shouldNotBeNull()
+
+        profit should (50.0 plusOrMinus TOLERANCE)
     }
 }
