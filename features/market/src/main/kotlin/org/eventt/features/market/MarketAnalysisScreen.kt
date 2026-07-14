@@ -63,6 +63,10 @@ import java.awt.datatransfer.StringSelection
 import java.util.Locale
 import kotlin.math.round
 
+// Past this many candidate types, one paginated all-orders region fetch (a few hundred pages)
+// is cheaper than a separate per-type request each — see the bulk cutover in both Analyze paths.
+private const val BULK_ORDER_FETCH_THRESHOLD = 1000
+
 // ─── Data models ──────────────────────────────────────────────────────────
 
 data class StationOpportunity(
@@ -390,10 +394,12 @@ private fun StationTradingTab(
     var volCapPct by remember { mutableStateOf("10") }
     var copyVolumeEnabled by remember { mutableStateOf(true) }
     var skipExistingOrders by remember { mutableStateOf(false) }
+    var histSourceIsEsi by remember { mutableStateOf(false) }
 
     // Load persisted settings + character tax values
     LaunchedEffect(charId) {
         withContext(Dispatchers.IO) {
+            histSourceIsEsi = EveRefService.getSelectedSource() == "esi"
             S.get(S.ST_REGION)?.toIntOrNull()?.let { regionId = it }
             S.get(S.ST_STATION)?.toLongOrNull()?.let { stationId = it }
             S.get(S.ST_MARGIN)?.let { minMargin = it }
@@ -658,6 +664,19 @@ private fun StationTradingTab(
                                             }
                                         val locationSystemCache = java.util.concurrent.ConcurrentHashMap<Long, Int?>()
 
+                                        // Above ~1000 types (or with no category filter at all), one
+                                        // paginated all-orders fetch (~a few hundred pages) beats
+                                        // thousands of per-type requests. PLEX still needs its own
+                                        // call either way — it trades in its own special region.
+                                        val bulkByType: Map<Int, List<Map<String, Any?>>>? =
+                                            if (filterGroupIds == null || typeIds.size > BULK_ORDER_FETCH_THRESHOLD) {
+                                                statusMsg = "Fetching all region orders…"
+                                                withContext(Dispatchers.IO) { EsiClient.getMarketRegionOrders(regionId) }
+                                                    .groupBy { (it["type_id"] as? Number)?.toInt() ?: 0 }
+                                            } else {
+                                                null
+                                            }
+
                                         statusMsg = "0/${typeIds.size} types checked…"
 
                                         val semaphore = Semaphore(10)
@@ -679,7 +698,12 @@ private fun StationTradingTab(
                                                                     } else {
                                                                         regionId
                                                                     }
-                                                                val orders = EsiClient.getMarketRegionOrders(effRegion, typeId = typeId)
+                                                                val orders =
+                                                                    if (bulkByType != null && effRegion == regionId) {
+                                                                        bulkByType[typeId].orEmpty()
+                                                                    } else {
+                                                                        EsiClient.getMarketRegionOrders(effRegion, typeId = typeId)
+                                                                    }
                                                                 val opp =
                                                                     computeOpportunityForType(
                                                                         typeId,
@@ -763,6 +787,9 @@ private fun StationTradingTab(
                         Text(if (isAnalyzing) "Analyzing…" else "Analyze")
                     }
                 }
+            }
+            if (selectedTopGroup == null && histSourceIsEsi) {
+                EveRefHint()
             }
         }
 
@@ -947,10 +974,12 @@ private fun InterRegionTab(
     var volCapPct by remember { mutableStateOf("10") }
     var copyVolumeEnabled by remember { mutableStateOf(true) }
     var skipExistingOrders by remember { mutableStateOf(false) }
+    var histSourceIsEsi by remember { mutableStateOf(false) }
 
     // Load persisted settings + character tax values
     LaunchedEffect(charId) {
         withContext(Dispatchers.IO) {
+            histSourceIsEsi = EveRefService.getSelectedSource() == "esi"
             S.get(S.IR_BUY_REGION)?.toIntOrNull()?.let { buyRegionId = it }
             S.get(S.IR_BUY_STATION)?.toLongOrNull()?.let { buyStationId = it }
             S.get(S.IR_SELL_REGION)?.toIntOrNull()?.let { sellRegionId = it }
@@ -1298,6 +1327,22 @@ private fun InterRegionTab(
                                             } else {
                                                 allTypeIds
                                             }
+                                        // Same bulk cutover as Station Trading: past the threshold two
+                                        // paginated all-orders fetches (one per region) beat two HTTP
+                                        // requests per type.
+                                        val bulk: Pair<Map<Int, List<Map<String, Any?>>>, Map<Int, List<Map<String, Any?>>>>? =
+                                            if (filterGroupIds == null || typeIds.size > BULK_ORDER_FETCH_THRESHOLD) {
+                                                statusMsg = "Fetching all $buyName orders…"
+                                                val buyAll = withContext(Dispatchers.IO) { EsiClient.getMarketRegionOrders(buyRegionId) }
+                                                statusMsg = "Fetching all $sellName orders…"
+                                                val sellAll = withContext(Dispatchers.IO) { EsiClient.getMarketRegionOrders(sellRegionId) }
+
+                                                fun List<Map<String, Any?>>.byType() = groupBy { (it["type_id"] as? Number)?.toInt() ?: 0 }
+                                                buyAll.byType() to sellAll.byType()
+                                            } else {
+                                                null
+                                            }
+
                                         statusMsg = "0/${typeIds.size} types…"
 
                                         // Each permit fires 2 real HTTP requests (buy + sell region
@@ -1317,22 +1362,26 @@ private fun InterRegionTab(
                                                             runCatching {
                                                                 // Both regions for this type fetched simultaneously
                                                                 val (buyOrders, sellOrders) =
-                                                                    coroutineScope {
-                                                                        val bDef =
-                                                                            async {
-                                                                                EsiClient.getMarketRegionOrders(
-                                                                                    buyRegionId,
-                                                                                    typeId = typeId,
-                                                                                )
-                                                                            }
-                                                                        val sDef =
-                                                                            async {
-                                                                                EsiClient.getMarketRegionOrders(
-                                                                                    sellRegionId,
-                                                                                    typeId = typeId,
-                                                                                )
-                                                                            }
-                                                                        bDef.await() to sDef.await()
+                                                                    if (bulk != null) {
+                                                                        bulk.first[typeId].orEmpty() to bulk.second[typeId].orEmpty()
+                                                                    } else {
+                                                                        coroutineScope {
+                                                                            val bDef =
+                                                                                async {
+                                                                                    EsiClient.getMarketRegionOrders(
+                                                                                        buyRegionId,
+                                                                                        typeId = typeId,
+                                                                                    )
+                                                                                }
+                                                                            val sDef =
+                                                                                async {
+                                                                                    EsiClient.getMarketRegionOrders(
+                                                                                        sellRegionId,
+                                                                                        typeId = typeId,
+                                                                                    )
+                                                                                }
+                                                                            bDef.await() to sDef.await()
+                                                                        }
                                                                     }
                                                                 val opp =
                                                                     computeRegionOpportunityForType(
@@ -1412,6 +1461,9 @@ private fun InterRegionTab(
                         Text(if (isAnalyzing) "Analyzing…" else "Analyze")
                     }
                 }
+            }
+            if (selectedTopGroup == null && histSourceIsEsi) {
+                EveRefHint()
             }
         }
 
@@ -1744,6 +1796,20 @@ private fun CheckboxParamField(
             CompactTextField(value = value, onValueChange = onValueChange, width = fieldWidth, enabled = fieldEnabled)
         }
     }
+}
+
+// ─── "All categories + ESI history" hint ──────────────────────────────────
+// With no category filter, every profitable candidate costs one live ESI history request —
+// the EVE Ref bulk download (Settings) turns those into local DB lookups.
+
+@Composable
+private fun EveRefHint() {
+    Text(
+        "Tip: scanning all categories fetches price history from ESI per profitable item — " +
+            "enable EVE Ref bulk data in Settings to make history lookups local and instant.",
+        style = MaterialTheme.typography.labelSmall,
+        color = Color(0xFFFFB74D),
+    )
 }
 
 // ─── Visual separator between filter sections ─────────────────────────────
