@@ -452,10 +452,11 @@ private fun StationTradingTab(
     Column(modifier = Modifier.fillMaxSize()) {
         // ── Filter bar ─────────────────────────────────────────────
         FilterBar {
-            // Row 1: location + category
+            // Row 1: location + category on the left, read-only fees info pinned right.
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 RegionPicker(allRegions, regionId, width = 180.dp, accentColor = MaterialTheme.colorScheme.primary) {
                     regionId = it
@@ -482,15 +483,29 @@ private fun StationTradingTab(
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_CAT_SUB, g?.marketGroupId?.toString() ?: "") } }
                     }
                 }
+                Spacer(Modifier.weight(1f))
+                // Read-only tax display — informational, so it lives at the far edge with the
+                // other non-inputs rather than crammed in with the editable filters.
+                FilterControl("Fees") {
+                    Text(
+                        "Tax ${String.format(
+                            Locale.US,
+                            "%.2f",
+                            salesTaxPct,
+                        )}%  ·  Broker ${String.format(Locale.US, "%.2f", brokerFeePct)}%",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                    )
+                }
             }
-            // Row 2: numeric filters + behavior toggles + analyze action — no weight() on the
-            // inner FlowRow, so it sizes to its natural (wrapped) width instead of stretching to
-            // fill the row and shoving Copy Vol/Fees/Analyze off to the far right edge, detached
-            // from the filter fields they belong with.
+            // Row 2: editable filters + behavior toggles on the left; the primary action
+            // (Analyze, with Stop/status while running) pinned to the right edge, where the
+            // eye expects a toolbar's main action — the weighted FlowRow absorbs the slack.
             Row(verticalAlignment = Alignment.Top) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.weight(1f),
                 ) {
                     ParamField("Margin %", minMargin, 68.dp) {
                         minMargin = it
@@ -534,34 +549,45 @@ private fun StationTradingTab(
                             modifier = Modifier.size(24.dp),
                         )
                     }
+                    FilterDivider()
+                    // Toggles whether the hotkey's second press copies the suggested volume, or just
+                    // advances straight to the next item after copying the price.
+                    FilterControl("Copy Vol") {
+                        Switch(
+                            checked = copyVolumeEnabled,
+                            onCheckedChange = {
+                                copyVolumeEnabled = it
+                                scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_COPY_VOLUME, it.toString()) } }
+                            },
+                            modifier = Modifier.height(FilterFieldHeight),
+                        )
+                    }
                 }
-                FilterDivider()
-                // Toggles whether the hotkey's second press copies the suggested volume, or just
-                // advances straight to the next item after copying the price.
-                FilterControl("Copy Vol") {
-                    Switch(
-                        checked = copyVolumeEnabled,
-                        onCheckedChange = {
-                            copyVolumeEnabled = it
-                            scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_COPY_VOLUME, it.toString()) } }
-                        },
-                        modifier = Modifier.height(FilterFieldHeight),
-                    )
+                if (statusMsg.isNotEmpty()) {
+                    FilterActionSlot {
+                        Text(
+                            statusMsg,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if ("Error" in statusMsg) Color(0xFFFF6B6B) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            modifier = Modifier.height(FilterFieldHeight).wrapContentHeight(Alignment.CenterVertically),
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
                 }
-                FilterDivider()
-                // Read-only tax display
-                FilterControl("Fees") {
-                    Text(
-                        "Tax ${String.format(
-                            Locale.US,
-                            "%.2f",
-                            salesTaxPct,
-                        )}%  ·  Broker ${String.format(Locale.US, "%.2f", brokerFeePct)}%",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                    )
+                if (isAnalyzing) {
+                    FilterActionSlot {
+                        OutlinedButton(
+                            onClick = { analyzeJob?.cancel() },
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                            modifier = Modifier.height(FilterFieldHeight),
+                        ) {
+                            Icon(Icons.Default.Stop, null, Modifier.size(14.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Stop")
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
                 }
-                Spacer(Modifier.width(12.dp))
                 FilterActionSlot {
                     Button(
                         onClick = {
@@ -726,7 +752,7 @@ private fun StationTradingTab(
                         },
                         enabled = !isAnalyzing,
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
-                        modifier = Modifier.height(48.dp),
+                        modifier = Modifier.height(FilterFieldHeight),
                     ) {
                         if (isAnalyzing) {
                             CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
@@ -735,31 +761,6 @@ private fun StationTradingTab(
                         }
                         Spacer(Modifier.width(6.dp))
                         Text(if (isAnalyzing) "Analyzing…" else "Analyze")
-                    }
-                }
-                if (isAnalyzing) {
-                    Spacer(Modifier.width(8.dp))
-                    FilterActionSlot {
-                        OutlinedButton(
-                            onClick = { analyzeJob?.cancel() },
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
-                            modifier = Modifier.height(48.dp),
-                        ) {
-                            Icon(Icons.Default.Stop, null, Modifier.size(14.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Stop")
-                        }
-                    }
-                }
-                if (statusMsg.isNotEmpty()) {
-                    Spacer(Modifier.width(12.dp))
-                    FilterActionSlot {
-                        Text(
-                            statusMsg,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if ("Error" in statusMsg) Color(0xFFFF6B6B) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                            modifier = Modifier.height(48.dp).wrapContentHeight(Alignment.CenterVertically),
-                        )
                     }
                 }
             }
@@ -1022,10 +1023,11 @@ private fun InterRegionTab(
     Column(modifier = Modifier.fillMaxSize()) {
         // ── Filter bar ─────────────────────────────────────────────
         FilterBar {
-            // Row 1: route (buy → sell) + trade type + categories
+            // Row 1: route (buy → sell) + trade type + categories on the left, fees info pinned right.
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 RegionPicker(
                     allRegions,
@@ -1078,15 +1080,29 @@ private fun InterRegionTab(
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_CAT_SUB, g?.marketGroupId?.toString() ?: "") } }
                     }
                 }
+                Spacer(Modifier.weight(1f))
+                // Read-only tax display — informational, so it lives at the far edge with the
+                // other non-inputs rather than crammed in with the editable filters.
+                FilterControl("Fees") {
+                    Text(
+                        "Tax ${String.format(
+                            Locale.US,
+                            "%.2f",
+                            salesTaxPct,
+                        )}%  ·  Broker ${String.format(Locale.US, "%.2f", brokerFeePct)}%",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                    )
+                }
             }
-            // Row 2: numeric filters + behavior toggles + analyze action — no weight() on the
-            // inner FlowRow, so it sizes to its natural (wrapped) width instead of stretching to
-            // fill the row and shoving Copy Vol/Fees/Analyze off to the far right edge, detached
-            // from the filter fields they belong with.
+            // Row 2: editable filters + behavior toggles on the left; the primary action
+            // (Analyze, with Stop/status while running) pinned to the right edge, where the
+            // eye expects a toolbar's main action — the weighted FlowRow absorbs the slack.
             Row(verticalAlignment = Alignment.Top) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.weight(1f),
                 ) {
                     ParamField("Margin %", minMargin, 68.dp) {
                         minMargin = it
@@ -1151,34 +1167,50 @@ private fun InterRegionTab(
                             modifier = Modifier.size(24.dp),
                         )
                     }
+                    FilterDivider()
+                    // Toggles whether the hotkey's second press copies the suggested volume, or just
+                    // advances straight to the next item after copying the price.
+                    FilterControl("Copy Vol") {
+                        Switch(
+                            checked = copyVolumeEnabled,
+                            onCheckedChange = {
+                                copyVolumeEnabled = it
+                                scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_COPY_VOLUME, it.toString()) } }
+                            },
+                            modifier = Modifier.height(FilterFieldHeight),
+                        )
+                    }
                 }
-                FilterDivider()
-                // Toggles whether the hotkey's second press copies the suggested volume, or just
-                // advances straight to the next item after copying the price.
-                FilterControl("Copy Vol") {
-                    Switch(
-                        checked = copyVolumeEnabled,
-                        onCheckedChange = {
-                            copyVolumeEnabled = it
-                            scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_COPY_VOLUME, it.toString()) } }
-                        },
-                        modifier = Modifier.height(FilterFieldHeight),
-                    )
+                if (statusMsg.isNotEmpty()) {
+                    FilterActionSlot {
+                        Text(
+                            statusMsg,
+                            style = MaterialTheme.typography.labelSmall,
+                            color =
+                                if ("Error" in statusMsg || "differ" in statusMsg) {
+                                    Color(0xFFFF6B6B)
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                },
+                            modifier = Modifier.height(FilterFieldHeight).wrapContentHeight(Alignment.CenterVertically),
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
                 }
-                FilterDivider()
-                // Read-only tax display
-                FilterControl("Fees") {
-                    Text(
-                        "Tax ${String.format(
-                            Locale.US,
-                            "%.2f",
-                            salesTaxPct,
-                        )}%  ·  Broker ${String.format(Locale.US, "%.2f", brokerFeePct)}%",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                    )
+                if (isAnalyzing) {
+                    FilterActionSlot {
+                        OutlinedButton(
+                            onClick = { analyzeJob?.cancel() },
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                            modifier = Modifier.height(FilterFieldHeight),
+                        ) {
+                            Icon(Icons.Default.Stop, null, Modifier.size(14.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Stop")
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
                 }
-                Spacer(Modifier.width(12.dp))
                 FilterActionSlot {
                     Button(
                         onClick = {
@@ -1369,7 +1401,7 @@ private fun InterRegionTab(
                         },
                         enabled = !isAnalyzing,
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
-                        modifier = Modifier.height(48.dp),
+                        modifier = Modifier.height(FilterFieldHeight),
                     ) {
                         if (isAnalyzing) {
                             CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
@@ -1378,36 +1410,6 @@ private fun InterRegionTab(
                         }
                         Spacer(Modifier.width(6.dp))
                         Text(if (isAnalyzing) "Analyzing…" else "Analyze")
-                    }
-                }
-                if (isAnalyzing) {
-                    Spacer(Modifier.width(8.dp))
-                    FilterActionSlot {
-                        OutlinedButton(
-                            onClick = { analyzeJob?.cancel() },
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
-                            modifier = Modifier.height(48.dp),
-                        ) {
-                            Icon(Icons.Default.Stop, null, Modifier.size(14.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Stop")
-                        }
-                    }
-                }
-                if (statusMsg.isNotEmpty()) {
-                    Spacer(Modifier.width(12.dp))
-                    FilterActionSlot {
-                        Text(
-                            statusMsg,
-                            style = MaterialTheme.typography.labelSmall,
-                            color =
-                                if ("Error" in statusMsg || "differ" in statusMsg) {
-                                    Color(0xFFFF6B6B)
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                                },
-                            modifier = Modifier.height(48.dp).wrapContentHeight(Alignment.CenterVertically),
-                        )
                     }
                 }
             }
@@ -1745,20 +1747,34 @@ private fun CheckboxParamField(
 }
 
 // ─── Visual separator between filter sections ─────────────────────────────
+// Top-padded past the label row so the line sits alongside the fields — FlowRow lines are
+// label+field tall (top-aligned), and an unpadded divider would float at label level instead.
 
 @Composable
 private fun FilterDivider() {
     VerticalDivider(
-        modifier = Modifier.height(FilterFieldHeight).padding(horizontal = 4.dp),
+        modifier =
+            Modifier
+                .padding(top = FilterLabelHeight + FilterLabelGap)
+                .height(FilterFieldHeight)
+                .padding(horizontal = 4.dp),
         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
     )
 }
 
 // ─── Route arrow between buy-side and sell-side pickers (Inter-Region only) ────────────────
+// Same label-row top offset as FilterDivider, so the arrow points between the chips themselves.
 
 @Composable
 private fun RouteArrow() {
-    Box(modifier = Modifier.height(FilterFieldHeight).padding(horizontal = 2.dp), contentAlignment = Alignment.Center) {
+    Box(
+        modifier =
+            Modifier
+                .padding(top = FilterLabelHeight + FilterLabelGap)
+                .height(FilterFieldHeight)
+                .padding(horizontal = 2.dp),
+        contentAlignment = Alignment.Center,
+    ) {
         Icon(
             Icons.AutoMirrored.Filled.ArrowForward,
             null,
