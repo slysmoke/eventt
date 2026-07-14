@@ -100,6 +100,12 @@ object DatabaseManager {
                 "ALTER TABLE nostr_orders ADD COLUMN trader_char_id INTEGER",
                 "ALTER TABLE nostr_reservations ADD COLUMN buyer_char_id INTEGER",
                 "ALTER TABLE nostr_reservations ADD COLUMN contact_char_id INTEGER",
+                // Modification fees paid to relist a market order at a new price aren't linkable
+                // to a specific order via the wallet journal (no order_id there, and it only
+                // refreshes hourly) -- so they're computed ourselves by diffing each order's price
+                // against its last-seen price on every refresh, and accumulated here.
+                "ALTER TABLE active_orders ADD COLUMN relist_count INTEGER DEFAULT 0",
+                "ALTER TABLE active_orders ADD COLUMN relist_fees_paid REAL DEFAULT 0.0",
             )
         conn.createStatement().use { stmt ->
             migrations.forEach { sql ->

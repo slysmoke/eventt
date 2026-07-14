@@ -27,6 +27,8 @@ class ActiveOrderDaoTest {
         characterId: Int? = 1,
         corporationId: Int? = null,
         issuedByCharId: Int? = null,
+        relistCount: Int = 0,
+        relistFeesPaid: Double = 0.0,
     ) = ActiveOrderDao.ActiveOrderRecord(
         orderId = orderId,
         typeId = 34,
@@ -44,6 +46,8 @@ class ActiveOrderDaoTest {
         issuedByCharId = issuedByCharId,
         characterId = characterId,
         corporationId = corporationId,
+        relistCount = relistCount,
+        relistFeesPaid = relistFeesPaid,
     )
 
     @Test
@@ -107,5 +111,49 @@ class ActiveOrderDaoTest {
         )
 
         ActiveOrderDao.getAll(corporationId = 500).single().issuedByCharId shouldBe 42
+    }
+
+    @Test
+    fun `replaceAll round-trips relistCount and relistFeesPaid`() {
+        ActiveOrderDao.replaceAll(
+            characterId = 1,
+            corporationId = null,
+            records = listOf(record(1, relistCount = 3, relistFeesPaid = 450.0)),
+        )
+
+        val stored = ActiveOrderDao.getAll(characterId = 1).single()
+        stored.relistCount shouldBe 3
+        stored.relistFeesPaid shouldBe 450.0
+    }
+
+    @Test
+    fun `bumpRelistStats increments count and fees and updates price for the matching order only`() {
+        ActiveOrderDao.replaceAll(
+            characterId = 1,
+            corporationId = null,
+            records = listOf(record(1, price = 100.0), record(2, price = 200.0)),
+        )
+
+        ActiveOrderDao.bumpRelistStats(orderId = 1, characterId = 1, corporationId = null, newPrice = 110.0, addedFee = 100.0)
+        ActiveOrderDao.bumpRelistStats(orderId = 1, characterId = 1, corporationId = null, newPrice = 120.0, addedFee = 100.0)
+
+        val orders = ActiveOrderDao.getAll(characterId = 1).associateBy { it.orderId }
+        orders.getValue(1).price shouldBe 120.0
+        orders.getValue(1).relistCount shouldBe 2
+        orders.getValue(1).relistFeesPaid shouldBe 200.0
+        // Untouched order keeps its original price and zero relist stats.
+        orders.getValue(2).price shouldBe 200.0
+        orders.getValue(2).relistCount shouldBe 0
+    }
+
+    @Test
+    fun `bumpRelistStats is scoped and does not affect a different character's order`() {
+        ActiveOrderDao.replaceAll(characterId = 1, corporationId = null, records = listOf(record(1, characterId = 1)))
+        ActiveOrderDao.replaceAll(characterId = 2, corporationId = null, records = listOf(record(2, characterId = 2)))
+
+        ActiveOrderDao.bumpRelistStats(orderId = 1, characterId = 1, corporationId = null, newPrice = 999.0, addedFee = 50.0)
+
+        ActiveOrderDao.getAll(characterId = 1).single().relistCount shouldBe 1
+        ActiveOrderDao.getAll(characterId = 2).single().relistCount shouldBe 0
     }
 }

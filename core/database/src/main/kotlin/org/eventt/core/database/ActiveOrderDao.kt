@@ -28,6 +28,11 @@ object ActiveOrderDao {
         val issuedByCharId: Int?,
         val characterId: Int?,
         val corporationId: Int?,
+        // Self-computed relist tracking: the wallet journal has no order_id to link a brokers_fee
+        // entry back to a specific order (and only refreshes hourly), so these are accumulated by
+        // diffing this order's price against its last-seen price on every refresh instead.
+        val relistCount: Int = 0,
+        val relistFeesPaid: Double = 0.0,
     )
 
     private data class WhereClause(
@@ -63,8 +68,9 @@ object ActiveOrderDao {
                 """
                 INSERT OR REPLACE INTO active_orders
                 (order_id, type_id, type_name, location_id, region_id, station_name, price, volume_total,
-                 volume_remaining, is_buy_order, duration, issued, state, issued_by_char_id, character_id, corporation_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 volume_remaining, is_buy_order, duration, issued, state, issued_by_char_id, character_id, corporation_id,
+                 relist_count, relist_fees_paid)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent()
             prepareStatement(sql).use { ps ->
                 records.forEach { r ->
@@ -84,9 +90,41 @@ object ActiveOrderDao {
                     if (r.issuedByCharId != null) ps.setInt(14, r.issuedByCharId) else ps.setNull(14, Types.INTEGER)
                     if (r.characterId != null) ps.setInt(15, r.characterId) else ps.setNull(15, Types.INTEGER)
                     if (r.corporationId != null) ps.setInt(16, r.corporationId) else ps.setNull(16, Types.INTEGER)
+                    ps.setInt(17, r.relistCount)
+                    ps.setDouble(18, r.relistFeesPaid)
                     ps.addBatch()
                 }
                 ps.executeBatch()
+            }
+        }
+    }
+
+    // Incremental single-row update for a relist detected between full snapshots (e.g. from the
+    // higher-frequency public order book poll) -- avoids waiting for the next full replaceAll to
+    // record it. No-ops if the order isn't in the current snapshot (already filled/cancelled).
+    fun bumpRelistStats(
+        orderId: Long,
+        characterId: Int?,
+        corporationId: Int?,
+        newPrice: Double,
+        addedFee: Double,
+    ) {
+        val (scopeSql, scopeParam) =
+            when {
+                characterId != null -> "character_id = ?" to characterId
+                corporationId != null -> "corporation_id = ?" to corporationId
+                else -> return
+            }
+        DatabaseManager.transaction {
+            prepareStatement(
+                "UPDATE active_orders SET price = ?, relist_count = relist_count + 1, " +
+                    "relist_fees_paid = relist_fees_paid + ? WHERE order_id = ? AND $scopeSql",
+            ).use { ps ->
+                ps.setDouble(1, newPrice)
+                ps.setDouble(2, addedFee)
+                ps.setLong(3, orderId)
+                ps.setObject(4, scopeParam)
+                ps.executeUpdate()
             }
         }
     }
@@ -120,6 +158,8 @@ object ActiveOrderDao {
                             issuedByCharId = rs.getInt("issued_by_char_id").takeIf { !rs.wasNull() },
                             characterId = rs.getInt("character_id").takeIf { !rs.wasNull() },
                             corporationId = rs.getInt("corporation_id").takeIf { !rs.wasNull() },
+                            relistCount = rs.getInt("relist_count"),
+                            relistFeesPaid = rs.getDouble("relist_fees_paid"),
                         ),
                     )
                 }

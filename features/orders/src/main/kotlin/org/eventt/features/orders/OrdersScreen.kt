@@ -60,6 +60,10 @@ private val ACTIVE_IN_GAME = Color(0xFF4A90D9) // blue — currently open in EVE
 
 private const val DEFAULT_REGION_ID = 10000002 // The Forge (Jita) — fallback for inventory items with no active order/region context
 
+private val beatenFilterIcon: @Composable () -> Unit = {
+    Icon(Icons.Default.ArrowDownward, contentDescription = null, modifier = Modifier.size(16.dp))
+}
+
 private data class CharacterOrder(
     val orderId: Long,
     val typeId: Int,
@@ -78,6 +82,10 @@ private data class CharacterOrder(
     // character placed each order (the character-scope endpoint has no such field, since it's
     // always "me"). Lets a corp's trading activity across characters show up in one table.
     val issuedByCharId: Int? = null,
+    // Self-computed relist tracking (see OrderFeeService) -- carried forward across refreshes via
+    // ActiveOrderDao rather than re-derived, since it depends on price history we don't re-fetch.
+    val relistCount: Int = 0,
+    val relistFeesPaid: Double = 0.0,
 ) {
     val total: Double get() = price * volumeRemaining
     val timeLeftSeconds: Long get() {
@@ -138,6 +146,8 @@ private fun CharacterOrder.toActiveOrderRecord(
         issuedByCharId = issuedByCharId,
         characterId = characterId,
         corporationId = corporationId,
+        relistCount = relistCount,
+        relistFeesPaid = relistFeesPaid,
     )
 
 private fun ActiveOrderDao.ActiveOrderRecord.toCharacterOrder(): CharacterOrder =
@@ -156,7 +166,36 @@ private fun ActiveOrderDao.ActiveOrderRecord.toCharacterOrder(): CharacterOrder 
         issued = issued,
         state = state,
         issuedByCharId = issuedByCharId,
+        relistCount = relistCount,
+        relistFeesPaid = relistFeesPaid,
     )
+
+// Diffs freshly-parsed orders against the last-known snapshot to detect relists (price changed
+// since we last saw this order) and accumulate their cost -- the only signal available, since the
+// wallet journal can't be linked to a specific order and only refreshes hourly. A brand-new order
+// (not in `previous`) starts at zero: its first sighting is the listing, not a modification.
+private fun mergeRelistStats(
+    previous: Map<Long, ActiveOrderDao.ActiveOrderRecord>,
+    fresh: List<CharacterOrder>,
+    brokerFeePct: Double,
+    relistDiscountPct: Double,
+): List<CharacterOrder> =
+    fresh.map { order ->
+        val prior = previous[order.orderId] ?: return@map order
+        if (prior.price == order.price) {
+            order.copy(relistCount = prior.relistCount, relistFeesPaid = prior.relistFeesPaid)
+        } else {
+            val fee =
+                OrderFeeService.computeModificationFee(
+                    prior.price,
+                    order.price,
+                    order.volumeRemaining,
+                    brokerFeePct,
+                    relistDiscountPct,
+                )
+            order.copy(relistCount = prior.relistCount + 1, relistFeesPaid = prior.relistFeesPaid + fee)
+        }
+    }
 
 /**
  * Best competing prices for a (typeId, locationId) pair, excluding the character's own orders.
@@ -186,14 +225,30 @@ internal fun computeMarginPct(
 
 /**
  * Net margin (%) of flipping at the market's current best prices: acquire via a buy order at
- * [MarketComparison.bestBuy], resell via a sell order at [MarketComparison.bestSell].
+ * [MarketComparison.bestBuy], resell via a sell order at [MarketComparison.bestSell]. Used as-is
+ * for buy orders' Best Margin; sell orders use [sellMarginPct] against their own cost basis instead
+ * (see below) since a sell order already owns the item — buying it again isn't the hypothetical.
  */
 internal fun computeBestMarginPct(
     comparison: MarketComparison?,
     taxConfig: CostBasisService.TaxConfig,
 ): Double? = computeMarginPct(comparison?.bestBuy, comparison?.bestSell, taxConfig)
 
-private enum class SortCol { NAME, PRICE, VOLUME, TOTAL, TIME_LEFT, ORDER_AGE, STATION }
+/** Net margin (%) of selling at [price] (net of sales tax + broker fee) against an already-owned [costBasis]. */
+internal fun sellMarginPct(
+    price: Double?,
+    costBasis: Double?,
+    taxConfig: CostBasisService.TaxConfig,
+): Double? {
+    val p = price ?: return null
+    val cost = costBasis ?: return null
+    if (cost <= 0) return null
+    return (p * taxConfig.sellMultiplier - cost) / cost * 100
+}
+
+// COST/RELIST/PROFIT/MARGIN/BEST_MARGIN are Sell-only (sorted in sortSellMetrics, since they're
+// derived values, not fields on CharacterOrder); TOTAL/ORDER_AGE are Buy-only (applySort).
+private enum class SortCol { NAME, PRICE, VOLUME, TOTAL, TIME_LEFT, ORDER_AGE, COST, RELIST, PROFIT, MARGIN, BEST_MARGIN }
 
 private enum class SortDir { ASC, DESC }
 
@@ -209,11 +264,15 @@ fun OrdersScreen(context: ViewContext?) {
     var orders by remember { mutableStateOf<List<CharacterOrder>>(emptyList()) }
     var historyOrders by remember { mutableStateOf<List<OrderHistoryDao.OrderHistoryRecord>>(emptyList()) }
     var fifoResult by remember { mutableStateOf<CostBasisService.FifoResult?>(null) }
+    var relistDiscountPct by remember { mutableStateOf(OrderFeeService.relistDiscountPct(0)) }
     var isLoading by remember { mutableStateOf(false) }
     var refreshAvailableAt by remember { mutableStateOf<Long?>(null) }
     var activeTab by remember { mutableStateOf(0) }
     var sortCol by remember { mutableStateOf(SortCol.NAME) }
     var sortDir by remember { mutableStateOf(SortDir.ASC) }
+    // Sell tab only: when on, hides every order that isn't currently beaten by a cheaper
+    // competing sell order at the same station. Off (show all) by default.
+    var showBeatenOnly by remember { mutableStateOf(false) }
 
     // Market comparison data — loaded after orders, shown as overbid indicators.
     // Refreshed on order load and via the manual "Refresh Prices" button (no auto-refresh:
@@ -250,6 +309,9 @@ fun OrdersScreen(context: ViewContext?) {
         scope.launch(Dispatchers.IO) {
             withContext(Dispatchers.Main) { isLoadingMarket = true }
             try {
+                val brokerFeePct = (fifoResult?.taxConfig ?: CostBasisService.TaxConfig()).brokerFeePct
+                val activeById = activeOrders.associateBy { it.orderId }
+
                 // One ESI call per (typeId, regionId) still covers every station in that region —
                 // sell competition is then split out per station below, entirely from that same
                 // response, so this doesn't cost any extra requests.
@@ -260,6 +322,10 @@ fun OrdersScreen(context: ViewContext?) {
                         .toSet()
 
                 val result = mutableMapOf<Pair<Int, Long>, MarketComparison>()
+                // Relists detected from the live public order book -- ~5min fresh, versus
+                // ~25-30min for /characters/{id}/orders/, so this catches a price change well
+                // before the next full loadOrders() poll would.
+                val detectedChanges = mutableMapOf<Long, CharacterOrder>()
                 // Latest of the per-pair ESI cache expiries — waiting for every pair to have
                 // actually gone stale (rather than just the first one) means each click of
                 // "Refresh Prices" does real work for every pair instead of mostly re-checking
@@ -288,6 +354,37 @@ fun OrdersScreen(context: ViewContext?) {
                                     .minOrNull()
                             result[typeId to locationId] = MarketComparison(bestSell, bestBuy)
                         }
+                        // Same response also carries this character's own orders (excluded above
+                        // for competition purposes) — compare against the last-known price to
+                        // detect a relist that happened since the last poll.
+                        all
+                            .filter { (it["order_id"] as? Number)?.toLong() in ownIds }
+                            .forEach { o ->
+                                val orderId = (o["order_id"] as? Number)?.toLong() ?: return@forEach
+                                val price = (o["price"] as? Number)?.toDouble() ?: return@forEach
+                                val volRemain = (o["volume_remain"] as? Number)?.toInt() ?: return@forEach
+                                val known = activeById[orderId] ?: return@forEach
+                                if (known.price != price) {
+                                    val fee =
+                                        OrderFeeService.computeModificationFee(
+                                            known.price,
+                                            price,
+                                            volRemain,
+                                            brokerFeePct,
+                                            relistDiscountPct,
+                                        )
+                                    ActiveOrderDao.bumpRelistStats(orderId, charId, corpId, price, fee)
+                                    detectedChanges[orderId] =
+                                        known.copy(
+                                            price = price,
+                                            volumeRemaining = volRemain,
+                                            relistCount = known.relistCount + 1,
+                                            relistFeesPaid = known.relistFeesPaid + fee,
+                                        )
+                                } else if (known.volumeRemaining != volRemain) {
+                                    detectedChanges[orderId] = known.copy(volumeRemaining = volRemain)
+                                }
+                            }
                         val expiry =
                             EsiClient.getEndpointExpiry(
                                 "/markets/$regionId/orders/",
@@ -302,6 +399,7 @@ fun OrdersScreen(context: ViewContext?) {
                 withContext(Dispatchers.Main) {
                     marketComparisons = result
                     marketComparisonsExpiresAt = latestExpiry
+                    if (detectedChanges.isNotEmpty()) orders = orders.map { detectedChanges[it.orderId] ?: it }
                 }
             } finally {
                 withContext(Dispatchers.Main) { isLoadingMarket = false }
@@ -383,8 +481,19 @@ fun OrdersScreen(context: ViewContext?) {
         scope.launch(Dispatchers.IO) {
             withContext(Dispatchers.Main) { isLoading = true }
             try {
+                val taxConfig =
+                    CostBasisService.TaxConfig(
+                        salesTaxPct = StaticDataDao.getCharSalesTax(acting),
+                        brokerFeePct = StaticDataDao.getCharBrokersFee(acting),
+                    )
+                val relistDiscount = OrderFeeService.relistDiscountPct(StaticDataDao.getCharRelistSkillLevel(acting))
+
                 val raw = if (corp != null) EsiClient.getCorporationOrders(corp, acting) else EsiClient.getCharacterOrders(cid!!)
-                val parsed = raw.map { m -> parseOrder(m, if (corp != null) (m["issued_by"] as? Number)?.toInt() else null) }
+                val freshlyParsed = raw.map { m -> parseOrder(m, if (corp != null) (m["issued_by"] as? Number)?.toInt() else null) }
+                // Diff against the last-known snapshot before overwriting it, so a price change
+                // detected here gets counted as a relist (see mergeRelistStats).
+                val previousSnapshot = ActiveOrderDao.getAll(characterId = cid, corporationId = corp).associateBy { it.orderId }
+                val parsed = mergeRelistStats(previousSnapshot, freshlyParsed, taxConfig.brokerFeePct, relistDiscount)
                 withContext(Dispatchers.Main) { orders = parsed }
                 if (corp != null) resolveIssuerNames(parsed.mapNotNull { it.issuedByCharId }.toSet())
                 ActiveOrderDao.replaceAll(cid, corp, parsed.map { it.toActiveOrderRecord(cid, corp) })
@@ -458,11 +567,6 @@ fun OrdersScreen(context: ViewContext?) {
                 } catch (_: Exception) {
                 }
 
-                val taxConfig =
-                    CostBasisService.TaxConfig(
-                        salesTaxPct = StaticDataDao.getCharSalesTax(acting),
-                        brokerFeePct = StaticDataDao.getCharBrokersFee(acting),
-                    )
                 val fifo = CostBasisService.compute(characterId = cid, corporationId = corp, taxConfig = taxConfig)
                 val expiry =
                     if (corp != null) {
@@ -472,6 +576,7 @@ fun OrdersScreen(context: ViewContext?) {
                     }
                 withContext(Dispatchers.Main) {
                     fifoResult = fifo
+                    relistDiscountPct = relistDiscount
                     refreshAvailableAt = expiry
                 }
 
@@ -537,9 +642,12 @@ fun OrdersScreen(context: ViewContext?) {
             when (event) {
                 is MarketLogEvent.MyOrdersImported -> {
                     if (corpId == null && event.charId == charId) {
-                        val parsed = event.rows.map { parseOrder(it.toEsiOrderMap(), issuedByCharId = null) }
-                        orders = parsed
+                        val brokerFeePct = (fifoResult?.taxConfig ?: CostBasisService.TaxConfig()).brokerFeePct
+                        val freshlyParsed = event.rows.map { parseOrder(it.toEsiOrderMap(), issuedByCharId = null) }
                         withContext(Dispatchers.IO) {
+                            val previousSnapshot = ActiveOrderDao.getAll(characterId = charId).associateBy { it.orderId }
+                            val parsed = mergeRelistStats(previousSnapshot, freshlyParsed, brokerFeePct, relistDiscountPct)
+                            withContext(Dispatchers.Main) { orders = parsed }
                             ActiveOrderDao.replaceAll(charId, null, parsed.map { it.toActiveOrderRecord(charId, null) })
                             EsiClient.invalidateEndpointCache("/characters/$charId/orders/")
                         }
@@ -556,10 +664,15 @@ fun OrdersScreen(context: ViewContext?) {
                                 rowCorp != null && rowCorp != corp
                             }
                         if (!mismatch) {
-                            val parsed = event.rows.map { parseOrder(it.toEsiOrderMap(), issuedByCharId = it.charId) }
-                            orders = parsed
-                            resolveIssuerNames(parsed.mapNotNull { it.issuedByCharId }.toSet())
+                            val brokerFeePct = (fifoResult?.taxConfig ?: CostBasisService.TaxConfig()).brokerFeePct
+                            val freshlyParsed = event.rows.map { parseOrder(it.toEsiOrderMap(), issuedByCharId = it.charId) }
                             withContext(Dispatchers.IO) {
+                                val previousSnapshot = ActiveOrderDao.getAll(corporationId = corp).associateBy { it.orderId }
+                                val parsed = mergeRelistStats(previousSnapshot, freshlyParsed, brokerFeePct, relistDiscountPct)
+                                withContext(Dispatchers.Main) {
+                                    orders = parsed
+                                    resolveIssuerNames(parsed.mapNotNull { it.issuedByCharId }.toSet())
+                                }
                                 ActiveOrderDao.replaceAll(null, corp, parsed.map { it.toActiveOrderRecord(null, corp) })
                                 EsiClient.invalidateEndpointCache("/corporations/$corp/orders/")
                             }
@@ -597,6 +710,8 @@ fun OrdersScreen(context: ViewContext?) {
                     CostBasisService.compute(characterId = charId, corporationId = corpId, taxConfig = taxConfig)
                 }
             fifoResult = fifo
+            relistDiscountPct =
+                withContext(Dispatchers.IO) { OrderFeeService.relistDiscountPct(StaticDataDao.getCharRelistSkillLevel(acting)) }
             loadOrders()
         } else {
             PendingOrdersQueue.clear()
@@ -841,30 +956,44 @@ fun OrdersScreen(context: ViewContext?) {
                 }
                 else -> {
                     val filtered = if (activeTab == 0) sellOrders else buyOrders
-                    val sorted = applySort(filtered, sortCol, sortDir)
-                    if (sorted.isEmpty() && !isLoading) {
+                    if (filtered.isEmpty() && !isLoading) {
                         EmptyState(
                             icon = Icons.Default.Receipt,
                             title = if (activeTab == 0) "No Sell Orders" else "No Buy Orders",
                             description = if (context == null) "Add a character to view orders." else "No active orders.",
                         )
                     } else if (activeTab == 0) {
-                        SellOrdersTable(
-                            orders = sorted,
-                            sortCol = sortCol,
-                            sortDir = sortDir,
-                            onSort = ::onSort,
-                            inventory = inventory,
-                            taxConfig = tax,
-                            historyCostBasis = historyCostBasis,
-                            comparisons = marketComparisons,
-                            selectedOrderId = selectedOrderId,
-                            activeOrderId = activeOrderId,
-                            issuerNames = if (corpId != null) issuerNames else null,
-                            onSelect = { id -> selectedOrderId = if (selectedOrderId == id) null else id },
-                            onAction = { order -> triggerOrderAction(order) },
-                        )
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.End,
+                            ) {
+                                FilterChip(
+                                    selected = showBeatenOnly,
+                                    onClick = { showBeatenOnly = !showBeatenOnly },
+                                    label = { Text(if (showBeatenOnly) "Beaten only" else "All orders") },
+                                    leadingIcon = if (showBeatenOnly) beatenFilterIcon else null,
+                                )
+                            }
+                            SellOrdersTable(
+                                orders = filtered,
+                                sortCol = sortCol,
+                                sortDir = sortDir,
+                                onSort = ::onSort,
+                                inventory = inventory,
+                                taxConfig = tax,
+                                historyCostBasis = historyCostBasis,
+                                comparisons = marketComparisons,
+                                relistDiscountPct = relistDiscountPct,
+                                showBeatenOnly = showBeatenOnly,
+                                selectedOrderId = selectedOrderId,
+                                activeOrderId = activeOrderId,
+                                onSelect = { id -> selectedOrderId = if (selectedOrderId == id) null else id },
+                                onAction = { order -> triggerOrderAction(order) },
+                            )
+                        }
                     } else {
+                        val sorted = applySort(filtered, sortCol, sortDir)
                         BuyOrdersTable(
                             orders = sorted,
                             sortCol = sortCol,
@@ -874,7 +1003,6 @@ fun OrdersScreen(context: ViewContext?) {
                             comparisons = marketComparisons,
                             selectedOrderId = selectedOrderId,
                             activeOrderId = activeOrderId,
-                            issuerNames = if (corpId != null) issuerNames else null,
                             onSelect = { id -> selectedOrderId = if (selectedOrderId == id) null else id },
                             onAction = { order -> triggerOrderAction(order) },
                         )
@@ -914,12 +1042,89 @@ private fun applySort(
             SortCol.TOTAL -> list.sortedBy { it.total }
             SortCol.TIME_LEFT -> list.sortedBy { it.timeLeftSeconds }
             SortCol.ORDER_AGE -> list.sortedBy { it.orderAgeSeconds }
-            SortCol.STATION -> list.sortedBy { it.stationName }
+            // Sell-only derived columns -- not applicable here (Buy has no cost basis / relist
+            // margin concept the same way); leave order unchanged rather than crash.
+            SortCol.COST, SortCol.RELIST, SortCol.PROFIT, SortCol.MARGIN, SortCol.BEST_MARGIN -> list
+        }
+    return if (dir == SortDir.DESC) sorted.reversed() else sorted
+}
+
+// Sell-only: sorts by a value derived from cost basis / market comparison, neither of which lives
+// on CharacterOrder itself -- computed once per row in computeSellMetrics, sorted here.
+private fun sortSellMetrics(
+    list: List<SellOrderMetrics>,
+    col: SortCol,
+    dir: SortDir,
+): List<SellOrderMetrics> {
+    val sorted =
+        when (col) {
+            SortCol.NAME -> list.sortedBy { it.order.typeName }
+            SortCol.COST -> list.sortedBy { it.costBasis ?: Double.NEGATIVE_INFINITY }
+            SortCol.PRICE -> list.sortedBy { it.order.price }
+            SortCol.RELIST -> list.sortedBy { it.order.relistFeesPaid }
+            SortCol.PROFIT -> list.sortedBy { it.totalProfit ?: Double.NEGATIVE_INFINITY }
+            SortCol.MARGIN -> list.sortedBy { it.marginPct ?: Double.NEGATIVE_INFINITY }
+            SortCol.BEST_MARGIN -> list.sortedBy { it.bestMarginPct ?: Double.NEGATIVE_INFINITY }
+            SortCol.VOLUME -> list.sortedBy { it.order.volumeRemaining }
+            SortCol.TIME_LEFT -> list.sortedBy { it.order.timeLeftSeconds }
+            SortCol.TOTAL, SortCol.ORDER_AGE -> list // Buy-only columns, not shown here
         }
     return if (dir == SortDir.DESC) sorted.reversed() else sorted
 }
 
 // ── Tables ────────────────────────────────────────────────────────────────
+
+// Every per-row derived value the Sell table shows or sorts by, computed once so sorting doesn't
+// have to re-derive it and rows don't duplicate the math.
+private data class SellOrderMetrics(
+    val order: CharacterOrder,
+    val comparison: MarketComparison?,
+    val costBasis: Double?,
+    val isEstimated: Boolean,
+    val totalProfit: Double?,
+    val marginPct: Double?,
+    val bestMarginPct: Double?,
+    val updatesRemaining: Int?,
+    // Beaten: another sell order at the same station is currently cheaper than ours.
+    val isBeaten: Boolean,
+)
+
+private fun computeSellMetrics(
+    order: CharacterOrder,
+    inventory: Map<Int, CostBasisService.InventoryItem>,
+    historyCostBasis: Map<Int, Double>,
+    taxConfig: CostBasisService.TaxConfig,
+    comparisons: Map<Pair<Int, Long>, MarketComparison>,
+    relistDiscountPct: Double,
+): SellOrderMetrics {
+    val comparison = comparisons[order.typeId to order.locationId]
+    val costBasis = inventory[order.typeId]?.avgCostBasis ?: historyCostBasis[order.typeId]
+    val isEstimated = inventory[order.typeId] == null && costBasis != null
+    val netSellPrice = order.price * taxConfig.sellMultiplier
+    // Whole remaining position, not per-unit: profit/margin should reflect what this order
+    // actually nets after the relist fees already sunk into it, not just its current listed price.
+    val totalProfit = costBasis?.let { order.volumeRemaining * (netSellPrice - it) - order.relistFeesPaid }
+    val marginPct =
+        costBasis?.let { cb ->
+            totalProfit?.let { p -> if (cb > 0 && order.volumeRemaining > 0) p / (cb * order.volumeRemaining) * 100 else null }
+        }
+    // "If I matched the top competing sell price instead" against my own cost basis -- not the
+    // region market-flip metric BuyOrderRow uses, since a sell order already owns the item.
+    val bestMarginPct = sellMarginPct(comparison?.bestSell, costBasis, taxConfig)
+    val updatesRemaining =
+        OrderFeeService.estimateUpdatesRemaining(
+            volumeRemaining = order.volumeRemaining,
+            price = order.price,
+            netSellPricePerUnit = netSellPrice,
+            costBasis = costBasis,
+            brokerFeePct = taxConfig.brokerFeePct,
+            relistCount = order.relistCount,
+            relistFeesPaid = order.relistFeesPaid,
+            relistDiscountPct = relistDiscountPct,
+        )
+    val isBeaten = comparison?.bestSell != null && comparison.bestSell < order.price
+    return SellOrderMetrics(order, comparison, costBasis, isEstimated, totalProfit, marginPct, bestMarginPct, updatesRemaining, isBeaten)
+}
 
 @Composable
 private fun SellOrdersTable(
@@ -931,13 +1136,20 @@ private fun SellOrdersTable(
     taxConfig: CostBasisService.TaxConfig,
     historyCostBasis: Map<Int, Double>,
     comparisons: Map<Pair<Int, Long>, MarketComparison>,
+    relistDiscountPct: Double,
+    showBeatenOnly: Boolean,
     selectedOrderId: Long?,
     activeOrderId: Long?,
-    // Non-null only in corp view: issuedByCharId -> name, shown as a "Character" column.
-    issuerNames: Map<Int, String>?,
     onSelect: (Long) -> Unit,
     onAction: (CharacterOrder) -> Unit,
 ) {
+    val metrics =
+        remember(orders, inventory, historyCostBasis, taxConfig, comparisons, relistDiscountPct) {
+            orders.map { computeSellMetrics(it, inventory, historyCostBasis, taxConfig, comparisons, relistDiscountPct) }
+        }
+    val visible = if (showBeatenOnly) metrics.filter { it.isBeaten } else metrics
+    val sorted = sortSellMetrics(visible, sortCol, sortDir)
+
     Column {
         Row(
             modifier =
@@ -949,15 +1161,14 @@ private fun SellOrdersTable(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SortHeader("Name", SortCol.NAME, sortCol, sortDir, onSort, Modifier.weight(3f))
-            if (issuerNames != null) StaticHeader("Character", Modifier.weight(2f))
-            StaticHeader("Price / Best", Modifier.weight(2.4f))
-            StaticHeader("Cost", Modifier.weight(1.8f))
-            StaticHeader("Profit", Modifier.weight(1.8f))
-            StaticHeader("Margin", Modifier.weight(1.2f))
-            StaticHeader("Best Margin", Modifier.weight(1.4f))
+            SortHeader("Cost", SortCol.COST, sortCol, sortDir, onSort, Modifier.weight(1.8f))
+            SortHeader("Price / Best", SortCol.PRICE, sortCol, sortDir, onSort, Modifier.weight(2.4f))
+            SortHeader("Relist", SortCol.RELIST, sortCol, sortDir, onSort, Modifier.weight(1.8f))
+            SortHeader("Profit", SortCol.PROFIT, sortCol, sortDir, onSort, Modifier.weight(1.8f))
+            SortHeader("Margin", SortCol.MARGIN, sortCol, sortDir, onSort, Modifier.weight(1.2f))
+            SortHeader("Best Margin", SortCol.BEST_MARGIN, sortCol, sortDir, onSort, Modifier.weight(1.4f))
             SortHeader("Volume", SortCol.VOLUME, sortCol, sortDir, onSort, Modifier.weight(2.5f))
             SortHeader("Time Left", SortCol.TIME_LEFT, sortCol, sortDir, onSort, Modifier.weight(1.5f))
-            SortHeader("Station", SortCol.STATION, sortCol, sortDir, onSort, Modifier.weight(2.5f))
             StaticHeader("", Modifier.width(36.dp))
         }
         HorizontalDivider()
@@ -965,25 +1176,18 @@ private fun SellOrdersTable(
         // The hotkey cycles activeOrderId through the list, but the highlighted row moves
         // independently of scroll position — without this, cycling can walk the active row
         // off-screen with no visual indication of where it went.
-        LaunchedEffect(activeOrderId, orders) {
-            val idx = orders.indexOfFirst { it.orderId == activeOrderId }
+        LaunchedEffect(activeOrderId, sorted) {
+            val idx = sorted.indexOfFirst { it.order.orderId == activeOrderId }
             if (idx >= 0) listState.ensureVisible(idx)
         }
         LazyColumn(state = listState) {
-            items(orders, key = { it.orderId }) { order ->
-                val comp = comparisons[order.typeId to order.locationId]
+            items(sorted, key = { it.order.orderId }) { m ->
                 SellOrderRow(
-                    order = order,
-                    inv = inventory[order.typeId],
-                    taxConfig = taxConfig,
-                    fallbackCost = historyCostBasis[order.typeId],
-                    comparison = comp,
-                    isSelected = selectedOrderId == order.orderId,
-                    isActiveInGame = activeOrderId == order.orderId,
-                    issuerName = issuerNames?.let { order.issuedByCharId?.let { id -> it[id] } },
-                    showCharacterColumn = issuerNames != null,
-                    onSelect = { onSelect(order.orderId) },
-                    onAction = { onAction(order) },
+                    metrics = m,
+                    isSelected = selectedOrderId == m.order.orderId,
+                    isActiveInGame = activeOrderId == m.order.orderId,
+                    onSelect = { onSelect(m.order.orderId) },
+                    onAction = { onAction(m.order) },
                 )
                 HorizontalDivider(thickness = 0.5.dp)
             }
@@ -1001,7 +1205,6 @@ private fun BuyOrdersTable(
     comparisons: Map<Pair<Int, Long>, MarketComparison>,
     selectedOrderId: Long?,
     activeOrderId: Long?,
-    issuerNames: Map<Int, String>?,
     onSelect: (Long) -> Unit,
     onAction: (CharacterOrder) -> Unit,
 ) {
@@ -1016,7 +1219,6 @@ private fun BuyOrdersTable(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SortHeader("Name", SortCol.NAME, sortCol, sortDir, onSort, Modifier.weight(3f))
-            if (issuerNames != null) StaticHeader("Character", Modifier.weight(2f))
             StaticHeader("Price / Best", Modifier.weight(2.4f))
             StaticHeader("Margin", Modifier.weight(1.2f))
             StaticHeader("Best Margin", Modifier.weight(1.4f))
@@ -1024,7 +1226,7 @@ private fun BuyOrdersTable(
             SortHeader("Total", SortCol.TOTAL, sortCol, sortDir, onSort, Modifier.weight(2f))
             SortHeader("Time Left", SortCol.TIME_LEFT, sortCol, sortDir, onSort, Modifier.weight(1.5f))
             SortHeader("Order Age", SortCol.ORDER_AGE, sortCol, sortDir, onSort, Modifier.weight(1.5f))
-            SortHeader("Station", SortCol.STATION, sortCol, sortDir, onSort, Modifier.weight(3f))
+            StaticHeader("Relist", Modifier.weight(1.6f))
             StaticHeader("", Modifier.width(36.dp))
         }
         HorizontalDivider()
@@ -1045,8 +1247,6 @@ private fun BuyOrdersTable(
                     comparison = comp,
                     isSelected = selectedOrderId == order.orderId,
                     isActiveInGame = activeOrderId == order.orderId,
-                    issuerName = issuerNames?.let { order.issuedByCharId?.let { id -> it[id] } },
-                    showCharacterColumn = issuerNames != null,
                     onSelect = { onSelect(order.orderId) },
                     onAction = { onAction(order) },
                 )
@@ -1141,29 +1341,22 @@ private fun InventoryTable(
 
 @Composable
 private fun SellOrderRow(
-    order: CharacterOrder,
-    inv: CostBasisService.InventoryItem?,
-    taxConfig: CostBasisService.TaxConfig,
-    fallbackCost: Double?,
-    comparison: MarketComparison?,
+    metrics: SellOrderMetrics,
     isSelected: Boolean,
     isActiveInGame: Boolean,
-    issuerName: String?,
-    showCharacterColumn: Boolean,
     onSelect: () -> Unit,
     onAction: () -> Unit,
 ) {
-    val costBasis = inv?.avgCostBasis ?: fallbackCost
-    val isEstimated = inv == null && costBasis != null
-    val netSellPrice = order.price * taxConfig.sellMultiplier
-    val profitPerUnit = costBasis?.let { netSellPrice - it }
-    val marginPct = costBasis?.let { if (it > 0) (netSellPrice - it) / it * 100 else null }
-    val profitColor = profitPerUnit?.let { if (it >= 0) PROFIT_COLOR else LOSS_COLOR } ?: MaterialTheme.colorScheme.onSurfaceVariant
-    val bestMarginPct = computeBestMarginPct(comparison, taxConfig)
+    val order = metrics.order
+    val comparison = metrics.comparison
+    val costBasis = metrics.costBasis
+    val isEstimated = metrics.isEstimated
+    val totalProfit = metrics.totalProfit
+    val marginPct = metrics.marginPct
+    val bestMarginPct = metrics.bestMarginPct
+    val isBeaten = metrics.isBeaten
+    val profitColor = totalProfit?.let { if (it >= 0) PROFIT_COLOR else LOSS_COLOR } ?: MaterialTheme.colorScheme.onSurfaceVariant
     val bestMarginColor = bestMarginPct?.let { if (it >= 0) PROFIT_COLOR else LOSS_COLOR } ?: MaterialTheme.colorScheme.onSurfaceVariant
-
-    // Undercut: another sell order is cheaper than ours
-    val isUndercut = comparison?.bestSell != null && comparison.bestSell < order.price
     val rowBg =
         when {
             isActiveInGame -> ACTIVE_IN_GAME.copy(alpha = 0.15f)
@@ -1187,37 +1380,10 @@ private fun SellOrderRow(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             StatusDot(order.state)
-            if (isUndercut) {
+            if (isBeaten) {
                 Icon(Icons.Default.ArrowDownward, contentDescription = "Undercut", modifier = Modifier.size(11.dp), tint = UNDERCUT_COLOR)
             }
             Text(order.typeName, style = MaterialTheme.typography.bodyMedium, overflow = TextOverflow.Ellipsis, maxLines = 1)
-        }
-
-        if (showCharacterColumn) {
-            Text(
-                issuerName ?: "—",
-                modifier = Modifier.weight(2f),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                overflow = TextOverflow.Ellipsis,
-                maxLines = 1,
-            )
-        }
-
-        // Price column: order price + competing price below if undercut
-        Column(modifier = Modifier.weight(2.4f)) {
-            Text(
-                formatIsk(order.price),
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (isUndercut) UNDERCUT_COLOR else SELL_COLOR,
-            )
-            if (isUndercut) {
-                Text(
-                    "Best: ${formatIsk(comparison.bestSell)}",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                    color = UNDERCUT_COLOR.copy(alpha = 0.8f),
-                )
-            }
         }
 
         Text(
@@ -1231,12 +1397,32 @@ private fun SellOrderRow(
                     MaterialTheme.colorScheme.onSurfaceVariant
                 },
         )
+
+        // Price column: order price + competing price below if beaten
+        Column(modifier = Modifier.weight(2.4f)) {
+            Text(
+                formatIsk(order.price),
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (isBeaten) UNDERCUT_COLOR else SELL_COLOR,
+            )
+            val bestSell = comparison?.bestSell
+            if (isBeaten && bestSell != null) {
+                Text(
+                    "Best: ${formatIsk(bestSell)}",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                    color = UNDERCUT_COLOR.copy(alpha = 0.8f),
+                )
+            }
+        }
+
+        RelistCell(order.relistCount, order.relistFeesPaid, metrics.updatesRemaining, modifier = Modifier.weight(1.8f))
+
         Text(
-            profitPerUnit?.let { (if (isEstimated) "~" else "") + formatIsk(it) } ?: "—",
+            totalProfit?.let { (if (isEstimated) "~" else "") + formatIsk(it) } ?: "—",
             modifier = Modifier.weight(1.8f),
             style = MaterialTheme.typography.bodySmall,
             color = if (isEstimated) profitColor.copy(alpha = 0.7f) else profitColor,
-            fontWeight = if (profitPerUnit != null) FontWeight.SemiBold else FontWeight.Normal,
+            fontWeight = if (totalProfit != null) FontWeight.SemiBold else FontWeight.Normal,
         )
         Text(
             marginPct?.let { (if (isEstimated) "~" else "") + "%.1f%%".format(it) } ?: "—",
@@ -1257,14 +1443,6 @@ private fun SellOrderRow(
             style = MaterialTheme.typography.bodySmall,
             color = timeLeftColor(order.timeLeftSeconds),
         )
-        Text(
-            order.stationName,
-            modifier = Modifier.weight(2.5f).padding(start = 4.dp),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            overflow = TextOverflow.Ellipsis,
-            maxLines = 1,
-        )
 
         // Action button: open market in-game + copy overbid price
         IconButton(modifier = Modifier.size(36.dp), onClick = onAction) {
@@ -1275,9 +1453,35 @@ private fun SellOrderRow(
                 tint =
                     when {
                         isActiveInGame -> ACTIVE_IN_GAME
-                        isUndercut -> UNDERCUT_COLOR
+                        isBeaten -> UNDERCUT_COLOR
                         else -> MaterialTheme.colorScheme.onSurfaceVariant
                     },
+            )
+        }
+    }
+}
+
+// Modification fees paid so far ("N× · total") plus an estimated countdown to zero margin
+// ("~N left"), stacked like the Price column's undercut sub-line. updatesRemaining is omitted
+// (buy orders, or no cost basis to estimate against) rather than shown as a misleading "—".
+@Composable
+private fun RelistCell(
+    relistCount: Int,
+    relistFeesPaid: Double,
+    updatesRemaining: Int?,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Text(
+            if (relistCount > 0) "$relistCount× · ${formatIsk(relistFeesPaid)}" else "—",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (updatesRemaining != null) {
+            Text(
+                "~$updatesRemaining left",
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             )
         }
     }
@@ -1290,8 +1494,6 @@ private fun BuyOrderRow(
     comparison: MarketComparison?,
     isSelected: Boolean,
     isActiveInGame: Boolean,
-    issuerName: String?,
-    showCharacterColumn: Boolean,
     onSelect: () -> Unit,
     onAction: () -> Unit,
 ) {
@@ -1328,17 +1530,6 @@ private fun BuyOrderRow(
                 Icon(Icons.Default.ArrowUpward, contentDescription = "Overbid", modifier = Modifier.size(11.dp), tint = UNDERCUT_COLOR)
             }
             Text(order.typeName, style = MaterialTheme.typography.bodyMedium, overflow = TextOverflow.Ellipsis, maxLines = 1)
-        }
-
-        if (showCharacterColumn) {
-            Text(
-                issuerName ?: "—",
-                modifier = Modifier.weight(2f),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                overflow = TextOverflow.Ellipsis,
-                maxLines = 1,
-            )
         }
 
         // Price column: order price + competing price below if overbid
@@ -1379,14 +1570,9 @@ private fun BuyOrderRow(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Text(
-            order.stationName,
-            modifier = Modifier.weight(3f).padding(start = 4.dp),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            overflow = TextOverflow.Ellipsis,
-            maxLines = 1,
-        )
+        // No "~N left" estimate here: unlike a sell order, a buy order has no committed cost
+        // basis yet to measure remaining margin against, only a speculative future resale price.
+        RelistCell(order.relistCount, order.relistFeesPaid, updatesRemaining = null, modifier = Modifier.weight(1.6f))
 
         IconButton(modifier = Modifier.size(36.dp), onClick = onAction) {
             Icon(

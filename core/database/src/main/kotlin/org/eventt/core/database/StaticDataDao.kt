@@ -724,6 +724,16 @@ object StaticDataDao {
         pct: Double,
     ) = setSetting("char.$charId.brokers_fee", "%.4f".format(pct))
 
+    // Advanced Broker Relations (formerly Margin Trading) skill level, 0-5 -- sets the Relist
+    // Discount applied when modifying a market order's price. Manually configured like the other
+    // character fee settings above, rather than fetched from ESI's skills endpoint.
+    fun getCharRelistSkillLevel(charId: Int): Int = getSetting("char.$charId.relist_skill_level")?.toIntOrNull() ?: 0
+
+    fun setCharRelistSkillLevel(
+        charId: Int,
+        level: Int,
+    ) = setSetting("char.$charId.relist_skill_level", level.coerceIn(0, 5).toString())
+
     // ─── Helpers ──────────────────────────────────────────────────────────
 
     private fun java.sql.ResultSet.mapResultSetToType(): StaticTypeModel =

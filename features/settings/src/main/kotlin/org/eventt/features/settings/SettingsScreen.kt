@@ -662,6 +662,14 @@ private fun CharacterFeesCard() {
                 }
             }
         }
+    val relistSkillValues =
+        remember {
+            mutableStateMapOf<Int, String>().also { map ->
+                characters.forEach { char ->
+                    map[char.id] = StaticDataDao.getCharRelistSkillLevel(char.id).toString()
+                }
+            }
+        }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -705,6 +713,21 @@ private fun CharacterFeesCard() {
                                 }
                             },
                             modifier = Modifier.width(140.dp),
+                        )
+
+                        OutlinedTextField(
+                            value = relistSkillValues[char.id] ?: "0",
+                            onValueChange = { v ->
+                                val filtered = v.filter { it.isDigit() }.take(1)
+                                relistSkillValues[char.id] = filtered
+                                filtered.toIntOrNull()?.let { level ->
+                                    scope.launch(Dispatchers.IO) { StaticDataDao.setCharRelistSkillLevel(char.id, level.coerceIn(0, 5)) }
+                                }
+                            },
+                            label = { Text("Adv. Broker Relations Lvl", style = MaterialTheme.typography.labelSmall) },
+                            singleLine = true,
+                            modifier = Modifier.width(180.dp),
+                            textStyle = MaterialTheme.typography.bodyMedium,
                         )
 
                         val tax = salesTaxValues[char.id]?.toDoubleOrNull() ?: 0.0
