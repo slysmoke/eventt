@@ -28,6 +28,7 @@ import org.eventt.core.database.AppState
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.marketlogs.MarketLogEvent
 import org.eventt.core.marketlogs.MarketLogWatcher
+import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.eveOutbidPrice
 import org.eventt.core.model.eveUndercutPrice
 import org.eventt.core.model.formatEveSigFigPrice
@@ -181,19 +182,34 @@ private fun OverlayContent(
                 // Prefer orders actually in this system (0 jumps); only fall back to the whole
                 // region if none are local — same scoping for the best price as for the buyout/
                 // sellout totals below, so they describe the same population of orders.
-                val sellRowsUsed = event.sellRows.filter { it.jumps == 0 }.ifEmpty { event.sellRows }
-                val buyRowsUsed = event.buyRows.filter { it.jumps == 0 }.ifEmpty { event.buyRows }
+                // PLEX is the exception: it trades in one global virtual market, so station or
+                // jumps scoping is meaningless and the whole exported book is used as-is.
+                val isGlobalMarket = event.typeId == PLEX_TYPE_ID
+                val sellRowsUsed =
+                    if (isGlobalMarket) event.sellRows else event.sellRows.filter { it.jumps == 0 }.ifEmpty { event.sellRows }
+                val buyRowsUsed =
+                    if (isGlobalMarket) event.buyRows else event.buyRows.filter { it.jumps == 0 }.ifEmpty { event.buyRows }
                 val bestSell = sellRowsUsed.minByOrNull { it.price }
                 val bestBuy = buyRowsUsed.maxByOrNull { it.price }
                 bestSell?.let {
                     sellPrice = it.price
-                    sellLoc = StaticDataDao.getStationById(it.stationId)?.name ?: it.stationId.toString()
+                    sellLoc =
+                        if (isGlobalMarket) {
+                            "Global market"
+                        } else {
+                            StaticDataDao.getStationById(it.stationId)?.name ?: it.stationId.toString()
+                        }
                     sellSource = PriceSource.FILE
                     sellBook = sellRowsUsed.map { row -> row.price to row.volRemaining.toLong() }
                 }
                 bestBuy?.let {
                     buyPrice = it.price
-                    buyLoc = StaticDataDao.getStationById(it.stationId)?.name ?: it.stationId.toString()
+                    buyLoc =
+                        if (isGlobalMarket) {
+                            "Global market"
+                        } else {
+                            StaticDataDao.getStationById(it.stationId)?.name ?: it.stationId.toString()
+                        }
                     buySource = PriceSource.FILE
                     buyBook = buyRowsUsed.map { row -> row.price to row.volRemaining.toLong() }
                 }

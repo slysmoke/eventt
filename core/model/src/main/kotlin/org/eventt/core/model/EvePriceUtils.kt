@@ -6,6 +6,12 @@ import kotlin.math.log10
 import kotlin.math.pow
 import kotlin.math.round
 
+// PLEX doesn't trade in ordinary regions — CCP settles it in one global virtual market region
+// shared across all of New Eden (not in the SDE; announced by CCP as ID 19000001). Station or
+// system scoping is meaningless for it.
+const val PLEX_TYPE_ID = 44992
+const val PLEX_MARKET_REGION_ID = 19000001
+
 /**
  * Calculates EVE's price tick step size based on 4 significant figures,
  * with a minimum step size (precision) of 0.01 ISK.

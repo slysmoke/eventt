@@ -31,6 +31,8 @@ import org.eventt.core.database.ActiveOrderDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.everef.EveRefService
+import org.eventt.core.model.PLEX_MARKET_REGION_ID
+import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.StaticMarketGroupModel
 import org.eventt.core.model.StaticRegionModel
 import org.eventt.core.model.StaticStationModel

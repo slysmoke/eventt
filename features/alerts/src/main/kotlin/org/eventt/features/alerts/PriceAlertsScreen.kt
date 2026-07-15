@@ -19,15 +19,15 @@ import kotlinx.coroutines.withContext
 import org.eventt.core.database.AlertDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.esi.EsiClient
+import org.eventt.core.model.PLEX_MARKET_REGION_ID
+import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.PriceAlertModel
 import org.eventt.ui.common.*
 import java.util.Locale
 
 private const val JITA_REGION_ID = 10000002
-private const val PLEX_REGION_ID = 19000001
-private const val PLEX_TYPE_ID = 44992
 
-private fun effectiveRegionId(typeId: Int) = if (typeId == PLEX_TYPE_ID) PLEX_REGION_ID else JITA_REGION_ID
+private fun effectiveRegionId(typeId: Int) = if (typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else JITA_REGION_ID
 
 @Composable
 fun PriceAlertsScreen() {

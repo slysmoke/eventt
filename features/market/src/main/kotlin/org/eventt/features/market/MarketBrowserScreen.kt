@@ -43,6 +43,8 @@ import org.eventt.core.database.MarketDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.MarketHistoryModel
+import org.eventt.core.model.PLEX_MARKET_REGION_ID
+import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.PriceAlertModel
 import org.eventt.core.model.StaticMarketGroupModel
 import org.eventt.core.model.StaticTypeModel
@@ -55,10 +57,6 @@ import kotlin.math.floor
 import kotlin.math.log10
 import kotlin.math.pow
 import kotlin.math.roundToInt
-
-// Virtual region for PLEX — not in SDE, announced by CCP as ID 19000001
-const val PLEX_MARKET_REGION_ID = 19000001
-const val PLEX_TYPE_ID = 44992
 
 // Trade hub regions
 val TRADE_HUBS =

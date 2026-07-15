@@ -7,6 +7,8 @@ import androidx.compose.runtime.*
 import org.eventt.core.database.MarketDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.esi.EsiClient
+import org.eventt.core.model.PLEX_MARKET_REGION_ID
+import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.eveSigFigStep
 import kotlin.math.round
 

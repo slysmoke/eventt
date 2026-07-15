@@ -1,6 +1,8 @@
 package org.eventt.features.p2pmarket
 
 import org.eventt.core.esi.EsiClient
+import org.eventt.core.model.PLEX_MARKET_REGION_ID
+import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.nostr.OrderSide
 
 data class SavingsResult(
@@ -14,12 +16,8 @@ data class RecommendedPrice(
     val price: Double,
 )
 
-// PLEX doesn't trade in ordinary regions — CCP settles it in one virtual region shared across all
-// of New Eden (id 19000001, not in the SDE — same special-casing MarketBrowserScreen's own
-// PLEX_MARKET_REGION_ID does). Looking up PLEX orders in whatever region the order form has
-// selected (e.g. The Forge) always comes back empty, since PLEX simply isn't listed there.
-private const val PLEX_TYPE_ID = 44992
-private const val PLEX_MARKET_REGION_ID = 19000001
+// Looking up PLEX orders in whatever region the order form has selected (e.g. The Forge) always
+// comes back empty — PLEX only lists in its global virtual region (PLEX_MARKET_REGION_ID).
 
 // The Forge (Jita) is New Eden's deepest, most liquid market — a recommended price sourced from
 // wherever the order form happens to be posting (a quiet region might have zero relevant orders,
