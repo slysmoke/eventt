@@ -25,6 +25,7 @@ class PendingOrdersQueueTest {
     @AfterEach
     fun tearDown() {
         PendingOrdersQueue.clear()
+        PendingOrdersQueue.onlyBeaten = false
         unmockkObject(EsiClient)
     }
 
@@ -126,6 +127,52 @@ class PendingOrdersQueueTest {
 
         PendingOrdersQueue.processNext()
         PendingOrdersQueue.currentOrderId.value shouldBe 10L
+    }
+
+    @Test
+    fun `queue update keeps the cycle position by orderId`() {
+        PendingOrdersQueue.update(
+            listOf(
+                order(10, "Isogen", isBeaten = false),
+                order(20, "Tritanium", isBeaten = false),
+                order(30, "Zydrine", isBeaten = false),
+            ),
+        )
+        PendingOrdersQueue.processNext()
+        PendingOrdersQueue.currentOrderId.value shouldBe 10L
+
+        // A refresh replaces the queue (same orders, one newly beaten and resorted to the front) —
+        // the cycle must resume after order 10, not restart at the head.
+        PendingOrdersQueue.update(
+            listOf(
+                order(10, "Isogen", isBeaten = false),
+                order(20, "Tritanium", isBeaten = false),
+                order(30, "Zydrine", isBeaten = true),
+            ),
+        )
+        PendingOrdersQueue.processNext()
+        PendingOrdersQueue.currentOrderId.value shouldBe 20L
+    }
+
+    @Test
+    fun `onlyBeaten cycles just the beaten orders`() {
+        PendingOrdersQueue.onlyBeaten = true
+        PendingOrdersQueue.update(
+            listOf(
+                order(10, "Isogen", isBeaten = false),
+                order(20, "Tritanium", isBeaten = true),
+                order(30, "Zydrine", isBeaten = true),
+            ),
+        )
+
+        PendingOrdersQueue.size shouldBe 2
+
+        PendingOrdersQueue.processNext()
+        PendingOrdersQueue.currentOrderId.value shouldBe 20L
+        PendingOrdersQueue.processNext()
+        PendingOrdersQueue.currentOrderId.value shouldBe 30L
+        PendingOrdersQueue.processNext()
+        PendingOrdersQueue.currentOrderId.value shouldBe 20L
     }
 
     @Test

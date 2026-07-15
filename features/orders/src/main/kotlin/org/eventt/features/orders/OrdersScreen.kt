@@ -1,5 +1,6 @@
 package org.eventt.features.orders
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -18,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.ActiveOrderDao
@@ -188,6 +190,17 @@ internal fun mergeRelistStats(
  * order. bestBuy stays region-wide (same value across every station in the region): buy orders
  * carry a range and compete across the whole region regardless of where they're placed.
  */
+private const val NOTIFY_BEATEN_SETTING = "orders.notify_beaten"
+
+// Whether a competitor currently beats this order — a cheaper sell at the same station, or a
+// higher buy region-wide. Single source for the hotkey queue, the header badge, and notifications.
+internal fun CharacterOrder.isBeatenBy(comp: MarketComparison?): Boolean =
+    if (isBuyOrder) {
+        comp?.bestBuy?.let { it > price } ?: false
+    } else {
+        comp?.bestSell?.let { it < price } ?: false
+    }
+
 internal data class MarketComparison(
     val bestSell: Double?, // lowest sell from others at the same station — null means no sell competition there
     val bestBuy: Double?, // highest region-wide buy from others — null means no buy competition
@@ -267,10 +280,19 @@ fun OrdersScreen(context: ViewContext?) {
     // competing buy order region-wide. Off (show all) by default.
     var showOverbidOnly by remember { mutableStateOf(false) }
 
-    // Market comparison data — loaded after orders, shown as overbid indicators.
-    // Refreshed on order load and via the manual "Refresh Prices" button (no auto-refresh:
-    // that used to reset the Ctrl+Z hotkey cycle position every 60s — see PendingOrdersQueue.update).
+    // Market comparison data — loaded after orders, shown as overbid indicators. Refreshed on
+    // order load, via the manual "Refresh Prices" button, and automatically once the ESI cache
+    // expires (safe since the Ctrl+Z cycle keeps its place across updates, keyed by orderId).
     var marketComparisons by remember { mutableStateOf<Map<Pair<Int, Long>, MarketComparison>>(emptyMap()) }
+
+    // Ctrl+Z cycles only beaten orders when on (mirrors PendingOrdersQueue.onlyBeaten).
+    var onlyBeaten by remember { mutableStateOf(PendingOrdersQueue.onlyBeaten) }
+
+    // Tray notification when an order newly becomes beaten. Persisted; default on.
+    var notifyBeaten by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        notifyBeaten = withContext(Dispatchers.IO) { StaticDataDao.getSetting(NOTIFY_BEATEN_SETTING) != "false" }
+    }
     var isLoadingMarket by remember { mutableStateOf(false) }
     var marketComparisonsExpiresAt by remember { mutableStateOf<Long?>(null) }
 
@@ -728,12 +750,7 @@ fun OrdersScreen(context: ViewContext?) {
                 .filter { it.state == "active" }
                 .map { order ->
                     val comp = marketComparisons[order.typeId to order.locationId]
-                    val isBeaten =
-                        if (order.isBuyOrder) {
-                            comp?.bestBuy != null && comp.bestBuy > order.price
-                        } else {
-                            comp?.bestSell != null && comp.bestSell < order.price
-                        }
+                    val isBeaten = order.isBeatenBy(comp)
                     PendingOrder(
                         charId = cid,
                         orderId = order.orderId,
@@ -747,6 +764,37 @@ fun OrdersScreen(context: ViewContext?) {
                     )
                 }
         PendingOrdersQueue.update(pending)
+    }
+
+    // Tray notification for orders that just became beaten — computed over all active orders
+    // (not the tab-scoped hotkey queue) so switching tabs can't re-fire it. The first comparison
+    // snapshot only seeds the seen-set; notifications start from the next change.
+    var seenBeatenIds by remember(context) { mutableStateOf<Set<Long>?>(null) }
+    LaunchedEffect(orders, marketComparisons) {
+        if (marketComparisons.isEmpty()) return@LaunchedEffect
+        val beaten =
+            orders.filter { it.state == "active" && it.isBeatenBy(marketComparisons[it.typeId to it.locationId]) }
+        val prev = seenBeatenIds
+        seenBeatenIds = beaten.map { it.orderId }.toSet()
+        if (prev == null) return@LaunchedEffect
+        val fresh = beaten.filter { it.orderId !in prev }
+        if (fresh.isNotEmpty() && notifyBeaten) {
+            val names = fresh.take(3).joinToString(", ") { it.typeName }
+            val suffix = if (fresh.size > 3) " (+${fresh.size - 3} more)" else ""
+            PendingOrdersQueue.notifier?.invoke("Orders beaten", names + suffix)
+        }
+    }
+
+    // Auto-refresh market comparisons once the ESI cache for every pair has expired, so beaten
+    // detection (and the notification above) stays current without manual clicks.
+    LaunchedEffect(context) {
+        while (true) {
+            delay(30_000)
+            val expiry = marketComparisonsExpiresAt ?: continue
+            if (System.currentTimeMillis() >= expiry && !isLoadingMarket && !isLoading && orders.isNotEmpty()) {
+                fetchMarketComparisons(orders)
+            }
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -797,15 +845,7 @@ fun OrdersScreen(context: ViewContext?) {
                         },
                     )
                 val queueSize = tabActive.size
-                val beatenCount =
-                    tabActive.count { o ->
-                        val comp = marketComparisons[o.typeId to o.locationId]
-                        if (o.isBuyOrder) {
-                            comp?.bestBuy?.let { it > o.price } ?: false
-                        } else {
-                            comp?.bestSell?.let { it < o.price } ?: false
-                        }
-                    }
+                val beatenCount = tabActive.count { it.isBeatenBy(marketComparisons[it.typeId to it.locationId]) }
                 if (queueSize > 0 && actingCharId != null) {
                     Spacer(Modifier.width(4.dp))
                     Surface(
@@ -843,6 +883,18 @@ fun OrdersScreen(context: ViewContext?) {
                                     fontWeight = FontWeight.SemiBold,
                                 )
                             }
+                            Text("·", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                "only beaten",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (onlyBeaten) UNDERCUT_COLOR else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                fontWeight = if (onlyBeaten) FontWeight.SemiBold else FontWeight.Normal,
+                                modifier =
+                                    Modifier.clickable {
+                                        onlyBeaten = !onlyBeaten
+                                        PendingOrdersQueue.onlyBeaten = onlyBeaten
+                                    },
+                            )
                         }
                     }
                 }
@@ -857,6 +909,17 @@ fun OrdersScreen(context: ViewContext?) {
                             issuerNames = issuerNames,
                             selected = issuerFilter,
                             onSelect = { issuerFilter = it },
+                        )
+                    }
+                    IconButton(onClick = {
+                        notifyBeaten = !notifyBeaten
+                        scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(NOTIFY_BEATEN_SETTING, notifyBeaten.toString()) }
+                    }) {
+                        Icon(
+                            if (notifyBeaten) Icons.Default.NotificationsActive else Icons.Default.NotificationsOff,
+                            contentDescription = "Toggle beaten-order notifications",
+                            tint = if (notifyBeaten) UNDERCUT_COLOR else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp),
                         )
                     }
                     TextButton(onClick = { recalculateFifo() }) {

@@ -11,7 +11,6 @@ import org.eventt.core.model.eveSigFigStep
 import org.eventt.core.model.formatEveSigFigPrice
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
-import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.round
 
 data class PendingOrder(
@@ -44,20 +43,37 @@ data class PendingOrder(
  */
 object PendingOrdersQueue {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val cursor = AtomicInteger(0)
 
     @Volatile private var queue: List<PendingOrder> = emptyList()
+
+    // The order the hotkey acted on last. The cycle position derives from it by orderId, so a
+    // queue update (auto price refresh, resort) keeps the user's place instead of resetting it.
+    @Volatile private var lastOrderId: Long? = null
+
+    /** When on, the hotkey cycles only orders currently beaten by a competitor. Toggled from the UI. */
+    @Volatile var onlyBeaten: Boolean = false
+
+    // Set by the app shell at startup; invoked with (title, message) when orders newly become
+    // beaten. Lives here because features:orders has no tray icon or windowing of its own.
+    @Volatile var notifier: ((title: String, message: String) -> Unit)? = null
 
     /** The orderId most recently opened via the hotkey. Observed by OrdersScreen to highlight the row. */
     private val _currentOrderId = MutableStateFlow<Long?>(null)
     val currentOrderId: StateFlow<Long?> = _currentOrderId
 
-    val size: Int get() = queue.size
+    private fun active(): List<PendingOrder> = if (onlyBeaten) queue.filter { it.isBeaten } else queue
 
-    /** Current 1-based position in the cycle, for display. */
+    // Index of the order the next hotkey press will act on: the one after the last-processed
+    // order, by id. If that order left the queue (no longer beaten, filter change), indexOfFirst
+    // returns -1 and the cycle restarts at the most urgent entry.
+    private fun nextIndex(q: List<PendingOrder>): Int = (q.indexOfFirst { it.orderId == lastOrderId } + 1) % q.size
+
+    val size: Int get() = active().size
+
+    /** Current 1-based position in the cycle (the next order the hotkey acts on), for display. */
     val currentPosition: Int get() {
-        val q = queue
-        return if (q.isEmpty()) 0 else (cursor.get() % q.size) + 1
+        val q = active()
+        return if (q.isEmpty()) 0 else nextIndex(q) + 1
     }
 
     /** Replace the queue. Beaten orders sort first, then alphabetically by name. */
@@ -66,12 +82,11 @@ object PendingOrdersQueue {
             orders.sortedWith(
                 compareByDescending<PendingOrder> { it.isBeaten }.thenBy { it.typeName },
             )
-        cursor.set(0)
     }
 
     fun clear() {
         queue = emptyList()
-        cursor.set(0)
+        lastOrderId = null
         _currentOrderId.value = null
     }
 
@@ -81,9 +96,10 @@ object PendingOrdersQueue {
      *   2. Copy the overbid/undercut price (or own price if no competition) to clipboard
      */
     fun processNext() {
-        val q = queue
+        val q = active()
         if (q.isEmpty()) return
-        val order = q[cursor.getAndIncrement() % q.size]
+        val order = q[nextIndex(q)]
+        lastOrderId = order.orderId
         _currentOrderId.value = order.orderId
         scope.launch {
             runCatching { EsiClient.openMarketWindow(order.charId, order.typeId) }

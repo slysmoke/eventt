@@ -18,6 +18,8 @@ import org.eventt.core.model.AppPaths
 import org.eventt.core.model.CharacterModel
 import org.eventt.core.nostr.NostrIdentityService
 import org.eventt.core.nostr.NostrRelayManager
+import org.eventt.features.orders.PendingOrdersQueue
+import org.eventt.notify.TrayNotifier
 import org.eventt.ui.EventtApp
 
 // Fake ESI character ID (outside EVE's real ID range) used only to give the P2P Market
@@ -70,6 +72,9 @@ fun main() {
     // kills the whole JVM (Xlib's default error handler calls exit(), it's not a catchable
     // Java exception) — so the test instance skips registering it entirely.
     if (!isP2pTestInstance) GlobalHotkeyService.start()
+    // Beaten-order tray notifications: OrdersScreen detects the transition, this supplies the
+    // tray (the icon resource and windowing live in the app module, not features:orders).
+    PendingOrdersQueue.notifier = TrayNotifier::notify
     // No separate startup wipe: MarketLogWatcher itself consumes (imports, then deletes) any
     // recognized export already sitting in the folder within its first couple of polls after
     // start() — including one written just before a restart, before it had a chance to be
