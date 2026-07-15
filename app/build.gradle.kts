@@ -120,6 +120,8 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "eventt"
             packageVersion = appVersion
+            description = "Desktop trading toolkit for EVE Online"
+            vendor = "EVE Night Trade Tools"
 
             modules("java.sql", "java.naming")
 
@@ -137,6 +139,8 @@ compose.desktop {
             }
             linux {
                 iconFile.set(project.file("icons/icon.png"))
+                // Becomes the .desktop file's Categories — freedesktop main categories.
+                menuGroup = "Game;Utility"
             }
         }
     }
