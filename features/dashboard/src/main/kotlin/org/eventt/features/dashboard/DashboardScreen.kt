@@ -1,5 +1,6 @@
 package org.eventt.features.dashboard
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
@@ -8,9 +9,15 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -311,6 +318,9 @@ fun DashboardScreen(
             }
         }
 
+        // Daily P&L bars — last 30 calendar days from the same cash-flow breakdown as the cards
+        item { PnlBarChart(txBreakdown) }
+
         // P&L mini cards — FIFO cost-basis (profit only counted once a lot is actually sold)
         if (fifoWindow != null) {
             item {
@@ -495,6 +505,85 @@ private fun PnlMiniCard(
                 fontWeight = FontWeight.SemiBold,
                 color = color,
             )
+        }
+    }
+}
+
+// Diverging daily-net bars around a zero baseline. Scale is asymmetric (top = best day,
+// bottom = worst day) so an all-profit month uses the full height instead of half of it.
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun PnlBarChart(breakdown: List<org.eventt.core.model.DailyWalletEntry>) {
+    // Zero-fill the last 30 calendar days — the breakdown is sparse (active days only),
+    // and missing bars would silently compress time.
+    val days =
+        remember(breakdown) {
+            val today = LocalDate.now()
+            val byDate = breakdown.associateBy { it.date }
+            (29 downTo 0).map { off ->
+                val d = today.minusDays(off.toLong()).toString()
+                d to (byDate[d]?.net ?: 0.0)
+            }
+        }
+    var hovered by remember { mutableStateOf<Int?>(null) }
+
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Daily P&L — 30d", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                val h = hovered
+                Text(
+                    if (h != null) "${days[h].first}   ${formatIsk(days[h].second, showSign = true)}" else "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color =
+                        when {
+                            h == null -> Color.Unspecified
+                            days[h].second >= 0 -> POSITIVE
+                            else -> NEGATIVE
+                        },
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            if (days.all { it.second == 0.0 }) {
+                EmptyHint("No wallet activity in the last 30 days")
+            } else {
+                val baseline = MaterialTheme.colorScheme.outlineVariant
+                val maxPos = days.maxOf { it.second }.coerceAtLeast(0.0)
+                val maxNeg = -days.minOf { it.second }.coerceAtLeast(0.0)
+                val range = (maxPos + maxNeg).takeIf { it > 0 } ?: 1.0
+                Canvas(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(110.dp)
+                            .onPointerEvent(PointerEventType.Move) { event ->
+                                val x =
+                                    event.changes
+                                        .first()
+                                        .position.x
+                                hovered = (x / (size.width / days.size.toFloat())).toInt().coerceIn(0, days.lastIndex)
+                            }.onPointerEvent(PointerEventType.Exit) { hovered = null },
+                ) {
+                    val slot = size.width / days.size
+                    val barWidth = (slot - 2f).coerceAtLeast(1f)
+                    val zeroY = (size.height * (maxPos / range)).toFloat()
+                    days.forEachIndexed { i, (_, net) ->
+                        if (net == 0.0) return@forEachIndexed
+                        val h = (kotlin.math.abs(net) / range * size.height).toFloat()
+                        drawRoundRect(
+                            color = (if (net > 0) POSITIVE else NEGATIVE).copy(alpha = if (hovered == i) 1f else 0.75f),
+                            topLeft = Offset(i * slot + 1f, if (net > 0) zeroY - h else zeroY),
+                            size = Size(barWidth, h),
+                            cornerRadius = CornerRadius(2f, 2f),
+                        )
+                    }
+                    drawLine(baseline, Offset(0f, zeroY), Offset(size.width, zeroY), strokeWidth = 1f)
+                }
+            }
         }
     }
 }
