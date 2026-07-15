@@ -15,8 +15,52 @@ data class HotkeyKey(
     val id: Int,
 ) {
     companion object {
-        val CTRL_Z = HotkeyKey(label = "Ctrl+Z", win32VkCode = 0x5A, x11KeyString = "z", macVkCode = 0x06, id = 1)
-        val CTRL_M = HotkeyKey(label = "Ctrl+M", win32VkCode = 0x4D, x11KeyString = "m", macVkCode = 0x2E, id = 2)
+        // macOS virtual keycodes for letters follow no alphabetical order (ANSI layout codes).
+        private val MAC_VK =
+            mapOf(
+                'A' to 0x00,
+                'B' to 0x0B,
+                'C' to 0x08,
+                'D' to 0x02,
+                'E' to 0x0E,
+                'F' to 0x03,
+                'G' to 0x05,
+                'H' to 0x04,
+                'I' to 0x22,
+                'J' to 0x26,
+                'K' to 0x28,
+                'L' to 0x25,
+                'M' to 0x2E,
+                'N' to 0x2D,
+                'O' to 0x1F,
+                'P' to 0x23,
+                'Q' to 0x0C,
+                'R' to 0x0F,
+                'S' to 0x01,
+                'T' to 0x11,
+                'U' to 0x20,
+                'V' to 0x09,
+                'W' to 0x0D,
+                'X' to 0x07,
+                'Y' to 0x10,
+                'Z' to 0x06,
+            )
+
+        /** Ctrl + a single letter — the only combo shape this app registers. */
+        fun ctrlLetter(
+            letter: Char,
+            id: Int,
+        ): HotkeyKey {
+            val u = letter.uppercaseChar()
+            require(u in 'A'..'Z') { "hotkey letter must be A-Z, got '$letter'" }
+            return HotkeyKey(
+                label = "Ctrl+$u",
+                win32VkCode = 0x41 + (u - 'A'),
+                x11KeyString = u.lowercaseChar().toString(),
+                macVkCode = MAC_VK.getValue(u),
+                id = id,
+            )
+        }
     }
 }
 

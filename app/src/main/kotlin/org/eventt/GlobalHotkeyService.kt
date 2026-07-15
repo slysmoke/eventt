@@ -1,5 +1,7 @@
 package org.eventt
 
+import org.eventt.core.database.StaticDataDao
+import org.eventt.core.model.HotkeyBindings
 import org.eventt.features.market.InterRegionQueue
 import org.eventt.features.market.MarketAnalysisRouter
 import org.eventt.features.market.StationTradingQueue
@@ -51,12 +53,32 @@ object GlobalHotkeyService {
             }
         }
 
-        queueBackend = registerFirst(HotkeyKey.CTRL_Z, onQueueTrigger)
+        val queueKey =
+            HotkeyKey.ctrlLetter(
+                HotkeyBindings.letterOrDefault(readSetting(HotkeyBindings.QUEUE_KEY_SETTING), HotkeyBindings.DEFAULT_QUEUE_LETTER),
+                id = 1,
+            )
+        val overlayKey =
+            HotkeyKey.ctrlLetter(
+                HotkeyBindings.letterOrDefault(readSetting(HotkeyBindings.OVERLAY_KEY_SETTING), HotkeyBindings.DEFAULT_OVERLAY_LETTER),
+                id = 2,
+            )
+        HotkeyBindings.publishLabels(queue = queueKey.label, overlay = overlayKey.label)
+
+        queueBackend = registerFirst(queueKey, onQueueTrigger)
         isRegistered = queueBackend != null
 
-        overlayBackend = registerFirst(HotkeyKey.CTRL_M, OverlayController::openAtMouse)
+        overlayBackend = registerFirst(overlayKey, OverlayController::openAtMouse)
         isOverlayHotkeyRegistered = overlayBackend != null
     }
+
+    /** Re-reads the configured letters and re-registers both hotkeys. Called from Settings. */
+    fun restart() {
+        stop()
+        start()
+    }
+
+    private fun readSetting(key: String): String? = runCatching { StaticDataDao.getSetting(key) }.getOrNull()
 
     private fun registerFirst(
         key: HotkeyKey,

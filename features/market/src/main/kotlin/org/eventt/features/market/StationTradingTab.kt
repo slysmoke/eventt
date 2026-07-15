@@ -31,6 +31,7 @@ import org.eventt.core.database.ActiveOrderDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.everef.EveRefService
+import org.eventt.core.model.HotkeyBindings
 import org.eventt.core.model.PLEX_MARKET_REGION_ID
 import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.StaticMarketGroupModel
@@ -534,8 +535,9 @@ internal fun StationTradingTab(
                 }
             }
             if (charId != null && StationTradingQueue.size > 0) {
+                val hotkeyLabel by HotkeyBindings.queueLabel.collectAsState()
                 Text(
-                    "Ctrl+Z cycles ${StationTradingQueue.size} item(s) — position " +
+                    "$hotkeyLabel cycles ${StationTradingQueue.size} item(s) — position " +
                         "${StationTradingQueue.currentPosition}/${StationTradingQueue.size}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),

@@ -16,6 +16,7 @@ import org.eventt.core.http.EveHttpClient
 import org.eventt.core.marketlogs.MarketLogWatcher
 import org.eventt.core.model.AppPaths
 import org.eventt.core.model.CharacterModel
+import org.eventt.core.model.HotkeyBindings
 import org.eventt.core.nostr.NostrIdentityService
 import org.eventt.core.nostr.NostrRelayManager
 import org.eventt.features.orders.PendingOrdersQueue
@@ -71,7 +72,11 @@ fun main() {
     // hotkey while the main instance already holds it raises a fatal X BadAccess error that
     // kills the whole JVM (Xlib's default error handler calls exit(), it's not a catchable
     // Java exception) — so the test instance skips registering it entirely.
-    if (!isP2pTestInstance) GlobalHotkeyService.start()
+    if (!isP2pTestInstance) {
+        GlobalHotkeyService.start()
+        // Settings saves new hotkey letters, then calls this to re-register without a restart.
+        HotkeyBindings.applyChange = GlobalHotkeyService::restart
+    }
     // Beaten-order tray notifications: OrdersScreen detects the transition, this supplies the
     // tray (the icon resource and windowing live in the app module, not features:orders).
     PendingOrdersQueue.notifier = TrayNotifier::notify

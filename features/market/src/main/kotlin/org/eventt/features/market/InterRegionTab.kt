@@ -32,6 +32,7 @@ import org.eventt.core.database.ActiveOrderDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.everef.EveRefService
+import org.eventt.core.model.HotkeyBindings
 import org.eventt.core.model.StaticMarketGroupModel
 import org.eventt.core.model.StaticRegionModel
 import org.eventt.core.model.StaticStationModel
@@ -645,8 +646,9 @@ internal fun InterRegionTab(
                 }
             }
             if (charId != null && InterRegionQueue.size > 0) {
+                val hotkeyLabel by HotkeyBindings.queueLabel.collectAsState()
                 Text(
-                    "Ctrl+Z cycles ${InterRegionQueue.size} item(s) — position " +
+                    "$hotkeyLabel cycles ${InterRegionQueue.size} item(s) — position " +
                         "${InterRegionQueue.currentPosition}/${InterRegionQueue.size}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),

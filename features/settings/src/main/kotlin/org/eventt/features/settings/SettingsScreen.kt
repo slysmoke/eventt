@@ -100,6 +100,8 @@ fun SettingsScreen() {
 
         CharacterFeesCard()
 
+        HotkeysCard()
+
         NostrIdentityCard()
 
         NostrRelaysCard()

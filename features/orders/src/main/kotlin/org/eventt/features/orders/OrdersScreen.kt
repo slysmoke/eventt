@@ -29,6 +29,7 @@ import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.ViewContext
 import org.eventt.core.database.WalletDao
 import org.eventt.core.esi.EsiClient
+import org.eventt.core.model.HotkeyBindings
 import org.eventt.core.model.eveSigFigStep
 import org.eventt.core.model.formatEveSigFigPrice
 import org.eventt.ui.common.EmptyState
@@ -873,8 +874,9 @@ fun OrdersScreen(context: ViewContext?) {
                                 modifier = Modifier.size(12.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                            val hotkeyLabel by HotkeyBindings.queueLabel.collectAsState()
                             Text(
-                                "Ctrl+Z",
+                                hotkeyLabel,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
