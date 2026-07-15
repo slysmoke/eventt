@@ -26,7 +26,17 @@ object TrayNotifier {
         title: String,
         message: String,
     ) {
-        trayIcon?.displayMessage(title, message, TrayIcon.MessageType.WARNING)
-            ?: AppLog.warn("Notify", "$title: $message (no system tray)")
+        val icon = trayIcon
+        if (icon != null) {
+            icon.displayMessage(title, message, TrayIcon.MessageType.WARNING)
+            return
+        }
+        // No AWT tray (common on Linux Wayland/GNOME sessions) — libnotify's notify-send is the
+        // standard desktop-notification path there and needs no tray at all.
+        runCatching {
+            ProcessBuilder("notify-send", "--app-name=EVE Night Trade Tools", "--urgency=normal", title, message).start()
+        }.onFailure {
+            AppLog.warn("Notify", "$title: $message (no system tray or notify-send)")
+        }
     }
 }
