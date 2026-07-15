@@ -26,8 +26,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.AppState
 import org.eventt.core.database.StaticDataDao
+import org.eventt.core.esi.EsiClient
 import org.eventt.core.marketlogs.MarketLogEvent
 import org.eventt.core.marketlogs.MarketLogWatcher
+import org.eventt.core.model.PLEX_MARKET_REGION_ID
 import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.eveOutbidPrice
 import org.eventt.core.model.eveUndercutPrice
@@ -89,7 +91,30 @@ fun OverlayWindow(onClose: () -> Unit) {
     }
 }
 
-private enum class PriceSource { CLIPBOARD, FILE }
+private enum class PriceSource { CLIPBOARD, FILE, LOOKUP }
+
+private const val THE_FORGE_REGION_ID = 10000002
+private const val JITA_44_STATION_ID = 60003760L
+
+// Copied-name price check: the full Jita 4-4 order book for a type (PLEX: the global market),
+// as (price, volume) rows — sell book first, buy book second. Null on any ESI failure.
+private fun fetchTypeBook(typeId: Int): Pair<List<Pair<Double, Long>>, List<Pair<Double, Long>>>? =
+    runCatching {
+        val regionId = if (typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else THE_FORGE_REGION_ID
+        val orders = EsiClient.getMarketRegionOrders(regionId, typeId = typeId)
+        val local =
+            if (typeId == PLEX_TYPE_ID) {
+                orders
+            } else {
+                orders.filter { (it["location_id"] as? Number)?.toLong() == JITA_44_STATION_ID }
+            }
+
+        fun side(isBuy: Boolean) =
+            local
+                .filter { (it["is_buy_order"] as? Boolean) == isBuy }
+                .map { ((it["price"] as? Number)?.toDouble() ?: 0.0) to ((it["volume_remain"] as? Number)?.toLong() ?: 0L) }
+        side(false) to side(true)
+    }.getOrNull()
 
 // Which beat price to auto-copy to the clipboard when an order-book export is imported:
 // one tick under the best sell (to undercut) or one tick over the best buy (to outbid).
@@ -152,7 +177,42 @@ private fun OverlayContent(
             val text = ClipboardParser.readClipboard()
             if (text != null && text != lastClipboard) {
                 lastClipboard = text
-                val p = ClipboardParser.parse(text) ?: continue
+                val p = ClipboardParser.parse(text)
+                if (p == null) {
+                    // Not an order row — maybe a copied item name: exact market-type match pulls
+                    // the Jita 4-4 book (PLEX: global) so any item can be price-checked from
+                    // anywhere a name can be copied (chat, contracts, inventory).
+                    val name = text.trim()
+                    if (name.length in 3..60 && name.none { it == '\t' || it == '\n' } && name.any { it.isLetter() }) {
+                        withContext(Dispatchers.IO) {
+                            val type =
+                                runCatching { StaticDataDao.searchMarketTypes(name, limit = 1).firstOrNull() }
+                                    .getOrNull()
+                                    ?.takeIf { it.name.equals(name, ignoreCase = true) }
+                            val book = type?.let { fetchTypeBook(it.typeId) }
+                            if (type != null && book != null) {
+                                val (sells, buys) = book
+                                val loc = if (type.typeId == PLEX_TYPE_ID) "Global market" else "Jita IV-4"
+                                withContext(Dispatchers.Main) {
+                                    bookItemName = type.name
+                                    sells.minByOrNull { it.first }?.let {
+                                        sellPrice = it.first
+                                        sellLoc = loc
+                                        sellSource = PriceSource.LOOKUP
+                                        sellBook = sells
+                                    }
+                                    buys.maxByOrNull { it.first }?.let {
+                                        buyPrice = it.first
+                                        buyLoc = loc
+                                        buySource = PriceSource.LOOKUP
+                                        buyBook = buys
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    continue
+                }
                 if (p.isBuy) {
                     buyPrice = p.price
                     buyLoc = p.location
@@ -514,6 +574,7 @@ private fun SourceBadge(source: PriceSource?) {
         when (source) {
             PriceSource.FILE -> Icons.Default.Bolt to "auto"
             PriceSource.CLIPBOARD -> Icons.Default.ContentPaste to "manual"
+            PriceSource.LOOKUP -> Icons.Default.Search to "jita"
         }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, null, tint = DIM_TEXT, modifier = Modifier.size(10.dp))
