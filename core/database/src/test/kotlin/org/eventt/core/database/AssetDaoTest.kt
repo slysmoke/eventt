@@ -63,10 +63,29 @@ class AssetDaoTest {
     }
 
     @Test
-    fun `bulkUpsert inserts every asset in one call`() {
-        AssetDao.bulkUpsert(listOf(asset(itemId = 1), asset(itemId = 2), asset(itemId = 3)))
+    fun `replaceFor inserts every asset in one call`() {
+        AssetDao.replaceFor(characterId = 1, assets = listOf(asset(itemId = 1), asset(itemId = 2), asset(itemId = 3)))
 
         AssetDao.getByCharacter(1) shouldHaveSize 3
+    }
+
+    @Test
+    fun `replaceFor drops assets missing from the new snapshot`() {
+        AssetDao.replaceFor(characterId = 1, assets = listOf(asset(itemId = 1), asset(itemId = 2)))
+
+        // Item 1 was sold/moved in game — the fresh ESI snapshot no longer contains it.
+        AssetDao.replaceFor(characterId = 1, assets = listOf(asset(itemId = 2)))
+
+        AssetDao.getByCharacter(1).map { it.itemId } shouldBe listOf(2L)
+    }
+
+    @Test
+    fun `replaceFor only touches the owner being replaced`() {
+        AssetDao.upsert(asset(itemId = 1, characterId = 2))
+        AssetDao.replaceFor(characterId = 1, assets = listOf(asset(itemId = 2)))
+
+        AssetDao.getByCharacter(2) shouldHaveSize 1
+        AssetDao.getByCharacter(1) shouldHaveSize 1
     }
 
     @Test

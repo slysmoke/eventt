@@ -408,7 +408,7 @@ private suspend fun fetchCharacterAssets(characterId: Int) {
             )
         }
 
-    AssetDao.bulkUpsert(models)
+    AssetDao.replaceFor(characterId = characterId, assets = models)
 }
 
 private suspend fun fetchCorporationAssets(
@@ -458,5 +458,5 @@ private suspend fun fetchCorporationAssets(
             )
         }
 
-    AssetDao.bulkUpsert(models)
+    AssetDao.replaceFor(corporationId = corporationId, assets = models)
 }

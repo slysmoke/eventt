@@ -3,75 +3,78 @@ package org.eventt.core.database
 import org.eventt.core.model.AssetModel
 
 object AssetDao {
+    private val INSERT_SQL =
+        """
+        INSERT OR REPLACE INTO assets (item_id, type_id, type_name, quantity, location_id, location_name,
+            region_id, region_name, system_id, system_name, station_id, station_name,
+            is_singleton, location_flag, estimated_price, is_corp_asset, character_id, corporation_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """.trimIndent()
+
+    private fun java.sql.PreparedStatement.bindAsset(asset: AssetModel) {
+        setLong(1, asset.itemId)
+        setInt(2, asset.typeId)
+        setString(3, asset.typeName)
+        setInt(4, asset.quantity)
+        setLong(5, asset.locationId)
+        setString(6, asset.locationName)
+        setInt(7, asset.regionId)
+        setString(8, asset.regionName)
+        setInt(9, asset.systemId)
+        setString(10, asset.systemName)
+        setLong(11, asset.stationId)
+        setString(12, asset.stationName)
+        setInt(13, if (asset.isSingleton) 1 else 0)
+        setString(14, asset.locationFlag)
+        setDouble(15, asset.estimatedPrice)
+        setInt(16, if (asset.isCorpAsset) 1 else 0)
+        asset.characterId?.let { setInt(17, it) } ?: setNull(17, java.sql.Types.INTEGER)
+        asset.corporationId?.let { setInt(18, it) } ?: setNull(18, java.sql.Types.INTEGER)
+    }
+
     fun upsert(asset: AssetModel) {
         DatabaseManager.transaction {
-            prepareStatement(
-                """
-                INSERT OR REPLACE INTO assets (item_id, type_id, type_name, quantity, location_id, location_name,
-                    region_id, region_name, system_id, system_name, station_id, station_name,
-                    is_singleton, location_flag, estimated_price, is_corp_asset, character_id, corporation_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """.trimIndent(),
-            ).use { stmt ->
-                stmt.setLong(1, asset.itemId)
-                stmt.setInt(2, asset.typeId)
-                stmt.setString(3, asset.typeName)
-                stmt.setInt(4, asset.quantity)
-                stmt.setLong(5, asset.locationId)
-                stmt.setString(6, asset.locationName)
-                stmt.setInt(7, asset.regionId)
-                stmt.setString(8, asset.regionName)
-                stmt.setInt(9, asset.systemId)
-                stmt.setString(10, asset.systemName)
-                stmt.setLong(11, asset.stationId)
-                stmt.setString(12, asset.stationName)
-                stmt.setInt(13, if (asset.isSingleton) 1 else 0)
-                stmt.setString(14, asset.locationFlag)
-                stmt.setDouble(15, asset.estimatedPrice)
-                stmt.setInt(16, if (asset.isCorpAsset) 1 else 0)
-                asset.characterId?.let { stmt.setInt(17, it) } ?: stmt.setNull(17, java.sql.Types.INTEGER)
-                asset.corporationId?.let { stmt.setInt(18, it) } ?: stmt.setNull(18, java.sql.Types.INTEGER)
+            prepareStatement(INSERT_SQL).use { stmt ->
+                stmt.bindAsset(asset)
                 stmt.executeUpdate()
             }
         }
     }
 
-    fun bulkUpsert(assets: List<AssetModel>) {
+    /**
+     * Atomically replace one owner's stored snapshot: delete every asset row belonging to the
+     * character (or corporation) and insert the fresh ESI list in the same transaction. Without
+     * the delete, items that no longer exist in game (sold, moved, destroyed) linger forever.
+     */
+    fun replaceFor(
+        characterId: Int? = null,
+        corporationId: Int? = null,
+        assets: List<AssetModel>,
+    ) {
+        require((characterId != null) xor (corporationId != null)) {
+            "replaceFor needs exactly one of characterId/corporationId"
+        }
         DatabaseManager.transaction {
             autoCommit = false
             try {
-                prepareStatement(
-                    """
-                    INSERT OR REPLACE INTO assets (item_id, type_id, type_name, quantity, location_id, location_name,
-                        region_id, region_name, system_id, system_name, station_id, station_name,
-                        is_singleton, location_flag, estimated_price, is_corp_asset, character_id, corporation_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """.trimIndent(),
-                ).use { stmt ->
+                val (deleteSql, ownerId) =
+                    if (characterId != null) {
+                        "DELETE FROM assets WHERE character_id = ?" to characterId
+                    } else {
+                        "DELETE FROM assets WHERE corporation_id = ?" to corporationId!!
+                    }
+                prepareStatement(deleteSql).use { stmt ->
+                    stmt.setInt(1, ownerId)
+                    stmt.executeUpdate()
+                }
+                prepareStatement(INSERT_SQL).use { stmt ->
                     assets.forEach { asset ->
-                        stmt.setLong(1, asset.itemId)
-                        stmt.setInt(2, asset.typeId)
-                        stmt.setString(3, asset.typeName)
-                        stmt.setInt(4, asset.quantity)
-                        stmt.setLong(5, asset.locationId)
-                        stmt.setString(6, asset.locationName)
-                        stmt.setInt(7, asset.regionId)
-                        stmt.setString(8, asset.regionName)
-                        stmt.setInt(9, asset.systemId)
-                        stmt.setString(10, asset.systemName)
-                        stmt.setLong(11, asset.stationId)
-                        stmt.setString(12, asset.stationName)
-                        stmt.setInt(13, if (asset.isSingleton) 1 else 0)
-                        stmt.setString(14, asset.locationFlag)
-                        stmt.setDouble(15, asset.estimatedPrice)
-                        stmt.setInt(16, if (asset.isCorpAsset) 1 else 0)
-                        asset.characterId?.let { stmt.setInt(17, it) } ?: stmt.setNull(17, java.sql.Types.INTEGER)
-                        asset.corporationId?.let { stmt.setInt(18, it) } ?: stmt.setNull(18, java.sql.Types.INTEGER)
+                        stmt.bindAsset(asset)
                         stmt.addBatch()
                     }
                     stmt.executeBatch()
-                    commit()
                 }
+                commit()
             } catch (e: Exception) {
                 rollback()
                 throw e
