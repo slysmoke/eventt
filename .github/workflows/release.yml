@@ -261,3 +261,30 @@ jobs:
             artifacts/eventt-windows-jar/eventt-windows.jar \
             artifacts/eventt-macos-x64-jar/eventt-macos-x64.jar \
             artifacts/eventt-macos-arm64-jar/eventt-macos-arm64.jar
+
+      # ── Keep flake.nix in sync with the release ─────────────────────────────
+      # flake.nix pins version + the fetchzip output hash of eventt-linux.zip so the
+      # Nix package build stays fully hermetic (no local gradlew, no --impure). Both
+      # values only change on a real release tag, so this bumps them here instead of
+      # requiring a manual edit before every release.
+      - uses: cachix/install-nix-action@v31
+
+      - name: Update flake.nix
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          HASH=$(nix hash convert --hash-algo sha256 --to sri \
+            "$(nix-prefetch-url --unpack --type sha256 \
+              "file://$(pwd)/artifacts/eventt-linux/eventt-linux.zip" 2>/dev/null | tail -1)")
+
+          sed -i \
+            -e "s|version = \"[0-9.]*\";|version = \"$VERSION\";|" \
+            -e "s|/download/v[0-9.]*/eventt-linux.zip|/download/$GITHUB_REF_NAME/eventt-linux.zip|" \
+            -e "s|hash = \"sha256-[^\"]*\";|hash = \"$HASH\";|" \
+            flake.nix
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add flake.nix
+          git diff --staged --quiet && exit 0
+          git commit -m "flake: bump to $GITHUB_REF_NAME"
+          git push origin HEAD:main

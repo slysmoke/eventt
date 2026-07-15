@@ -13,16 +13,43 @@
       in {
         packages.default = pkgs.stdenv.mkDerivation {
           pname = "eventt";
-          version = "1.0.1";
+          version = "1.0.6";
 
-          # Требует предварительного запуска: ./gradlew createDistributable
-          # Используем --impure и PWD чтобы обойти ограничение git-tracked файлов
-          src = builtins.path {
-            name = "eventt-dist";
-            path = "${builtins.getEnv "PWD"}/app/build/compose/binaries/main/app/eventt";
+          # Скачивает уже собранный Linux app-image из GitHub Release (собирается и
+          # публикуется на CI по тегу — .github/workflows/release.yml). version/hash
+          # ниже правит тот же workflow автоматически при каждом релизном теге, так
+          # что сборка полностью герметична — не нужен --impure и локальный gradlew.
+          src = pkgs.fetchzip {
+            url = "https://github.com/slysmoke/eventt/releases/download/v1.0.6/eventt-linux.zip";
+            hash = "sha256-va37nnbhLKVWjC/Xvn/GYBsq+31ImkmdC99KEZqzxWg=";
           };
 
-          nativeBuildInputs = [ pkgs.makeWrapper ];
+          # Бинарники в архиве собраны на обычном Ubuntu CI-раннере — их ELF-интерпретер
+          # (/lib64/ld-linux...) и RPATH не подходят для NixOS. autoPatchelfHook переписывает
+          # оба под buildInputs ниже.
+          nativeBuildInputs = [ pkgs.makeWrapper pkgs.autoPatchelfHook ];
+          buildInputs = with pkgs; [
+            stdenv.cc.cc.lib
+            zlib
+            libGL
+            libGLU
+            libxkbcommon
+            libXi
+            libX11
+            fontconfig
+            cups
+            libxinerama
+            libxrandr
+            libxrender
+            libxext
+            libxfixes
+            libxcursor
+            libxcomposite
+            libxdamage
+            libXtst
+            alsa-lib
+            gtk3
+          ];
 
           installPhase = ''
             mkdir -p $out
