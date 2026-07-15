@@ -314,6 +314,11 @@ fun OrdersScreen(context: ViewContext?) {
     // Selected order for hotkey action
     var selectedOrderId by remember { mutableStateOf<Long?>(null) }
 
+    // Selecting a row also repositions the Ctrl+Z cycle: the next press acts on that order.
+    LaunchedEffect(selectedOrderId) {
+        selectedOrderId?.let { PendingOrdersQueue.startFrom(it) }
+    }
+
     // Order currently open in the EVE client via the global hotkey
     val activeOrderId by PendingOrdersQueue.currentOrderId.collectAsState()
 

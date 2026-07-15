@@ -176,6 +176,27 @@ class PendingOrdersQueueTest {
     }
 
     @Test
+    fun `startFrom makes the next press act on the chosen order, then the cycle continues`() {
+        PendingOrdersQueue.update(
+            listOf(
+                order(10, "Isogen", isBeaten = false),
+                order(20, "Tritanium", isBeaten = false),
+                order(30, "Zydrine", isBeaten = false),
+            ),
+        )
+        PendingOrdersQueue.processNext()
+        PendingOrdersQueue.currentOrderId.value shouldBe 10L
+
+        PendingOrdersQueue.startFrom(30L)
+        PendingOrdersQueue.processNext()
+        PendingOrdersQueue.currentOrderId.value shouldBe 30L
+
+        // One-shot: after acting on 30 the cycle continues from there, wrapping to the head.
+        PendingOrdersQueue.processNext()
+        PendingOrdersQueue.currentOrderId.value shouldBe 10L
+    }
+
+    @Test
     fun `processNext on an empty queue does nothing`() {
         PendingOrdersQueue.processNext()
 

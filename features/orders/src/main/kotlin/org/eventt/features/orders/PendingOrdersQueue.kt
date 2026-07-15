@@ -53,6 +53,15 @@ object PendingOrdersQueue {
     /** When on, the hotkey cycles only orders currently beaten by a competitor. Toggled from the UI. */
     @Volatile var onlyBeaten: Boolean = false
 
+    // One-shot override set by selecting a row in OrdersScreen: the next hotkey press acts on
+    // this order (then the cycle continues from there) instead of wherever the cycle left off.
+    @Volatile private var nextOrderId: Long? = null
+
+    /** Make the next hotkey press start from [orderId] — set when the user selects an order row. */
+    fun startFrom(orderId: Long) {
+        nextOrderId = orderId
+    }
+
     // Set by the app shell at startup; invoked with (title, message) when orders newly become
     // beaten. Lives here because features:orders has no tray icon or windowing of its own.
     @Volatile var notifier: ((title: String, message: String) -> Unit)? = null
@@ -66,7 +75,13 @@ object PendingOrdersQueue {
     // Index of the order the next hotkey press will act on: the one after the last-processed
     // order, by id. If that order left the queue (no longer beaten, filter change), indexOfFirst
     // returns -1 and the cycle restarts at the most urgent entry.
-    private fun nextIndex(q: List<PendingOrder>): Int = (q.indexOfFirst { it.orderId == lastOrderId } + 1) % q.size
+    private fun nextIndex(q: List<PendingOrder>): Int {
+        nextOrderId?.let { id ->
+            val i = q.indexOfFirst { it.orderId == id }
+            if (i >= 0) return i
+        }
+        return (q.indexOfFirst { it.orderId == lastOrderId } + 1) % q.size
+    }
 
     val size: Int get() = active().size
 
@@ -87,6 +102,7 @@ object PendingOrdersQueue {
     fun clear() {
         queue = emptyList()
         lastOrderId = null
+        nextOrderId = null
         _currentOrderId.value = null
     }
 
@@ -99,6 +115,7 @@ object PendingOrdersQueue {
         val q = active()
         if (q.isEmpty()) return
         val order = q[nextIndex(q)]
+        nextOrderId = null
         lastOrderId = order.orderId
         _currentOrderId.value = order.orderId
         scope.launch {
