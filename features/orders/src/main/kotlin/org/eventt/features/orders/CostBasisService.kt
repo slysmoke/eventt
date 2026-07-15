@@ -23,6 +23,25 @@ object CostBasisService {
         val remainingQty: Int,
         val avgCostBasis: Double, // per unit, includes buy broker fee
         val totalCostBasis: Double,
+        // Purchase date of the oldest remaining FIFO lot — how long the capital in this
+        // item has been sitting unsold. Null only for legacy/synthetic results.
+        val oldestLotDate: String? = null,
+    ) {
+        val daysHeld: Long?
+            get() =
+                oldestLotDate?.take(10)?.let {
+                    runCatching {
+                        java.time.temporal.ChronoUnit.DAYS
+                            .between(LocalDate.parse(it), LocalDate.now())
+                    }.getOrNull()
+                }
+    }
+
+    // One FIFO buy lot: quantity remaining, per-unit cost (incl. broker fee), purchase date.
+    private data class Lot(
+        val qty: Int,
+        val cost: Double,
+        val date: String,
     )
 
     data class RealizedSellTx(
@@ -61,7 +80,7 @@ object CostBasisService {
     ): FifoResult {
         val transactions = WalletDao.getAllTransactions(characterId, corporationId)
 
-        val lots = mutableMapOf<Int, ArrayDeque<Pair<Int, Double>>>()
+        val lots = mutableMapOf<Int, ArrayDeque<Lot>>()
         val typeNames = mutableMapOf<Int, String>()
         val realized = mutableListOf<RealizedSellTx>()
 
@@ -70,7 +89,7 @@ object CostBasisService {
             if (tx.isBuy) {
                 // Store adjusted cost: price + broker fee paid to place the buy order.
                 val adjustedCost = tx.unitPrice * taxConfig.buyMultiplier
-                lots.getOrPut(tx.typeId) { ArrayDeque() }.addLast(tx.quantity to adjustedCost)
+                lots.getOrPut(tx.typeId) { ArrayDeque() }.addLast(Lot(tx.quantity, adjustedCost, tx.date))
             } else {
                 val queue = lots.getOrPut(tx.typeId) { ArrayDeque() }
                 var remaining = tx.quantity
@@ -78,11 +97,11 @@ object CostBasisService {
                 var qtyMatched = 0
 
                 while (remaining > 0 && queue.isNotEmpty()) {
-                    val (lotQty, lotPrice) = queue.removeFirst()
-                    val consume = minOf(remaining, lotQty)
-                    costConsumed += consume * lotPrice
+                    val lot = queue.removeFirst()
+                    val consume = minOf(remaining, lot.qty)
+                    costConsumed += consume * lot.cost
                     qtyMatched += consume
-                    if (consume < lotQty) queue.addFirst((lotQty - consume) to lotPrice)
+                    if (consume < lot.qty) queue.addFirst(lot.copy(qty = lot.qty - consume))
                     remaining -= consume
                 }
 
@@ -99,9 +118,16 @@ object CostBasisService {
         val inventory =
             lots
                 .mapValues { (typeId, queue) ->
-                    val qty = queue.sumOf { it.first }
-                    val cost = queue.sumOf { it.first.toDouble() * it.second }
-                    InventoryItem(typeId, typeNames[typeId] ?: "", qty, if (qty > 0) cost / qty else 0.0, cost)
+                    val qty = queue.sumOf { it.qty }
+                    val cost = queue.sumOf { it.qty.toDouble() * it.cost }
+                    InventoryItem(
+                        typeId,
+                        typeNames[typeId] ?: "",
+                        qty,
+                        if (qty > 0) cost / qty else 0.0,
+                        cost,
+                        oldestLotDate = queue.firstOrNull()?.date,
+                    )
                 }.filter { it.value.remainingQty > 0 }
 
         return FifoResult(inventory, realized, taxConfig)

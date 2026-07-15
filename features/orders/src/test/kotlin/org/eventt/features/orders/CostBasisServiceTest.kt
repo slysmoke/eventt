@@ -85,6 +85,8 @@ class CostBasisServiceTest {
         val remaining = result.inventory.getValue(TYPE_ID)
         remaining.remainingQty shouldBe 2
         remaining.avgCostBasis should (206.0 plusOrMinus TOLERANCE)
+        // The first lot was fully consumed, so the oldest remaining lot is the second buy.
+        remaining.oldestLotDate shouldBe "2024-01-02"
     }
 
     @Test

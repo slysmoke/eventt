@@ -335,6 +335,7 @@ internal fun InventoryTable(
         ) {
             StaticHeader("Name", Modifier.weight(3f))
             StaticHeader("Qty", Modifier.weight(1.5f))
+            StaticHeader("Age", Modifier.weight(1f))
             StaticHeader("Avg Cost", Modifier.weight(2f))
             StaticHeader("Total Cost", Modifier.weight(2f))
             StaticHeader("Sell Price", Modifier.weight(2f))

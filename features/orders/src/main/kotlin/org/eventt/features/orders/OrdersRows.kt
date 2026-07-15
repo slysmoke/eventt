@@ -375,6 +375,14 @@ internal fun InventoryRow(
             maxLines = 1,
         )
         Text(formatNumber(item.remainingQty), modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.bodyMedium)
+        val daysHeld = item.daysHeld
+        Text(
+            daysHeld?.let { "${it}d" } ?: "—",
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodySmall,
+            // Stale stock: capital stuck for over 30 days gets the same orange as beaten orders.
+            color = if (daysHeld != null && daysHeld > 30) UNDERCUT_COLOR else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Text(
             formatIsk(item.avgCostBasis),
             modifier = Modifier.weight(2f),
