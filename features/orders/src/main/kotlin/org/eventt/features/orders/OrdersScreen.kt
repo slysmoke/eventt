@@ -42,6 +42,7 @@ import org.eventt.ui.common.EmptyState
 import org.eventt.ui.common.EsiRefreshButton
 import org.eventt.ui.common.LoadingOverlay
 import org.eventt.ui.common.ensureVisible
+import org.eventt.ui.common.formatIsk
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 import java.time.OffsetDateTime
@@ -2136,12 +2137,3 @@ private fun timeLeftColor(seconds: Long): Color =
     }
 
 private fun formatNumber(value: Int): String = "%,d".format(value)
-
-private fun formatIsk(value: Double): String =
-    when {
-        kotlin.math.abs(value) >= 1_000_000_000_000 -> "%.2fT".format(value / 1_000_000_000_000)
-        kotlin.math.abs(value) >= 1_000_000_000 -> "%.2fB".format(value / 1_000_000_000)
-        kotlin.math.abs(value) >= 1_000_000 -> "%.2fM".format(value / 1_000_000)
-        kotlin.math.abs(value) >= 1_000 -> "%.2fK".format(value / 1_000)
-        else -> "%,.2f".format(value)
-    }

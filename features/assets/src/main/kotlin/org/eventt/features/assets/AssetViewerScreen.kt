@@ -23,7 +23,6 @@ import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.AssetModel
 import org.eventt.core.model.StaticStationModel
 import org.eventt.ui.common.*
-import java.util.Locale
 
 @Composable
 fun AssetViewerScreen(context: ViewContext?) {
@@ -461,12 +460,3 @@ private suspend fun fetchCorporationAssets(
 
     AssetDao.bulkUpsert(models)
 }
-
-private fun formatIsk(value: Double): String =
-    when {
-        value >= 1_000_000_000_000 -> String.format(Locale.US, "%.2fT", value / 1_000_000_000_000)
-        value >= 1_000_000_000 -> String.format(Locale.US, "%.2fB", value / 1_000_000_000)
-        value >= 1_000_000 -> String.format(Locale.US, "%.2fM", value / 1_000_000)
-        value >= 1_000 -> String.format(Locale.US, "%.2fK", value / 1_000)
-        else -> String.format(Locale.US, "%.2f", value)
-    }

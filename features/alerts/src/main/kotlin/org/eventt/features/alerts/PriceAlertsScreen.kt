@@ -356,11 +356,3 @@ private fun AddAlertDialog(
         },
     )
 }
-
-private fun formatIsk(value: Double): String =
-    when {
-        value >= 1_000_000_000_000 -> String.format(Locale.US, "%.2fT", value / 1_000_000_000_000)
-        value >= 1_000_000_000 -> String.format(Locale.US, "%.2fB", value / 1_000_000_000)
-        value >= 1_000_000 -> String.format(Locale.US, "%.2fM", value / 1_000_000)
-        else -> String.format(Locale.US, "%,.2f", value)
-    }

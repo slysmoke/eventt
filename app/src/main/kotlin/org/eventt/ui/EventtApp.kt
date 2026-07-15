@@ -65,11 +65,11 @@ import org.eventt.features.settings.SettingsScreen
 import org.eventt.features.tools.ToolsScreen
 import org.eventt.features.wallet.WalletScreen
 import org.eventt.ui.common.RequestProgressDialog
+import org.eventt.ui.common.formatIsk
 import org.eventt.ui.theme.*
 import org.eventt.update.UpdateChecker
 import org.eventt.update.UpdateInfo
 import org.eventt.update.UpdateProgress
-import java.util.Locale
 
 enum class AppScreen(
     val label: String,
@@ -730,7 +730,7 @@ private fun AlertNotificationBanner(
                 Text(
                     "${alert.orderType.replaceFirstChar { it.uppercase() }} price " +
                         "${if (isAbove) "rose above" else "dropped below"} " +
-                        formatAlertPrice(alert.targetPrice),
+                        formatIsk(alert.targetPrice) + " ISK",
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White.copy(alpha = 0.75f),
                 )
@@ -741,14 +741,6 @@ private fun AlertNotificationBanner(
         }
     }
 }
-
-private fun formatAlertPrice(v: Double): String =
-    when {
-        v >= 1_000_000_000 -> String.format(Locale.US, "%.2fB ISK", v / 1_000_000_000)
-        v >= 1_000_000 -> String.format(Locale.US, "%.2fM ISK", v / 1_000_000)
-        v >= 1_000 -> String.format(Locale.US, "%.1fK ISK", v / 1_000)
-        else -> String.format(Locale.US, "%,.2f ISK", v)
-    }
 
 private data class IncomingRequestNotice(
     val reservation: NostrReservationModel,

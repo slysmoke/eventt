@@ -27,20 +27,13 @@ import org.eventt.features.tools.ToolsInputParser
 import org.eventt.features.tools.pricing.PricingService
 import org.eventt.ui.common.ConfirmDialog
 import org.eventt.ui.common.ContentCard
+import org.eventt.ui.common.formatIsk
 import java.awt.Toolkit
 import java.awt.datatransfer.DataFlavor
 
 // EVE's SDE ship category — packaged_volume is only meaningfully populated for this category
 // by this app's static-data importer (see core/staticdata/StaticDataImporter.kt).
 private const val SHIP_CATEGORY_ID = 6
-
-private fun formatIsk(v: Double): String =
-    when {
-        v >= 1_000_000_000 -> "%.2fB".format(v / 1_000_000_000)
-        v >= 1_000_000 -> "%.2fM".format(v / 1_000_000)
-        v >= 1_000 -> "%.2fK".format(v / 1_000)
-        else -> "%.2f".format(v)
-    }
 
 private fun formatVolume(v: Double): String = "%.1f m³".format(v)
 

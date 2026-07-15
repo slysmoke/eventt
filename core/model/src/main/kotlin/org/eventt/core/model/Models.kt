@@ -20,14 +20,6 @@ data class CharacterModel(
     var corporationName: String? = null,
 )
 
-@Serializable
-data class CorporationModel(
-    val id: Int,
-    val name: String,
-    val ticker: String = "",
-    val allianceId: Int? = null,
-)
-
 // ─── ESI Cache ──────────────────────────────────────────────────────────────
 
 @Serializable
@@ -45,25 +37,6 @@ data class EsiCacheEntry(
 // ─── Market ─────────────────────────────────────────────────────────────────
 
 @Serializable
-data class MarketOrderModel(
-    val orderId: Long,
-    val typeId: Int,
-    val stationId: Long? = null,
-    val regionId: Int? = null,
-    val price: Double,
-    val volumeTotal: Int,
-    val volumeRemaining: Int,
-    val range: String = "",
-    val isBuyOrder: Boolean,
-    val duration: Int = 0,
-    val issued: String = "",
-    val minVolume: Int = 1,
-    val isCorpOrder: Boolean = false,
-    val characterId: Int? = null,
-    val corporationId: Int? = null,
-)
-
-@Serializable
 data class MarketHistoryModel(
     val typeId: Int,
     val regionId: Int,
@@ -73,46 +46,6 @@ data class MarketHistoryModel(
     val orderCount: Long,
     val highest: Double,
     val lowest: Double,
-)
-
-// ─── Transactions & Journal ────────────────────────────────────────────────
-
-@Serializable
-data class TransactionModel(
-    val transactionId: Long,
-    val date: String,
-    val typeId: Int,
-    val typeName: String = "",
-    val quantity: Int,
-    val unitPrice: Double,
-    val total: Double,
-    val isBuy: Boolean,
-    val clientId: Int = 0,
-    val clientName: String = "",
-    val locationId: Long = 0,
-    val locationName: String = "",
-    val isCorp: Boolean = false,
-    val characterId: Int? = null,
-    val corporationId: Int? = null,
-)
-
-@Serializable
-data class JournalEntryModel(
-    val entryId: Long,
-    val date: String,
-    val amount: Double,
-    val balance: Double,
-    val reason: String = "",
-    val refType: String = "",
-    val firstPartyId: Int = 0,
-    val firstPartyName: String = "",
-    val secondPartyId: Int = 0,
-    val secondPartyName: String = "",
-    val taxAmount: Double? = null,
-    val isCorp: Boolean = false,
-    val characterId: Int? = null,
-    val corporationId: Int? = null,
-    val divisionId: Int? = null,
 )
 
 // ─── Assets ─────────────────────────────────────────────────────────────────
@@ -326,22 +259,6 @@ data class QueuedRequest(
     val startTime: Long? = null,
     val endTime: Long? = null,
     val error: String? = null,
-)
-
-// ─── Dashboard Summary ──────────────────────────────────────────────────────
-
-data class DashboardSummary(
-    val totalAssetValue: Double = 0.0,
-    val totalOrderValue: Double = 0.0,
-    val todayPL: Double = 0.0,
-    val weekPL: Double = 0.0,
-    val monthPL: Double = 0.0,
-    val activeOrderCount: Int = 0,
-    val activeContractCount: Int = 0,
-    val triggeredAlertCount: Int = 0,
-    val runningJobCount: Int = 0,
-    val characterCount: Int = 0,
-    val corporationCount: Int = 0,
 )
 
 // ─── Wallet Summary ────────────────────────────────────────────────────────

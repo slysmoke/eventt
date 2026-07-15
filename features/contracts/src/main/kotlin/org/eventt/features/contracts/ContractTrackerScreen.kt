@@ -20,7 +20,6 @@ import org.eventt.core.database.ContractDao
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.ContractModel
 import org.eventt.ui.common.*
-import java.util.Locale
 
 @Composable
 fun ContractTrackerScreen(charId: Int?) {
@@ -248,11 +247,3 @@ private fun loadContractsByStatus(
 }
 
 private fun String.capitalize(): String = replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
-
-private fun formatIsk(value: Double): String =
-    when {
-        value >= 1_000_000_000_000 -> String.format(Locale.US, "%.2fT", value / 1_000_000_000_000)
-        value >= 1_000_000_000 -> String.format(Locale.US, "%.2fB", value / 1_000_000_000)
-        value >= 1_000_000 -> String.format(Locale.US, "%.2fM", value / 1_000_000)
-        else -> String.format(Locale.US, "%,.2f", value)
-    }

@@ -41,7 +41,6 @@ import org.eventt.core.model.toPnlWindow
 import org.eventt.features.orders.CostBasisService
 import org.eventt.features.orders.realizedPnlWindow
 import org.eventt.ui.common.*
-import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -1020,12 +1019,3 @@ private fun resolveLocalNames(rows: List<Map<String, Any?>>): List<Map<String, A
         updated
     }
 }
-
-private fun formatIsk(value: Double): String =
-    when {
-        kotlin.math.abs(value) >= 1_000_000_000_000 -> String.format(Locale.US, "%.2fT", value / 1_000_000_000_000)
-        kotlin.math.abs(value) >= 1_000_000_000 -> String.format(Locale.US, "%.2fB", value / 1_000_000_000)
-        kotlin.math.abs(value) >= 1_000_000 -> String.format(Locale.US, "%.2fM", value / 1_000_000)
-        kotlin.math.abs(value) >= 1_000 -> String.format(Locale.US, "%.2fK", value / 1_000)
-        else -> String.format(Locale.US, "%,.2f", value)
-    }

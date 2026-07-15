@@ -98,9 +98,6 @@ dependencies {
     implementation(libs.okhttp.core)
     implementation(libs.kotlinx.serialization.json)
 
-    // DI
-    implementation(libs.koin.core)
-
     // Coroutines
     implementation(libs.kotlinx.coroutines.swing)
 

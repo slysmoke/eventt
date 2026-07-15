@@ -23,7 +23,6 @@ import org.eventt.core.model.toPnlWindow
 import org.eventt.features.orders.CostBasisService
 import org.eventt.features.orders.realizedPnlWindow
 import java.time.LocalDate
-import java.util.Locale
 
 private val POSITIVE = Color(0xFF69DB7C)
 private val NEGATIVE = Color(0xFFFF6B6B)
@@ -526,23 +525,7 @@ private fun AlertRow(alert: PriceAlertModel) {
 private fun formatIsk(
     value: Double,
     showSign: Boolean = false,
-): String {
-    val abs = kotlin.math.abs(value)
-    val sign =
-        if (showSign && value > 0) {
-            "+"
-        } else if (value < 0) {
-            "-"
-        } else {
-            ""
-        }
-    val formatted =
-        when {
-            abs >= 1_000_000_000_000.0 -> String.format(Locale.US, "%.2fT", abs / 1_000_000_000_000.0)
-            abs >= 1_000_000_000.0 -> String.format(Locale.US, "%.2fB", abs / 1_000_000_000.0)
-            abs >= 1_000_000.0 -> String.format(Locale.US, "%.2fM", abs / 1_000_000.0)
-            abs >= 1_000.0 -> String.format(Locale.US, "%.2fK", abs / 1_000.0)
-            else -> String.format(Locale.US, "%,.2f", abs)
-        }
-    return "$sign$formatted"
-}
+): String =
+    (if (showSign && value > 0) "+" else "") +
+        org.eventt.ui.common
+            .formatIsk(value)

@@ -1,6 +1,19 @@
 package org.eventt.ui.common
 
 import java.util.Locale
+import kotlin.math.abs
+
+/**
+ * Formats an ISK amount with abbreviated units (T/B/M/K). Negative values keep their sign.
+ */
+fun formatIsk(value: Double): String =
+    when {
+        abs(value) >= 1_000_000_000_000 -> String.format(Locale.US, "%.2fT", value / 1_000_000_000_000)
+        abs(value) >= 1_000_000_000 -> String.format(Locale.US, "%.2fB", value / 1_000_000_000)
+        abs(value) >= 1_000_000 -> String.format(Locale.US, "%.2fM", value / 1_000_000)
+        abs(value) >= 1_000 -> String.format(Locale.US, "%.2fK", value / 1_000)
+        else -> String.format(Locale.US, "%,.2f", value)
+    }
 
 /**
  * Formats a price for UI display using abbreviated units (B/M/K) similar to MarketBrowserScreen.
@@ -39,8 +52,3 @@ fun formatVolume(vol: Long): String =
         vol >= 1_000L -> String.format(Locale.US, "%.1fK", vol / 1_000.0)
         else -> vol.toString()
     }
-
-/**
- * Formats a volume for the SplitterScreen (in cubic meters) with one decimal place.
- */
-fun formatVolumeM3(v: Double): String = "%.1f m³".format(v)
