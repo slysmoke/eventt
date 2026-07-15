@@ -13,15 +13,15 @@
       in {
         packages.default = pkgs.stdenv.mkDerivation {
           pname = "eventt";
-          version = "1.0.6";
+          version = "1.0.7";
 
           # Скачивает уже собранный Linux app-image из GitHub Release (собирается и
           # публикуется на CI по тегу — .github/workflows/release.yml). version/hash
           # ниже правит тот же workflow автоматически при каждом релизном теге, так
           # что сборка полностью герметична — не нужен --impure и локальный gradlew.
           src = pkgs.fetchzip {
-            url = "https://github.com/slysmoke/eventt/releases/download/v1.0.6/eventt-linux.zip";
-            hash = "sha256-va37nnbhLKVWjC/Xvn/GYBsq+31ImkmdC99KEZqzxWg=";
+            url = "https://github.com/slysmoke/eventt/releases/download/v1.0.7/eventt-linux.zip";
+            hash = "sha256-OaDLrkdQwn8UZz2Y5Ifr/kXEzbW+Siw7GiCPHN5M3gE=";
           };
 
           # Бинарники в архиве собраны на обычном Ubuntu CI-раннере — их ELF-интерпретер
