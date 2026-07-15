@@ -73,6 +73,19 @@ class OrderHistoryDaoTest {
     }
 
     @Test
+    fun `re-syncing history without fee info keeps the stored relist fees`() {
+        // The sync where the order left the active set carried its final relist total…
+        OrderHistoryDao.upsertAll(listOf(record(1).copy(relistFeesPaid = 500.0)))
+
+        // …later syncs rebuild the record from ESI history, which knows nothing about fees.
+        OrderHistoryDao.upsertAll(listOf(record(1).copy(state = "cancelled")))
+
+        val stored = OrderHistoryDao.getAll(characterId = 1).single()
+        stored.relistFeesPaid shouldBe 500.0
+        stored.state shouldBe "cancelled" // other columns still refresh
+    }
+
+    @Test
     fun `getAll filters by isBuyOrder when specified`() {
         OrderHistoryDao.upsertAll(listOf(record(1, isBuyOrder = true), record(2, isBuyOrder = false)))
 

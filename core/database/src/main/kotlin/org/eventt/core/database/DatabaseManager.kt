@@ -105,6 +105,9 @@ object DatabaseManager {
                 // refreshes hourly) -- so they're computed ourselves by diffing each order's price
                 // against its last-seen price on every refresh, and accumulated here.
                 "ALTER TABLE active_orders ADD COLUMN relist_count INTEGER DEFAULT 0",
+                // Final relist total copied into history when an order leaves the active set —
+                // active_orders is a replaced snapshot, so the fees would otherwise vanish with it.
+                "ALTER TABLE order_history ADD COLUMN relist_fees_paid REAL DEFAULT 0.0",
                 "ALTER TABLE active_orders ADD COLUMN relist_fees_paid REAL DEFAULT 0.0",
                 // Server "as of" time (ESI Last-Modified) behind this row's price/relist stats —
                 // lets a relist bump be rejected as stale if it's reporting a snapshot older than
@@ -434,7 +437,8 @@ object DatabaseManager {
                     range TEXT DEFAULT 'station',
                     min_volume INTEGER DEFAULT 1,
                     state TEXT DEFAULT 'expired',
-                    character_id INTEGER
+                    character_id INTEGER,
+                    relist_fees_paid REAL DEFAULT 0.0
                 )
                 """.trimIndent(),
                 // Currently active orders — a full snapshot per character/corp, replaced wholesale

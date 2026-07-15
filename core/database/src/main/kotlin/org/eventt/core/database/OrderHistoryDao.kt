@@ -21,6 +21,9 @@ object OrderHistoryDao {
         val characterId: Int?,
         val corporationId: Int? = null,
         val isCorp: Boolean = false,
+        // Broker fees paid relisting this order while it was active (tracked in active_orders,
+        // copied here on the sync where the order leaves the active set).
+        val relistFeesPaid: Double = 0.0,
     )
 
     private data class WhereClause(
@@ -41,13 +44,25 @@ object OrderHistoryDao {
     fun upsertAll(records: List<OrderHistoryRecord>) {
         if (records.isEmpty()) return
         DatabaseManager.transaction {
+            // ON CONFLICT (not OR REPLACE) with MAX on relist_fees_paid: ESI history rows carry no
+            // fee info, so a later re-sync (fee 0 on the incoming row) must not wipe the stored value.
             val sql =
                 """
-                INSERT OR REPLACE INTO order_history
+                INSERT INTO order_history
                 (order_id, type_id, type_name, location_id, station_name, price, volume_total,
                  volume_remaining, is_buy_order, duration, issued, range, min_volume, state, character_id,
-                 corporation_id, is_corp)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 corporation_id, is_corp, relist_fees_paid)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(order_id) DO UPDATE SET
+                    type_id = excluded.type_id, type_name = excluded.type_name,
+                    location_id = excluded.location_id, station_name = excluded.station_name,
+                    price = excluded.price, volume_total = excluded.volume_total,
+                    volume_remaining = excluded.volume_remaining, is_buy_order = excluded.is_buy_order,
+                    duration = excluded.duration, issued = excluded.issued, range = excluded.range,
+                    min_volume = excluded.min_volume, state = excluded.state,
+                    character_id = excluded.character_id, corporation_id = excluded.corporation_id,
+                    is_corp = excluded.is_corp,
+                    relist_fees_paid = MAX(relist_fees_paid, excluded.relist_fees_paid)
                 """.trimIndent()
             prepareStatement(sql).use { ps ->
                 records.forEach { r ->
@@ -68,6 +83,7 @@ object OrderHistoryDao {
                     if (r.characterId != null) ps.setInt(15, r.characterId) else ps.setNull(15, Types.INTEGER)
                     if (r.corporationId != null) ps.setInt(16, r.corporationId) else ps.setNull(16, Types.INTEGER)
                     ps.setInt(17, if (r.isCorp) 1 else 0)
+                    ps.setDouble(18, r.relistFeesPaid)
                     ps.addBatch()
                 }
                 ps.executeBatch()
@@ -118,6 +134,7 @@ object OrderHistoryDao {
                             characterId = rs.getInt("character_id").takeIf { !rs.wasNull() },
                             corporationId = rs.getInt("corporation_id").takeIf { !rs.wasNull() },
                             isCorp = rs.getInt("is_corp") == 1,
+                            relistFeesPaid = rs.getDouble("relist_fees_paid"),
                         ),
                     )
                 }

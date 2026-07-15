@@ -327,15 +327,17 @@ internal fun historyPnl(
     val taxConfig = fifoResult.taxConfig
     val netSellPrice = order.price * taxConfig.sellMultiplier
 
+    // Relist fees the order accumulated while active come straight off its profit — they were
+    // paid to keep this exact order competitive, so they belong to it, not to general overhead.
     val fifoProfit = CostBasisService.pnlForOrder(fifoResult, order.typeId, order.issued, filled)
     if (fifoProfit != null) {
         val cb = netSellPrice - fifoProfit / filled
         val margin = if (cb > 0) (netSellPrice - cb) / cb * 100 else 0.0
-        return fifoProfit to margin
+        return (fifoProfit - order.relistFeesPaid) to margin
     }
 
     val cb = fifoResult.avgCostBasisForType(order.typeId) ?: return null to null
-    val profit = (netSellPrice - cb) * filled
+    val profit = (netSellPrice - cb) * filled - order.relistFeesPaid
     val margin = if (cb > 0) (netSellPrice - cb) / cb * 100 else 0.0
     return profit to margin
 }

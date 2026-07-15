@@ -571,8 +571,9 @@ fun OrdersScreen(context: ViewContext?) {
                         rawHistory.map { m ->
                             val typeId = (m["type_id"] as? Number)?.toInt() ?: 0
                             val locationId = (m["location_id"] as? Number)?.toLong() ?: 0L
+                            val orderId = (m["order_id"] as? Number)?.toLong() ?: 0L
                             OrderHistoryDao.OrderHistoryRecord(
-                                orderId = (m["order_id"] as? Number)?.toLong() ?: 0L,
+                                orderId = orderId,
                                 typeId = typeId,
                                 typeName = StaticDataDao.getTypeName(typeId) ?: "Unknown ($typeId)",
                                 locationId = locationId,
@@ -589,6 +590,10 @@ fun OrdersScreen(context: ViewContext?) {
                                 characterId = if (corp != null) null else cid,
                                 corporationId = corp,
                                 isCorp = corp != null,
+                                // The pre-replace active snapshot still holds the order's final
+                                // relist total; upsertAll keeps the max, so later syncs (where
+                                // the active row is already gone) can't zero it back out.
+                                relistFeesPaid = previousSnapshot[orderId]?.relistFeesPaid ?: 0.0,
                             )
                         }
                     OrderHistoryDao.upsertAll(historyRecords)
