@@ -2,6 +2,7 @@ package org.eventt.features.overlay
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -27,10 +28,15 @@ import org.eventt.core.database.AppState
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.marketlogs.MarketLogEvent
 import org.eventt.core.marketlogs.MarketLogWatcher
+import org.eventt.core.model.eveOutbidPrice
+import org.eventt.core.model.eveUndercutPrice
+import org.eventt.core.model.formatEveSigFigPrice
 import org.eventt.ui.theme.DarkColorScheme
 import org.eventt.ui.theme.EveTypography
 import java.awt.KeyboardFocusManager
 import java.awt.MouseInfo
+import java.awt.Toolkit
+import java.awt.datatransfer.StringSelection
 import java.util.prefs.Preferences
 
 private val OVERLAY_BG = Color(0xEE0D1117)
@@ -56,7 +62,7 @@ fun OverlayWindow(onClose: () -> Unit) {
             // is an undecorated, non-resizable window, so anything taller than this is otherwise
             // silently clipped rather than scrolled. The body below is also independently
             // scrollable as a safety net against any further growth (long station names, etc.).
-            height = 400.dp,
+            height = 460.dp,
             position =
                 if (pendingPosition != null) {
                     WindowPosition(x = pendingPosition.first.dp, y = pendingPosition.second.dp)
@@ -83,6 +89,18 @@ fun OverlayWindow(onClose: () -> Unit) {
 }
 
 private enum class PriceSource { CLIPBOARD, FILE }
+
+// Which beat price to auto-copy to the clipboard when an order-book export is imported:
+// one tick under the best sell (to undercut) or one tick over the best buy (to outbid).
+private enum class AutoCopy { OFF, SELL, BUY }
+
+// Writes the beat price to the clipboard in EVE's own 4-sigfig format, ready to paste into the
+// order dialog. Returns the written string so the poll loop can skip its own write.
+private fun copyBeatPrice(price: Double): String {
+    val text = formatEveSigFigPrice(price)
+    Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
+    return text
+}
 
 @Composable
 private fun OverlayContent(
@@ -123,7 +141,9 @@ private fun OverlayContent(
     }
 
     // Clipboard polling — auto-assign sell/buy by EVE row format (manual fallback: copy one
-    // order row in-game, this overlay picks it up within ~400ms).
+    // order row in-game, this overlay picks it up within ~400ms). The parsed price is written
+    // straight back to the clipboard as its beat price (one tick under a sell, one tick over a
+    // buy), so the next paste into EVE's order dialog already beats the copied order.
     var lastClipboard by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -137,14 +157,20 @@ private fun OverlayContent(
                     buyLoc = p.location
                     buySource = PriceSource.CLIPBOARD
                     buyBook = listOf(p.price to p.volume)
+                    lastClipboard = copyBeatPrice(eveOutbidPrice(p.price))
                 } else {
                     sellPrice = p.price
                     sellLoc = p.location
                     sellSource = PriceSource.CLIPBOARD
                     sellBook = listOf(p.price to p.volume)
+                    lastClipboard = copyBeatPrice(eveUndercutPrice(p.price))
                 }
             }
         }
+    }
+
+    var autoCopy by remember {
+        mutableStateOf(runCatching { AutoCopy.valueOf(prefs.get("autoCopy", "OFF")) }.getOrDefault(AutoCopy.OFF))
     }
 
     // Richer, automatic source: EVE's own item order-book export (Settings › Marketlogs Folder)
@@ -172,6 +198,11 @@ private fun OverlayContent(
                     buyBook = buyRowsUsed.map { row -> row.price to row.volRemaining.toLong() }
                 }
                 bookItemName = StaticDataDao.getTypeName(event.typeId) ?: "Unknown (${event.typeId})"
+                when (autoCopy) {
+                    AutoCopy.SELL -> bestSell?.let { lastClipboard = copyBeatPrice(eveUndercutPrice(it.price)) }
+                    AutoCopy.BUY -> bestBuy?.let { lastClipboard = copyBeatPrice(eveOutbidPrice(it.price)) }
+                    AutoCopy.OFF -> {}
+                }
             }
         }
     }
@@ -265,6 +296,7 @@ private fun OverlayContent(
                         PriceRow(
                             label = "SELL",
                             price = sellPrice,
+                            beatPrice = sellPrice?.let { eveUndercutPrice(it) },
                             location = sellLoc,
                             color = SELL_COLOR,
                             source = sellSource,
@@ -275,11 +307,13 @@ private fun OverlayContent(
                                 sellSource = PriceSource.CLIPBOARD
                                 sellBook = listOf(p.price to p.volume)
                             },
+                            onCopyBeat = { lastClipboard = copyBeatPrice(it) },
                         )
                         Spacer(Modifier.height(6.dp))
                         PriceRow(
                             label = "BUY ",
                             price = buyPrice,
+                            beatPrice = buyPrice?.let { eveOutbidPrice(it) },
                             location = buyLoc,
                             color = BUY_COLOR,
                             source = buySource,
@@ -290,7 +324,37 @@ private fun OverlayContent(
                                 buySource = PriceSource.CLIPBOARD
                                 buyBook = listOf(p.price to p.volume)
                             },
+                            onCopyBeat = { lastClipboard = copyBeatPrice(it) },
                         )
+                        Spacer(Modifier.height(6.dp))
+                        // Which beat price a Marketlogs order-book import auto-copies to the clipboard.
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Auto-copy", color = DIM_TEXT, style = MaterialTheme.typography.labelSmall)
+                            Spacer(Modifier.weight(1f))
+                            AutoCopy.entries.forEach { mode ->
+                                val label =
+                                    when (mode) {
+                                        AutoCopy.OFF -> "OFF"
+                                        AutoCopy.SELL -> "SELL−"
+                                        AutoCopy.BUY -> "BUY+"
+                                    }
+                                TextButton(
+                                    onClick = {
+                                        autoCopy = mode
+                                        prefs.put("autoCopy", mode.name)
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                                    modifier = Modifier.height(22.dp),
+                                ) {
+                                    Text(
+                                        label,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (autoCopy == mode) ACCENT else DIM_TEXT,
+                                        fontWeight = if (autoCopy == mode) FontWeight.Bold else FontWeight.Normal,
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     // ─── Profit / margin ──────────────────────────────────
@@ -360,10 +424,12 @@ private fun OverlayContent(
 private fun PriceRow(
     label: String,
     price: Double?,
+    beatPrice: Double?,
     location: String,
     color: Color,
     source: PriceSource?,
     onSet: () -> Unit,
+    onCopyBeat: (Double) -> Unit,
 ) {
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -395,6 +461,19 @@ private fun PriceRow(
             ) {
                 Text("SET", style = MaterialTheme.typography.labelSmall, color = ACCENT)
             }
+        }
+        // The beat price already sits in the clipboard (written by the poll loop / book import);
+        // clicking here re-copies it after something else overwrote the clipboard.
+        if (beatPrice != null) {
+            Text(
+                "beat ${formatEveSigFigPrice(beatPrice)}",
+                color = ACCENT,
+                style = MaterialTheme.typography.labelSmall,
+                modifier =
+                    Modifier
+                        .padding(start = 38.dp)
+                        .clickable { onCopyBeat(beatPrice) },
+            )
         }
         if (location.isNotEmpty()) {
             Text(

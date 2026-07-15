@@ -4,6 +4,7 @@ import java.util.Locale
 import kotlin.math.floor
 import kotlin.math.log10
 import kotlin.math.pow
+import kotlin.math.round
 
 /**
  * Calculates EVE's price tick step size based on 4 significant figures,
@@ -24,4 +25,19 @@ fun formatEveSigFigPrice(price: Double): String {
     val step = eveSigFigStep(price)
     val decimals = maxOf(0, -floor(log10(step)).toInt())
     return String.format(Locale.US, "%.${decimals}f", price)
+}
+
+/**
+ * One tick below [price] on EVE's 4-sigfig grid — the price to paste to undercut a sell order.
+ * Snaps to the grid first so float noise doesn't skip a tick.
+ */
+fun eveUndercutPrice(price: Double): Double {
+    val step = eveSigFigStep(price)
+    return (round(price / step) * step - step).coerceAtLeast(0.01)
+}
+
+/** One tick above [price] on EVE's 4-sigfig grid — the price to paste to outbid a buy order. */
+fun eveOutbidPrice(price: Double): Double {
+    val step = eveSigFigStep(price)
+    return round(price / step) * step + step
 }
