@@ -79,6 +79,21 @@
 
             # лаунчер ищет конфиг по имени бинарника; makeWrapper переименовывает его в .eventt-wrapped
             ln -s $out/lib/app/eventt.cfg $out/lib/app/.eventt-wrapped.cfg
+
+            # jpackage app-image не создаёт .desktop/иконку в XDG-путях (это делает только
+            # --type deb/rpm) — добавляем вручную, чтобы приложение появилось в меню.
+            install -Dm444 $out/lib/eventt.png $out/share/icons/hicolor/128x128/apps/eventt.png
+            mkdir -p $out/share/applications
+            cat > $out/share/applications/eventt.desktop <<EOF
+            [Desktop Entry]
+            Type=Application
+            Name=EVE Night Trade Tools
+            Comment=EVE Online trading tools
+            Exec=$out/bin/eventt
+            Icon=eventt
+            Categories=Game;Utility;
+            Terminal=false
+            EOF
           '';
         };
 
