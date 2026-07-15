@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.*
 import org.eventt.core.esi.EsiClient
@@ -30,6 +31,8 @@ import org.eventt.core.model.toPnlWindow
 import org.eventt.features.orders.CostBasisService
 import org.eventt.features.orders.realizedPnlWindow
 import java.time.LocalDate
+
+private const val COMBINE_ALL_SETTING = "dashboard.combine_all"
 
 private val POSITIVE = Color(0xFF69DB7C)
 private val NEGATIVE = Color(0xFFFF6B6B)
@@ -48,6 +51,10 @@ fun DashboardScreen(
     // with no character/corporation filter) instead of the selected context. ESI sync is skipped
     // there — it authorizes as one character; each context refreshes its own data when viewed.
     var combined by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) {
+        combined = withContext(Dispatchers.IO) { StaticDataDao.getSetting(COMBINE_ALL_SETTING) == "true" }
+    }
     var walletBalance by remember { mutableStateOf(0.0) }
     var txBreakdown by remember { mutableStateOf<List<org.eventt.core.model.DailyWalletEntry>>(emptyList()) }
     var fifoResult by remember { mutableStateOf<CostBasisService.FifoResult?>(null) }
@@ -269,7 +276,10 @@ fun DashboardScreen(
                     )
                     Switch(
                         checked = combined,
-                        onCheckedChange = { combined = it },
+                        onCheckedChange = {
+                            combined = it
+                            scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(COMBINE_ALL_SETTING, it.toString()) }
+                        },
                         modifier = Modifier.height(24.dp),
                     )
                 }
