@@ -9,6 +9,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.*
@@ -39,6 +40,7 @@ import org.eventt.core.database.NostrReservationModel
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.ViewContext
 import org.eventt.core.everef.EveRefService
+import org.eventt.core.model.AppLog
 import org.eventt.core.model.CharacterModel
 import org.eventt.core.model.PriceAlertModel
 import org.eventt.core.model.RequestStatus
@@ -155,6 +157,7 @@ fun EventtApp() {
     ) {
         var selectedScreen by remember { mutableStateOf(AppScreen.DASHBOARD) }
         var showProgressDialog by remember { mutableStateOf(false) }
+        var showErrorLog by remember { mutableStateOf(false) }
 
         // Tell the global hotkey which screen's queue (Orders vs Station Trading) Ctrl+Z should
         // act on — every visited screen keeps running in the background, so this can't be inferred
@@ -188,6 +191,7 @@ fun EventtApp() {
                     onThemeToggle = { darkTheme = !darkTheme },
                     eveColors = eveColors,
                     onShowProgress = { showProgressDialog = true },
+                    onShowErrors = { showErrorLog = true },
                     overlayActive = showOverlay,
                     onToggleOverlay = { OverlayController.toggle() },
                 )
@@ -250,6 +254,10 @@ fun EventtApp() {
 
                     if (showProgressDialog) {
                         RequestProgressDialog(onDismiss = { showProgressDialog = false })
+                    }
+
+                    if (showErrorLog) {
+                        ErrorLogDialog(onDismiss = { showErrorLog = false })
                     }
 
                     if (importState.isRunning) {
@@ -367,6 +375,7 @@ private fun TopBar(
     onThemeToggle: () -> Unit,
     eveColors: EveColors,
     onShowProgress: () -> Unit,
+    onShowErrors: () -> Unit = {},
     overlayActive: Boolean = false,
     onToggleOverlay: () -> Unit = {},
 ) {
@@ -400,6 +409,18 @@ private fun TopBar(
                         animationSpec = infiniteRepeatable(tween(1000, easing = LinearEasing)),
                         label = "esiSyncSpinAngle",
                     )
+                val logEntries by AppLog.entries.collectAsState()
+                if (logEntries.isNotEmpty()) {
+                    IconButton(onClick = onShowErrors) {
+                        BadgedBox(badge = { Badge { Text("${logEntries.size}") } }) {
+                            Icon(
+                                imageVector = Icons.Default.WarningAmber,
+                                contentDescription = "Recent errors",
+                                tint = Color(0xFFFF9800),
+                            )
+                        }
+                    }
+                }
                 IconButton(onClick = onShowProgress) {
                     Icon(
                         imageVector = Icons.Default.Sync,
@@ -740,6 +761,42 @@ private fun AlertNotificationBanner(
             }
         }
     }
+}
+
+// Recent app errors (ESI failures, DB errors) collected by AppLog — the topbar warning icon
+// opens this so silent failures have a visible explanation.
+@Composable
+private fun ErrorLogDialog(onDismiss: () -> Unit) {
+    val entries by AppLog.entries.collectAsState()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Recent errors") },
+        text = {
+            if (entries.isEmpty()) {
+                Text("No errors recorded", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+            } else {
+                LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
+                    items(entries.size) { i ->
+                        val e = entries[i]
+                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                            Text(
+                                e.time,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                modifier = Modifier.width(64.dp),
+                            )
+                            Text(
+                                "[${e.tag}] ${e.message}",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        dismissButton = { TextButton(onClick = { AppLog.clear() }) { Text("Clear") } },
+    )
 }
 
 private data class IncomingRequestNotice(

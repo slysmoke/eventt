@@ -25,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.*
 import org.eventt.core.esi.EsiClient
+import org.eventt.core.model.AppLog
 import org.eventt.core.model.toPnlWindow
 import org.eventt.features.orders.CostBasisService
 import org.eventt.features.orders.realizedPnlWindow
@@ -78,7 +79,8 @@ fun DashboardScreen(
                 txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = qCharId, corporationId = qCorpId, since = since90)
                 assetValue = if (context != null) AssetDao.getTotalValue(characterId = qCharId, corporationId = qCorpId) else 0.0
                 recentTx = WalletDao.getTransactions(characterId = qCharId, corporationId = qCorpId, limit = 12)
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                AppLog.warn("Dashboard", e)
             }
 
             val acting = actingCharId
@@ -87,7 +89,7 @@ fun DashboardScreen(
                     walletBalance =
                         if (isCorp) EsiClient.getCorporationWallet(corpId, acting).values.sum() else EsiClient.getCharacterWallet(acting)
                 } catch (e: Exception) {
-                    println("Dashboard: wallet ESI error: ${e.message}")
+                    AppLog.warn("Dashboard", "wallet ESI: ${e.message}")
                 }
 
                 try {
@@ -125,7 +127,7 @@ fun DashboardScreen(
                     walletBalance = WalletDao.getWalletSummary(characterId = charId, corporationId = corpId).balance
                     txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = charId, corporationId = corpId, since = since90)
                 } catch (e: Exception) {
-                    println("Dashboard: journal ESI error: ${e.message}")
+                    AppLog.warn("Dashboard", "journal ESI: ${e.message}")
                 }
 
                 try {
@@ -164,7 +166,7 @@ fun DashboardScreen(
                     recentTx = WalletDao.getTransactions(characterId = charId, corporationId = corpId, limit = 12)
                     txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = charId, corporationId = corpId, since = since90)
                 } catch (e: Exception) {
-                    println("Dashboard: transactions ESI error: ${e.message}")
+                    AppLog.warn("Dashboard", "transactions ESI: ${e.message}")
                 }
             }
 
@@ -216,7 +218,8 @@ fun DashboardScreen(
                         .sortedBy { it.second }
                         .take(5)
                         .map(::toItemPnl)
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                AppLog.warn("Dashboard", e)
             }
         }
         isLoading = false

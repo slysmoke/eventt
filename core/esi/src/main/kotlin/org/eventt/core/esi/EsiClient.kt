@@ -13,6 +13,7 @@ import org.eventt.core.auth.SsoAuthManager
 import org.eventt.core.cache.CacheState
 import org.eventt.core.cache.EsiCacheManager
 import org.eventt.core.http.EveHttpClient
+import org.eventt.core.model.AppLog
 import org.eventt.core.model.EsiResponseMetadata
 import org.eventt.core.model.QueuedRequest
 import org.eventt.core.model.RequestSource
@@ -266,6 +267,7 @@ object EsiClient {
                 )
         } catch (e: IOException) {
             RequestQueueManager.completeRequest(queuedRequest.id, error = e.message)
+            AppLog.warn("ESI", "$endpoint: ${e.message}")
             if (cacheResult.state == CacheState.STALE && cacheResult.data != null) {
                 return cacheResult.data!! to EsiResponseMetadata()
             }
@@ -450,6 +452,7 @@ object EsiClient {
             return json.decodeFromString(FittingResponseDto.serializer(), respBody).fittingId
         } catch (e: IOException) {
             RequestQueueManager.completeRequest(queuedRequest.id, error = e.message)
+            AppLog.warn("ESI", "$endpoint: ${e.message}")
             throw e
         }
     }

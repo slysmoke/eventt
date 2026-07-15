@@ -29,6 +29,7 @@ import org.eventt.core.database.StaticDataDao
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.marketlogs.MarketLogEvent
 import org.eventt.core.marketlogs.MarketLogWatcher
+import org.eventt.core.model.AppLog
 import org.eventt.core.model.PLEX_MARKET_REGION_ID
 import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.eveOutbidPrice
@@ -114,7 +115,7 @@ private fun fetchTypeBook(typeId: Int): Pair<List<Pair<Double, Long>>, List<Pair
                 .filter { (it["is_buy_order"] as? Boolean) == isBuy }
                 .map { ((it["price"] as? Number)?.toDouble() ?: 0.0) to ((it["volume_remain"] as? Number)?.toLong() ?: 0L) }
         side(false) to side(true)
-    }.getOrNull()
+    }.onFailure { AppLog.warn("Overlay", "price lookup: ${it.message}") }.getOrNull()
 
 // Which beat price to auto-copy to the clipboard when an order-book export is imported:
 // one tick under the best sell (to undercut) or one tick over the best buy (to outbid).
