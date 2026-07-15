@@ -1,134 +1,136 @@
 # EVE Night Trade Tools — Wiki
 
-Десктопное приложение для торговли в EVE Online: анализ рынка, управление ордерами, P&L-учёт, оверлей-калькулятор поверх игры. Kotlin/JVM + Compose Desktop, данные — через официальное ESI API с авторизацией EVE SSO.
+English | [Русский](WIKI.ru.md)
+
+A desktop trading toolkit for EVE Online: market analysis, order management, P&L accounting, and an in-game overlay calculator. Kotlin/JVM + Compose Desktop; all data comes from the official ESI API via EVE SSO.
 
 ---
 
-## Быстрый старт
+## Quick start
 
-1. Запусти приложение и добавь персонажа на экране **Characters** — откроется браузер с EVE SSO, после логина токен сохраняется локально.
-2. Выбери персонажа (или корпорацию) в сайдбаре — все экраны работают в выбранном контексте.
-3. В **Settings** укажи свои комиссии (Sales Tax, Broker Fee, скилл Advanced Broker Relations) — от них считаются все P&L и цены перебития.
-4. Для интеграции с игрой укажи в Settings папку **Marketlogs** (куда EVE кладёт экспорт рынка) — это включает автоимпорт ордербуков в оверлей.
+1. Launch the app and add a character on the **Characters** screen — a browser opens with EVE SSO; after login the token is stored locally.
+2. Pick a character (or corporation) in the sidebar — every screen operates in the selected context.
+3. In **Settings**, set your fees (Sales Tax, Broker Fee, Advanced Broker Relations skill) — every P&L figure and beat price is computed from them.
+4. For in-game integration, point Settings at your EVE **Marketlogs** folder (where EVE writes market exports) — this enables automatic order-book import into the overlay.
 
-**Где лежат данные:** SQLite-база и токены — в стандартной папке данных ОС, каталог `eventt` (старые `~/.eve-trader` и `~/.eventt` мигрируются автоматически при первом запуске).
+**Where data lives:** the SQLite database and tokens sit in the OS's standard app-data directory, under `eventt` (legacy `~/.eve-trader` and `~/.eventt` are migrated automatically on first launch).
 
 ---
 
-## Глобальные хоткеи
+## Global hotkeys
 
-Работают, даже когда фокус в клиенте EVE.
+These work even while the EVE client has focus.
 
-| Хоткей | Действие |
+| Hotkey | Action |
 |---|---|
-| **Ctrl+Z** | Следующий элемент активной очереди: на экране Orders — цикл по своим ордерам, на Analysis — очередь закупок (Station Trading или Inter-Region, по активной вкладке) |
-| **Ctrl+M** | Открыть/закрыть оверлей Trade Calc у курсора |
+| **Ctrl+Z** | Next item of the active queue: on the Orders screen — cycles your own orders, on Analysis — the buy queue (Station Trading or Inter-Region, per active tab) |
+| **Ctrl+M** | Open/close the Trade Calc overlay at the cursor |
 
 ---
 
-## Экраны
+## Screens
 
 ### Dashboard
 
-Сводка по выбранному персонажу/корпорации:
+Summary for the selected character/corporation:
 
-- **KPI**: баланс кошелька, стоимость ассетов, P&L за 30 дней.
-- **Cash Flow** — денежный поток из журнала кошелька (сегодня / 7 дней / доход и расход за 30 дней).
-- **Daily P&L — 30d** — бары дневного P&L вокруг нулевой линии; наведение показывает дату и сумму.
-- **Realized P&L (FIFO)** — прибыль, засчитанная только по фактически проданным лотам, с учётом комиссий.
-- **Top Items — Realized 30d** — до 5 самых прибыльных и до 5 самых убыточных товаров за 30 дней.
-- **Recent Transactions** — последние сделки.
+- **KPIs**: wallet balance, asset value, 30-day P&L.
+- **Cash Flow** — money flow from the wallet journal (today / 7 days / 30-day income and expenses).
+- **Daily P&L — 30d** — daily P&L bars around a zero baseline; hovering shows the day and amount.
+- **Realized P&L (FIFO)** — profit counted only once a lot is actually sold, fees included.
+- **Top Items — Realized 30d** — up to 5 most profitable and 5 most losing items over 30 days.
+- **Recent Transactions** — latest trades.
 
-Переключатель **Combine all** в шапке агрегирует всё по всем персонажам и корпорациям сразу (балансы суммируются по каждой сущности; ESI-синк в этом режиме не выполняется — используются накопленные локальные данные).
+The **Combine all** switch in the header aggregates everything across all characters and corporations at once (balances are summed per entity; ESI sync is skipped in this mode — it uses the locally accumulated data).
 
 ### Characters
 
-Добавление персонажей через EVE SSO, список токенов, выбор активного контекста — персонаж или корпорация (корпорация действует через токен одного из её персонажей).
+Add characters via EVE SSO, manage tokens, and pick the active context — a character or a corporation (a corporation acts through one of its characters' tokens).
 
 ### Market
 
-- **Browser** — поиск товара по дереву маркет-групп или по имени, стакан ордеров и история цен по региону. PLEX обрабатывается особо: он торгуется в едином глобальном виртуальном регионе (ID 19000001), а не по регионам.
-- Отсюда же можно создавать прайс-алерты.
+- **Browser** — find an item via the market-group tree or by name; regional order book and price history. PLEX is special-cased: it trades in a single global virtual region (ID 19000001), not per-region.
+- Price alerts can be created from here as well.
 
 ### Analysis
 
-Два сканера возможностей:
+Two opportunity scanners:
 
-- **Station Trading** — ищет товары с хорошей маржой между buy- и sell-ордерами на одной станции. Фильтры: регион/станция, категория товара, маржа, объём торгов, модификатор объёма. Результаты можно выделять (drag-select) и отправлять в очередь Ctrl+Z: первое нажатие открывает окно рынка в игре и копирует цену buy-ордера, второе — объём закупки.
-- **Inter-Region** — межрегиональная торговля: пять типов сделок (Sell→Buy мгновенно, Sell→Sell Order, Buy Order→Buy, Buy→Sell и Safe Buy→Sell с «необгоняемой» ценой закупки). Считает стоимость доставки за м³, реальный профит по проходу стакана (не по одной лучшей цене), тренд 7d и отклонение от средней недели.
+- **Station Trading** — finds items with a healthy margin between buy and sell orders at one station. Filters: region/station, item category, margin, traded volume, volume modifier. Results support drag-select and feed the Ctrl+Z queue: the first press opens the item's market window in-game and copies the buy price, the second copies the quantity to buy.
+- **Inter-Region** — cross-region hauling: five trade types (Sell→Buy instant, Sell→Sell Order, Buy Order→Buy, Buy→Sell, and Safe Buy→Sell with an "unattractive to outbid" source price). Computes shipping cost per m³, real profit by walking the order book (not just the single best price), the 7-day trend, and the deviation from the weekly average.
 
-При большом числе кандидатов (>1000) сканер переключается на пакетную выгрузку всего стакана региона — это быстрее, чем тысячи одиночных запросов.
+With many candidates (>1000) the scanner switches to a bulk fetch of the whole region's order book — faster than thousands of per-type requests.
 
 ### Orders
 
-Твои активные ордера и всё вокруг них. Вкладки: **Sell / Buy / History / Inventory**.
+Your active orders and everything around them. Tabs: **Sell / Buy / History / Inventory**.
 
-- **Перебитые ордера**: после «Refresh Prices» приложение сравнивает твою цену с лучшей в регионе (sell — на той же станции, buy — по региону) и подсвечивает перебитые оранжевым; в шапке — счётчик «N beaten». Сравнения автообновляются, как только истекает ESI-кэш.
-- **Очередь Ctrl+Z**: циклично проходит по ордерам (перебитые — первыми), открывает окно рынка в игре и кладёт в буфер цену перебития (±1 тик по сетке 4 значащих цифр). Позиция цикла привязана к ордеру и не сбрасывается при обновлении данных. Переключатель **only beaten** ограничивает цикл только перебитыми. Клик по строке ордера переставляет цикл на него.
-- **Уведомления**: когда ордер становится перебитым — системное уведомление (tray, а без него — notify-send на Linux). Выключается колокольчиком рядом с Refresh Prices.
-- **Relist-комиссии**: приложение замечает смену цены ордера по публичному стакану и считает уплаченные комиссии модификации с учётом скилла Advanced Broker Relations.
-- **Inventory** — остатки по FIFO: средняя себестоимость (с комиссией покупки), текущая цена продажи, профит/юнит, реализованный P&L и колонка **Age** — сколько дней лежит самый старый лот (>30 дней подсвечивается).
+- **Beaten orders**: after "Refresh Prices" the app compares your price against the best in the region (sell — at the same station, buy — region-wide) and highlights beaten orders in orange; the header shows an "N beaten" counter. Comparisons auto-refresh as soon as the ESI cache expires.
+- **The Ctrl+Z queue**: cycles through your orders (beaten first), opens the market window in-game, and puts the beat price on the clipboard (±1 tick on EVE's 4-significant-figures grid). The cycle position is keyed to the order and survives data refreshes. The **only beaten** toggle restricts the cycle to beaten orders. Clicking an order row repositions the cycle onto it.
+- **Notifications**: when an order becomes beaten — a system notification (tray, falling back to notify-send on Linux). Toggle with the bell next to Refresh Prices.
+- **Relist fees**: the app notices price changes on your orders via the public order book and tallies the modification fees paid, honoring the Advanced Broker Relations skill.
+- **Inventory** — FIFO stock: average cost basis (buy broker fee included), current sell price, profit/unit, realized P&L, and an **Age** column — how many days the oldest lot has been sitting (>30 days is highlighted).
 
 ### Wallet
 
-Журнал кошелька и транзакции с разбивкой по дням, типам операций и P&L-окнами (сегодня/7d/30d/всё время). Работает и для корпоративных кошельков (по дивизионам).
+Wallet journal and transactions with daily breakdowns, operation types, and P&L windows (today/7d/30d/all-time). Works for corporation wallets too (per division).
 
 ### Assets
 
-Ассеты персонажа/корпорации по локациям с оценочной стоимостью.
+Character/corporation assets by location with estimated value.
 
 ### Alerts
 
-Прайс-алерты: условие выше/ниже цены (buy или sell), проверка по Jita (для PLEX — по глобальному рынку). Сработавшие показываются баннером в приложении.
+Price alerts: above/below a price (buy or sell side), checked against Jita (PLEX — against the global market). Triggered alerts show as in-app banners.
 
 ### Contracts
 
-Трекер контрактов: item exchange / courier / auction, статусы, стоимость содержимого.
+Contract tracker: item exchange / courier / auction, statuses, contents value.
 
 ### P2P Market
 
-Прямая торговля между игроками поверх протокола **Nostr** (децентрализованные реле, без центрального сервера): публикация ордеров, заявки, входящие запросы, резервации. У каждого ордера — бейдж экономии относительно рыночной цены региона (PLEX сравнивается с глобальным рынком).
+Direct player-to-player trading over the **Nostr** protocol (decentralized relays, no central server): publish orders, make requests, handle incoming requests and reservations. Each order carries a savings badge relative to the regional market price (PLEX is compared to the global market).
 
 ### Tools
 
-- **Pricing** — прайсер: список товаров → цены, копирование результата в буфер.
-- **Cargo Splitter** — режет закупку на партии под объём трюма; готовые партии можно запушить в игру как фиты через ESI.
+- **Pricing** — a pricer: item list in → prices out, results copyable to the clipboard.
+- **Cargo Splitter** — splits a purchase into hold-sized batches; batches can be pushed into the game as fittings via ESI.
 
 ### Settings
 
-Комиссии персонажей (Sales Tax / Broker Fee / Relist-скилл), папка Marketlogs, импорт статических данных SDE, синк цен EveRef, настройки P2P Market, обслуживание БД.
+Character fees (Sales Tax / Broker Fee / relist skill), Marketlogs folder, SDE static-data import, EveRef price sync, P2P Market settings, database maintenance.
 
 ---
 
-## Оверлей Trade Calc (Ctrl+M)
+## Trade Calc overlay (Ctrl+M)
 
-Компактное always-on-top окно поверх игры. Источники цен:
+A compact always-on-top window over the game. Price sources:
 
-1. **Копирование строки ордера в игре** (Ctrl+C по строке рынка) — оверлей парсит её (обычные товары и PLEX), определяет buy/sell и **сразу кладёт обратно в буфер цену перебития**: на 1 тик ниже для sell, на 1 тик выше для buy. Вставляешь в диалог ордера — и ты первый.
-2. **Экспорт ордербука** из окна рынка EVE (файл в Marketlogs) — оверлей автоматически подхватывает весь стакан: лучшие цены, стены Buy out / Sell out (проход по каждому ордеру), средняя по верхним 5%. Селектор **Auto-copy: OFF / SELL− / BUY+** выбирает, какая цена перебития автоматически копируется при импорте. Для PLEX стакан берётся целиком (глобальный рынок, без фильтра по станции).
-3. **Копирование названия предмета** откуда угодно (чат, контракт) — если текст точно совпадает с именем маркет-товара, оверлей подтянет стакан Jita 4-4 (бейдж «jita»).
+1. **Copying an order row in-game** (Ctrl+C on a market row) — the overlay parses it (regular items and PLEX), detects buy/sell, and **immediately writes the beat price back to the clipboard**: one tick below for sell, one tick above for buy. Paste it into the order dialog and you're on top.
+2. **Order-book export** from EVE's market window (a file in Marketlogs) — the overlay picks up the whole book automatically: best prices, Buy out / Sell out walls (walked order-by-order), the top-5% average. The **Auto-copy: OFF / SELL− / BUY+** selector chooses which beat price is auto-copied on import. For PLEX the whole book is used (global market, no station filter).
+3. **Copying an item name** from anywhere (chat, a contract) — if the text exactly matches a market type name, the overlay pulls the Jita 4-4 book (badge "jita").
 
-Под каждой ценой — кликабельная строка `beat …`: повторно копирует цену перебития, если буфер перезаписался. Профит и маржа считаются с комиссиями выбранного персонажа. Все цены — по сетке EVE «4 значащие цифры».
-
----
-
-## Как это работает внутри
-
-- **ESI-кэш**: трёхуровневый (FRESH / STALE / MISS) по заголовку `Expires`; устаревший ответ отдаётся сразу, обновление уходит в фон. Прогресс всех запросов виден по иконке синхронизации в топбаре.
-- **Журнал ошибок**: сбои ESI и загрузок не глотаются — оранжевый значок в топбаре открывает список последних ошибок (время, источник, сообщение).
-- **Обновления**: приложение проверяет GitHub-релизы и показывает баннер с кнопкой установки.
-- **Marketlogs-вотчер**: папка опрашивается периодически; распознанный экспорт импортируется и удаляется.
-- **База**: SQLite (WAL), весь доступ сериализован через однопоточный диспетчер — конкурентных `SQLITE_BUSY` не бывает.
+Under each price sits a clickable `beat …` line: re-copies the beat price if the clipboard got overwritten. Profit and margin are computed with the selected character's fees. All prices follow EVE's 4-significant-figures grid.
 
 ---
 
-## Типовые сценарии
+## How it works inside
 
-**Станционная торговля за вечер**
-Analysis → Station Trading → скан региона → выделил кандидатов → в игре: Ctrl+Z (цена) → выставил buy → Ctrl+Z (объём) → … → позже Orders покажет, кого перебили → Ctrl+Z в режиме only beaten возвращает лидерство.
+- **ESI cache**: three-state (FRESH / STALE / MISS) driven by the `Expires` header; a stale response is served immediately while the refresh runs in the background. All request progress is visible via the sync icon in the top bar.
+- **Error journal**: ESI and load failures aren't swallowed — an orange top-bar icon opens the list of recent errors (time, source, message).
+- **Updates**: the app checks GitHub releases and shows a one-click update banner.
+- **Marketlogs watcher**: the folder is polled periodically; a recognized export is imported and deleted.
+- **Database**: SQLite (WAL); all access is serialized through a single-threaded dispatcher — no concurrent `SQLITE_BUSY`.
 
-**Межрегиональный хаул**
-Analysis → Inter-Region → выбрал тип сделки и регионы → отсортировал по Net Profit → Tools → Cargo Splitter под трюм → пуш фитов в игру.
+---
 
-**Быстрый прайс-чек**
-Ctrl+M → скопировал название предмета или строку ордера → цены, стены и цена перебития уже на экране (и в буфере).
+## Typical workflows
+
+**An evening of station trading**
+Analysis → Station Trading → scan the region → select candidates → in-game: Ctrl+Z (price) → place the buy → Ctrl+Z (quantity) → … → later, Orders shows who got beaten → Ctrl+Z in only-beaten mode takes the lead back.
+
+**A cross-region haul**
+Analysis → Inter-Region → pick the trade type and regions → sort by Net Profit → Tools → Cargo Splitter for your hold → push the fittings into the game.
+
+**A quick price check**
+Ctrl+M → copy an item name or an order row → prices, walls, and the beat price are on screen (and on the clipboard).

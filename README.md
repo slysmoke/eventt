@@ -7,26 +7,29 @@
 
 # <img src="app/icons/icon.png" width="40" valign="middle" alt="App icon"> EVE Night Trade Tools
 
+English | [Русский](README.ru.md) · **[User Wiki](docs/WIKI.md)** ([RU](docs/WIKI.ru.md))
+
 A desktop trading toolkit for [EVE Online](https://www.eveonline.com/), built with Kotlin/JVM and Jetpack Compose for Desktop. It talks to CCP's ESI API (OAuth2 SSO) to pull your characters' orders, wallet, assets, and contracts, and layers market analysis, alerts, and a FIFO cost-basis/P&L engine on top.
 
 ## Features
 
-- **Dashboard** — at-a-glance summary across your tracked characters
-- **Characters** — manage linked EVE characters via SSO
-- **Market** — browse regional market orders and price history
-- **Analysis** — trade-hub comparison and market analysis tools
+- **Dashboard** — wallet/asset/P&L KPIs, a 30-day daily P&L chart, top winners/losers by realized FIFO P&L, and a "Combine all" mode aggregating every character and corporation
+- **Characters** — manage linked EVE characters via SSO; act as a character or a corporation
+- **Market** — browse regional market orders and price history (PLEX handled via its global market region)
+- **Analysis** — station-trading and inter-region opportunity scanners with hotkey-driven buy queues
 - **Assets** — inventory viewer across stations/structures
 - **Wallet** — transaction journal and P&L
-- **Orders** — active buy/sell orders with margin and market-comparison columns, order history, and a FIFO-costed inventory view
-- **Watchlist** — track items with sparklines
+- **Orders** — active buy/sell orders with market comparison, beaten-order highlighting and desktop notifications, relist-fee tracking, order history, and a FIFO-costed inventory view with stock age
 - **Alerts** — price alerts with in-app notifications
 - **Contracts** — contract tracker
-- **Tools** — cargo splitter and a sell-pricing calculator that scopes prices to your character's current docked station
+- **Tools** — cargo splitter (with fitting push into the game) and a sell-pricing calculator that scopes prices to your character's current docked station
 - **P2P Market** — peer-to-peer OTC trading over [Nostr](https://nostr.com/): post buy/sell orders, negotiate reservations over encrypted DMs, and settle in-game outside the ESI market
-- **Trade Calc** — a small always-on-top overlay for quick station-trading margin math: reads SELL/BUY prices from a copied order row or an EVE order-book export, and shows broker/tax fees, profit margin, and real buy-out/sell-out totals walked from the actual order book
+- **Trade Calc** — a small always-on-top overlay: reads SELL/BUY prices from a copied order row, an EVE order-book export, or a copied item name (Jita lookup); writes the beat price straight back to the clipboard and shows fees, margin, and real buy-out/sell-out totals walked from the actual order book
 - **Settings** — tax rates, data source, and app preferences
 
 Two global hotkeys work even when EVE has focus: **Ctrl+Z** cycles through your queued orders, opens the in-game market window, and copies an overbid/undercut price to your clipboard; **Ctrl+M** opens the Trade Calc overlay at your cursor.
+
+See the **[User Wiki](docs/WIKI.md)** for a screen-by-screen guide and typical workflows.
 
 ## Requirements
 
@@ -108,7 +111,7 @@ The app checks the repo's latest GitHub Release on startup and offers a one-clic
 Modules are organized under `core/`, `features/`, and `ui/`:
 
 - **`core/`**: model, database, http, cache, auth, esi, queue, staticdata, image, everef, marketlogs, nostr
-- **`features/`**: characters, market, assets, wallet, orders, dashboard, alerts, contracts, watchlist, settings, overlay, tools, p2pmarket
+- **`features/`**: characters, market, assets, wallet, orders, dashboard, alerts, contracts, settings, overlay, tools, p2pmarket
 - **`ui/`**: theme (Material 3 + EVE color palette), common (shared Compose components)
 
 ```
