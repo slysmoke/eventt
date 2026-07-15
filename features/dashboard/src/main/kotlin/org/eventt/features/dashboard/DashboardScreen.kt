@@ -18,7 +18,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.*
 import org.eventt.core.esi.EsiClient
-import org.eventt.core.model.PriceAlertModel
 import org.eventt.core.model.toPnlWindow
 import org.eventt.features.orders.CostBasisService
 import org.eventt.features.orders.realizedPnlWindow
@@ -37,30 +36,46 @@ fun DashboardScreen(
     val corpId = (context as? ViewContext.Corporation)?.corporationId
     val corpName = (context as? ViewContext.Corporation)?.corporationName
     val actingCharId = context?.actingCharId
+    // Combined mode aggregates the local DB across every character and corporation (DAO calls
+    // with no character/corporation filter) instead of the selected context. ESI sync is skipped
+    // there — it authorizes as one character; each context refreshes its own data when viewed.
+    var combined by remember { mutableStateOf(false) }
     var walletBalance by remember { mutableStateOf(0.0) }
     var txBreakdown by remember { mutableStateOf<List<org.eventt.core.model.DailyWalletEntry>>(emptyList()) }
     var fifoResult by remember { mutableStateOf<CostBasisService.FifoResult?>(null) }
     var assetValue by remember { mutableStateOf(0.0) }
     var recentTx by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
-    var triggeredAlerts by remember { mutableStateOf<List<PriceAlertModel>>(emptyList()) }
+    var topWinners by remember { mutableStateOf<List<ItemPnl>>(emptyList()) }
+    var topLosers by remember { mutableStateOf<List<ItemPnl>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
 
-    LaunchedEffect(context, refreshTrigger) {
+    LaunchedEffect(context, refreshTrigger, combined) {
         isLoading = true
         withContext(Dispatchers.IO) {
             val isCorp = corpId != null
             val since90 = LocalDate.now().minusDays(90).toString()
+            val qCharId = if (combined) null else charId
+            val qCorpId = if (combined) null else corpId
             try {
-                walletBalance = WalletDao.getWalletSummary(characterId = charId, corporationId = corpId).balance
-                txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = charId, corporationId = corpId, since = since90)
-                assetValue = if (context != null) AssetDao.getTotalValue(characterId = charId, corporationId = corpId) else 0.0
-                recentTx = WalletDao.getTransactions(characterId = charId, corporationId = corpId, limit = 12)
-                triggeredAlerts = AlertDao.getEnabled().filter { it.triggered }
+                walletBalance =
+                    if (combined) {
+                        // The unfiltered journal's latest row is one wallet's balance, not a
+                        // total — sum each character's and each corporation's own latest balance.
+                        val chars = CharacterDao.getAll()
+                        val corpIds = chars.mapNotNull { it.corporationId }.distinct()
+                        chars.sumOf { WalletDao.getWalletSummary(characterId = it.id).balance } +
+                            corpIds.sumOf { WalletDao.getWalletSummary(corporationId = it).balance }
+                    } else {
+                        WalletDao.getWalletSummary(characterId = charId, corporationId = corpId).balance
+                    }
+                txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = qCharId, corporationId = qCorpId, since = since90)
+                assetValue = if (context != null) AssetDao.getTotalValue(characterId = qCharId, corporationId = qCorpId) else 0.0
+                recentTx = WalletDao.getTransactions(characterId = qCharId, corporationId = qCorpId, limit = 12)
             } catch (_: Exception) {
             }
 
             val acting = actingCharId
-            if (acting != null) {
+            if (acting != null && !combined) {
                 try {
                     walletBalance =
                         if (isCorp) EsiClient.getCorporationWallet(corpId, acting).values.sum() else EsiClient.getCharacterWallet(acting)
@@ -156,7 +171,44 @@ fun DashboardScreen(
                     } else {
                         CostBasisService.TaxConfig()
                     }
-                fifoResult = CostBasisService.compute(characterId = charId, corporationId = corpId, taxConfig = taxConfig)
+                val fifo =
+                    CostBasisService.compute(
+                        characterId = if (combined) null else charId,
+                        corporationId = if (combined) null else corpId,
+                        taxConfig = taxConfig,
+                    )
+                fifoResult = fifo
+
+                // Realized P&L per item over the last 30 days, for the winners/losers lists.
+                val since30 = LocalDate.now().minusDays(30).toString()
+                val byType =
+                    fifo.realizedSells
+                        .filter { it.date.take(10) >= since30 }
+                        .groupBy { it.typeId }
+                        .map { (typeId, sells) -> Triple(typeId, sells.sumOf { it.profit }, sells.sumOf { it.qty }) }
+
+                fun toItemPnl(entry: Triple<Int, Double, Int>) =
+                    ItemPnl(
+                        typeId = entry.first,
+                        name =
+                            fifo.inventory[entry.first]?.typeName?.takeIf { it.isNotEmpty() }
+                                ?: StaticDataDao.getTypeName(entry.first)
+                                ?: "Type ${entry.first}",
+                        profit = entry.second,
+                        qty = entry.third,
+                    )
+                topWinners =
+                    byType
+                        .filter { it.second > 0 }
+                        .sortedByDescending { it.second }
+                        .take(5)
+                        .map(::toItemPnl)
+                topLosers =
+                    byType
+                        .filter { it.second < 0 }
+                        .sortedBy { it.second }
+                        .take(5)
+                        .map(::toItemPnl)
             } catch (_: Exception) {
             }
         }
@@ -191,10 +243,26 @@ fun DashboardScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    if (corpName != null) "Dashboard — $corpName" else "Dashboard",
+                    when {
+                        combined -> "Dashboard — All characters & corps"
+                        corpName != null -> "Dashboard — $corpName"
+                        else -> "Dashboard"
+                    },
                     style = MaterialTheme.typography.headlineMedium,
                 )
-                if (isLoading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (isLoading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Text(
+                        "Combine all",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                    Switch(
+                        checked = combined,
+                        onCheckedChange = { combined = it },
+                        modifier = Modifier.height(24.dp),
+                    )
+                }
             }
         }
 
@@ -297,30 +365,20 @@ fun DashboardScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        SectionHeader("Triggered Alerts", badge = triggeredAlerts.size.takeIf { it > 0 })
+                        SectionHeader("Top Items — Realized 30d")
                         Spacer(Modifier.height(8.dp))
-                        if (triggeredAlerts.isEmpty()) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                Icon(Icons.Default.CheckCircle, null, tint = POSITIVE, modifier = Modifier.size(16.dp))
-                                Text(
-                                    "No triggered alerts",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                        if (topWinners.isEmpty() && topLosers.isEmpty()) {
+                            EmptyHint("No realized sells in the last 30 days")
+                        } else {
+                            topWinners.forEach { ItemPnlRow(it) }
+                            if (topWinners.isNotEmpty() && topLosers.isNotEmpty()) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(vertical = 4.dp),
+                                    thickness = 0.5.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
                                 )
                             }
-                        } else {
-                            triggeredAlerts.forEachIndexed { i, alert ->
-                                AlertRow(alert)
-                                if (i < triggeredAlerts.lastIndex) {
-                                    HorizontalDivider(
-                                        thickness = 0.5.dp,
-                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
-                                    )
-                                }
-                            }
+                            topLosers.forEach { ItemPnlRow(it) }
                         }
                     }
                 }
@@ -489,34 +547,36 @@ private fun TransactionRow(tx: Map<String, Any?>) {
     }
 }
 
+// One item's realized FIFO P&L over the dashboard's 30-day window.
+private data class ItemPnl(
+    val typeId: Int,
+    val name: String,
+    val profit: Double,
+    val qty: Int,
+)
+
 @Composable
-private fun AlertRow(alert: PriceAlertModel) {
+private fun ItemPnlRow(item: ItemPnl) {
+    val color = if (item.profit >= 0) POSITIVE else NEGATIVE
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(Icons.Default.Notifications, null, tint = Color(0xFFFF8C00), modifier = Modifier.size(16.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(alert.typeName, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(item.name, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                "${alert.condition} ${formatIsk(alert.targetPrice)}",
+                "${item.qty} sold",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
             )
         }
-        Surface(
-            color = Color(0xFFFF8C00).copy(alpha = 0.15f),
-            shape = MaterialTheme.shapes.extraSmall,
-        ) {
-            Text(
-                alert.orderType.uppercase(),
-                style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFFFF8C00),
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
-            )
-        }
+        Text(
+            formatIsk(item.profit, showSign = true),
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            color = color,
+        )
     }
 }
 
