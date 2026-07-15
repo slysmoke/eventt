@@ -2,6 +2,7 @@ package org.eventt
 
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.model.HotkeyBindings
+import org.eventt.core.model.HotkeyCombo
 import org.eventt.features.market.InterRegionQueue
 import org.eventt.features.market.MarketAnalysisRouter
 import org.eventt.features.market.StationTradingQueue
@@ -54,13 +55,13 @@ object GlobalHotkeyService {
         }
 
         val queueKey =
-            HotkeyKey.ctrlLetter(
-                HotkeyBindings.letterOrDefault(readSetting(HotkeyBindings.QUEUE_KEY_SETTING), HotkeyBindings.DEFAULT_QUEUE_LETTER),
+            HotkeyKey.fromCombo(
+                HotkeyCombo.parse(readSetting(HotkeyBindings.QUEUE_KEY_SETTING)) ?: HotkeyCombo.QUEUE_DEFAULT,
                 id = 1,
             )
         val overlayKey =
-            HotkeyKey.ctrlLetter(
-                HotkeyBindings.letterOrDefault(readSetting(HotkeyBindings.OVERLAY_KEY_SETTING), HotkeyBindings.DEFAULT_OVERLAY_LETTER),
+            HotkeyKey.fromCombo(
+                HotkeyCombo.parse(readSetting(HotkeyBindings.OVERLAY_KEY_SETTING)) ?: HotkeyCombo.OVERLAY_DEFAULT,
                 id = 2,
             )
         HotkeyBindings.publishLabels(queue = queueKey.label, overlay = overlayKey.label)

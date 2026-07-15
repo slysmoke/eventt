@@ -1,17 +1,21 @@
 package org.eventt.hotkey
 
+import org.eventt.core.model.HotkeyCombo
+
 /**
- * One physical global hotkey combo, expressed in whatever form each native backend needs to
- * register it. Ctrl is the only modifier used anywhere in this app, so it's baked into each
- * backend rather than threaded through here.
+ * One physical global hotkey combo (any mix of Ctrl/Alt/Shift + a letter), expressed in whatever
+ * form each native backend needs to register it.
  */
 data class HotkeyKey(
     val label: String,
+    val ctrl: Boolean,
+    val alt: Boolean,
+    val shift: Boolean,
     val win32VkCode: Int,
     val x11KeyString: String,
     val macVkCode: Int,
     // Distinguishes native hotkey IDs / portal shortcut IDs between the two keys this app
-    // registers, so binding both at once (Ctrl+Z and Ctrl+M) can't collide.
+    // registers, so binding both at once can't collide.
     val id: Int,
 ) {
     companion object {
@@ -46,15 +50,17 @@ data class HotkeyKey(
                 'Z' to 0x06,
             )
 
-        /** Ctrl + a single letter — the only combo shape this app registers. */
-        fun ctrlLetter(
-            letter: Char,
+        fun fromCombo(
+            combo: HotkeyCombo,
             id: Int,
         ): HotkeyKey {
-            val u = letter.uppercaseChar()
-            require(u in 'A'..'Z') { "hotkey letter must be A-Z, got '$letter'" }
+            val u = combo.letter.uppercaseChar()
+            require(u in 'A'..'Z') { "hotkey letter must be A-Z, got '${combo.letter}'" }
             return HotkeyKey(
-                label = "Ctrl+$u",
+                label = combo.label,
+                ctrl = combo.ctrl,
+                alt = combo.alt,
+                shift = combo.shift,
                 win32VkCode = 0x41 + (u - 'A'),
                 x11KeyString = u.lowercaseChar().toString(),
                 macVkCode = MAC_VK.getValue(u),

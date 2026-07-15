@@ -86,7 +86,7 @@ class MacHotkeyBackend : HotkeyBackend {
                 id = key.id
             }
         val hotKeyOutRef = PointerByReference()
-        val registerStatus = lib.RegisterEventHotKey(key.macVkCode, MOD_CONTROL, hotKeyId, eventTarget, 0, hotKeyOutRef)
+        val registerStatus = lib.RegisterEventHotKey(key.macVkCode, key.carbonModifiers(), hotKeyId, eventTarget, 0, hotKeyOutRef)
         if (registerStatus != 0) {
             println("[Hotkey][macOS] RegisterEventHotKey failed: status=$registerStatus")
             handlerRef?.let { lib.RemoveEventHandler(it) }
@@ -113,8 +113,13 @@ class MacHotkeyBackend : HotkeyBackend {
         const val EVENT_HOTKEY_PRESSED = 5
         const val EVENT_PARAM_DIRECT_OBJECT = 0x2D2D2D2D // '----'
         const val TYPE_EVENT_HOTKEY_ID = 0x686B6964 // 'hkid'
+        const val MOD_SHIFT = 512 // shiftKey
+        const val MOD_OPTION = 2048 // optionKey (Alt)
         const val MOD_CONTROL = 4096 // controlKey
     }
+
+    private fun HotkeyKey.carbonModifiers(): Int =
+        (if (ctrl) MOD_CONTROL else 0) or (if (alt) MOD_OPTION else 0) or (if (shift) MOD_SHIFT else 0)
 }
 
 // Public for the same reason as the Structure subclasses below - JNA needs cross-package

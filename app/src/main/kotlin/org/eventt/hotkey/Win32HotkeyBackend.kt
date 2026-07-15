@@ -45,7 +45,7 @@ class Win32HotkeyBackend : HotkeyBackend {
             Thread({
                 try {
                     threadId = Kernel32.INSTANCE.GetCurrentThreadId()
-                    registered = user32.RegisterHotKey(null, id, MOD_CONTROL, key.win32VkCode)
+                    registered = user32.RegisterHotKey(null, id, key.win32Modifiers(), key.win32VkCode)
                 } catch (e: Throwable) {
                     println("[Hotkey][Win32] Failed to register hotkey: ${e.message}")
                     registered = false
@@ -91,9 +91,14 @@ class Win32HotkeyBackend : HotkeyBackend {
         threadId = 0
     }
 
+    private fun HotkeyKey.win32Modifiers(): Int =
+        (if (ctrl) MOD_CONTROL else 0) or (if (alt) MOD_ALT else 0) or (if (shift) MOD_SHIFT else 0)
+
     private companion object {
         const val HOTKEY_ID_BASE = 0xC0DE
+        const val MOD_ALT = 0x0001
         const val MOD_CONTROL = 0x0002
+        const val MOD_SHIFT = 0x0004
         const val WM_HOTKEY = 0x0312
         const val WM_QUIT = 0x0012
     }

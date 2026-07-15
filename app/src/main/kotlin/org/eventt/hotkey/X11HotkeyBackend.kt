@@ -50,10 +50,15 @@ class X11HotkeyBackend : HotkeyBackend {
             return false
         }
 
+        val baseMask =
+            (if (key.ctrl) CONTROL_MASK else 0) or
+                (if (key.alt) MOD1_MASK else 0) or
+                (if (key.shift) SHIFT_MASK else 0)
+
         // XGrabKey doesn't ignore lock modifiers (CapsLock/NumLock) by itself - grab every
         // combination so the hotkey doesn't silently stop firing when either is toggled on.
         for (lockBits in intArrayOf(0, LOCK_MASK, NUM_LOCK_MASK, LOCK_MASK or NUM_LOCK_MASK)) {
-            lib.XGrabKey(disp, keycode, CONTROL_MASK or lockBits, root, 0, GRAB_MODE_ASYNC, GRAB_MODE_ASYNC)
+            lib.XGrabKey(disp, keycode, baseMask or lockBits, root, 0, GRAB_MODE_ASYNC, GRAB_MODE_ASYNC)
         }
 
         display = disp
@@ -90,7 +95,9 @@ class X11HotkeyBackend : HotkeyBackend {
     }
 
     private companion object {
+        const val SHIFT_MASK = 1 shl 0
         const val CONTROL_MASK = 1 shl 2
+        const val MOD1_MASK = 1 shl 3 // Alt
         const val LOCK_MASK = 1 shl 1
         const val NUM_LOCK_MASK = 1 shl 4
         const val GRAB_MODE_ASYNC = 1

@@ -6,8 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Card
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -19,42 +17,51 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.model.HotkeyBindings
+import org.eventt.core.model.HotkeyCombo
 
 /**
- * Rebind the two global hotkeys. Ctrl is fixed (the only modifier the native backends register);
- * the letter is the configurable part. Changes are saved and re-registered immediately.
+ * Rebind the two global hotkeys by pressing the wanted combination: any mix of Ctrl/Alt/Shift
+ * plus a letter (at least one modifier — a bare letter grabbed system-wide would swallow normal
+ * typing). Changes are saved and re-registered immediately.
  */
 @Composable
 internal fun HotkeysCard() {
-    var queueLetter by remember { mutableStateOf(HotkeyBindings.DEFAULT_QUEUE_LETTER) }
-    var overlayLetter by remember { mutableStateOf(HotkeyBindings.DEFAULT_OVERLAY_LETTER) }
+    var queueCombo by remember { mutableStateOf(HotkeyCombo.QUEUE_DEFAULT) }
+    var overlayCombo by remember { mutableStateOf(HotkeyCombo.OVERLAY_DEFAULT) }
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
-            queueLetter =
-                HotkeyBindings.letterOrDefault(
-                    StaticDataDao.getSetting(HotkeyBindings.QUEUE_KEY_SETTING),
-                    HotkeyBindings.DEFAULT_QUEUE_LETTER,
-                )
-            overlayLetter =
-                HotkeyBindings.letterOrDefault(
-                    StaticDataDao.getSetting(HotkeyBindings.OVERLAY_KEY_SETTING),
-                    HotkeyBindings.DEFAULT_OVERLAY_LETTER,
-                )
+            queueCombo =
+                HotkeyCombo.parse(StaticDataDao.getSetting(HotkeyBindings.QUEUE_KEY_SETTING))
+                    ?: HotkeyCombo.QUEUE_DEFAULT
+            overlayCombo =
+                HotkeyCombo.parse(StaticDataDao.getSetting(HotkeyBindings.OVERLAY_KEY_SETTING))
+                    ?: HotkeyCombo.OVERLAY_DEFAULT
         }
     }
 
     suspend fun save(
         settingKey: String,
-        letter: Char,
+        combo: HotkeyCombo,
     ) {
-        withContext(Dispatchers.IO) { StaticDataDao.setSetting(settingKey, letter.toString()) }
+        withContext(Dispatchers.IO) { StaticDataDao.setSetting(settingKey, combo.serialize()) }
         HotkeyBindings.applyChange?.invoke()
     }
 
@@ -62,23 +69,26 @@ internal fun HotkeysCard() {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Global Hotkeys", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
-                "System-wide — they trigger even while the EVE client has focus. Ctrl is always the modifier.",
+                "System-wide — they trigger even while the EVE client has focus. Click a binding, then " +
+                    "press the combination you want (Ctrl/Alt/Shift + a letter, at least one modifier). " +
+                    "Extra mouse buttons: bind them to this combination in your mouse software " +
+                    "(Logitech G HUB, Razer Synapse, input-remapper on Linux).",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            HotkeyRow(
+            HotkeyCaptureRow(
                 label = "Cycle order/trade queue",
-                letter = queueLetter,
-                takenLetter = overlayLetter,
-                onPick = { queueLetter = it },
+                combo = queueCombo,
+                takenCombo = overlayCombo,
+                onPick = { queueCombo = it },
                 settingKey = HotkeyBindings.QUEUE_KEY_SETTING,
                 save = ::save,
             )
-            HotkeyRow(
+            HotkeyCaptureRow(
                 label = "Toggle Trade Calc overlay",
-                letter = overlayLetter,
-                takenLetter = queueLetter,
-                onPick = { overlayLetter = it },
+                combo = overlayCombo,
+                takenCombo = queueCombo,
+                onPick = { overlayCombo = it },
                 settingKey = HotkeyBindings.OVERLAY_KEY_SETTING,
                 save = ::save,
             )
@@ -86,17 +96,50 @@ internal fun HotkeysCard() {
     }
 }
 
+// Compose desktop Keys for A..Z, index 0 = 'A'.
+private val LETTER_KEYS =
+    listOf(
+        Key.A,
+        Key.B,
+        Key.C,
+        Key.D,
+        Key.E,
+        Key.F,
+        Key.G,
+        Key.H,
+        Key.I,
+        Key.J,
+        Key.K,
+        Key.L,
+        Key.M,
+        Key.N,
+        Key.O,
+        Key.P,
+        Key.Q,
+        Key.R,
+        Key.S,
+        Key.T,
+        Key.U,
+        Key.V,
+        Key.W,
+        Key.X,
+        Key.Y,
+        Key.Z,
+    )
+
 @Composable
-private fun HotkeyRow(
+private fun HotkeyCaptureRow(
     label: String,
-    letter: Char,
-    takenLetter: Char,
-    onPick: (Char) -> Unit,
+    combo: HotkeyCombo,
+    takenCombo: HotkeyCombo,
+    onPick: (HotkeyCombo) -> Unit,
     settingKey: String,
-    save: suspend (String, Char) -> Unit,
+    save: suspend (String, HotkeyCombo) -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    var pendingSave by remember { mutableStateOf<Char?>(null) }
+    var capturing by remember { mutableStateOf(false) }
+    var hint by remember { mutableStateOf<String?>(null) }
+    var pendingSave by remember { mutableStateOf<HotkeyCombo?>(null) }
+    val focusRequester = remember { FocusRequester() }
 
     LaunchedEffect(pendingSave) {
         pendingSave?.let {
@@ -104,30 +147,74 @@ private fun HotkeyRow(
             pendingSave = null
         }
     }
+    LaunchedEffect(capturing) {
+        if (capturing) focusRequester.requestFocus()
+    }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
         Column {
-            OutlinedButton(onClick = { expanded = true }) { Text("Ctrl+$letter") }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                for (candidate in 'A'..'Z') {
-                    if (candidate == takenLetter) continue
-                    DropdownMenuItem(
-                        text = { Text("Ctrl+$candidate") },
-                        onClick = {
-                            expanded = false
-                            if (candidate != letter) {
-                                onPick(candidate)
-                                pendingSave = candidate
-                            }
-                        },
-                    )
-                }
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+            hint?.let {
+                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
             }
+        }
+        OutlinedButton(
+            onClick = {
+                capturing = true
+                hint = null
+            },
+            modifier =
+                Modifier
+                    .focusRequester(focusRequester)
+                    .onFocusChanged { if (!it.isFocused) capturing = false }
+                    .onPreviewKeyEvent { event ->
+                        if (!capturing) return@onPreviewKeyEvent false
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent true
+                        val idx = LETTER_KEYS.indexOf(event.key)
+                        when {
+                            event.key == Key.Escape -> capturing = false
+                            idx == -1 -> {
+                                // Modifier keydowns pass silently while the user forms the chord;
+                                // anything else that isn't a letter can't be bound.
+                                val isModifier =
+                                    event.key == Key.CtrlLeft ||
+                                        event.key == Key.CtrlRight ||
+                                        event.key == Key.AltLeft ||
+                                        event.key == Key.AltRight ||
+                                        event.key == Key.ShiftLeft ||
+                                        event.key == Key.ShiftRight
+                                if (!isModifier) hint = "Press Ctrl/Alt/Shift + a letter (A–Z)"
+                            }
+                            else -> {
+                                val picked =
+                                    HotkeyCombo(
+                                        ctrl = event.isCtrlPressed,
+                                        alt = event.isAltPressed,
+                                        shift = event.isShiftPressed,
+                                        letter = 'A' + idx,
+                                    )
+                                when {
+                                    !picked.ctrl && !picked.alt && !picked.shift ->
+                                        hint = "Hold at least one modifier (Ctrl/Alt/Shift)"
+                                    picked == takenCombo ->
+                                        hint = "${picked.label} is already used by the other hotkey"
+                                    else -> {
+                                        onPick(picked)
+                                        pendingSave = picked
+                                        hint = null
+                                        capturing = false
+                                    }
+                                }
+                            }
+                        }
+                        true // swallow everything while capturing
+                    },
+        ) {
+            Text(if (capturing) "Press keys…" else combo.label)
         }
     }
 }
