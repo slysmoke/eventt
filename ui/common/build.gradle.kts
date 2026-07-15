@@ -8,6 +8,7 @@ group = "org.eventt"
 version = "1.0.0"
 
 dependencies {
+    implementation(project(":core:image"))
     implementation(project(":core:model"))
     implementation(project(":core:queue"))
     implementation(project(":ui:theme"))

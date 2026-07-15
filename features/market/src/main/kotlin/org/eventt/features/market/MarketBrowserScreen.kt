@@ -486,21 +486,7 @@ private fun TypeMarketHeader(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // Type icon
-            Surface(
-                modifier = Modifier.size(32.dp),
-                shape = MaterialTheme.shapes.small,
-                color = MaterialTheme.colorScheme.primaryContainer,
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        Icons.Default.Extension,
-                        null,
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                }
-            }
+            TypeIcon(type.typeId, size = 32.dp)
 
             Spacer(modifier = Modifier.width(8.dp))
 
@@ -1251,7 +1237,7 @@ private fun SearchRow(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Default.Extension, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+        TypeIcon(type.typeId, size = 18.dp)
         Spacer(modifier = Modifier.width(8.dp))
         Text(type.name, style = MaterialTheme.typography.bodyMedium)
     }

@@ -238,16 +238,7 @@ private fun AssetRow(asset: AssetModel) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Icon placeholder (would load from EveImageServer)
-            Surface(
-                modifier = Modifier.size(24.dp),
-                shape = MaterialTheme.shapes.small,
-                color = MaterialTheme.colorScheme.surfaceVariant,
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Extension, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.Gray)
-                }
-            }
+            TypeIcon(asset.typeId, size = 24.dp)
 
             Column {
                 Text(asset.typeName, style = MaterialTheme.typography.bodyMedium)
