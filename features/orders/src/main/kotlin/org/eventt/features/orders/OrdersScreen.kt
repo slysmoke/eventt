@@ -36,19 +36,22 @@ import org.eventt.core.model.formatEveSigFigPrice
 import org.eventt.ui.common.EmptyState
 import org.eventt.ui.common.EsiRefreshButton
 import org.eventt.ui.common.LoadingOverlay
+import org.eventt.ui.theme.negativeColor
+import org.eventt.ui.theme.positiveColor
+import org.eventt.ui.theme.warningColor
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 
-internal val SELL_COLOR = Color(0xFFFF6B6B)
-internal val BUY_COLOR = Color(0xFF69DB7C)
-internal val VOL_SELL = Color(0xFFFF8C00)
+internal val SELL_COLOR: Color @Composable get() = negativeColor
+internal val BUY_COLOR: Color @Composable get() = positiveColor
+internal val VOL_SELL: Color @Composable get() = warningColor
 internal val VOL_BUY = Color(0xFF2E7D32)
-internal val PROFIT_COLOR = Color(0xFF69DB7C)
-internal val LOSS_COLOR = Color(0xFFFF6B6B)
-internal val UNDERCUT_COLOR = Color(0xFFFF9800) // orange — order has been beaten
+internal val PROFIT_COLOR: Color @Composable get() = positiveColor
+internal val LOSS_COLOR: Color @Composable get() = negativeColor
+internal val UNDERCUT_COLOR: Color @Composable get() = warningColor // order has been beaten
 internal val ACTIVE_IN_GAME = Color(0xFF4A90D9) // blue — currently open in EVE client
 
 private const val DEFAULT_REGION_ID = 10000002 // The Forge (Jita) — fallback for inventory items with no active order/region context

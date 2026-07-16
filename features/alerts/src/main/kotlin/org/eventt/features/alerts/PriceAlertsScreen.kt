@@ -23,6 +23,8 @@ import org.eventt.core.model.PLEX_MARKET_REGION_ID
 import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.PriceAlertModel
 import org.eventt.ui.common.*
+import org.eventt.ui.theme.negativeColor
+import org.eventt.ui.theme.positiveColor
 import java.util.Locale
 
 private const val JITA_REGION_ID = 10000002
@@ -140,7 +142,7 @@ private fun AlertCard(
             Icon(
                 imageVector = if (alert.condition == "above") Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
                 contentDescription = null,
-                tint = if (alert.condition == "above") Color(0xFF69DB7C) else Color(0xFFFF6B6B),
+                tint = if (alert.condition == "above") positiveColor else negativeColor,
                 modifier = Modifier.size(24.dp),
             )
 

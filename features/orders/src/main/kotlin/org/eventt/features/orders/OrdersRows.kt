@@ -20,6 +20,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.eventt.core.database.OrderHistoryDao
 import org.eventt.ui.common.formatIsk
+import org.eventt.ui.theme.negativeColor
+import org.eventt.ui.theme.positiveColor
+import org.eventt.ui.theme.warningColor
 
 // ── Rows ──────────────────────────────────────────────────────────────────
 
@@ -410,10 +413,10 @@ internal fun OrderHistoryRow(
     val effectiveState = effectiveOrderState(order)
     val stateColor =
         when (effectiveState) {
-            "fulfilled" -> Color(0xFF69DB7C)
+            "fulfilled" -> positiveColor
             "partially_filled" -> Color(0xFF74C0FC)
-            "cancelled" -> Color(0xFFFF6B6B)
-            else -> Color(0xFFFFD43B)
+            "cancelled" -> negativeColor
+            else -> warningColor
         }
     val profitColor = pnl?.let { if (it >= 0) PROFIT_COLOR else LOSS_COLOR }
 

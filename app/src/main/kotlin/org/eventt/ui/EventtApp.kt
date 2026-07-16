@@ -5,7 +5,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.PaddingValues
@@ -19,12 +19,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -94,12 +100,16 @@ enum class AppScreen(
     SETTINGS("Settings", Icons.Default.Settings),
 }
 
+private const val THEME_SETTING_KEY = "app.theme"
+private const val FONT_SETTING_KEY = "app.font"
+
 @Composable
 fun EventtApp() {
-    var darkTheme by remember { mutableStateOf(true) }
+    var themeVariant by remember { mutableStateOf(ThemeVariant.EVE_DARK) }
+    var fontChoice by remember { mutableStateOf(FontChoice.SYSTEM_SANS) }
 
-    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
-    val eveColors = if (darkTheme) DarkEveColors else LightEveColors
+    val colorScheme = themeVariant.colorScheme
+    val eveColors = themeVariant.eveColors
 
     val importState by StaticDataImporter.state.collectAsState()
     val everefState by EveRefService.state.collectAsState()
@@ -110,6 +120,12 @@ fun EventtApp() {
                 StaticDataImporter.checkVersionChanged() -> StaticDataImporter.importAll()
             }
             AppState.init()
+            StaticDataDao.getSetting(THEME_SETTING_KEY)?.let { saved ->
+                ThemeVariant.entries.firstOrNull { it.name == saved }?.let { themeVariant = it }
+            }
+            StaticDataDao.getSetting(FONT_SETTING_KEY)?.let { saved ->
+                FontChoice.entries.firstOrNull { it.name == saved }?.let { fontChoice = it }
+            }
         }
         // EveRef sync runs in parallel — does not block UI or AppState init
         launch(Dispatchers.IO) {
@@ -156,7 +172,7 @@ fun EventtApp() {
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = EveTypography,
+        typography = fontChoice.typography,
     ) {
         var selectedScreen by remember { mutableStateOf(AppScreen.DASHBOARD) }
         var showProgressDialog by remember { mutableStateOf(false) }
@@ -189,9 +205,17 @@ fun EventtApp() {
         Scaffold(
             topBar = {
                 TopBar(
-                    darkTheme = darkTheme,
+                    themeVariant = themeVariant,
+                    onThemeChange = { variant ->
+                        themeVariant = variant
+                        coroutineScope.launch(Dispatchers.IO) { StaticDataDao.setSetting(THEME_SETTING_KEY, variant.name) }
+                    },
+                    fontChoice = fontChoice,
+                    onFontChange = { choice ->
+                        fontChoice = choice
+                        coroutineScope.launch(Dispatchers.IO) { StaticDataDao.setSetting(FONT_SETTING_KEY, choice.name) }
+                    },
                     currentScreen = selectedScreen,
-                    onThemeToggle = { darkTheme = !darkTheme },
                     eveColors = eveColors,
                     onShowProgress = { showProgressDialog = true },
                     onShowErrors = { showErrorLog = true },
@@ -373,9 +397,11 @@ private fun UpdateBanner(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TopBar(
-    darkTheme: Boolean,
+    themeVariant: ThemeVariant,
+    onThemeChange: (ThemeVariant) -> Unit,
+    fontChoice: FontChoice,
+    onFontChange: (FontChoice) -> Unit,
     currentScreen: AppScreen,
-    onThemeToggle: () -> Unit,
     eveColors: EveColors,
     onShowProgress: () -> Unit,
     onShowErrors: () -> Unit = {},
@@ -419,7 +445,7 @@ private fun TopBar(
                             Icon(
                                 imageVector = Icons.Default.WarningAmber,
                                 contentDescription = "Recent errors",
-                                tint = Color(0xFFFF9800),
+                                tint = warningColor,
                             )
                         }
                     }
@@ -430,7 +456,7 @@ private fun TopBar(
                         contentDescription = "Show request progress",
                         tint =
                             when {
-                                esiFailed > 0 -> Color(0xFFFF6B6B)
+                                esiFailed > 0 -> negativeColor
                                 esiActive > 0 -> eveColors.accentColor
                                 else -> MaterialTheme.colorScheme.onSurface
                             },
@@ -444,12 +470,77 @@ private fun TopBar(
                         tint = if (overlayActive) eveColors.accentColor else MaterialTheme.colorScheme.onSurface,
                     )
                 }
-                IconButton(onClick = onThemeToggle) {
-                    Icon(
-                        imageVector = if (darkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
-                        contentDescription = "Toggle theme",
-                        tint = MaterialTheme.colorScheme.onSurface,
-                    )
+                var themeMenuExpanded by remember { mutableStateOf(false) }
+                Box {
+                    IconButton(onClick = { themeMenuExpanded = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Palette,
+                            contentDescription = "Change theme",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = themeMenuExpanded,
+                        onDismissRequest = { themeMenuExpanded = false },
+                    ) {
+                        ThemeVariant.entries.forEach { variant ->
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        if (variant == themeVariant) {
+                                            Icon(Icons.Default.Check, null, Modifier.size(14.dp), tint = eveColors.accentColor)
+                                        } else {
+                                            Spacer(Modifier.size(14.dp))
+                                        }
+                                        Text(variant.label)
+                                    }
+                                },
+                                onClick = {
+                                    onThemeChange(variant)
+                                    themeMenuExpanded = false
+                                },
+                            )
+                        }
+                    }
+                }
+                var fontMenuExpanded by remember { mutableStateOf(false) }
+                Box {
+                    IconButton(onClick = { fontMenuExpanded = true }) {
+                        Icon(
+                            imageVector = Icons.Default.FontDownload,
+                            contentDescription = "Change font",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = fontMenuExpanded,
+                        onDismissRequest = { fontMenuExpanded = false },
+                    ) {
+                        FontChoice.entries.forEach { choice ->
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        if (choice == fontChoice) {
+                                            Icon(Icons.Default.Check, null, Modifier.size(14.dp), tint = eveColors.accentColor)
+                                        } else {
+                                            Spacer(Modifier.size(14.dp))
+                                        }
+                                        Text(choice.label)
+                                    }
+                                },
+                                onClick = {
+                                    onFontChange(choice)
+                                    fontMenuExpanded = false
+                                },
+                            )
+                        }
+                    }
                 }
             },
             colors =
@@ -462,11 +553,7 @@ private fun TopBar(
             modifier = Modifier.align(Alignment.Center),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Image(
-                painter = painterResource("icon.png"),
-                contentDescription = null,
-                modifier = Modifier.size(40.dp),
-            )
+            AppLogoBadge(eveColors = eveColors)
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "EVE Night Trade Tools",
@@ -476,6 +563,58 @@ private fun TopBar(
             Spacer(modifier = Modifier.width(12.dp))
             AppOnlineCounter()
         }
+    }
+}
+
+// Recolorable stand-in for icons/icon.svg (the packaged app icon) — that one's baked-in navy/blue
+// gradient doesn't follow the selected theme. Same rounded-square-plus-orbit-ring composition,
+// but every accent pulls from eveColors so it matches whatever theme is active, and "NTT" is
+// plain Compose Text instead of an SVG path (the original used Montserrat Black glyph outlines,
+// which would need font-to-path conversion to reproduce here).
+@Composable
+private fun AppLogoBadge(eveColors: EveColors) {
+    Box(modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val corner = CornerRadius(size.minDimension * 0.22f)
+            val center = Offset(size.width / 2f, size.height / 2f)
+            drawRoundRect(
+                brush =
+                    Brush.radialGradient(
+                        colors = listOf(eveColors.accentColor.copy(alpha = 0.30f), eveColors.headerColor),
+                        center = Offset(size.width * 0.5f, size.height * 0.4f),
+                        radius = size.maxDimension * 0.85f,
+                    ),
+                cornerRadius = corner,
+            )
+            drawRoundRect(
+                color = eveColors.accentColor.copy(alpha = 0.5f),
+                cornerRadius = corner,
+                style = Stroke(width = size.minDimension * 0.045f),
+            )
+            val ringRadius = size.minDimension * 0.36f
+            drawCircle(
+                color = eveColors.accentColor.copy(alpha = 0.35f),
+                radius = ringRadius,
+                center = center,
+                style = Stroke(width = size.minDimension * 0.035f),
+            )
+            drawArc(
+                color = eveColors.accentColor,
+                startAngle = -130f,
+                sweepAngle = 70f,
+                useCenter = false,
+                topLeft = Offset(center.x - ringRadius, center.y - ringRadius),
+                size = Size(ringRadius * 2, ringRadius * 2),
+                style = Stroke(width = size.minDimension * 0.05f, cap = StrokeCap.Round),
+            )
+        }
+        Text(
+            "NTT",
+            color = eveColors.accentColor,
+            fontWeight = FontWeight.Black,
+            fontSize = 13.sp,
+            letterSpacing = (-0.5).sp,
+        )
     }
 }
 
@@ -777,7 +916,7 @@ private fun AlertNotificationBanner(
                 if (isAbove) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
                 contentDescription = null,
                 modifier = Modifier.size(18.dp),
-                tint = if (isAbove) Color(0xFF69DB7C) else Color(0xFFFF6B6B),
+                tint = if (isAbove) positiveColor else negativeColor,
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(

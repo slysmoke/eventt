@@ -28,6 +28,7 @@ import org.eventt.features.tools.pricing.PricingService
 import org.eventt.ui.common.ConfirmDialog
 import org.eventt.ui.common.ContentCard
 import org.eventt.ui.common.formatIsk
+import org.eventt.ui.theme.positiveColor
 import java.awt.Toolkit
 import java.awt.datatransfer.DataFlavor
 
@@ -343,7 +344,7 @@ fun SplitterScreen(context: ViewContext?) {
                     actions = {
                         when {
                             pushResult?.success == true -> {
-                                Icon(Icons.Default.CheckCircle, "Pushed", tint = Color(0xFF69DB7C))
+                                Icon(Icons.Default.CheckCircle, "Pushed", tint = positiveColor)
                             }
 
                             pushResult?.success == false -> {

@@ -25,6 +25,7 @@ import org.eventt.features.tools.ParseWarning
 import org.eventt.features.tools.ToolsInputParser
 import org.eventt.ui.common.ContentCard
 import org.eventt.ui.common.formatPriceSimple
+import org.eventt.ui.theme.positiveColor
 import java.awt.Toolkit
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.StringSelection
@@ -32,8 +33,6 @@ import java.util.Locale
 
 // Comma-grouped, fixed 2-decimal ISK amount — unlike the K/M/B abbreviations used for rough
 // totals elsewhere in the app, per-unit sell-order prices need full precision to be usable as-is.
-
-private val PositiveMarginColor = Color(0xFF69DB7C)
 
 // Persisted across restarts — the margin target and whether it's enforced are per-user setup.
 private object PricingSettings {
@@ -483,7 +482,7 @@ fun PricingScreen(context: ViewContext?) {
                                         when {
                                             margin == null -> MaterialTheme.colorScheme.onSurfaceVariant
                                             margin < 0 -> MaterialTheme.colorScheme.error
-                                            else -> PositiveMarginColor
+                                            else -> positiveColor
                                         },
                                 )
                             }

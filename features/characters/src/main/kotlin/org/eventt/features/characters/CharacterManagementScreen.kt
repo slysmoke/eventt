@@ -22,6 +22,8 @@ import org.eventt.core.esi.EsiClient
 import org.eventt.ui.common.ConfirmDialog
 import org.eventt.ui.common.EmptyState
 import org.eventt.ui.common.LoadingOverlay
+import org.eventt.ui.theme.negativeColor
+import org.eventt.ui.theme.positiveColor
 
 @Composable
 fun CharacterManagementScreen() {
@@ -106,7 +108,7 @@ fun CharacterManagementScreen() {
                     Text("This will open your browser to authenticate with EVE Online SSO.")
                     if (authError != null) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(authError!!, color = Color.Red, style = MaterialTheme.typography.bodySmall)
+                        Text(authError!!, color = negativeColor, style = MaterialTheme.typography.bodySmall)
                     }
                 }
             },
@@ -213,14 +215,14 @@ private fun CharacterCard(
                     Icon(
                         imageVector = if (tokenExpired) Icons.Default.Warning else Icons.Default.CheckCircle,
                         contentDescription = null,
-                        tint = if (tokenExpired) Color.Red else Color.Green,
+                        tint = if (tokenExpired) negativeColor else positiveColor,
                         modifier = Modifier.size(14.dp),
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = if (tokenExpired) "Token expired" else "Token valid",
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (tokenExpired) Color.Red else Color.Green,
+                        color = if (tokenExpired) negativeColor else positiveColor,
                     )
                 }
 
@@ -240,7 +242,7 @@ private fun CharacterCard(
                 Icon(Icons.Default.Refresh, contentDescription = "Refresh")
             }
             IconButton(onClick = onRemove) {
-                Icon(Icons.Default.Delete, contentDescription = "Remove", tint = Color.Red)
+                Icon(Icons.Default.Delete, contentDescription = "Remove", tint = negativeColor)
             }
         }
     }

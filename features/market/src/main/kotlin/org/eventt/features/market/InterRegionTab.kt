@@ -38,6 +38,7 @@ import org.eventt.core.model.StaticRegionModel
 import org.eventt.core.model.StaticStationModel
 import org.eventt.core.staticdata.JumpGraphService
 import org.eventt.ui.common.ensureVisible
+import org.eventt.ui.theme.negativeColor
 import java.util.Locale
 
 // ─── Inter-Region ─────────────────────────────────────────────────────────
@@ -326,7 +327,7 @@ internal fun InterRegionTab(
                             style = MaterialTheme.typography.labelSmall,
                             color =
                                 if ("Error" in statusMsg || "differ" in statusMsg) {
-                                    Color(0xFFFF6B6B)
+                                    negativeColor
                                 } else {
                                     MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                                 },

@@ -17,6 +17,8 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.sample
 import org.eventt.core.model.RequestStatus
 import org.eventt.core.queue.RequestQueueManager
+import org.eventt.ui.theme.negativeColor
+import org.eventt.ui.theme.positiveColor
 
 val EventtBlue = Color(0xFF4A90D9)
 
@@ -43,7 +45,7 @@ fun RequestProgressDialog(onDismiss: () -> Unit) {
                 if (active.isNotEmpty()) {
                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                 } else {
-                    Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF69DB7C), modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.CheckCircle, null, tint = positiveColor, modifier = Modifier.size(20.dp))
                 }
                 Text("ESI Requests")
             }
@@ -56,9 +58,9 @@ fun RequestProgressDialog(onDismiss: () -> Unit) {
                 // Summary line
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     SummaryChip("${active.size} active", if (active.isNotEmpty()) EventtBlue else Color.Gray)
-                    SummaryChip("$completed done", Color(0xFF69DB7C))
+                    SummaryChip("$completed done", positiveColor)
                     if (failed.isNotEmpty()) {
-                        SummaryChip("${failed.size} failed", Color(0xFFFF6B6B))
+                        SummaryChip("${failed.size} failed", negativeColor)
                     }
                     if (total > 0) {
                         Text(
@@ -83,7 +85,7 @@ fun RequestProgressDialog(onDismiss: () -> Unit) {
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF69DB7C), modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.CheckCircle, null, tint = positiveColor, modifier = Modifier.size(16.dp))
                             Text("All requests completed", style = MaterialTheme.typography.bodySmall)
                         }
                     }
@@ -163,7 +165,7 @@ private fun RequestRow(
     Surface(
         color =
             when (status) {
-                RequestStatus.FAILED -> Color(0xFFFF6B6B).copy(alpha = 0.08f)
+                RequestStatus.FAILED -> negativeColor.copy(alpha = 0.08f)
                 RequestStatus.IN_PROGRESS -> EventtBlue.copy(alpha = 0.06f)
                 else -> Color.Transparent
             },
@@ -177,8 +179,8 @@ private fun RequestRow(
                 when (status) {
                     RequestStatus.QUEUED -> Icon(Icons.Default.Schedule, null, Modifier.size(13.dp), tint = Color.Gray)
                     RequestStatus.IN_PROGRESS -> Icon(Icons.Default.Sync, null, Modifier.size(13.dp), tint = EventtBlue)
-                    RequestStatus.FAILED -> Icon(Icons.Default.Error, null, Modifier.size(13.dp), tint = Color(0xFFFF6B6B))
-                    RequestStatus.COMPLETED -> Icon(Icons.Default.Check, null, Modifier.size(13.dp), tint = Color(0xFF69DB7C))
+                    RequestStatus.FAILED -> Icon(Icons.Default.Error, null, Modifier.size(13.dp), tint = negativeColor)
+                    RequestStatus.COMPLETED -> Icon(Icons.Default.Check, null, Modifier.size(13.dp), tint = positiveColor)
                 }
                 Text(
                     description,
@@ -191,7 +193,7 @@ private fun RequestRow(
                     Text(
                         source,
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (source == "cache") Color(0xFF69DB7C).copy(alpha = 0.8f) else EventtBlue.copy(alpha = 0.8f),
+                        color = if (source == "cache") positiveColor.copy(alpha = 0.8f) else EventtBlue.copy(alpha = 0.8f),
                     )
                 }
             }
@@ -206,7 +208,7 @@ private fun RequestRow(
                 Text(
                     it,
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFFFF6B6B),
+                    color = negativeColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

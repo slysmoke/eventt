@@ -30,12 +30,12 @@ import org.eventt.core.model.AppLog
 import org.eventt.core.model.toPnlWindow
 import org.eventt.features.orders.CostBasisService
 import org.eventt.features.orders.realizedPnlWindow
+import org.eventt.ui.theme.negativeColor
+import org.eventt.ui.theme.positiveColor
 import java.time.LocalDate
 
 private const val COMBINE_ALL_SETTING = "dashboard.combine_all"
 
-private val POSITIVE = Color(0xFF69DB7C)
-private val NEGATIVE = Color(0xFFFF6B6B)
 private val ACCENT = Color(0xFF4A90D9)
 
 @Composable
@@ -311,8 +311,8 @@ fun DashboardScreen(
                     icon = Icons.AutoMirrored.Filled.TrendingUp,
                     label = "Cash Flow 30d",
                     value = formatIsk(month30CashFlow, showSign = true),
-                    color = if (month30CashFlow >= 0) POSITIVE else NEGATIVE,
-                    valueColor = if (month30CashFlow >= 0) POSITIVE else NEGATIVE,
+                    color = if (month30CashFlow >= 0) positiveColor else negativeColor,
+                    valueColor = if (month30CashFlow >= 0) positiveColor else negativeColor,
                 )
             }
         }
@@ -329,8 +329,8 @@ fun DashboardScreen(
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 PnlMiniCard(modifier = Modifier.weight(1f), label = "Cash Flow Today", value = todayCashFlow, showSign = true)
                 PnlMiniCard(modifier = Modifier.weight(1f), label = "Cash Flow 7 days", value = week7CashFlow, showSign = true)
-                PnlMiniCard(modifier = Modifier.weight(1f), label = "Income 30d", value = income30d, forceColor = POSITIVE)
-                PnlMiniCard(modifier = Modifier.weight(1f), label = "Expenses 30d", value = spend30d, forceColor = NEGATIVE)
+                PnlMiniCard(modifier = Modifier.weight(1f), label = "Income 30d", value = income30d, forceColor = positiveColor)
+                PnlMiniCard(modifier = Modifier.weight(1f), label = "Expenses 30d", value = spend30d, forceColor = negativeColor)
             }
         }
 
@@ -519,8 +519,8 @@ private fun PnlMiniCard(
 ) {
     val color =
         forceColor ?: when {
-            value > 0 -> POSITIVE
-            value < 0 -> NEGATIVE
+            value > 0 -> positiveColor
+            value < 0 -> negativeColor
             else -> Color.Gray
         }
     Card(
@@ -563,6 +563,8 @@ private fun PnlBarChart(
             }
         }
     var hovered by remember { mutableStateOf<Int?>(null) }
+    val positive = positiveColor
+    val negative = negativeColor
 
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -579,8 +581,8 @@ private fun PnlBarChart(
                     color =
                         when {
                             h == null -> Color.Unspecified
-                            days[h].second >= 0 -> POSITIVE
-                            else -> NEGATIVE
+                            days[h].second >= 0 -> positive
+                            else -> negative
                         },
                 )
             }
@@ -612,7 +614,7 @@ private fun PnlBarChart(
                         if (net == 0.0) return@forEachIndexed
                         val h = (kotlin.math.abs(net) / range * size.height).toFloat()
                         drawRoundRect(
-                            color = (if (net > 0) POSITIVE else NEGATIVE).copy(alpha = if (hovered == i) 1f else 0.75f),
+                            color = (if (net > 0) positive else negative).copy(alpha = if (hovered == i) 1f else 0.75f),
                             topLeft = Offset(i * slot + 1f, if (net > 0) zeroY - h else zeroY),
                             size = Size(barWidth, h),
                             cornerRadius = CornerRadius(2f, 2f),
@@ -633,7 +635,7 @@ private fun TransactionRow(tx: Map<String, Any?>) {
     val unitPrice = (tx["unit_price"] as? Number)?.toDouble() ?: 0.0
     val total = (tx["total"] as? Number)?.toDouble() ?: 0.0
     val date = (tx["date"] as? String)?.take(10) ?: ""
-    val color = if (isBuy) NEGATIVE else POSITIVE
+    val color = if (isBuy) negativeColor else positiveColor
 
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
@@ -683,7 +685,7 @@ private data class ItemPnl(
 
 @Composable
 private fun ItemPnlRow(item: ItemPnl) {
-    val color = if (item.profit >= 0) POSITIVE else NEGATIVE
+    val color = if (item.profit >= 0) positiveColor else negativeColor
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,

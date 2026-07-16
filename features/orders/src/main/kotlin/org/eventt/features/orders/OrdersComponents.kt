@@ -18,6 +18,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.eventt.core.database.OrderHistoryDao
 import org.eventt.ui.common.formatIsk
+import org.eventt.ui.theme.negativeColor
+import org.eventt.ui.theme.positiveColor
+import org.eventt.ui.theme.warningColor
 import java.util.Locale
 
 // ── Sub-components ────────────────────────────────────────────────────────
@@ -121,9 +124,9 @@ internal fun VolumeBar(
 internal fun StatusDot(state: String) {
     val color =
         when (state) {
-            "active" -> Color(0xFF69DB7C)
-            "cancelled" -> Color(0xFFFF6B6B)
-            "expired" -> Color(0xFFFF6B6B)
+            "active" -> positiveColor
+            "cancelled" -> negativeColor
+            "expired" -> negativeColor
             "pending" -> Color(0xFF74C0FC)
             else -> Color.Gray
         }
@@ -368,10 +371,11 @@ internal fun formatDuration(seconds: Long): String {
     }
 }
 
+@Composable
 internal fun timeLeftColor(seconds: Long): Color =
     when {
-        seconds <= 0 -> Color(0xFFFF6B6B)
-        seconds < 86400 -> Color(0xFFFFD43B)
+        seconds <= 0 -> negativeColor
+        seconds < 86400 -> warningColor
         else -> Color.Unspecified
     }
 

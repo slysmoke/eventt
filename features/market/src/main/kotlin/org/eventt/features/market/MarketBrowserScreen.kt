@@ -52,6 +52,9 @@ import org.eventt.core.staticdata.StaticDataImporter
 import org.eventt.ui.common.*
 import org.eventt.ui.common.formatPriceAbbr
 import org.eventt.ui.common.formatVolume
+import org.eventt.ui.theme.negativeColor
+import org.eventt.ui.theme.positiveColor
+import org.eventt.ui.theme.warningColor
 import java.util.Locale
 import kotlin.math.floor
 import kotlin.math.log10
@@ -528,9 +531,9 @@ private fun TypeMarketHeader(
                 modifier = Modifier.padding(10.dp),
                 horizontalArrangement = Arrangement.spacedBy(24.dp),
             ) {
-                SpreadItem("Best Sell", formatPriceAbbr(bestSell), Color(0xFFFF6B6B))
-                SpreadItem("Best Buy", formatPriceAbbr(bestBuy), Color(0xFF69DB7C))
-                SpreadItem("Spread", "${String.format(Locale.US, "%.2f", spread ?: 0.0)}%", Color(0xFFFF8C00))
+                SpreadItem("Best Sell", formatPriceAbbr(bestSell), negativeColor)
+                SpreadItem("Best Buy", formatPriceAbbr(bestBuy), positiveColor)
+                SpreadItem("Spread", "${String.format(Locale.US, "%.2f", spread ?: 0.0)}%", warningColor)
                 SpreadItem("Sell Orders", sellOrders.size.toString(), MaterialTheme.colorScheme.onSurface)
                 SpreadItem("Buy Orders", buyOrders.size.toString(), MaterialTheme.colorScheme.onSurface)
             }
@@ -635,7 +638,7 @@ private fun OrderBookView(
         OrderTable(
             title = "Sell Orders",
             count = sellOrders.size,
-            titleColor = Color(0xFFFF6B6B),
+            titleColor = negativeColor,
             orders = sellOrders,
             isBuy = false,
             sortCol = sellSort,
@@ -655,7 +658,7 @@ private fun OrderBookView(
         OrderTable(
             title = "Buy Orders",
             count = buyOrders.size,
-            titleColor = Color(0xFF69DB7C),
+            titleColor = positiveColor,
             orders = buyOrders,
             isBuy = true,
             sortCol = buySort,
@@ -785,9 +788,16 @@ private fun OrderRow(
     index: Int,
     onCreateAlert: ((MarketOrder) -> Unit)? = null,
 ) {
-    val priceColor = if (!isBuy) Color(0xFFFF6B6B) else Color(0xFF69DB7C)
+    val priceColor = if (!isBuy) negativeColor else positiveColor
     val expiry = remember(order.issued, order.duration) { computeExpiry(order.issued, order.duration) }
-    val expColor = remember(order.issued, order.duration) { expiryColor(order.issued, order.duration) }
+    val expDaysLeft = remember(order.issued, order.duration) { daysLeftUntilExpiry(order.issued, order.duration) }
+    val expColor =
+        when {
+            expDaysLeft == null -> Color.Gray
+            expDaysLeft <= 1 -> negativeColor
+            expDaysLeft <= 7 -> warningColor
+            else -> Color(0xFF888888)
+        }
     val rowBg =
         if (index % 2 == 0) {
             Color.Transparent
@@ -865,7 +875,7 @@ private fun OrderRow(
                 expiry,
                 style = MaterialTheme.typography.labelSmall,
                 color = expColor,
-                fontWeight = if (expColor == Color(0xFFFF6B6B)) FontWeight.Medium else FontWeight.Normal,
+                fontWeight = if (expDaysLeft != null && expDaysLeft <= 1) FontWeight.Medium else FontWeight.Normal,
                 modifier = Modifier.width(56.dp),
             )
         }
@@ -1410,27 +1420,21 @@ private fun computeExpiry(
         "${durationDays}d"
     }
 
-private fun expiryColor(
+private fun daysLeftUntilExpiry(
     issued: String,
     durationDays: Int,
-): Color =
+): Long? =
     try {
         val issuedInstant = java.time.Instant.parse(issued)
         val expiryInstant = issuedInstant.plusSeconds(durationDays * 86400L)
-        val daysLeft =
-            (
-                expiryInstant.epochSecond -
-                    java.time.Instant
-                        .now()
-                        .epochSecond
-            ) / 86400
-        when {
-            daysLeft <= 1 -> Color(0xFFFF6B6B)
-            daysLeft <= 7 -> Color(0xFFFF8C00)
-            else -> Color(0xFF888888)
-        }
+        (
+            expiryInstant.epochSecond -
+                java.time.Instant
+                    .now()
+                    .epochSecond
+        ) / 86400
     } catch (e: Exception) {
-        Color.Gray
+        null
     }
 
 // Deprecated local formatPrice removed. Use formatPriceAbbr from FormatUtils.
@@ -1490,7 +1494,7 @@ private fun AddToAlertDialog(
                             Text(
                                 "Best Sell: ${formatPriceAbbr(bestSell)}",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFFFF6B6B),
+                                color = negativeColor,
                             )
                         }
                         if (bestBuy !=
@@ -1499,7 +1503,7 @@ private fun AddToAlertDialog(
                             Text(
                                 "Best Buy: ${formatPriceAbbr(bestBuy)}",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF69DB7C),
+                                color = positiveColor,
                             )
                         }
                     }

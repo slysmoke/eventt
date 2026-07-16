@@ -20,6 +20,9 @@ import org.eventt.core.database.ContractDao
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.ContractModel
 import org.eventt.ui.common.*
+import org.eventt.ui.theme.negativeColor
+import org.eventt.ui.theme.positiveColor
+import org.eventt.ui.theme.warningColor
 
 @Composable
 fun ContractTrackerScreen(charId: Int?) {
@@ -148,9 +151,9 @@ private fun ContractCard(contract: ContractModel) {
     val statusColor =
         when (contract.status) {
             "outstanding" -> Color(0xFFB197FC)
-            "in_progress" -> Color(0xFFFF8C00)
-            "finished" -> Color(0xFF69DB7C)
-            "cancelled" -> Color(0xFFFF6B6B)
+            "in_progress" -> warningColor
+            "finished" -> positiveColor
+            "cancelled" -> negativeColor
             else -> Color.Gray
         }
 

@@ -42,6 +42,8 @@ import org.eventt.core.model.toPnlWindow
 import org.eventt.features.orders.CostBasisService
 import org.eventt.features.orders.realizedPnlWindow
 import org.eventt.ui.common.*
+import org.eventt.ui.theme.negativeColor
+import org.eventt.ui.theme.positiveColor
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -138,8 +140,8 @@ fun WalletScreen(context: ViewContext?) {
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     val totalEarned = dailyBreakdown.sumOf { it.income }
                     val totalSpent = dailyBreakdown.sumOf { it.expenses }
-                    Text("Earned: ${formatIsk(totalEarned)}", style = MaterialTheme.typography.bodySmall, color = Color(0xFF69DB7C))
-                    Text("Spent: ${formatIsk(totalSpent)}", style = MaterialTheme.typography.bodySmall, color = Color(0xFFFF6B6B))
+                    Text("Earned: ${formatIsk(totalEarned)}", style = MaterialTheme.typography.bodySmall, color = positiveColor)
+                    Text("Spent: ${formatIsk(totalSpent)}", style = MaterialTheme.typography.bodySmall, color = negativeColor)
                 }
             }
         }
@@ -214,8 +216,8 @@ private fun TransactionList(transactions: List<Map<String, Any?>>) {
                     tx["location_name"]?.toString()?.ifEmpty { null }
                         ?: tx["location_id"]?.toString() ?: ""
                 val dateStr = tx["date"]?.toString()?.take(16)?.replace("T", " ") ?: ""
-                val buyColor = Color(0xFF69DB7C)
-                val sellColor = Color(0xFFFF6B6B)
+                val buyColor = positiveColor
+                val sellColor = negativeColor
 
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
@@ -351,7 +353,7 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
                                 formatIsk(totalTax),
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFFFF6B6B),
+                                color = negativeColor,
                             )
                         }
                     }
@@ -366,7 +368,7 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
                                 formatIsk(totalBroker),
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFFFF6B6B),
+                                color = negativeColor,
                             )
                         }
                     }
@@ -377,7 +379,7 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
                                 formatIsk(totalTax + totalBroker),
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFFFF6B6B),
+                                color = negativeColor,
                             )
                         }
                     }
@@ -412,7 +414,7 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
                 val refType = entry["ref_type"]?.toString() ?: ""
                 val reason = entry["reason"]?.toString()?.trim() ?: ""
                 val dateStr = entry["date"]?.toString()?.take(16)?.replace("T", " ") ?: ""
-                val amountColor = if (amount >= 0) Color(0xFF69DB7C) else Color(0xFFFF6B6B)
+                val amountColor = if (amount >= 0) positiveColor else negativeColor
 
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
@@ -456,7 +458,7 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
                             if (taxAmount != null &&
                                 taxAmount != 0.0
                             ) {
-                                Color(0xFFFF6B6B)
+                                negativeColor
                             } else {
                                 MaterialTheme.colorScheme.onSurfaceVariant
                             },
@@ -585,16 +587,13 @@ private fun formatRefType(refType: String): String =
         }
     }
 
-private val PNL_POSITIVE = Color(0xFF69DB7C)
-private val PNL_NEGATIVE = Color(0xFFFF6B6B)
-
 private fun pnlSignedText(value: Double): String = "${if (value >= 0) "+" else "-"}${formatIsk(abs(value))}"
 
 @Composable
 private fun pnlColor(value: Double): Color =
     when {
-        value > 0 -> PNL_POSITIVE
-        value < 0 -> PNL_NEGATIVE
+        value > 0 -> positiveColor
+        value < 0 -> negativeColor
         else -> MaterialTheme.colorScheme.onSurface
     }
 
@@ -678,8 +677,8 @@ private fun PnlChart(
 
         Spacer(modifier = Modifier.height(8.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            PnlStatCard("Income", "+${formatIsk(incomeAll)}", PNL_POSITIVE, Modifier.weight(1f))
-            PnlStatCard("Expenses", "-${formatIsk(expensesAll)}", PNL_NEGATIVE, Modifier.weight(1f))
+            PnlStatCard("Income", "+${formatIsk(incomeAll)}", positiveColor, Modifier.weight(1f))
+            PnlStatCard("Expenses", "-${formatIsk(expensesAll)}", negativeColor, Modifier.weight(1f))
             PnlStatCard(
                 "Avg Margin (realized)",
                 margin?.let { "%.1f%%".format(it) } ?: "—",
@@ -762,14 +761,14 @@ private fun PnlTable(entries: List<DailyWalletEntry>) {
                     modifier = Modifier.weight(1.5f),
                     textAlign = TextAlign.End,
                     style = MaterialTheme.typography.bodySmall,
-                    color = PNL_POSITIVE,
+                    color = positiveColor,
                 )
                 Text(
                     "-${formatIsk(entry.expenses)}",
                     modifier = Modifier.weight(1.5f),
                     textAlign = TextAlign.End,
                     style = MaterialTheme.typography.bodySmall,
-                    color = PNL_NEGATIVE,
+                    color = negativeColor,
                 )
                 Text(
                     pnlSignedText(entry.net),
@@ -798,6 +797,8 @@ private fun PnlBarChart(
     val labelColor = Color(0xFF777777)
     val maxAbs = remember(data) { (data.maxOfOrNull { abs(it) } ?: 0.0).coerceAtLeast(1.0) }
     var hoverIdx by remember { mutableStateOf<Int?>(null) }
+    val positive = positiveColor
+    val negative = negativeColor
 
     Canvas(
         modifier =
@@ -857,7 +858,7 @@ private fun PnlBarChart(
             val barHeight = barHeightOf(v)
             val isPositive = v >= 0
             val y = if (isPositive) centerY - barHeight else centerY
-            val color = if (isPositive) PNL_POSITIVE else PNL_NEGATIVE
+            val color = if (isPositive) positive else negative
             drawRect(
                 if (i == hoverIdx) color else color.copy(alpha = 0.75f),
                 Offset(barX(i) + 0.5f, y),
@@ -886,7 +887,7 @@ private fun PnlBarChart(
             val cx = barX(idx) + barW / 2
             val v = data[idx]
             val isPositive = v >= 0
-            val color = if (isPositive) PNL_POSITIVE else PNL_NEGATIVE
+            val color = if (isPositive) positive else negative
             val barHeight = barHeightOf(v)
             val y = if (isPositive) centerY - barHeight else centerY + barHeight
 

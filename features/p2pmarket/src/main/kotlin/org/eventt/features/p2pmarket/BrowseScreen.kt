@@ -49,10 +49,9 @@ import org.eventt.core.nostr.OrderSide
 import org.eventt.core.nostr.ReputationAggregator
 import org.eventt.core.nostr.ReservationService
 import org.eventt.ui.common.SearchField
+import org.eventt.ui.theme.positiveColor
 import java.util.Locale
 import kotlin.math.abs
-
-private val PositiveColor = Color(0xFF69DB7C)
 
 private data class BrowseRow(
     val order: NostrOrderModel,
@@ -256,7 +255,7 @@ private fun BrowseTableRow(
                 Text(
                     "${if (s.savingsPct >= 0) "-" else "+"}${String.format(Locale.US, "%.1f", abs(s.savingsPct))}%",
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (s.savingsPct >= 0) PositiveColor else MaterialTheme.colorScheme.error,
+                    color = if (s.savingsPct >= 0) positiveColor else MaterialTheme.colorScheme.error,
                 )
             }
         }

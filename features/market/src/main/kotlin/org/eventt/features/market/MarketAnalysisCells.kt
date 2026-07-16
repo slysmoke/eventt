@@ -18,6 +18,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.eventt.ui.common.formatPriceAbbr
 import org.eventt.ui.common.formatVolume
+import org.eventt.ui.theme.negativeColor
+import org.eventt.ui.theme.positiveColor
+import org.eventt.ui.theme.warningColor
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 import java.util.Locale
@@ -131,11 +134,11 @@ internal fun StationRow(
             color = if (isActiveInGame) STATION_ACTIVE_IN_GAME else Color.Unspecified,
             fontWeight = if (isActiveInGame) FontWeight.Bold else FontWeight.Normal,
         )
-        PriceText(opp.bestBuy, Color(0xFFFF6B6B), Modifier.width(95.dp))
-        PriceText(opp.bestSell, Color(0xFF69DB7C), Modifier.width(95.dp))
+        PriceText(opp.bestBuy, negativeColor, Modifier.width(95.dp))
+        PriceText(opp.bestSell, positiveColor, Modifier.width(95.dp))
         MarginText(opp.marginPct, Modifier.width(65.dp))
         MarginText(opp.roiPct, Modifier.width(65.dp))
-        PriceText(opp.netProfit, Color(0xFF69DB7C), Modifier.width(95.dp))
+        PriceText(opp.netProfit, positiveColor, Modifier.width(95.dp))
         TrendText(opp.priceChange7d, Modifier.width(65.dp))
         Text(
             if (effVol > 0) formatVolume(effVol) else "—",
@@ -203,12 +206,12 @@ internal fun RegionRow(
             fontWeight = if (isActiveInGame) FontWeight.Bold else FontWeight.Normal,
         )
         Column(Modifier.width(95.dp)) {
-            PriceText(opp.buyPrice, Color(0xFFFF6B6B), Modifier.fillMaxWidth())
+            PriceText(opp.buyPrice, negativeColor, Modifier.fillMaxWidth())
             // Paying more than a typical recent day is the bad direction when you're the buyer.
             Avg7dDeviationText(opp.buyVsAvg7dPct, higherIsBetter = false)
         }
         Column(Modifier.width(95.dp)) {
-            PriceText(opp.sellPrice, Color(0xFF69DB7C), Modifier.fillMaxWidth())
+            PriceText(opp.sellPrice, positiveColor, Modifier.fillMaxWidth())
             // Selling for more than a typical recent day is the good direction here.
             Avg7dDeviationText(opp.sellVsAvg7dPct, higherIsBetter = true)
         }
@@ -220,8 +223,8 @@ internal fun RegionRow(
             color = Color.Gray,
             modifier = Modifier.width(70.dp),
         )
-        PriceText(opp.shippingCostPerUnit, Color(0xFFFF8C00), Modifier.width(90.dp))
-        PriceText(opp.netProfit, Color(0xFF69DB7C), Modifier.width(95.dp), bold = true)
+        PriceText(opp.shippingCostPerUnit, warningColor, Modifier.width(90.dp))
+        PriceText(opp.netProfit, positiveColor, Modifier.width(95.dp), bold = true)
         TrendText(opp.priceChange7d, Modifier.width(65.dp))
         Text(
             if (effVol > 0) formatVolume(effVol) else "—",
@@ -306,7 +309,7 @@ private fun TrendText(
         return
     }
     val positive = changePct >= 0
-    val color = if (positive) Color(0xFF69DB7C) else Color(0xFFFF6B6B)
+    val color = if (positive) positiveColor else negativeColor
     val arrow = if (positive) "▲" else "▼"
     Text(
         "$arrow ${String.format(Locale.US, "%.1f", Math.abs(changePct))}%",
@@ -331,7 +334,7 @@ private fun Avg7dDeviationText(
     if (deviationPct.isNaN()) return
     val positive = deviationPct >= 0
     val good = if (higherIsBetter) positive else !positive
-    val color = if (good) Color(0xFF69DB7C) else Color(0xFFFF6B6B)
+    val color = if (good) positiveColor else negativeColor
     Text(
         "${if (positive) "+" else ""}${String.format(Locale.US, "%.1f", deviationPct)}% vs 7d",
         style = MaterialTheme.typography.labelSmall,
@@ -346,8 +349,8 @@ private fun MarginText(
 ) {
     val color =
         when {
-            pct >= 20 -> Color(0xFF69DB7C)
-            pct >= 10 -> Color(0xFFFF8C00)
+            pct >= 20 -> positiveColor
+            pct >= 10 -> warningColor
             else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
         }
     Text(

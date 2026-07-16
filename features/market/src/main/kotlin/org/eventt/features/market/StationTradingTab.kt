@@ -39,6 +39,7 @@ import org.eventt.core.model.StaticRegionModel
 import org.eventt.core.model.StaticStationModel
 import org.eventt.core.staticdata.JumpGraphService
 import org.eventt.ui.common.ensureVisible
+import org.eventt.ui.theme.negativeColor
 import java.util.Locale
 
 // ─── Station Trading ──────────────────────────────────────────────────────
@@ -254,7 +255,7 @@ internal fun StationTradingTab(
                         Text(
                             statusMsg,
                             style = MaterialTheme.typography.labelSmall,
-                            color = if ("Error" in statusMsg) Color(0xFFFF6B6B) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            color = if ("Error" in statusMsg) negativeColor else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                             modifier = Modifier.height(FilterFieldHeight).wrapContentHeight(Alignment.CenterVertically),
                         )
                     }
