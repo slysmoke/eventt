@@ -123,7 +123,7 @@ compose.desktop {
             description = "Desktop trading toolkit for EVE Online"
             vendor = "EVE Night Trade Tools"
 
-            modules("java.sql", "java.naming")
+            modules("java.sql", "java.naming", "jdk.httpserver")
 
             windows {
                 // Installs to %LOCALAPPDATA% instead of Program Files so the app can
