@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.eventt.core.database.OrderHistoryDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.ViewContext
 import org.eventt.core.database.WalletDao
@@ -54,6 +55,10 @@ fun WalletScreen(context: ViewContext?) {
     var dailyBreakdown by remember { mutableStateOf<List<DailyWalletEntry>>(emptyList()) }
     var pnlBreakdown by remember { mutableStateOf<List<DailyWalletEntry>>(emptyList()) }
     var fifoResult by remember { mutableStateOf<CostBasisService.FifoResult?>(null) }
+    // Relist (order-modification) fees summed over completed orders — the FIFO profit above
+    // doesn't know about them (they're journal entries, not transactions), so the realized
+    // margin card subtracts them separately.
+    var relistFeesTotal by remember { mutableStateOf(0.0) }
     var transactions by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
     var journal by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
@@ -72,6 +77,7 @@ fun WalletScreen(context: ViewContext?) {
                 dailyCallback = { dailyBreakdown = it },
                 pnlCallback = { pnlBreakdown = it },
                 fifoCallback = { fifoResult = it },
+                relistFeesCallback = { relistFeesTotal = it },
                 transactionsCallback = { transactions = it },
                 journalCallback = { journal = it },
                 expiryCallback = { refreshAvailableAt = it },
@@ -102,6 +108,7 @@ fun WalletScreen(context: ViewContext?) {
                                 dailyCallback = { dailyBreakdown = it },
                                 pnlCallback = { pnlBreakdown = it },
                                 fifoCallback = { fifoResult = it },
+                                relistFeesCallback = { relistFeesTotal = it },
                                 transactionsCallback = { transactions = it },
                                 journalCallback = { journal = it },
                                 expiryCallback = { refreshAvailableAt = it },
@@ -153,7 +160,7 @@ fun WalletScreen(context: ViewContext?) {
             when (activeTab) {
                 0 -> TransactionList(transactions)
                 1 -> JournalList(journal)
-                2 -> PnlChart(pnlBreakdown, fifoResult)
+                2 -> PnlChart(pnlBreakdown, fifoResult, relistFeesTotal)
             }
         }
     }
@@ -519,6 +526,7 @@ private fun pnlColor(value: Double): Color =
 private fun PnlChart(
     dailyBreakdown: List<DailyWalletEntry>,
     fifoResult: CostBasisService.FifoResult?,
+    relistFeesTotal: Double,
 ) {
     if (dailyBreakdown.isEmpty()) {
         EmptyState(
@@ -540,7 +548,16 @@ private fun PnlChart(
     val incomeAll = window.incomeAll
     val expensesAll = window.expensesAll
     val profitableDays = window.profitableDays
-    val margin = if (incomeAll > 0) netAll / incomeAll * 100 else 0.0
+    // Average realized margin over completed FIFO trades, net of relist fees — profit relative
+    // to the capital those sold units cost. The old figure (net cash flow / income) mostly
+    // measured how much restocking happened lately, not how profitable the trading was.
+    val realizedCost = fifoResult?.realizedSells?.sumOf { it.costBasis * it.qty } ?: 0.0
+    val margin =
+        if (fifoResult != null && realizedCost > 0) {
+            (fifoResult.totalRealizedPnl - relistFeesTotal) / realizedCost * 100
+        } else {
+            null
+        }
     val fifoWindow = fifoResult?.realizedPnlWindow()
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -577,7 +594,12 @@ private fun PnlChart(
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             PnlStatCard("Income", "+${formatIsk(incomeAll)}", PNL_POSITIVE, Modifier.weight(1f))
             PnlStatCard("Expenses", "-${formatIsk(expensesAll)}", PNL_NEGATIVE, Modifier.weight(1f))
-            PnlStatCard("Margin", "%.1f%%".format(margin), pnlColor(margin), Modifier.weight(1f))
+            PnlStatCard(
+                "Avg Margin (realized)",
+                margin?.let { "%.1f%%".format(it) } ?: "—",
+                pnlColor(margin ?: 0.0),
+                Modifier.weight(1f),
+            )
             PnlStatCard(
                 "Profitable Days",
                 "$profitableDays / ${chronological.size}",
@@ -588,12 +610,30 @@ private fun PnlChart(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        ContentCard("Daily Net P&L") {
-            PnlBarChart(
-                data = chronological.map { it.net },
-                dates = chronological.map { it.date },
-                modifier = Modifier.fillMaxWidth().height(220.dp),
-            )
+        // Realized profit per sell date, mirroring the Dashboard chart — the cash-flow series
+        // this used to plot spikes hugely negative on every restock day, which reads as a loss.
+        if (fifoResult != null) {
+            ContentCard("Daily Realized P&L — 30d") {
+                val today = java.time.LocalDate.now()
+                val dailyRealized =
+                    fifoResult.realizedSells
+                        .groupBy { it.date.substring(0, 10) }
+                        .mapValues { (_, sells) -> sells.sumOf { it.profit } }
+                val days = (29 downTo 0).map { today.minusDays(it.toLong()).toString() }
+                PnlBarChart(
+                    data = days.map { dailyRealized[it] ?: 0.0 },
+                    dates = days,
+                    modifier = Modifier.fillMaxWidth().height(220.dp),
+                )
+            }
+        } else {
+            ContentCard("Daily Cash Flow") {
+                PnlBarChart(
+                    data = chronological.map { it.net },
+                    dates = chronological.map { it.date },
+                    modifier = Modifier.fillMaxWidth().height(220.dp),
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -794,6 +834,7 @@ private suspend fun loadWalletData(
     dailyCallback: (List<DailyWalletEntry>) -> Unit,
     pnlCallback: (List<DailyWalletEntry>) -> Unit,
     fifoCallback: (CostBasisService.FifoResult) -> Unit,
+    relistFeesCallback: (Double) -> Unit,
     transactionsCallback: (List<Map<String, Any?>>) -> Unit,
     journalCallback: (List<Map<String, Any?>>) -> Unit,
     expiryCallback: (Long?) -> Unit = {},
@@ -916,6 +957,9 @@ private suspend fun loadWalletData(
                     brokerFeePct = StaticDataDao.getCharBrokersFee(actingCharId),
                 )
             fifoCallback(CostBasisService.compute(characterId = characterId, corporationId = corporationId, taxConfig = taxConfig))
+            relistFeesCallback(
+                OrderHistoryDao.getAll(characterId = characterId, corporationId = corporationId).sumOf { it.relistFeesPaid },
+            )
         } catch (_: Exception) {
         }
 
