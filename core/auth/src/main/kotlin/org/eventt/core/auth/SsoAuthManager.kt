@@ -29,6 +29,7 @@ object SsoAuthManager {
     // client on developers.eveonline.com must be switched to PKCE/native for this to work.
     private const val CLIENT_ID = "9bacf8234c4b41888f00b084413868c0"
     private const val CALLBACK_URL = "http://localhost:8000/callback"
+
     // Kept in sync with what EsiClient.kt actually calls — the SSO authorize request is a GET
     // with the scope list in the query string, and CCP's front end rejects it with a plain
     // "400: request headers too long" once the encoded scope string plus the browser's
