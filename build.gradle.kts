@@ -49,6 +49,9 @@ subprojects {
     // each subproject's own build.gradle.kts) has run — which happens after this block, since
     // the root project's script evaluates first. withPlugin() defers until that's actually true.
     pluginManager.withPlugin("org.jetbrains.kotlin.jvm") {
+        extensions.configure<org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension> {
+            jvmToolchain(21)
+        }
         dependencies {
             "testImplementation"(rootProject.libs.junit.jupiter)
             "testImplementation"(rootProject.libs.mockk)
