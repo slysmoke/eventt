@@ -199,6 +199,7 @@ internal fun NostrRelaysCard() {
                     Column(modifier = Modifier.fillMaxWidth().padding(start = 4.dp)) {
                         Text(relay.url, style = MaterialTheme.typography.bodySmall)
                         RelayStatusLabel(relay)
+                        RelayNipWarningLabel(relay)
                     }
                     IconButton(onClick = {
                         scope.launch(Dispatchers.IO) {
@@ -233,6 +234,24 @@ internal fun NostrRelaysCard() {
             }
         }
     }
+}
+
+/**
+ * Warns when the relay's NIP-11 document says it's a poor fit for order storage: paid/restricted
+ * writes mean our publishes are silently rejected; no NIP-40 means expired orders are served
+ * forever (and in-memory relays like memlay advertise almost no NIPs at all). Nothing is shown
+ * until NIP-11 has actually been fetched — an unreachable info document is not a problem per se.
+ */
+@Composable
+private fun RelayNipWarningLabel(relay: NostrRelayModel) {
+    if (relay.nip11FetchedAt == null) return
+    val warning =
+        when {
+            relay.restrictedWrites -> "Paid/restricted writes — this relay likely rejects your orders"
+            40 !in relay.supportedNips -> "No NIP-40 expiration — may store nothing or serve expired orders"
+            else -> return
+        }
+    Text("⚠ $warning", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
 }
 
 @Composable

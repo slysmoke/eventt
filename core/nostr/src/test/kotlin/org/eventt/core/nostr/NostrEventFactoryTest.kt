@@ -46,6 +46,18 @@ class NostrEventFactoryTest {
     }
 
     @Test
+    fun `buildDeletionEvent produces a kind 5 addressing every revision of the order`() {
+        val original = NostrEventFactory.buildOrderEvent(signer, draft(), orderUuid = "order-abc", createdAt = 1_700_000_000L)
+        val parsed = requireNotNull(NostrEventFactory.parseOrderEvent(original))
+
+        val deletion = NostrEventFactory.buildDeletionEvent(signer, parsed)
+
+        deletion.kind shouldBe 5
+        deletion.tags.first { it[0] == "a" }[1] shouldBe "$ORDER_KIND:${parsed.pubkey}:order-abc"
+        deletion.tags.first { it[0] == "k" }[1] shouldBe ORDER_KIND.toString()
+    }
+
+    @Test
     fun `republishOrder keeps the same order_uuid and expiration unless renew is requested`() {
         val original = NostrEventFactory.buildOrderEvent(signer, draft(), orderUuid = "order-abc", createdAt = 1_700_000_000L)
         val previous = requireNotNull(NostrEventFactory.parseOrderEvent(original))

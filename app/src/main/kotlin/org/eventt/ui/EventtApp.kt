@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.AppVersion
@@ -46,6 +47,7 @@ import org.eventt.core.model.PriceAlertModel
 import org.eventt.core.model.RequestStatus
 import org.eventt.core.nostr.NostrRelayEvent
 import org.eventt.core.nostr.NostrRelayManager
+import org.eventt.core.nostr.PresenceService
 import org.eventt.core.queue.RequestQueueManager
 import org.eventt.core.staticdata.CitadelService
 import org.eventt.core.staticdata.StaticDataImporter
@@ -470,7 +472,35 @@ private fun TopBar(
                 style = MaterialTheme.typography.titleMedium,
                 color = eveColors.accentColor,
             )
+            Spacer(modifier = Modifier.width(12.dp))
+            AppOnlineCounter()
         }
+    }
+}
+
+/**
+ * How many copies of the app are online right now — the count of unexpired anonymous
+ * per-install NIP-38 statuses (see [PresenceService.appPresence]); one app = one unit, no matter
+ * how many characters it trades. Includes ourselves once our own heartbeat echoes back. Hidden
+ * at zero: that just means presence data hasn't arrived yet, not an empty network.
+ */
+@Composable
+private fun AppOnlineCounter() {
+    val appPresence by PresenceService.appPresence.collectAsState()
+    var nowSec by remember { mutableStateOf(System.currentTimeMillis() / 1000) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            nowSec = System.currentTimeMillis() / 1000
+        }
+    }
+    val online = appPresence.values.count { it.isOnline(nowSec) }
+    if (online > 0) {
+        Text(
+            "● $online online",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.tertiary,
+        )
     }
 }
 

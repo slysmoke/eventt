@@ -93,7 +93,15 @@ object OrderRepository {
         }
 
     /** Cancelling is just republishing with qty_remaining = 0 — there's no separate "cancelled" protocol state. */
-    suspend fun cancelOrder(order: NostrOrderModel): ParsedOrder? = setRemainingQty(order, 0)
+    suspend fun cancelOrder(order: NostrOrderModel): ParsedOrder? {
+        val cancelled = setRemainingQty(order, 0) ?: return null
+        // Best-effort NIP-09 cleanup on top of the tombstone (see buildDeletionEvent) — if a relay
+        // ignores it, the qty_remaining=0 revision above still supersedes the order everywhere.
+        NostrIdentityService.getIdentityByPubkey(order.pubkey)?.let { identity ->
+            NostrRelayManager.publish(NostrEventFactory.buildDeletionEvent(QuartzGateway.signerFor(identity.keyPair), cancelled))
+        }
+        return cancelled
+    }
 
     private suspend fun republish(
         order: NostrOrderModel,

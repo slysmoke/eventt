@@ -235,6 +235,7 @@ private fun SellerReservationTableRow(
                 )
                 if (reservation.buyerChar.isNotBlank()) TraderInfoButton(reservation.buyerChar, reservation.buyerCharacterId)
             }
+            PresenceBadge(reservation.buyerPubkey)
             row.orderSide?.let {
                 Text(
                     "wants to ${if (requesterRole(it) == "Buyer") "buy" else "sell"}",

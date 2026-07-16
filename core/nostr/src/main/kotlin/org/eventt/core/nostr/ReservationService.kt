@@ -124,6 +124,11 @@ object ReservationService {
                 NostrOrderDao.getByCoordinate(reservation.orderUuid, reservation.sellerPubkey)
             } ?: return false
 
+        // Oversell guard: two pending requests can both individually fit the order, but accepting
+        // the second after the first already decremented qty_remaining would promise stock that no
+        // longer exists — both buyers would get an "accepted" DM for the same units.
+        if (accept && order.qtyRemaining < reservation.qty) return false
+
         val nowSec = System.currentTimeMillis() / 1000
         val reservedQty = if (accept) reservation.qty else null
         val holdUntil = if (accept) nowSec + holdHours * 3600 else null
@@ -223,6 +228,16 @@ object ReservationService {
         when (type) {
             "reservation_request" -> {
                 val req = runCatching { json.decodeFromString<ReservationRequest>(content) }.getOrNull() ?: return null
+                // Anyone who can see an order can gift-wrap us arbitrary JSON — only requests that
+                // target one of *our own*, actually existing orders with a protocol-valid qty reach
+                // the DB (and thus the Incoming requests screen / notification banner). Everything
+                // else is spam or a broken client and is dropped without a trace.
+                if (NostrIdentityService.getIdentityByPubkey(req.orderPubkey) == null) return null
+                val order =
+                    withContext(Dispatchers.IO) {
+                        NostrOrderDao.getByCoordinate(req.orderId, req.orderPubkey)
+                    } ?: return null
+                if (!isValidRequestQty(req.qty, order)) return null
                 val isNew =
                     withContext(Dispatchers.IO) {
                         NostrReservationDao.insertRequestIfAbsent(
@@ -244,6 +259,11 @@ object ReservationService {
             }
             "reservation_response" -> {
                 val resp = runCatching { json.decodeFromString<ReservationResponse>(content) }.getOrNull() ?: return null
+                // Only the seller of this trade may answer it — a tradeId is not a capability.
+                // Anyone who learns it (log, screenshot, compromised counterparty) could otherwise
+                // send a buyer a forged "accepted" for a meetup that was never agreed to.
+                val existing = withContext(Dispatchers.IO) { NostrReservationDao.getByTradeId(resp.tradeId) } ?: return null
+                if (existing.sellerPubkey != fromPubkey) return null
                 withContext(Dispatchers.IO) {
                     NostrReservationDao.updateResponse(
                         resp.tradeId,
@@ -258,10 +278,46 @@ object ReservationService {
             }
             "reservation_cancel" -> {
                 val cancel = runCatching { json.decodeFromString<ReservationCancel>(content) }.getOrNull() ?: return null
+                // Same sender check as reservation_response, buyer's side; and only a still-pending
+                // request may be cancelled — a replayed cancel from relay DM backlog (or a legit one
+                // racing our accept) must not clobber an accepted/completed reservation whose qty is
+                // already held on the order.
+                val existing = withContext(Dispatchers.IO) { NostrReservationDao.getByTradeId(cancel.tradeId) } ?: return null
+                if (existing.buyerPubkey != fromPubkey || existing.status != "sent") return null
                 withContext(Dispatchers.IO) { NostrReservationDao.updateStatus(cancel.tradeId, "cancelled") }
             }
         }
         return null
+    }
+
+    /**
+     * Restores qty for every accepted hold whose hold_until has passed — without this, a buyer who
+     * never shows up leaves the seller's stock frozen until the seller remembers to hit Release by
+     * hand. Called periodically by [NostrRelayManager]; [release] itself re-checks status, so a
+     * race with a manual release is harmless.
+     */
+    suspend fun releaseExpiredHolds() {
+        val nowSec = System.currentTimeMillis() / 1000
+        val expired =
+            withContext(Dispatchers.IO) { NostrReservationDao.listForRole("seller", listOf("accepted")) }
+                .filter { (it.holdUntil ?: Long.MAX_VALUE) < nowSec }
+        expired.forEach { release(it) }
+    }
+
+    /**
+     * Protocol-valid request quantity: positive, within what the order still has, and at or above
+     * the order's min lot (in units, or in ISK value when min_lot_unit is "isk"). Our own send UI
+     * enforces this too — anything violating it over the wire is a bot or a broken client.
+     */
+    internal fun isValidRequestQty(
+        qty: Long,
+        order: NostrOrderModel,
+    ): Boolean {
+        if (qty <= 0 || qty > order.qtyRemaining) return false
+        return when (order.minLotUnit) {
+            "isk" -> qty * order.price >= order.minLot
+            else -> qty >= order.minLot
+        }
     }
 
     private suspend fun sendDm(

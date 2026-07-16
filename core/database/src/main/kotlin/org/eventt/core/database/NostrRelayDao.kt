@@ -9,6 +9,11 @@ data class NostrRelayModel(
     val lastConnectedAt: Long?,
     val lastStatus: String,
     val lastError: String?,
+    /** NIPs from the relay's NIP-11 document; empty until [nip11FetchedAt] is set. */
+    val supportedNips: List<Int> = emptyList(),
+    /** True when NIP-11 declares restricted_writes or payment_required — our publishes are likely rejected. */
+    val restrictedWrites: Boolean = false,
+    val nip11FetchedAt: Long? = null,
 )
 
 object NostrRelayDao {
@@ -28,6 +33,14 @@ object NostrRelayDao {
                                 lastConnectedAt = rs.getLong("last_connected_at").takeIf { !rs.wasNull() },
                                 lastStatus = rs.getString("last_status") ?: "unknown",
                                 lastError = rs.getString("last_error"),
+                                supportedNips =
+                                    rs
+                                        .getString("supported_nips")
+                                        .orEmpty()
+                                        .split(',')
+                                        .mapNotNull { it.trim().toIntOrNull() },
+                                restrictedWrites = rs.getInt("restricted_writes") == 1,
+                                nip11FetchedAt = rs.getLong("nip11_fetched_at").takeIf { !rs.wasNull() },
                             ),
                         )
                     }
@@ -88,6 +101,26 @@ object NostrRelayDao {
                 stmt.setString(1, status)
                 stmt.setString(2, error)
                 stmt.setString(3, url)
+                stmt.executeUpdate()
+            }
+        }
+    }
+
+    /** Stores what Nip11Service fetched — [supportedNips] is kept as a comma-separated list. */
+    fun updateNip11(
+        url: String,
+        supportedNips: List<Int>,
+        restrictedWrites: Boolean,
+        fetchedAt: Long,
+    ) {
+        DatabaseManager.transaction {
+            prepareStatement(
+                "UPDATE nostr_relays SET supported_nips = ?, restricted_writes = ?, nip11_fetched_at = ? WHERE url = ?",
+            ).use { stmt ->
+                stmt.setString(1, supportedNips.joinToString(","))
+                stmt.setInt(2, if (restrictedWrites) 1 else 0)
+                stmt.setLong(3, fetchedAt)
+                stmt.setString(4, url)
                 stmt.executeUpdate()
             }
         }

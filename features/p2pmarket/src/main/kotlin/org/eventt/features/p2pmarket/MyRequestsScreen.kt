@@ -263,15 +263,18 @@ private fun RequestTableRow(
             modifier = Modifier.width(130.dp),
         )
         Text("${reservation.qty}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(70.dp))
-        Row(modifier = Modifier.width(160.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                row.counterpartyLabel,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            row.counterpartyCharacterName?.let { TraderInfoButton(it, row.counterpartyCharacterId) }
+        Column(modifier = Modifier.width(160.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    row.counterpartyLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                row.counterpartyCharacterName?.let { TraderInfoButton(it, row.counterpartyCharacterId) }
+            }
+            PresenceBadge(reservation.sellerPubkey)
         }
         Text(
             statusLabel,

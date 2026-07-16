@@ -76,6 +76,9 @@ object QuartzGateway {
         return signer.sign(createdAt, kind, minedTags, content)
     }
 
+    /** Inverse of [Event.toJson] — null on malformed input. Used to replay the persistent outbox. */
+    fun eventFromJson(json: String): Event? = Event.fromJsonOrNull(json)
+
     /** The suspend-capable signer NIP17Factory needs — wraps the same keypair as [signerFor]. */
     fun asyncSignerFor(keyPair: KeyPair): NostrSigner = NostrSignerInternal(keyPair)
 

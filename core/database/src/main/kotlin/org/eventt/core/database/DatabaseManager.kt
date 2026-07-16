@@ -113,6 +113,12 @@ object DatabaseManager {
                 // lets a relist bump be rejected as stale if it's reporting a snapshot older than
                 // one already applied, instead of trusting whichever caller happens to run last.
                 "ALTER TABLE active_orders ADD COLUMN price_updated_at INTEGER DEFAULT 0",
+                // NIP-11 relay information document (supported NIPs, write restrictions), fetched
+                // by core:nostr's Nip11Service — lets Settings warn about relays that can't store
+                // orders (no NIP-40) or silently reject our publishes (paid/restricted writes).
+                "ALTER TABLE nostr_relays ADD COLUMN supported_nips TEXT",
+                "ALTER TABLE nostr_relays ADD COLUMN restricted_writes INTEGER DEFAULT 0",
+                "ALTER TABLE nostr_relays ADD COLUMN nip11_fetched_at INTEGER",
             )
         conn.createStatement().use { stmt ->
             migrations.forEach { sql ->
@@ -537,6 +543,16 @@ object DatabaseManager {
                     contact_char_id INTEGER,
                     requested_at INTEGER NOT NULL,
                     responded_at INTEGER
+                )
+                """.trimIndent(),
+                // P2P Market (Nostr) — publishes not yet acknowledged (NIP-01 OK) by any relay.
+                // Quartz's own outbox retries within a session but is in-memory; this survives
+                // app restarts and publishes attempted while the relay client wasn't up at all.
+                """
+                CREATE TABLE IF NOT EXISTS nostr_outbox (
+                    event_id TEXT PRIMARY KEY,
+                    event_json TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
                 )
                 """.trimIndent(),
                 // P2P Market (Nostr) — local mirror of kind-7733 trade receipts (mine + the

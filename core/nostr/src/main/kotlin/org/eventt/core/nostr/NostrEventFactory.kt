@@ -130,6 +130,27 @@ object NostrEventFactory {
         )
     }
 
+    /**
+     * NIP-09 deletion request for an order — best-effort relay cleanup published *after* the
+     * authoritative tombstone republish (qty_remaining=0), never instead of it: relays MAY honor
+     * kind 5, while latest-created_at replacement of an addressable event is mandatory NIP-01.
+     * The `a` tag addresses every past revision of the order, not one event id.
+     */
+    fun buildDeletionEvent(
+        signer: NostrSignerSync,
+        order: ParsedOrder,
+    ): Event =
+        QuartzGateway.signEvent(
+            signer,
+            System.currentTimeMillis() / 1000,
+            5,
+            arrayOf(
+                arrayOf("a", "$ORDER_KIND:${order.pubkey}:${order.orderUuid}"),
+                arrayOf("k", ORDER_KIND.toString()),
+            ),
+            "",
+        )
+
     private fun buildTags(
         orderUuid: String,
         side: OrderSide,

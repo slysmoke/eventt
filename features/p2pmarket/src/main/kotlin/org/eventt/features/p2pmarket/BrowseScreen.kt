@@ -277,6 +277,7 @@ private fun BrowseTableRow(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            PresenceBadge(order.pubkey)
             if (row.confirmedTrades > 0) {
                 Text(
                     "${row.confirmedTrades} confirmed",

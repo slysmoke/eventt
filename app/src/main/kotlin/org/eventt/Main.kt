@@ -68,10 +68,9 @@ fun main() {
     val isP2pTestInstance = System.getenv("EVENTT_DATA_DIR") != null
     if (isP2pTestInstance) seedP2pTestIdentityIfNeeded()
 
-    // X11's XGrabKey is exclusive process-wide: a second instance grabbing the same global
-    // hotkey while the main instance already holds it raises a fatal X BadAccess error that
-    // kills the whole JVM (Xlib's default error handler calls exit(), it's not a catchable
-    // Java exception) — so the test instance skips registering it entirely.
+    // X11's XGrabKey is exclusive process-wide — the main instance already holds these combos,
+    // so a test instance's grab can never succeed (X11HotkeyBackend detects the BadAccess and
+    // backs off gracefully); don't even try.
     if (!isP2pTestInstance) {
         GlobalHotkeyService.start()
         // Settings saves new hotkey letters, then calls this to re-register without a restart.
@@ -87,6 +86,7 @@ fun main() {
     // file before the watcher ever saw it — a real data-loss bug, not just theoretical.
     MarketLogWatcher.start()
     NostrRelayManager.start()
+    P2pRequestNotifier.start()
     // Keeps the P2P Market active identity following whichever character (or corp's acting
     // character) is selected in the main nav — there's no separate manual picker for it anymore.
     CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { NostrIdentityService.followAppCharacterSelection() }
