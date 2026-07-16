@@ -42,6 +42,7 @@ internal fun StationHeader(
             ACol("Buy At", StationSortCol.BUY_PRICE, sort, asc, onSort, Modifier.width(95.dp))
             ACol("Sell At", StationSortCol.SELL_PRICE, sort, asc, onSort, Modifier.width(95.dp))
             ACol("Margin", StationSortCol.MARGIN, sort, asc, onSort, Modifier.width(65.dp))
+            ACol("ROI", StationSortCol.ROI, sort, asc, onSort, Modifier.width(65.dp))
             ACol("Net/unit", StationSortCol.NET_PROFIT, sort, asc, onSort, Modifier.width(95.dp))
             ACol("7d", StationSortCol.TREND_7D, sort, asc, onSort, Modifier.width(65.dp))
             ACol("Vol/day", StationSortCol.VOLUME, sort, asc, onSort, Modifier.width(75.dp))
@@ -74,6 +75,7 @@ internal fun RegionHeader(
             ACol("Buy", RegionSortCol.BUY_PRICE, sort, asc, onSort, Modifier.width(95.dp))
             ACol("Sell", RegionSortCol.SELL_PRICE, sort, asc, onSort, Modifier.width(95.dp))
             ACol("Margin", RegionSortCol.MARGIN, sort, asc, onSort, Modifier.width(65.dp))
+            ACol("ROI", RegionSortCol.ROI, sort, asc, onSort, Modifier.width(65.dp))
             ACol("m³/unit", RegionSortCol.ITEM_VOL, sort, asc, onSort, Modifier.width(70.dp))
             ACol("Ship/unit", RegionSortCol.SHIPPING, sort, asc, onSort, Modifier.width(90.dp))
             ACol("Net/unit", RegionSortCol.NET_PROFIT, sort, asc, onSort, Modifier.width(95.dp))
@@ -132,6 +134,7 @@ internal fun StationRow(
         PriceText(opp.bestBuy, Color(0xFFFF6B6B), Modifier.width(95.dp))
         PriceText(opp.bestSell, Color(0xFF69DB7C), Modifier.width(95.dp))
         MarginText(opp.marginPct, Modifier.width(65.dp))
+        MarginText(opp.roiPct, Modifier.width(65.dp))
         PriceText(opp.netProfit, Color(0xFF69DB7C), Modifier.width(95.dp))
         TrendText(opp.priceChange7d, Modifier.width(65.dp))
         Text(
@@ -210,6 +213,7 @@ internal fun RegionRow(
             Avg7dDeviationText(opp.sellVsAvg7dPct, higherIsBetter = true)
         }
         MarginText(opp.marginPct, Modifier.width(65.dp))
+        MarginText(opp.roiPct, Modifier.width(65.dp))
         Text(
             formatVolume(opp.itemVolumeM3),
             style = MaterialTheme.typography.bodySmall,

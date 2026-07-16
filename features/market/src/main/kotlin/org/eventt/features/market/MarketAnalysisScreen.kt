@@ -29,7 +29,10 @@ data class StationOpportunity(
     val bestBuy: Double,
     val grossProfit: Double,
     val netProfit: Double,
+    // NET margin (after fees) relative to the sell price — matches the Trade Calc overlay.
     val marginPct: Double,
+    // The same net profit relative to the buy price — return on the capital tied up.
+    val roiPct: Double,
     val dailyVolume: Long,
     val sellOrderCount: Int,
     val buyOrderCount: Int,
@@ -46,7 +49,10 @@ data class RegionOpportunity(
     val sellPrice: Double,
     val grossProfit: Double,
     val netProfit: Double,
+    // NET margin (after fees and shipping) relative to the sell price — matches Station Trading.
     val marginPct: Double,
+    // The same net profit relative to buy price + shipping — return on the capital outlaid.
+    val roiPct: Double,
     val itemVolumeM3: Double,
     val shippingCostPerUnit: Double,
     val dailyVolume: Long, // sell region
@@ -73,13 +79,14 @@ data class RegionOpportunity(
 
 // ─── Sort / trade-type enums ───────────────────────────────────────────────
 
-internal enum class StationSortCol { NAME, BUY_PRICE, SELL_PRICE, MARGIN, NET_PROFIT, VOLUME, DAILY_PROFIT, TREND_7D }
+internal enum class StationSortCol { NAME, BUY_PRICE, SELL_PRICE, MARGIN, ROI, NET_PROFIT, VOLUME, DAILY_PROFIT, TREND_7D }
 
 internal enum class RegionSortCol {
     NAME,
     BUY_PRICE,
     SELL_PRICE,
     MARGIN,
+    ROI,
     ITEM_VOL,
     SHIPPING,
     NET_PROFIT,
@@ -134,6 +141,7 @@ internal fun sortStation(
             StationSortCol.BUY_PRICE -> compareBy { it.bestBuy }
             StationSortCol.SELL_PRICE -> compareBy { it.bestSell }
             StationSortCol.MARGIN -> compareBy { it.marginPct }
+            StationSortCol.ROI -> compareBy { it.roiPct }
             StationSortCol.NET_PROFIT -> compareBy { it.netProfit }
             StationSortCol.VOLUME -> compareBy { effVol(it) }
             StationSortCol.DAILY_PROFIT -> compareBy { it.netProfit * effVol(it) }
@@ -217,6 +225,7 @@ internal fun sortRegion(
             RegionSortCol.BUY_PRICE -> compareBy { it.buyPrice }
             RegionSortCol.SELL_PRICE -> compareBy { it.sellPrice }
             RegionSortCol.MARGIN -> compareBy { it.marginPct }
+            RegionSortCol.ROI -> compareBy { it.roiPct }
             RegionSortCol.ITEM_VOL -> compareBy { it.itemVolumeM3 }
             RegionSortCol.SHIPPING -> compareBy { it.shippingCostPerUnit }
             RegionSortCol.NET_PROFIT -> compareBy { it.netProfit }

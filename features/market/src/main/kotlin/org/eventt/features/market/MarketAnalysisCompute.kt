@@ -95,10 +95,13 @@ internal fun computeOpportunityForType(
     if (bestSell > maxBuyPrice) return null
     val grossProfit = bestSell - bestBuy
     if (grossProfit <= 0) return null
-    val marginPct = grossProfit / bestSell * 100.0
-    if (marginPct < minMarginPct) return null
     val fees = (bestSell + bestBuy) * brokerFeePct / 100.0 + bestSell * salesTaxPct / 100.0
     val netProfit = grossProfit - fees
+    // NET margin, after broker fees and sales tax — the same number the Trade Calc overlay shows
+    // for the same prices. It used to be gross, which made "Margin ≥ 5%" pass trades whose real
+    // margin was negative once ~4-5% of fees were paid.
+    val marginPct = netProfit / bestSell * 100.0
+    if (marginPct < minMarginPct) return null
     if (netProfit < minNetProfit) return null
 
     val type = StaticDataDao.getTypeById(typeId) ?: return null
@@ -114,6 +117,7 @@ internal fun computeOpportunityForType(
         grossProfit = grossProfit,
         netProfit = netProfit,
         marginPct = marginPct,
+        roiPct = netProfit / bestBuy * 100.0,
         dailyVolume = medianDailyVol,
         sellOrderCount = sells.size,
         buyOrderCount = buys.size,
@@ -125,9 +129,11 @@ internal fun computeOpportunityForType(
 // ─── Order-book walkers (inter-region "real quantity" calculation) ────────
 
 // Walks a source SELL order book (ascending price — cheapest first) against a FIXED destination
-// price, accumulating volume from each lot while its own margin still clears minMarginPct. Stops
-// at the first lot that doesn't clear it: prices only get worse deeper into the book, so nothing
-// beyond that point would either. Returns (volume, exact accumulated profit for that volume).
+// price, accumulating volume from each lot while its own NET margin (after fees and shipping,
+// relative to the sell price — the same definition the opportunity-level filter uses) still
+// clears minMarginPct. Stops at the first lot that doesn't clear it: prices only get worse
+// deeper into the book, so nothing beyond that point would either. Returns (volume, exact
+// accumulated profit for that volume).
 internal fun walkSourceSellLots(
     lots: List<Pair<Double, Long>>, // (price, volume_remain), ascending by price
     fixedSellPrice: Double,
@@ -141,7 +147,7 @@ internal fun walkSourceSellLots(
         if (qty <= 0) continue
         val gross = fixedSellPrice - buyPrice
         val net = gross - feeForBuyPrice(buyPrice) - shippingPerUnit
-        val margin = if (buyPrice > 0) gross / buyPrice * 100.0 else 0.0
+        val margin = if (fixedSellPrice > 0) net / fixedSellPrice * 100.0 else 0.0
         if (net <= 0 || margin < minMarginPct) break
         volume += qty
         profit += net * qty
@@ -164,7 +170,7 @@ internal fun walkDestBuyLots(
         if (qty <= 0) continue
         val gross = sellPrice - fixedBuyPrice
         val net = gross - feeForSellPrice(sellPrice) - shippingPerUnit
-        val margin = if (fixedBuyPrice > 0) gross / fixedBuyPrice * 100.0 else 0.0
+        val margin = if (sellPrice > 0) net / sellPrice * 100.0 else 0.0
         if (net <= 0 || margin < minMarginPct) break
         volume += qty
         profit += net * qty
@@ -194,7 +200,7 @@ internal fun walkCrossedBook(
         val sellPrice = buyLots[j].first
         val gross = sellPrice - buyPrice
         val net = gross - feeFor(buyPrice, sellPrice) - shippingPerUnit
-        val margin = if (buyPrice > 0) gross / buyPrice * 100.0 else 0.0
+        val margin = if (sellPrice > 0) net / sellPrice * 100.0 else 0.0
         if (net <= 0 || margin < minMarginPct) break
         val take = minOf(remainingSell, remainingBuy)
         if (take <= 0) break
@@ -334,7 +340,9 @@ internal fun computeRegionOpportunityForType(
         }
     val netProfit = grossProfit - fees - shipping
     if (netProfit < minNetProfit) return null
-    val marginPct = grossProfit / buyPrice * 100.0
+    // NET margin relative to the sell price — same convention as Station Trading and the Trade
+    // Calc overlay. The old gross/buyPrice figure lives on as roiPct below.
+    val marginPct = netProfit / sellPrice * 100.0
     if (marginPct < minMarginPct) return null
 
     // Real achievable quantity: walk whichever side(s) represent existing order-book liquidity
@@ -375,6 +383,8 @@ internal fun computeRegionOpportunityForType(
         profitableVolume = profitableVolume,
         profitableTotalProfit = profitableTotalProfit,
         marginPct = marginPct,
+        // Return on the capital actually outlaid per unit: the item plus its hauling cost.
+        roiPct = netProfit / (buyPrice + shipping) * 100.0,
         itemVolumeM3 = itemVol,
         shippingCostPerUnit = shipping,
         dailyVolume = volSell,
