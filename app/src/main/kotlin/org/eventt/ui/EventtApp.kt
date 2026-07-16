@@ -162,12 +162,18 @@ fun EventtApp() {
         AlertMonitor.start(coroutineScope)
     }
 
-    // Trade overlay window — independent of the main theme, lives at the app level. Shared with
-    // the global Ctrl+M hotkey (app/GlobalHotkeyService) via OverlayController rather than local
-    // state, since the hotkey fires from a native thread with no access to this composable.
+    // Trade overlay window — its own top-level Window (not nested in the MaterialTheme below),
+    // lives at the app level. Shared with the global Ctrl+M hotkey (app/GlobalHotkeyService) via
+    // OverlayController rather than local state, since the hotkey fires from a native thread with
+    // no access to this composable. Given the current theme/font explicitly since it's a separate
+    // window and can't inherit them from the MaterialTheme wrapping the main window's content.
     val showOverlay by OverlayController.isOpen.collectAsState()
     if (showOverlay) {
-        OverlayWindow(onClose = { OverlayController.close() })
+        OverlayWindow(
+            onClose = { OverlayController.close() },
+            colorScheme = colorScheme,
+            typography = fontChoice.typography,
+        )
     }
 
     MaterialTheme(

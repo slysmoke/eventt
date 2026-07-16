@@ -35,24 +35,20 @@ import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.eveOutbidPrice
 import org.eventt.core.model.eveUndercutPrice
 import org.eventt.core.model.formatEveSigFigPrice
-import org.eventt.ui.theme.DarkColorScheme
-import org.eventt.ui.theme.EveTypography
+import org.eventt.ui.theme.negativeColor
+import org.eventt.ui.theme.positiveColor
 import java.awt.KeyboardFocusManager
 import java.awt.MouseInfo
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 import java.util.prefs.Preferences
 
-private val OVERLAY_BG = Color(0xEE0D1117)
-private val OVERLAY_BORDER = Color(0xFF2A3A50)
-private val OVERLAY_HEADER = Color(0xFF131C26)
-private val DIM_TEXT = Color(0xFF6A7D8E)
-private val SELL_COLOR = Color(0xFFFF6B6B)
-private val BUY_COLOR = Color(0xFF69DB7C)
-private val ACCENT = Color(0xFF4A90D9)
-
 @Composable
-fun OverlayWindow(onClose: () -> Unit) {
+fun OverlayWindow(
+    onClose: () -> Unit,
+    colorScheme: ColorScheme,
+    typography: Typography,
+) {
     val prefs = remember { Preferences.userRoot().node("org/eve/trader/overlay") }
 
     // Opened via the Ctrl+M hotkey: place it at the cursor instead of wherever it was last
@@ -86,7 +82,7 @@ fun OverlayWindow(onClose: () -> Unit) {
         resizable = false,
         title = "EVE Trade Overlay",
     ) {
-        MaterialTheme(colorScheme = DarkColorScheme, typography = EveTypography) {
+        MaterialTheme(colorScheme = colorScheme, typography = typography) {
             OverlayContent(onClose = onClose, prefs = prefs)
         }
     }
@@ -134,6 +130,14 @@ private fun OverlayContent(
     onClose: () -> Unit,
     prefs: Preferences,
 ) {
+    val accent = MaterialTheme.colorScheme.primary
+    val dimText = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+    val overlayBg = MaterialTheme.colorScheme.surface
+    val overlayHeader = MaterialTheme.colorScheme.surfaceVariant
+    val overlayBorder = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+    val sellColor = negativeColor
+    val buyColor = positiveColor
+
     var sellPrice by remember { mutableStateOf<Double?>(null) }
     var buyPrice by remember { mutableStateOf<Double?>(null) }
     var sellLoc by remember { mutableStateOf("") }
@@ -292,14 +296,14 @@ private fun OverlayContent(
 
     val shape = RoundedCornerShape(10.dp)
 
-    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0D1117))) {
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Box(
             modifier =
                 Modifier
                     .fillMaxSize()
                     .clip(shape)
-                    .background(OVERLAY_BG)
-                    .border(1.dp, OVERLAY_BORDER, shape),
+                    .background(overlayBg)
+                    .border(1.dp, overlayBorder, shape),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // ─── Header / drag handle — stays fixed, never scrolls ─────
@@ -307,7 +311,7 @@ private fun OverlayContent(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .background(OVERLAY_HEADER)
+                            .background(overlayHeader)
                             .pointerInput(Unit) {
                                 // Screen-coordinate drag: capture AWT window at drag start
                                 var dragWin: java.awt.Window? = null
@@ -346,17 +350,17 @@ private fun OverlayContent(
                             }.padding(horizontal = 10.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Default.DragIndicator, null, tint = ACCENT, modifier = Modifier.size(14.dp))
+                    Icon(Icons.Default.DragIndicator, null, tint = accent, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(
                         "EVE Trade Calc",
                         style = MaterialTheme.typography.labelMedium,
-                        color = ACCENT,
+                        color = accent,
                         fontWeight = FontWeight.Bold,
                     )
                     Spacer(Modifier.weight(1f))
                     IconButton(onClick = onClose, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Default.Close, null, tint = DIM_TEXT, modifier = Modifier.size(14.dp))
+                        Icon(Icons.Default.Close, null, tint = dimText, modifier = Modifier.size(14.dp))
                     }
                 }
 
@@ -367,7 +371,7 @@ private fun OverlayContent(
                         Text(
                             it,
                             style = MaterialTheme.typography.labelSmall,
-                            color = ACCENT,
+                            color = accent,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
@@ -381,7 +385,7 @@ private fun OverlayContent(
                             price = sellPrice,
                             beatPrice = sellPrice?.let { eveUndercutPrice(it) },
                             location = sellLoc,
-                            color = SELL_COLOR,
+                            color = sellColor,
                             source = sellSource,
                             onSet = {
                                 val p = ClipboardParser.parse(ClipboardParser.readClipboard()) ?: return@PriceRow
@@ -398,7 +402,7 @@ private fun OverlayContent(
                             price = buyPrice,
                             beatPrice = buyPrice?.let { eveOutbidPrice(it) },
                             location = buyLoc,
-                            color = BUY_COLOR,
+                            color = buyColor,
                             source = buySource,
                             onSet = {
                                 val p = ClipboardParser.parse(ClipboardParser.readClipboard()) ?: return@PriceRow
@@ -412,7 +416,7 @@ private fun OverlayContent(
                         Spacer(Modifier.height(6.dp))
                         // Which beat price a Marketlogs order-book import auto-copies to the clipboard.
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Auto-copy", color = DIM_TEXT, style = MaterialTheme.typography.labelSmall)
+                            Text("Auto-copy", color = dimText, style = MaterialTheme.typography.labelSmall)
                             Spacer(Modifier.weight(1f))
                             AutoCopy.entries.forEach { mode ->
                                 val label =
@@ -432,7 +436,7 @@ private fun OverlayContent(
                                     Text(
                                         label,
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = if (autoCopy == mode) ACCENT else DIM_TEXT,
+                                        color = if (autoCopy == mode) accent else dimText,
                                         fontWeight = if (autoCopy == mode) FontWeight.Bold else FontWeight.Normal,
                                     )
                                 }
@@ -442,7 +446,7 @@ private fun OverlayContent(
 
                     // ─── Profit / margin ──────────────────────────────────
                     if (sellPrice != null && buyPrice != null) {
-                        HorizontalDivider(color = OVERLAY_BORDER)
+                        HorizontalDivider(color = overlayBorder)
                         val sp = sellPrice!!
                         val bp = buyPrice!!
                         val bf = brokerFeePct / 100.0
@@ -455,12 +459,12 @@ private fun OverlayContent(
                         val revenuePerUnit = sp * (1.0 - bf - st)
                         val profitPerUnit = revenuePerUnit - costPerUnit
                         val margin = if (sp > 0) profitPerUnit / sp * 100.0 else 0.0
-                        val profitColor = if (profitPerUnit > 0) BUY_COLOR else SELL_COLOR
+                        val profitColor = if (profitPerUnit > 0) buyColor else sellColor
 
                         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                            CalcRow("Broker (buy)", fmtIsk(bp * bf), DIM_TEXT)
-                            CalcRow("Broker (sell)", fmtIsk(sp * bf), DIM_TEXT)
-                            CalcRow("Sales tax", fmtIsk(sp * st), DIM_TEXT)
+                            CalcRow("Broker (buy)", fmtIsk(bp * bf), dimText)
+                            CalcRow("Broker (sell)", fmtIsk(sp * bf), dimText)
+                            CalcRow("Sales tax", fmtIsk(sp * st), dimText)
                             Spacer(Modifier.height(4.dp))
                             CalcRow("Profit/unit", fmtIsk(profitPerUnit), profitColor, bold = true)
                             CalcRow("Margin", "%.1f%%".format(margin), profitColor, bold = true)
@@ -475,22 +479,22 @@ private fun OverlayContent(
                     // come from (sell wall, then buy wall — same order as the SELL/BUY rows
                     // above), not by which action they name, so adjacent rows read consistently.
                     if (sellBook.isNotEmpty() || buyBook.isNotEmpty()) {
-                        HorizontalDivider(color = OVERLAY_BORDER)
+                        HorizontalDivider(color = overlayBorder)
                         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                             if (sellBook.isNotEmpty()) {
                                 val vol = sellBook.sumOf { it.second }
                                 val cost = sellBook.sumOf { it.first * it.second }
-                                CalcRow("Sell wall: buy out (${fmtVol(vol)} units)", fmtIsk(cost), DIM_TEXT)
+                                CalcRow("Sell wall: buy out (${fmtVol(vol)} units)", fmtIsk(cost), dimText)
                                 avgTopPrice(sellBook, cheapestFirst = true)?.let {
-                                    CalcRow("Sell wall: avg (top 5%)", fmtIsk(it), DIM_TEXT)
+                                    CalcRow("Sell wall: avg (top 5%)", fmtIsk(it), dimText)
                                 }
                             }
                             if (buyBook.isNotEmpty()) {
                                 val vol = buyBook.sumOf { it.second }
                                 val revenue = buyBook.sumOf { it.first * it.second }
-                                CalcRow("Buy wall: sell out (${fmtVol(vol)} units)", fmtIsk(revenue), DIM_TEXT)
+                                CalcRow("Buy wall: sell out (${fmtVol(vol)} units)", fmtIsk(revenue), dimText)
                                 avgTopPrice(buyBook, cheapestFirst = false)?.let {
-                                    CalcRow("Buy wall: avg (top 5%)", fmtIsk(it), DIM_TEXT)
+                                    CalcRow("Buy wall: avg (top 5%)", fmtIsk(it), dimText)
                                 }
                             }
                         }
@@ -514,6 +518,8 @@ private fun PriceRow(
     onSet: () -> Unit,
     onCopyBeat: (Double) -> Unit,
 ) {
+    val accent = MaterialTheme.colorScheme.primary
+    val dimText = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -527,14 +533,14 @@ private fun PriceRow(
             if (price != null) {
                 Text(
                     fmtIsk(price),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                 )
                 Spacer(Modifier.width(6.dp))
                 SourceBadge(source)
             } else {
-                Text("—  copy an order row", color = DIM_TEXT, style = MaterialTheme.typography.bodySmall)
+                Text("—  copy an order row", color = dimText, style = MaterialTheme.typography.bodySmall)
             }
             Spacer(Modifier.weight(1f))
             TextButton(
@@ -542,7 +548,7 @@ private fun PriceRow(
                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
                 modifier = Modifier.height(22.dp),
             ) {
-                Text("SET", style = MaterialTheme.typography.labelSmall, color = ACCENT)
+                Text("SET", style = MaterialTheme.typography.labelSmall, color = accent)
             }
         }
         // The beat price already sits in the clipboard (written by the poll loop / book import);
@@ -550,7 +556,7 @@ private fun PriceRow(
         if (beatPrice != null) {
             Text(
                 "beat ${formatEveSigFigPrice(beatPrice)}",
-                color = ACCENT,
+                color = accent,
                 style = MaterialTheme.typography.labelSmall,
                 modifier =
                     Modifier
@@ -561,7 +567,7 @@ private fun PriceRow(
         if (location.isNotEmpty()) {
             Text(
                 location,
-                color = DIM_TEXT,
+                color = dimText,
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.padding(start = 38.dp),
                 maxLines = 1,
@@ -577,6 +583,7 @@ private fun PriceRow(
 @Composable
 private fun SourceBadge(source: PriceSource?) {
     if (source == null) return
+    val dimText = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
     val (icon, label) =
         when (source) {
             PriceSource.FILE -> Icons.Default.Bolt to "auto"
@@ -584,9 +591,9 @@ private fun SourceBadge(source: PriceSource?) {
             PriceSource.LOOKUP -> Icons.Default.Search to "jita"
         }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, tint = DIM_TEXT, modifier = Modifier.size(10.dp))
+        Icon(icon, null, tint = dimText, modifier = Modifier.size(10.dp))
         Spacer(Modifier.width(2.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall, color = DIM_TEXT)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = dimText)
     }
 }
 
@@ -598,7 +605,7 @@ private fun CalcRow(
     bold: Boolean = false,
 ) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = DIM_TEXT, style = MaterialTheme.typography.labelSmall)
+        Text(label, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), style = MaterialTheme.typography.labelSmall)
         Text(
             value,
             color = valueColor,
