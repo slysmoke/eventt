@@ -1,5 +1,6 @@
 package org.eventt.hotkey
 
+import com.sun.jna.Callback
 import com.sun.jna.Library
 import com.sun.jna.Memory
 import com.sun.jna.Native
@@ -55,10 +56,21 @@ class X11HotkeyBackend : HotkeyBackend {
                 (if (key.alt) MOD1_MASK else 0) or
                 (if (key.shift) SHIFT_MASK else 0)
 
+        installErrorHandler(lib)
+
         // XGrabKey doesn't ignore lock modifiers (CapsLock/NumLock) by itself - grab every
         // combination so the hotkey doesn't silently stop firing when either is toggled on.
+        X11ErrorTrap.sawGrabKeyBadAccess = false
         for (lockBits in intArrayOf(0, LOCK_MASK, NUM_LOCK_MASK, LOCK_MASK or NUM_LOCK_MASK)) {
             lib.XGrabKey(disp, keycode, baseMask or lockBits, root, 0, GRAB_MODE_ASYNC, GRAB_MODE_ASYNC)
+        }
+        // Grab errors arrive asynchronously — force a round-trip so a BadAccess (another client
+        // already holds this combo) is observed here, not as a surprise after reporting success.
+        lib.XSync(disp, 0)
+        if (X11ErrorTrap.sawGrabKeyBadAccess) {
+            println("[Hotkey][X11] '${key.label}' is already grabbed by another application (another running instance?) — hotkey disabled")
+            lib.XCloseDisplay(disp)
+            return false
         }
 
         display = disp
@@ -102,6 +114,48 @@ class X11HotkeyBackend : HotkeyBackend {
         const val NUM_LOCK_MASK = 1 shl 4
         const val GRAB_MODE_ASYNC = 1
         const val KEY_PRESS = 2
+
+        private var errorHandlerInstalled = false
+
+        /**
+         * Once per process: Xlib's default error handler prints the error and calls exit() — an
+         * async BadAccess from XGrabKey (combo already held by another client) killed the whole
+         * JVM before this handler existed. XSetErrorHandler is global to all Xlib connections,
+         * so one install covers every backend instance.
+         */
+        @Synchronized
+        fun installErrorHandler(lib: X11Lib) {
+            if (errorHandlerInstalled) return
+            lib.XSetErrorHandler(X11ErrorTrap)
+            errorHandlerInstalled = true
+        }
+    }
+}
+
+/**
+ * Replacement for Xlib's fatal default error handler: records grab conflicts for
+ * [X11HotkeyBackend] to turn into a graceful "hotkey unavailable", logs anything else, never
+ * exits. A Kotlin `object` is a permanent strong reference, which JNA requires for callbacks
+ * passed to native code (a GC'd callback = crash on the next X error).
+ */
+object X11ErrorTrap : Callback {
+    private const val BAD_ACCESS = 10
+    private const val X_GRAB_KEY_OPCODE = 33
+
+    @Volatile var sawGrabKeyBadAccess = false
+
+    @Suppress("unused") // invoked from native code via JNA
+    fun callback(
+        display: Pointer?,
+        errorEvent: Pointer?,
+    ): Int {
+        val err = errorEvent?.let { XErrorEvent(it) }
+        if (err != null && err.errorCode.toInt() == BAD_ACCESS && err.requestCode.toInt() == X_GRAB_KEY_OPCODE) {
+            sawGrabKeyBadAccess = true
+        } else {
+            println("[Hotkey][X11] X error ${err?.errorCode} (request ${err?.requestCode}) ignored")
+        }
+        return 0
     }
 }
 
@@ -138,6 +192,13 @@ private interface X11Lib : Library {
 
     fun XPending(display: Pointer): Int
 
+    fun XSync(
+        display: Pointer,
+        discard: Int,
+    ): Int
+
+    fun XSetErrorHandler(handler: Callback): Pointer?
+
     fun XNextEvent(
         display: Pointer,
         eventReturn: Pointer,
@@ -145,6 +206,31 @@ private interface X11Lib : Library {
 
     companion object {
         val INSTANCE: X11Lib = Native.load("X11", X11Lib::class.java)
+    }
+}
+
+// Mirrors Xlib's XErrorEvent. Public for the same JNA cross-package reflection reason as
+// XKeyEvent below.
+@Structure.FieldOrder("type", "display", "resourceid", "serial", "errorCode", "requestCode", "minorCode")
+class XErrorEvent(
+    p: Pointer,
+) : Structure(p) {
+    @JvmField var type: Int = 0
+
+    @JvmField var display: Pointer? = null
+
+    @JvmField var resourceid: NativeLong = NativeLong()
+
+    @JvmField var serial: NativeLong = NativeLong()
+
+    @JvmField var errorCode: Byte = 0
+
+    @JvmField var requestCode: Byte = 0
+
+    @JvmField var minorCode: Byte = 0
+
+    init {
+        read()
     }
 }
 
