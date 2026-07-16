@@ -33,7 +33,7 @@ fun SettingsScreen() {
     val sdeState by StaticDataImporter.state.collectAsState()
 
     var selectedSource by remember { mutableStateOf("esi") }
-    var periodMonths by remember { mutableStateOf(6) }
+    var periodMonths by remember { mutableStateOf(1) }
     var downloadCount by remember { mutableStateOf(0) }
     var earliestDate by remember { mutableStateOf<String?>(null) }
     var latestDate by remember { mutableStateOf<String?>(null) }
@@ -287,7 +287,7 @@ private fun EveRefSettings(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(1 to "1 month", 3 to "3 months", 6 to "6 months").forEach { (months, label) ->
+                listOf(1 to "1 month", 3 to "3 months").forEach { (months, label) ->
                     FilterChip(
                         selected = periodMonths == months,
                         onClick = { onPeriodSelected(months) },
