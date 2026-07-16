@@ -24,6 +24,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.ActiveOrderDao
 import org.eventt.core.database.CharacterDao
+import org.eventt.core.database.MarketTopSnapshotDao
 import org.eventt.core.database.OrderHistoryDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.ViewContext
@@ -193,6 +194,50 @@ internal fun mergeRelistStats(
  */
 private const val NOTIFY_BEATEN_SETTING = "orders.notify_beaten"
 
+// How much top-of-book history feeds the Competition column; snapshots older than this are pruned.
+private const val COMPETITION_WINDOW_MILLIS = 7L * 24 * 3600 * 1000
+
+/**
+ * Persists the current best price per order book we hold an active order in: sell competition per
+ * station (undercutting is station-local), buy competition per region (any regional buy order can
+ * outbid ours). Called once per (typeId, regionId) ESI response inside fetchMarketComparisons.
+ */
+private fun recordTopSnapshots(
+    all: List<Map<String, Any?>>,
+    ownIds: Set<Long>,
+    ownOrdersForPair: List<CharacterOrder>,
+    typeId: Int,
+    regionId: Int,
+    ts: Long,
+) {
+    fun record(
+        top: Map<String, Any?>,
+        scopeId: Long,
+        isBuy: Boolean,
+    ) {
+        val orderId = (top["order_id"] as? Number)?.toLong() ?: return
+        val price = (top["price"] as? Number)?.toDouble() ?: return
+        MarketTopSnapshotDao.insertIfAbsent(typeId, scopeId, isBuy, ts, price, orderId, orderId in ownIds)
+    }
+
+    ownOrdersForPair
+        .filter { !it.isBuyOrder }
+        .map { it.locationId }
+        .toSet()
+        .forEach { locationId ->
+            all
+                .filter { !(it["is_buy_order"] as? Boolean ?: false) && (it["location_id"] as? Number)?.toLong() == locationId }
+                .minByOrNull { (it["price"] as? Number)?.toDouble() ?: Double.MAX_VALUE }
+                ?.let { record(it, locationId, isBuy = false) }
+        }
+    if (ownOrdersForPair.any { it.isBuyOrder }) {
+        all
+            .filter { it["is_buy_order"] as? Boolean ?: false }
+            .maxByOrNull { (it["price"] as? Number)?.toDouble() ?: Double.MIN_VALUE }
+            ?.let { record(it, regionId.toLong(), isBuy = true) }
+    }
+}
+
 // Whether a competitor currently beats this order — a cheaper sell at the same station, or a
 // higher buy region-wide. Single source for the hotkey queue, the header badge, and notifications.
 internal fun CharacterOrder.isBeatenBy(comp: MarketComparison?): Boolean =
@@ -246,7 +291,7 @@ internal fun sellMarginPct(
 
 // COST/RELIST/PROFIT/MARGIN/BEST_MARGIN are Sell-only (sorted in sortSellMetrics, since they're
 // derived values, not fields on CharacterOrder); TOTAL/ORDER_AGE are Buy-only (applySort).
-internal enum class SortCol { NAME, PRICE, VOLUME, TOTAL, TIME_LEFT, ORDER_AGE, COST, RELIST, PROFIT, MARGIN, BEST_MARGIN }
+internal enum class SortCol { NAME, PRICE, VOLUME, TOTAL, TIME_LEFT, ORDER_AGE, COST, RELIST, PROFIT, MARGIN, BEST_MARGIN, COMPETITION }
 
 internal enum class SortDir { ASC, DESC }
 
@@ -285,6 +330,10 @@ fun OrdersScreen(context: ViewContext?) {
     // order load, via the manual "Refresh Prices" button, and automatically once the ESI cache
     // expires (safe since the Ctrl+Z cycle keeps its place across updates, keyed by orderId).
     var marketComparisons by remember { mutableStateOf<Map<Pair<Int, Long>, MarketComparison>>(emptyMap()) }
+    // Competition stats per order book — keyed (typeId, station) for sells and (typeId, region)
+    // for buys, matching how MarketTopSnapshotDao scopes each side. Station and region id spaces
+    // don't overlap, so one map serves both tables.
+    var competitionStats by remember { mutableStateOf<Map<Pair<Int, Long>, CompetitionService.Stats>>(emptyMap()) }
 
     // Ctrl+Z cycles only beaten orders when on (mirrors PendingOrdersQueue.onlyBeaten).
     var onlyBeaten by remember { mutableStateOf(PendingOrdersQueue.onlyBeaten) }
@@ -387,6 +436,14 @@ fun OrdersScreen(context: ViewContext?) {
                             // rather than a genuine relist (e.g. right after a character switch,
                             // where different pairs' cached responses can be minutes apart in age).
                             val pairLastModified = EsiClient.getEndpointLastModifiedMillis("/markets/$regionId/orders/", pairParams)
+                            // Top-of-book snapshot per ESI tick — the raw history behind the
+                            // Competition column. Unlike the comparison values above, our own
+                            // orders are INCLUDED here: "am I on top right now" is the point.
+                            // ts = the response's own Last-Modified, so re-reading a still-cached
+                            // response dedups on the primary key instead of minting fake ticks.
+                            if (pairLastModified != null) {
+                                recordTopSnapshots(all, ownIds, ownOrdersForPair, typeId, regionId, pairLastModified)
+                            }
                             // Same response also carries this character's own orders (excluded above
                             // for competition purposes) — compare against the last-known price to
                             // detect a relist that happened since the last poll.
@@ -434,9 +491,22 @@ fun OrdersScreen(context: ViewContext?) {
                         } catch (_: Exception) {
                         }
                     }
+                    MarketTopSnapshotDao.pruneOlderThan(System.currentTimeMillis() - COMPETITION_WINDOW_MILLIS)
+                    val statsSince = System.currentTimeMillis() - COMPETITION_WINDOW_MILLIS
+                    val stats = mutableMapOf<Pair<Int, Long>, CompetitionService.Stats>()
+                    activeOrders
+                        .filter { it.state == "active" }
+                        .forEach { o ->
+                            val scopeId = if (o.isBuyOrder) o.regionId.toLong() else o.locationId
+                            stats.getOrPut(o.typeId to scopeId) {
+                                CompetitionService.compute(MarketTopSnapshotDao.getWindow(o.typeId, scopeId, o.isBuyOrder, statsSince))
+                            }
+                        }
+
                     withContext(Dispatchers.Main) {
                         marketComparisons = result
                         marketComparisonsExpiresAt = latestExpiry
+                        competitionStats = stats
                         if (detectedChanges.isNotEmpty()) orders = orders.map { detectedChanges[it.orderId] ?: it }
                     }
                 } finally {
@@ -1056,6 +1126,7 @@ fun OrdersScreen(context: ViewContext?) {
                                 taxConfig = tax,
                                 historyCostBasis = historyCostBasis,
                                 comparisons = marketComparisons,
+                                competition = competitionStats,
                                 relistDiscountPct = relistDiscountPct,
                                 showBeatenOnly = showBeatenOnly,
                                 selectedOrderId = selectedOrderId,
@@ -1084,6 +1155,7 @@ fun OrdersScreen(context: ViewContext?) {
                                 onSort = ::onSort,
                                 taxConfig = tax,
                                 comparisons = marketComparisons,
+                                competition = competitionStats,
                                 showOverbidOnly = showOverbidOnly,
                                 selectedOrderId = selectedOrderId,
                                 activeOrderId = activeOrderId,

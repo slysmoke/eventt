@@ -35,6 +35,8 @@ private fun sortBuyMetrics(
             SortCol.TOTAL -> list.sortedBy { it.order.total }
             SortCol.TIME_LEFT -> list.sortedBy { it.order.timeLeftSeconds }
             SortCol.ORDER_AGE -> list.sortedBy { it.order.orderAgeSeconds }
+            // Ascending = most contested first (least time on top); no data sorts last.
+            SortCol.COMPETITION -> list.sortedBy { it.competition?.timeOnTopPct ?: 2.0 }
             SortCol.COST, SortCol.PROFIT -> list // Sell-only columns, not shown here
         }
     return if (dir == SortDir.DESC) sorted.reversed() else sorted
@@ -58,6 +60,8 @@ private fun sortSellMetrics(
             SortCol.BEST_MARGIN -> list.sortedBy { it.bestMarginPct ?: Double.NEGATIVE_INFINITY }
             SortCol.VOLUME -> list.sortedBy { it.order.volumeRemaining }
             SortCol.TIME_LEFT -> list.sortedBy { it.order.timeLeftSeconds }
+            // Ascending = most contested first (least time on top); no data sorts last.
+            SortCol.COMPETITION -> list.sortedBy { it.competition?.timeOnTopPct ?: 2.0 }
             SortCol.TOTAL, SortCol.ORDER_AGE -> list // Buy-only columns, not shown here
         }
     return if (dir == SortDir.DESC) sorted.reversed() else sorted
@@ -78,6 +82,7 @@ internal data class SellOrderMetrics(
     val updatesRemaining: Int?,
     // Beaten: another sell order at the same station is currently cheaper than ours.
     val isBeaten: Boolean,
+    val competition: CompetitionService.Stats?,
 )
 
 private fun computeSellMetrics(
@@ -86,6 +91,7 @@ private fun computeSellMetrics(
     historyCostBasis: Map<Int, Double>,
     taxConfig: CostBasisService.TaxConfig,
     comparisons: Map<Pair<Int, Long>, MarketComparison>,
+    competition: Map<Pair<Int, Long>, CompetitionService.Stats>,
     relistDiscountPct: Double,
 ): SellOrderMetrics {
     val comparison = comparisons[order.typeId to order.locationId]
@@ -114,7 +120,19 @@ private fun computeSellMetrics(
             relistDiscountPct = relistDiscountPct,
         )
     val isBeaten = comparison?.bestSell != null && comparison.bestSell < order.price
-    return SellOrderMetrics(order, comparison, costBasis, isEstimated, totalProfit, marginPct, bestMarginPct, updatesRemaining, isBeaten)
+    val competitionStats = competition[order.typeId to order.locationId]
+    return SellOrderMetrics(
+        order,
+        comparison,
+        costBasis,
+        isEstimated,
+        totalProfit,
+        marginPct,
+        bestMarginPct,
+        updatesRemaining,
+        isBeaten,
+        competitionStats,
+    )
 }
 
 @Composable
@@ -127,6 +145,7 @@ internal fun SellOrdersTable(
     taxConfig: CostBasisService.TaxConfig,
     historyCostBasis: Map<Int, Double>,
     comparisons: Map<Pair<Int, Long>, MarketComparison>,
+    competition: Map<Pair<Int, Long>, CompetitionService.Stats>,
     relistDiscountPct: Double,
     showBeatenOnly: Boolean,
     selectedOrderId: Long?,
@@ -135,8 +154,8 @@ internal fun SellOrdersTable(
     onAction: (CharacterOrder) -> Unit,
 ) {
     val metrics =
-        remember(orders, inventory, historyCostBasis, taxConfig, comparisons, relistDiscountPct) {
-            orders.map { computeSellMetrics(it, inventory, historyCostBasis, taxConfig, comparisons, relistDiscountPct) }
+        remember(orders, inventory, historyCostBasis, taxConfig, comparisons, competition, relistDiscountPct) {
+            orders.map { computeSellMetrics(it, inventory, historyCostBasis, taxConfig, comparisons, competition, relistDiscountPct) }
         }
     val visible = if (showBeatenOnly) metrics.filter { it.isBeaten } else metrics
     val sorted = sortSellMetrics(visible, sortCol, sortDir)
@@ -159,6 +178,7 @@ internal fun SellOrdersTable(
             SortHeader("Margin", SortCol.MARGIN, sortCol, sortDir, onSort, Modifier.weight(1.2f))
             SortHeader("Best Margin", SortCol.BEST_MARGIN, sortCol, sortDir, onSort, Modifier.weight(1.4f))
             SortHeader("Volume", SortCol.VOLUME, sortCol, sortDir, onSort, Modifier.weight(2.5f))
+            SortHeader("Competition", SortCol.COMPETITION, sortCol, sortDir, onSort, Modifier.weight(1.8f))
             SortHeader("Time Left", SortCol.TIME_LEFT, sortCol, sortDir, onSort, Modifier.weight(1.5f))
             StaticHeader("", Modifier.width(36.dp))
         }
@@ -195,19 +215,23 @@ internal data class BuyOrderMetrics(
     val bestMarginPct: Double?,
     // Overbid: another buy order region-wide currently pays more than ours.
     val isOverbid: Boolean,
+    val competition: CompetitionService.Stats?,
 )
 
 private fun computeBuyMetrics(
     order: CharacterOrder,
     taxConfig: CostBasisService.TaxConfig,
     comparisons: Map<Pair<Int, Long>, MarketComparison>,
+    competition: Map<Pair<Int, Long>, CompetitionService.Stats>,
 ): BuyOrderMetrics {
     val comparison = comparisons[order.typeId to order.locationId]
     // Margin if this order fills and the item is resold at the current best sell price.
     val marginPct = computeMarginPct(order.price, comparison?.bestSell, taxConfig)
     val bestMarginPct = computeBestMarginPct(comparison, taxConfig)
     val isOverbid = comparison?.bestBuy != null && comparison.bestBuy > order.price
-    return BuyOrderMetrics(order, comparison, marginPct, bestMarginPct, isOverbid)
+    // Buy competition is scoped to the region, matching recordTopSnapshots.
+    val competitionStats = competition[order.typeId to order.regionId.toLong()]
+    return BuyOrderMetrics(order, comparison, marginPct, bestMarginPct, isOverbid, competitionStats)
 }
 
 @Composable
@@ -218,6 +242,7 @@ internal fun BuyOrdersTable(
     onSort: (SortCol) -> Unit,
     taxConfig: CostBasisService.TaxConfig,
     comparisons: Map<Pair<Int, Long>, MarketComparison>,
+    competition: Map<Pair<Int, Long>, CompetitionService.Stats>,
     showOverbidOnly: Boolean,
     selectedOrderId: Long?,
     activeOrderId: Long?,
@@ -225,8 +250,8 @@ internal fun BuyOrdersTable(
     onAction: (CharacterOrder) -> Unit,
 ) {
     val metrics =
-        remember(orders, taxConfig, comparisons) {
-            orders.map { computeBuyMetrics(it, taxConfig, comparisons) }
+        remember(orders, taxConfig, comparisons, competition) {
+            orders.map { computeBuyMetrics(it, taxConfig, comparisons, competition) }
         }
     val visible = if (showOverbidOnly) metrics.filter { it.isOverbid } else metrics
     val sorted = sortBuyMetrics(visible, sortCol, sortDir)
@@ -248,6 +273,7 @@ internal fun BuyOrdersTable(
             SortHeader("Best Margin", SortCol.BEST_MARGIN, sortCol, sortDir, onSort, Modifier.weight(1.4f))
             SortHeader("Volume", SortCol.VOLUME, sortCol, sortDir, onSort, Modifier.weight(2.5f))
             SortHeader("Total", SortCol.TOTAL, sortCol, sortDir, onSort, Modifier.weight(2f))
+            SortHeader("Competition", SortCol.COMPETITION, sortCol, sortDir, onSort, Modifier.weight(1.8f))
             SortHeader("Time Left", SortCol.TIME_LEFT, sortCol, sortDir, onSort, Modifier.weight(1.5f))
             SortHeader("Order Age", SortCol.ORDER_AGE, sortCol, sortDir, onSort, Modifier.weight(1.5f))
             StaticHeader("", Modifier.width(36.dp))

@@ -119,6 +119,7 @@ internal fun SellOrderRow(
             color = bestMarginColor,
         )
         VolumeBar(order.volumeRemaining, order.volumeTotal, isSell = true, modifier = Modifier.weight(2.5f).padding(horizontal = 4.dp))
+        CompetitionCell(metrics.competition, modifier = Modifier.weight(1.8f))
         Text(
             formatDuration(order.timeLeftSeconds),
             modifier = Modifier.weight(1.5f),
@@ -138,6 +139,48 @@ internal fun SellOrderRow(
                         isBeaten -> UNDERCUT_COLOR
                         else -> MaterialTheme.colorScheme.onSurfaceVariant
                     },
+            )
+        }
+    }
+}
+
+/**
+ * Two-line competition summary from a week of top-of-book snapshots (see CompetitionService):
+ * a level word, then "time on top · rivals · median survival". "…" while the window is still
+ * too thin to judge; "—" when there's no data at all (stats haven't been fetched yet).
+ */
+@Composable
+private fun CompetitionCell(
+    stats: CompetitionService.Stats?,
+    modifier: Modifier = Modifier,
+) {
+    if (stats == null) {
+        Text("—", modifier = modifier, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        return
+    }
+    val (label, color) =
+        when (stats.level) {
+            CompetitionService.Level.COLLECTING -> "collecting…" to MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            CompetitionService.Level.CALM -> "Calm" to PROFIT_COLOR
+            CompetitionService.Level.CONTESTED -> "Contested" to UNDERCUT_COLOR
+            CompetitionService.Level.BOT_WAR -> "Bot war" to LOSS_COLOR
+        }
+    Column(modifier = modifier) {
+        Text(label, style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.SemiBold)
+        if (stats.level != CompetitionService.Level.COLLECTING) {
+            val details =
+                buildList {
+                    add("top ${(stats.timeOnTopPct * 100).toInt()}%")
+                    if (stats.competitors > 0) add("${stats.competitors} rivals")
+                    // Median ticks I survive on top, in wall-clock terms (one tick ≈ 5 min).
+                    stats.medianBeatTicks?.let { add("~${(it * 5).toInt()}m") }
+                }.joinToString(" · ")
+            Text(
+                details,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -244,6 +287,7 @@ internal fun BuyOrderRow(
 
         VolumeBar(order.volumeRemaining, order.volumeTotal, isSell = false, modifier = Modifier.weight(2.5f).padding(horizontal = 4.dp))
         Text(formatIsk(order.total), modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodyMedium)
+        CompetitionCell(metrics.competition, modifier = Modifier.weight(1.8f))
         Text(
             formatDuration(order.timeLeftSeconds),
             modifier = Modifier.weight(1.5f),

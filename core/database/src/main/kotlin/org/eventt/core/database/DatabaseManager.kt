@@ -545,6 +545,24 @@ object DatabaseManager {
                     responded_at INTEGER
                 )
                 """.trimIndent(),
+                // Top-of-book snapshot per ESI market tick (~5 min) for every (type, station/region)
+                // pair the user has an active order in — the raw history behind the Orders screen's
+                // competition metrics (time-on-top, distinct competitors, bot detection). scope_id
+                // is the station for sell orders and the region for buy orders (buy competition is
+                // regional). ts is ESI's own Last-Modified, so re-reads of the same cached response
+                // dedup via the primary key. Pruned after 7 days.
+                """
+                CREATE TABLE IF NOT EXISTS market_top_snapshots (
+                    type_id INTEGER NOT NULL,
+                    scope_id INTEGER NOT NULL,
+                    is_buy INTEGER NOT NULL,
+                    ts INTEGER NOT NULL,
+                    best_price REAL NOT NULL,
+                    best_order_id INTEGER NOT NULL,
+                    best_is_mine INTEGER NOT NULL,
+                    PRIMARY KEY (type_id, scope_id, is_buy, ts)
+                )
+                """.trimIndent(),
                 // P2P Market (Nostr) — publishes not yet acknowledged (NIP-01 OK) by any relay.
                 // Quartz's own outbox retries within a session but is in-memory; this survives
                 // app restarts and publishes attempted while the relay client wasn't up at all.
