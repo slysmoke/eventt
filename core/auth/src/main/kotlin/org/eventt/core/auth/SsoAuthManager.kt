@@ -178,7 +178,8 @@ object SsoAuthManager {
     fun refreshToken(refreshToken: String): TokenResponse? {
         val client = EveHttpClient.getClient()
 
-        val body = "grant_type=refresh_token&refresh_token=$refreshToken&client_id=$CLIENT_ID"
+        val encodedRefreshToken = java.net.URLEncoder.encode(refreshToken, "UTF-8")
+        val body = "grant_type=refresh_token&refresh_token=$encodedRefreshToken&client_id=$CLIENT_ID"
         val requestBody = body.toRequestBody("application/x-www-form-urlencoded".toMediaType())
 
         val request =
@@ -347,8 +348,9 @@ object SsoAuthManager {
         }
 
         val encodedRedirect = java.net.URLEncoder.encode(CALLBACK_URL, "UTF-8")
+        val encodedCode = java.net.URLEncoder.encode(code, "UTF-8")
         val body =
-            "grant_type=authorization_code&code=$code&redirect_uri=$encodedRedirect" +
+            "grant_type=authorization_code&code=$encodedCode&redirect_uri=$encodedRedirect" +
                 "&client_id=$CLIENT_ID&code_verifier=$verifier"
 
         println("[Auth] Exchanging code for token...")
