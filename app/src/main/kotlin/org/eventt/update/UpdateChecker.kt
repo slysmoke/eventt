@@ -300,9 +300,11 @@ object UpdateChecker {
             when (platform) {
                 // .app/Contents/MacOS/exe  →  .app/
                 "macos" -> exe.parentFile?.parentFile?.parentFile
+
                 // <packageName>/<packageName>.exe  →  <packageName>/ — unlike Linux/macOS,
                 // jpackage's Windows app-image has no bin/ subfolder.
                 "windows" -> exe.parentFile
+
                 // install/bin/exe  →  install/
                 else -> exe.parentFile?.parentFile
             }

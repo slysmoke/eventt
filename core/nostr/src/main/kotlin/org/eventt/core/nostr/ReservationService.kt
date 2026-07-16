@@ -257,6 +257,7 @@ object ReservationService {
                 if (!isNew) return null
                 return withContext(Dispatchers.IO) { NostrReservationDao.getByTradeId(req.tradeId) }
             }
+
             "reservation_response" -> {
                 val resp = runCatching { json.decodeFromString<ReservationResponse>(content) }.getOrNull() ?: return null
                 // Only the seller of this trade may answer it — a tradeId is not a capability.
@@ -276,6 +277,7 @@ object ReservationService {
                     )
                 }
             }
+
             "reservation_cancel" -> {
                 val cancel = runCatching { json.decodeFromString<ReservationCancel>(content) }.getOrNull() ?: return null
                 // Same sender check as reservation_response, buyer's side; and only a still-pending

@@ -442,13 +442,17 @@ private fun SectionHeader(
     ) {
         Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
         when {
-            badge != null -> Badge { Text("$badge") }
-            count != null ->
+            badge != null -> {
+                Badge { Text("$badge") }
+            }
+
+            count != null -> {
                 Text(
                     "$count",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                 )
+            }
         }
     }
 }

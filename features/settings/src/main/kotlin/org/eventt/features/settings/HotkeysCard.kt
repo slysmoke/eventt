@@ -176,7 +176,10 @@ private fun HotkeyCaptureRow(
                         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent true
                         val idx = LETTER_KEYS.indexOf(event.key)
                         when {
-                            event.key == Key.Escape -> capturing = false
+                            event.key == Key.Escape -> {
+                                capturing = false
+                            }
+
                             idx == -1 -> {
                                 // Modifier keydowns pass silently while the user forms the chord;
                                 // anything else that isn't a letter can't be bound.
@@ -189,6 +192,7 @@ private fun HotkeyCaptureRow(
                                         event.key == Key.ShiftRight
                                 if (!isModifier) hint = "Press Ctrl/Alt/Shift + a letter (A–Z)"
                             }
+
                             else -> {
                                 val picked =
                                     HotkeyCombo(
@@ -198,10 +202,14 @@ private fun HotkeyCaptureRow(
                                         letter = 'A' + idx,
                                     )
                                 when {
-                                    !picked.ctrl && !picked.alt && !picked.shift ->
+                                    !picked.ctrl && !picked.alt && !picked.shift -> {
                                         hint = "Hold at least one modifier (Ctrl/Alt/Shift)"
-                                    picked == takenCombo ->
+                                    }
+
+                                    picked == takenCombo -> {
                                         hint = "${picked.label} is already used by the other hotkey"
+                                    }
+
                                     else -> {
                                         onPick(picked)
                                         pendingSave = picked

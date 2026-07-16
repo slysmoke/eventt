@@ -27,16 +27,26 @@ private fun sortBuyMetrics(
     val sorted =
         when (col) {
             SortCol.NAME -> list.sortedBy { it.order.typeName }
+
             SortCol.PRICE -> list.sortedBy { it.order.price }
+
             SortCol.RELIST -> list.sortedBy { it.order.relistFeesPaid }
+
             SortCol.MARGIN -> list.sortedBy { it.marginPct ?: Double.NEGATIVE_INFINITY }
+
             SortCol.BEST_MARGIN -> list.sortedBy { it.bestMarginPct ?: Double.NEGATIVE_INFINITY }
+
             SortCol.VOLUME -> list.sortedBy { it.order.volumeRemaining }
+
             SortCol.TOTAL -> list.sortedBy { it.order.total }
+
             SortCol.TIME_LEFT -> list.sortedBy { it.order.timeLeftSeconds }
+
             SortCol.ORDER_AGE -> list.sortedBy { it.order.orderAgeSeconds }
+
             // Ascending = most contested first (least time on top); no data sorts last.
             SortCol.COMPETITION -> list.sortedBy { it.competition?.timeOnTopPct ?: 2.0 }
+
             SortCol.COST, SortCol.PROFIT -> list // Sell-only columns, not shown here
         }
     return if (dir == SortDir.DESC) sorted.reversed() else sorted
@@ -52,16 +62,26 @@ private fun sortSellMetrics(
     val sorted =
         when (col) {
             SortCol.NAME -> list.sortedBy { it.order.typeName }
+
             SortCol.COST -> list.sortedBy { it.costBasis ?: Double.NEGATIVE_INFINITY }
+
             SortCol.PRICE -> list.sortedBy { it.order.price }
+
             SortCol.RELIST -> list.sortedBy { it.order.relistFeesPaid }
+
             SortCol.PROFIT -> list.sortedBy { it.totalProfit ?: Double.NEGATIVE_INFINITY }
+
             SortCol.MARGIN -> list.sortedBy { it.marginPct ?: Double.NEGATIVE_INFINITY }
+
             SortCol.BEST_MARGIN -> list.sortedBy { it.bestMarginPct ?: Double.NEGATIVE_INFINITY }
+
             SortCol.VOLUME -> list.sortedBy { it.order.volumeRemaining }
+
             SortCol.TIME_LEFT -> list.sortedBy { it.order.timeLeftSeconds }
+
             // Ascending = most contested first (least time on top); no data sorts last.
             SortCol.COMPETITION -> list.sortedBy { it.competition?.timeOnTopPct ?: 2.0 }
+
             SortCol.TOTAL, SortCol.ORDER_AGE -> list // Buy-only columns, not shown here
         }
     return if (dir == SortDir.DESC) sorted.reversed() else sorted

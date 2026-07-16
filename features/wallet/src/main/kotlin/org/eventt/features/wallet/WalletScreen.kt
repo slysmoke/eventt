@@ -477,36 +477,112 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
 
 private fun formatRefType(refType: String): String =
     when (refType) {
-        "transaction_tax" -> "Sales Tax"
-        "brokers_fee" -> "Broker's Fee"
-        "market_transaction" -> "Market Transaction"
-        "market_escrow" -> "Buy Order Escrow"
-        "market_escrow_refund" -> "Escrow Refund"
-        "player_trading" -> "Trade"
-        "contract_price" -> "Contract"
-        "contract_reward" -> "Contract Reward"
-        "contract_deposit" -> "Contract Deposit"
-        "contract_deposit_refund" -> "Contract Deposit Refund"
-        "contract_price_payment_corp" -> "Corp Contract"
-        "bounty_prizes" -> "Bounty"
-        "industry_job_tax" -> "Industry Tax"
-        "manufacturing" -> "Manufacturing"
-        "reprocessing_tax" -> "Reprocessing Tax"
-        "jump_clone_installation_fee" -> "Clone Jump Fee"
-        "planetary_import_tax" -> "PI Import Tax"
-        "planetary_export_tax" -> "PI Export Tax"
-        "corporation_account_withdrawal" -> "Corp Withdrawal"
-        "corporation_dividend_payment" -> "Dividend"
-        "structure_gate_jump" -> "Jump Gate"
-        "asset_safety_recovery_tax" -> "Asset Safety Tax"
-        "skill_purchase" -> "Skill Purchase"
-        "agent_mission_reward" -> "Mission Reward"
-        "agent_mission_time_bonus_reward" -> "Mission Bonus"
-        else ->
+        "transaction_tax" -> {
+            "Sales Tax"
+        }
+
+        "brokers_fee" -> {
+            "Broker's Fee"
+        }
+
+        "market_transaction" -> {
+            "Market Transaction"
+        }
+
+        "market_escrow" -> {
+            "Buy Order Escrow"
+        }
+
+        "market_escrow_refund" -> {
+            "Escrow Refund"
+        }
+
+        "player_trading" -> {
+            "Trade"
+        }
+
+        "contract_price" -> {
+            "Contract"
+        }
+
+        "contract_reward" -> {
+            "Contract Reward"
+        }
+
+        "contract_deposit" -> {
+            "Contract Deposit"
+        }
+
+        "contract_deposit_refund" -> {
+            "Contract Deposit Refund"
+        }
+
+        "contract_price_payment_corp" -> {
+            "Corp Contract"
+        }
+
+        "bounty_prizes" -> {
+            "Bounty"
+        }
+
+        "industry_job_tax" -> {
+            "Industry Tax"
+        }
+
+        "manufacturing" -> {
+            "Manufacturing"
+        }
+
+        "reprocessing_tax" -> {
+            "Reprocessing Tax"
+        }
+
+        "jump_clone_installation_fee" -> {
+            "Clone Jump Fee"
+        }
+
+        "planetary_import_tax" -> {
+            "PI Import Tax"
+        }
+
+        "planetary_export_tax" -> {
+            "PI Export Tax"
+        }
+
+        "corporation_account_withdrawal" -> {
+            "Corp Withdrawal"
+        }
+
+        "corporation_dividend_payment" -> {
+            "Dividend"
+        }
+
+        "structure_gate_jump" -> {
+            "Jump Gate"
+        }
+
+        "asset_safety_recovery_tax" -> {
+            "Asset Safety Tax"
+        }
+
+        "skill_purchase" -> {
+            "Skill Purchase"
+        }
+
+        "agent_mission_reward" -> {
+            "Mission Reward"
+        }
+
+        "agent_mission_time_bonus_reward" -> {
+            "Mission Bonus"
+        }
+
+        else -> {
             refType
                 .replace('_', ' ')
                 .split(' ')
                 .joinToString(" ") { it.replaceFirstChar(Char::uppercaseChar) }
+        }
     }
 
 private val PNL_POSITIVE = Color(0xFF69DB7C)

@@ -104,7 +104,7 @@ object StaticDataImporter {
                 while (entry != null) {
                     val name = entry.name.substringAfterLast('/')
                     when (name) {
-                        "types.jsonl" ->
+                        "types.jsonl" -> {
                             parseJsonl(zip) { line ->
                                 parseTypeLine(line)?.let {
                                     types.add(it)
@@ -114,12 +114,31 @@ object StaticDataImporter {
                                     }
                                 }
                             }
-                        "groups.jsonl" -> parseJsonl(zip) { line -> parseGroupLine(line)?.let { groups.add(it) } }
-                        "categories.jsonl" -> parseJsonl(zip) { line -> parseCategoryLine(line)?.let { categories.add(it) } }
-                        "marketGroups.jsonl" -> parseJsonl(zip) { line -> parseMarketGroupLine(line)?.let { marketGroups.add(it) } }
-                        "mapRegions.jsonl" -> parseJsonl(zip) { line -> parseRegionLine(line)?.let { regions.add(it) } }
-                        "mapSolarSystems.jsonl" -> parseJsonl(zip) { line -> parseSystemLine(line)?.let { systems.add(it) } }
-                        "npcStations.jsonl" -> parseJsonl(zip) { line -> parseStationLine(line)?.let { rawNpcStations.add(it) } }
+                        }
+
+                        "groups.jsonl" -> {
+                            parseJsonl(zip) { line -> parseGroupLine(line)?.let { groups.add(it) } }
+                        }
+
+                        "categories.jsonl" -> {
+                            parseJsonl(zip) { line -> parseCategoryLine(line)?.let { categories.add(it) } }
+                        }
+
+                        "marketGroups.jsonl" -> {
+                            parseJsonl(zip) { line -> parseMarketGroupLine(line)?.let { marketGroups.add(it) } }
+                        }
+
+                        "mapRegions.jsonl" -> {
+                            parseJsonl(zip) { line -> parseRegionLine(line)?.let { regions.add(it) } }
+                        }
+
+                        "mapSolarSystems.jsonl" -> {
+                            parseJsonl(zip) { line -> parseSystemLine(line)?.let { systems.add(it) } }
+                        }
+
+                        "npcStations.jsonl" -> {
+                            parseJsonl(zip) { line -> parseStationLine(line)?.let { rawNpcStations.add(it) } }
+                        }
                     }
                     zip.closeEntry()
                     entry = zip.nextEntry

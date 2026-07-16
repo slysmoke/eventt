@@ -42,7 +42,7 @@ object GlobalHotkeyService {
     fun start() {
         val onQueueTrigger: () -> Unit = {
             when (activeScreen) {
-                AppScreen.ANALYSIS ->
+                AppScreen.ANALYSIS -> {
                     if (MarketAnalysisRouter.activeTab ==
                         0
                     ) {
@@ -50,7 +50,11 @@ object GlobalHotkeyService {
                     } else {
                         InterRegionQueue.processNext()
                     }
-                else -> PendingOrdersQueue.processNext()
+                }
+
+                else -> {
+                    PendingOrdersQueue.processNext()
+                }
             }
         }
 

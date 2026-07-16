@@ -276,8 +276,14 @@ private fun OverlayContent(
                 }
                 bookItemName = StaticDataDao.getTypeName(event.typeId) ?: "Unknown (${event.typeId})"
                 when (autoCopy) {
-                    AutoCopy.SELL -> bestSell?.let { lastClipboard = copyBeatPrice(eveUndercutPrice(it.price)) }
-                    AutoCopy.BUY -> bestBuy?.let { lastClipboard = copyBeatPrice(eveOutbidPrice(it.price)) }
+                    AutoCopy.SELL -> {
+                        bestSell?.let { lastClipboard = copyBeatPrice(eveUndercutPrice(it.price)) }
+                    }
+
+                    AutoCopy.BUY -> {
+                        bestBuy?.let { lastClipboard = copyBeatPrice(eveOutbidPrice(it.price)) }
+                    }
+
                     AutoCopy.OFF -> {}
                 }
             }

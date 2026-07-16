@@ -32,7 +32,10 @@ data class PendingOrder(
                 val rounded = round(bestCompetingPrice / step) * step
                 if (isBuyOrder) rounded + step else rounded - step
             }
-            else -> ownPrice
+
+            else -> {
+                ownPrice
+            }
         }
 }
 

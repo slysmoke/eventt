@@ -1019,6 +1019,7 @@ fun OrdersScreen(context: ViewContext?) {
                         OrderHistoryTable(historyOrders, fifoResult)
                     }
                 }
+
                 3 -> {
                     if (inventory.isEmpty() && !isLoading) {
                         EmptyState(
@@ -1030,6 +1031,7 @@ fun OrdersScreen(context: ViewContext?) {
                         InventoryTable(inventory, sellOrders, fifoResult, inventoryMarketPrices)
                     }
                 }
+
                 else -> {
                     val filtered = if (activeTab == 0) sellOrders else buyOrders
                     if (filtered.isEmpty() && !isLoading) {
@@ -1103,8 +1105,14 @@ fun OrdersScreen(context: ViewContext?) {
         }
 
         when (activeTab) {
-            3 -> fifoResult?.let { InventorySummaryBar(it, inventory) }
-            2 -> if (historyOrders.isNotEmpty()) HistorySummaryBar(historyOrders, fifoResult)
+            3 -> {
+                fifoResult?.let { InventorySummaryBar(it, inventory) }
+            }
+
+            2 -> {
+                if (historyOrders.isNotEmpty()) HistorySummaryBar(historyOrders, fifoResult)
+            }
+
             else -> {
                 val filtered = if (activeTab == 0) sellOrders else buyOrders
                 if (filtered.isNotEmpty()) {

@@ -71,12 +71,19 @@ class EsiThrottleInterceptor(
                             cooldownUntilMs = System.currentTimeMillis() + retryAfterS * 1000
                             true
                         }
+
                         response.code == 420 -> {
                             cooldownUntilMs = System.currentTimeMillis() + legacy420BackoffMs
                             true
                         }
-                        response.code >= 500 -> true
-                        else -> false
+
+                        response.code >= 500 -> {
+                            true
+                        }
+
+                        else -> {
+                            false
+                        }
                     }
 
             if (shouldRetry) {

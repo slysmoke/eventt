@@ -45,12 +45,25 @@ class PricingServiceTest {
         marketUndercut: Double?,
     ): Pair<Double?, Boolean> =
         when {
-            !marginLimitEnabled -> marketUndercut to true
-            target != null && marketUndercut != null ->
+            !marginLimitEnabled -> {
+                marketUndercut to true
+            }
+
+            target != null && marketUndercut != null -> {
                 if (marketUndercut < target) marketUndercut to true else target to false
-            target != null -> target to false
-            marketUndercut != null -> marketUndercut to true
-            else -> null to false
+            }
+
+            target != null -> {
+                target to false
+            }
+
+            marketUndercut != null -> {
+                marketUndercut to true
+            }
+
+            else -> {
+                null to false
+            }
         }
 
     @Test

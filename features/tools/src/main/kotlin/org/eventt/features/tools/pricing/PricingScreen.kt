@@ -99,6 +99,7 @@ fun PricingScreen(context: ViewContext?) {
                     StaticDataDao.setSetting(PricingSettings.SOURCE_TYPE, "character")
                     StaticDataDao.setSetting(PricingSettings.SOURCE_ID, source.charId.toString())
                 }
+
                 is CostBasisSource.Corporation -> {
                     StaticDataDao.setSetting(PricingSettings.SOURCE_TYPE, "corporation")
                     StaticDataDao.setSetting(PricingSettings.SOURCE_ID, source.corpId.toString())
@@ -121,7 +122,10 @@ fun PricingScreen(context: ViewContext?) {
         characters: List<CharacterModel>,
     ): Int? =
         when (source) {
-            is CostBasisSource.Character -> source.charId
+            is CostBasisSource.Character -> {
+                source.charId
+            }
+
             is CostBasisSource.Corporation -> {
                 val members = characters.filter { it.corporationId == source.corpId }
                 globalActingCharId?.takeIf { id -> members.any { it.id == id } } ?: members.firstOrNull()?.id
@@ -161,7 +165,10 @@ fun PricingScreen(context: ViewContext?) {
             pricingActingCharId =
                 source?.let { s ->
                     when (s) {
-                        is CostBasisSource.Character -> s.charId
+                        is CostBasisSource.Character -> {
+                            s.charId
+                        }
+
                         is CostBasisSource.Corporation -> {
                             val members = characters.filter { it.corporationId == s.corpId }
                             savedActingId?.takeIf { id -> members.any { it.id == id } } ?: defaultActingCharFor(s, characters)

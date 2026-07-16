@@ -208,12 +208,21 @@ private fun CompetitionTooltip(
         Column(modifier = Modifier.padding(10.dp).widthIn(max = 340.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             val levelHint =
                 when (stats.level) {
-                    CompetitionService.Level.COLLECTING ->
+                    CompetitionService.Level.COLLECTING -> {
                         "Collecting data — under an hour of snapshots so far. Stats build up while the app is running."
-                    CompetitionService.Level.CALM -> "Calm — you hold the top most of the time, or nobody competes at all."
-                    CompetitionService.Level.CONTESTED -> "Contested — you're being undercut at a human pace."
-                    CompetitionService.Level.BOT_WAR ->
+                    }
+
+                    CompetitionService.Level.CALM -> {
+                        "Calm — you hold the top most of the time, or nobody competes at all."
+                    }
+
+                    CompetitionService.Level.CONTESTED -> {
+                        "Contested — you're being undercut at a human pace."
+                    }
+
+                    CompetitionService.Level.BOT_WAR -> {
                         "Bot war — near-instant re-undercuts around the clock. Fighting this with relists mostly burns fees."
+                    }
                 }
             Text(
                 "$levelLabel — snapshots of this order book are taken every ~5 min (ESI tick), kept for 7 days.",

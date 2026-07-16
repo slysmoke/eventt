@@ -104,8 +104,11 @@ object MarketLogWatcher {
                     )
                 }
             }
+
             // Unrelated .txt someone dropped in the folder — leave it alone entirely.
-            MarketLogFileKind.UNKNOWN -> handled = false
+            MarketLogFileKind.UNKNOWN -> {
+                handled = false
+            }
         }
         if (handled) {
             runCatching { file.delete() }.onFailure { println("[MarketLogs] could not delete ${file.name}: ${it.message}") }

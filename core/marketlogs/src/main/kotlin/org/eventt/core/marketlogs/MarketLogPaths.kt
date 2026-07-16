@@ -21,20 +21,27 @@ object MarketLogPaths {
         val lower = osName.lowercase()
         return when {
             // Windows paths use \, not / — home arrives as "C:\Users\bob".
-            lower.contains("win") -> listOf("${home.trimEnd('\\', '/')}\\Documents\\EVE\\logs\\Marketlogs")
+            lower.contains("win") -> {
+                listOf("${home.trimEnd('\\', '/')}\\Documents\\EVE\\logs\\Marketlogs")
+            }
+
             // Best-effort guess only — EVE's Mac client is a wrapped Windows build that
             // historically mirrors the same relative Documents/EVE/logs/Marketlogs suffix, but
             // this is unverified; the Settings UI flags it as such whenever running on macOS.
-            lower.contains("mac") -> listOf("$home/Documents/EVE/logs/Marketlogs")
+            lower.contains("mac") -> {
+                listOf("$home/Documents/EVE/logs/Marketlogs")
+            }
+
             // Linux has no single answer — it depends on how the Windows client is being run.
             // 8500 is EVE Online's real Steam AppID.
-            else ->
+            else -> {
                 listOf(
                     "$home/.local/share/Steam/steamapps/compatdata/8500/pfx/drive_c/users/steamuser/Documents/EVE/logs/Marketlogs",
                     "$home/.steam/steam/steamapps/compatdata/8500/pfx/drive_c/users/steamuser/Documents/EVE/logs/Marketlogs",
                     "$home/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/compatdata/8500/pfx/drive_c/users/steamuser/Documents/EVE/logs/Marketlogs",
                     "$home/.wine/drive_c/users/${System.getProperty("user.name")}/Documents/EVE/logs/Marketlogs",
                 )
+            }
         }
     }
 

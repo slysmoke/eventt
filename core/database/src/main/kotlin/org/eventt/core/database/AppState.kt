@@ -80,8 +80,14 @@ object AppState {
         val current = _selectedContext.value
         val stillValid = current != null && chars.any { it.id == current.actingCharId }
         when {
-            stillValid -> Unit
-            chars.isNotEmpty() -> selectCharacter(chars.first().id)
+            stillValid -> {
+                Unit
+            }
+
+            chars.isNotEmpty() -> {
+                selectCharacter(chars.first().id)
+            }
+
             else -> {
                 setContext(null)
                 StaticDataDao.setSetting(SETTING_KEY, "")
@@ -115,6 +121,7 @@ object AppState {
                 val id = parts.getOrNull(1)?.toIntOrNull() ?: return null
                 if (chars.any { it.id == id }) ViewContext.Character(id) else null
             }
+
             "corp" -> {
                 val corpId = parts.getOrNull(1)?.toIntOrNull() ?: return null
                 val actingId = parts.getOrNull(2)?.toIntOrNull() ?: return null
@@ -127,7 +134,10 @@ object AppState {
                     } ?: ""
                 ViewContext.Corporation(corpId, corpName, actingId)
             }
-            else -> null
+
+            else -> {
+                null
+            }
         }
     }
 }

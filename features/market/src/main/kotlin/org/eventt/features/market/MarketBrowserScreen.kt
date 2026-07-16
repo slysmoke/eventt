@@ -376,20 +376,23 @@ private fun MarketGroupTree(
             },
         ) { node ->
             when (node) {
-                is TreeNode.GroupNode ->
+                is TreeNode.GroupNode -> {
                     GroupTreeRow(
                         group = node.group,
                         depth = node.depth,
                         isExpanded = node.group.marketGroupId in expandedGroups,
                         onToggle = { onToggleExpand(node.group.marketGroupId) },
                     )
-                is TreeNode.TypeNode ->
+                }
+
+                is TreeNode.TypeNode -> {
                     TypeTreeRow(
                         type = node.type,
                         depth = node.depth,
                         isSelected = node.type.typeId == selectedTypeId,
                         onClick = { onTypeClick(node.type) },
                     )
+                }
             }
         }
     }
@@ -569,14 +572,35 @@ private fun sortOrders(
 ): List<MarketOrder> {
     val cmp: Comparator<MarketOrder> =
         when (col) {
-            OrderSortColumn.PRICE -> compareBy { it.price }
-            OrderSortColumn.REMAIN -> compareBy { it.volumeRemaining }
-            OrderSortColumn.TOTAL_ISK -> compareBy { it.price * it.volumeRemaining }
-            OrderSortColumn.MIN_VOL -> compareBy { it.minVolume }
-            OrderSortColumn.RANGE -> compareBy { it.range }
-            OrderSortColumn.LOCATION -> compareBy { it.locationName }
-            OrderSortColumn.ISSUED -> compareBy { it.issued }
-            OrderSortColumn.EXPIRES ->
+            OrderSortColumn.PRICE -> {
+                compareBy { it.price }
+            }
+
+            OrderSortColumn.REMAIN -> {
+                compareBy { it.volumeRemaining }
+            }
+
+            OrderSortColumn.TOTAL_ISK -> {
+                compareBy { it.price * it.volumeRemaining }
+            }
+
+            OrderSortColumn.MIN_VOL -> {
+                compareBy { it.minVolume }
+            }
+
+            OrderSortColumn.RANGE -> {
+                compareBy { it.range }
+            }
+
+            OrderSortColumn.LOCATION -> {
+                compareBy { it.locationName }
+            }
+
+            OrderSortColumn.ISSUED -> {
+                compareBy { it.issued }
+            }
+
+            OrderSortColumn.EXPIRES -> {
                 compareBy {
                     try {
                         java.time.Instant
@@ -587,6 +611,7 @@ private fun sortOrders(
                         0L
                     }
                 }
+            }
         }
     return if (asc) orders.sortedWith(cmp) else orders.sortedWith(cmp.reversed())
 }

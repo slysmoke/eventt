@@ -51,9 +51,18 @@ private fun isBuyOrderReachable(
         locationSystemCache?.getOrPut(locationId) { StaticDataDao.getStationById(locationId)?.systemId }
             ?: StaticDataDao.getStationById(locationId)?.systemId
     return when (val range = order["range"] as? String ?: "station") {
-        "region" -> true
-        "solarsystem" -> resolveSystemId(loc) == stationSystemId
-        "station" -> false
+        "region" -> {
+            true
+        }
+
+        "solarsystem" -> {
+            resolveSystemId(loc) == stationSystemId
+        }
+
+        "station" -> {
+            false
+        }
+
         else -> {
             val jumps = range.toIntOrNull()
             val orderSystemId = if (jumps != null) resolveSystemId(loc) else null
@@ -288,13 +297,19 @@ internal fun computeRegionOpportunityForType(
 
     val buyPrice =
         when (tradeType) {
-            InterRegionTradeType.SELL_TO_BUY, InterRegionTradeType.SELL_TO_SELL -> srcSell
-            InterRegionTradeType.BUY_TO_BUY, InterRegionTradeType.BUY_TO_SELL -> srcBuy
+            InterRegionTradeType.SELL_TO_BUY, InterRegionTradeType.SELL_TO_SELL -> {
+                srcSell
+            }
+
+            InterRegionTradeType.BUY_TO_BUY, InterRegionTradeType.BUY_TO_SELL -> {
+                srcBuy
+            }
+
             // Priced off the sell side, not the buy side — see the enum's doc comment. But it must
             // still never sit at or behind the current best buy order (it would just never fill,
             // parked behind someone else's bid) — when the fee-net price would tie or lose, bump it
             // one EVE price-tick above the current best buy instead, so it becomes the winning bid.
-            InterRegionTradeType.SAFE_BUY_TO_SELL ->
+            InterRegionTradeType.SAFE_BUY_TO_SELL -> {
                 srcSell?.let { sell ->
                     val raw = sell * (1.0 - (salesTaxPct + brokerFeePct) / 100.0)
                     if (srcBuy != null && raw <= srcBuy) {
@@ -305,6 +320,7 @@ internal fun computeRegionOpportunityForType(
                         round(raw / step) * step
                     }
                 }
+            }
         } ?: return null
     val rawSellPrice =
         when (tradeType) {
@@ -332,11 +348,21 @@ internal fun computeRegionOpportunityForType(
     val grossProfit = sellPrice - buyPrice
     val fees =
         when (tradeType) {
-            InterRegionTradeType.SELL_TO_BUY -> sellPrice * salesTaxPct / 100.0
-            InterRegionTradeType.SELL_TO_SELL -> sellPrice * (salesTaxPct + brokerFeePct) / 100.0
-            InterRegionTradeType.BUY_TO_BUY -> buyPrice * brokerFeePct / 100.0 + sellPrice * salesTaxPct / 100.0
-            InterRegionTradeType.BUY_TO_SELL, InterRegionTradeType.SAFE_BUY_TO_SELL ->
+            InterRegionTradeType.SELL_TO_BUY -> {
+                sellPrice * salesTaxPct / 100.0
+            }
+
+            InterRegionTradeType.SELL_TO_SELL -> {
+                sellPrice * (salesTaxPct + brokerFeePct) / 100.0
+            }
+
+            InterRegionTradeType.BUY_TO_BUY -> {
+                buyPrice * brokerFeePct / 100.0 + sellPrice * salesTaxPct / 100.0
+            }
+
+            InterRegionTradeType.BUY_TO_SELL, InterRegionTradeType.SAFE_BUY_TO_SELL -> {
                 buyPrice * brokerFeePct / 100.0 + sellPrice * (salesTaxPct + brokerFeePct) / 100.0
+            }
         }
     val netProfit = grossProfit - fees - shipping
     if (netProfit < minNetProfit) return null
@@ -351,19 +377,27 @@ internal fun computeRegionOpportunityForType(
     // figure just because the *best* price on the book was great.
     val (profitableVolume, profitableTotalProfit) =
         when (tradeType) {
-            InterRegionTradeType.BUY_TO_BUY ->
+            InterRegionTradeType.BUY_TO_BUY -> {
                 walkDestBuyLots(dstBuyLots, fixedBuyPrice = buyPrice, shippingPerUnit = shipping, minMarginPct = minMarginPct) { sellP ->
                     buyPrice * brokerFeePct / 100.0 + sellP * salesTaxPct / 100.0
                 }
-            InterRegionTradeType.SELL_TO_SELL ->
+            }
+
+            InterRegionTradeType.SELL_TO_SELL -> {
                 walkSourceSellLots(srcSellLots, fixedSellPrice = sellPrice, shippingPerUnit = shipping, minMarginPct = minMarginPct) {
                     sellPrice * (salesTaxPct + brokerFeePct) / 100.0
                 }
-            InterRegionTradeType.SELL_TO_BUY ->
+            }
+
+            InterRegionTradeType.SELL_TO_BUY -> {
                 walkCrossedBook(srcSellLots, dstBuyLots, shippingPerUnit = shipping, minMarginPct = minMarginPct) { _, sellP ->
                     sellP * salesTaxPct / 100.0
                 }
-            InterRegionTradeType.BUY_TO_SELL, InterRegionTradeType.SAFE_BUY_TO_SELL -> 0L to 0.0
+            }
+
+            InterRegionTradeType.BUY_TO_SELL, InterRegionTradeType.SAFE_BUY_TO_SELL -> {
+                0L to 0.0
+            }
         }
 
     val sellHistory = fetchHistory(typeId, sellRegionId, historySource)

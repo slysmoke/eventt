@@ -342,13 +342,18 @@ fun SplitterScreen(context: ViewContext?) {
                     title = "Split ${split.index} — ${formatIsk(split.totalValue)} ISK, ${formatVolume(split.totalVolume)}",
                     actions = {
                         when {
-                            pushResult?.success == true -> Icon(Icons.Default.CheckCircle, "Pushed", tint = Color(0xFF69DB7C))
-                            pushResult?.success == false ->
+                            pushResult?.success == true -> {
+                                Icon(Icons.Default.CheckCircle, "Pushed", tint = Color(0xFF69DB7C))
+                            }
+
+                            pushResult?.success == false -> {
                                 Icon(
                                     Icons.Default.Error,
                                     pushResult.error,
                                     tint = MaterialTheme.colorScheme.error,
                                 )
+                            }
+
                             charId != null -> {
                                 TextButton(onClick = { confirmingSplit = split }, enabled = !isPushing) {
                                     Text("Push to ESI")

@@ -221,9 +221,14 @@ fun MyOrdersScreen() {
                         qtyText = ""
                         showPostForm = false
                     }
-                    PostOrderResult.NoIdentity -> formError = "No P2P Market identity set up yet — pick a character in Settings first."
-                    PostOrderResult.RateLimited ->
+
+                    PostOrderResult.NoIdentity -> {
+                        formError = "No P2P Market identity set up yet — pick a character in Settings first."
+                    }
+
+                    PostOrderResult.RateLimited -> {
                         formError = "You've posted too many new orders recently — try again in a bit."
+                    }
                 }
             }
         }

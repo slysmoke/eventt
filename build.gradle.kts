@@ -5,11 +5,11 @@ import org.jlleitschuh.gradle.ktlint.KtlintExtension
 import io.gitlab.arturbosch.detekt.extensions.DetektExtension
 
 plugins {
-    id("org.jetbrains.kotlin.jvm") version "2.4.0" apply false
+    id("org.jetbrains.kotlin.jvm") version "2.4.10" apply false
     id("org.jetbrains.compose") version "1.11.1" apply false
-    id("org.jetbrains.kotlin.plugin.compose") version "2.4.0" apply false
-    id("org.jlleitschuh.gradle.ktlint") version "12.1.1" apply false
-    id("io.gitlab.arturbosch.detekt") version "1.23.7" apply false
+    id("org.jetbrains.kotlin.plugin.compose") version "2.4.10" apply false
+    id("org.jlleitschuh.gradle.ktlint") version "14.2.0" apply false
+    id("io.gitlab.arturbosch.detekt") version "1.23.8" apply false
 }
 
 subprojects {
@@ -27,7 +27,7 @@ subprojects {
     // `./gradlew build` (assemble + check) already gates on tests + both linters passing —
     // CI just also runs them as separate steps for clearer pass/fail output per stage.
     extensions.configure<KtlintExtension> {
-        version.set("1.3.1")
+        version.set("1.8.0")
         // Several modules add generated sources (AppVersion.kt, Compose resource accessors,
         // etc.) under build/ to their Kotlin source sets — those aren't ours to style-check.
         filter {

@@ -145,16 +145,22 @@ object PricingService {
         val locationId = stationId ?: structureId ?: return null
         val name =
             when {
-                stationId != null ->
+                stationId != null -> {
                     StaticDataDao.getStationById(stationId)?.name
                         ?: EsiClient.resolveNames(listOf(stationId.toInt()))[stationId.toInt()]
-                structureId != null ->
+                }
+
+                structureId != null -> {
                     try {
                         EsiClient.getStructureInfo(structureId, actingCharId)?.get("name") as? String
                     } catch (e: Exception) {
                         null
                     }
-                else -> null
+                }
+
+                else -> {
+                    null
+                }
             } ?: "Unknown location ($locationId)"
         return ActingLocation(regionId, locationId, name)
     }
@@ -180,11 +186,24 @@ object PricingService {
         marketUndercut: Double?,
     ): Pair<Double?, Boolean> =
         when {
-            !marginLimitEnabled -> marketUndercut to true
-            target != null && marketUndercut != null ->
+            !marginLimitEnabled -> {
+                marketUndercut to true
+            }
+
+            target != null && marketUndercut != null -> {
                 if (marketUndercut < target) marketUndercut to true else target to false
-            target != null -> target to false
-            marketUndercut != null -> marketUndercut to true
-            else -> null to false
+            }
+
+            target != null -> {
+                target to false
+            }
+
+            marketUndercut != null -> {
+                marketUndercut to true
+            }
+
+            else -> {
+                null to false
+            }
         }
 }

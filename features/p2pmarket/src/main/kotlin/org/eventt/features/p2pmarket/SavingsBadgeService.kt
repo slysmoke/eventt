@@ -67,7 +67,10 @@ object SavingsBadgeService {
                 // Taking this SELL order instead of instantly buying on the market: the market
                 // charges a buyer nothing extra (sales tax only ever falls on the seller), so it's
                 // a plain price comparison against the market's own cheapest sell order.
-                OrderSide.SELL -> (marketPrice - orderPrice) / marketPrice * 100.0
+                OrderSide.SELL -> {
+                    (marketPrice - orderPrice) / marketPrice * 100.0
+                }
+
                 // Filling this BUY order instead of instantly selling into the market's best buy
                 // order: that market alternative costs sales tax, so the comparison has to be
                 // against what you'd actually net after tax, not the raw buy-order price.

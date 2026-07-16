@@ -41,12 +41,15 @@ object EsiClient {
     private fun JsonElement.toKotlinValue(): Any? =
         when (this) {
             is JsonNull -> null
+
             // A genuine JSON string must stay a String even when its content looks numeric —
             // e.g. a market order's `range` field is "1"/"5"/"40" (a jump count) as opposed to the
             // keywords "station"/"solarsystem"/"region". longOrNull/doubleOrNull ignore whether the
             // literal was quoted, so without the isString guard "1" silently became the Long 1.
             is JsonPrimitive -> if (isString) content else (longOrNull ?: doubleOrNull ?: booleanOrNull ?: content)
+
             is JsonArray -> map { it.toKotlinValue() }
+
             is JsonObject -> mapValues { (_, v) -> v.toKotlinValue() }
         }
 
@@ -279,11 +282,18 @@ object EsiClient {
         val expiresHeader = response.header("Expires")
         val cacheControl = response.header("Cache-Control")
         return when {
-            expiresHeader != null -> EsiCacheManager.parseExpiresHeader(expiresHeader)
-            cacheControl != null ->
+            expiresHeader != null -> {
+                EsiCacheManager.parseExpiresHeader(expiresHeader)
+            }
+
+            cacheControl != null -> {
                 EsiCacheManager.parseCacheControl(cacheControl)
                     ?: (System.currentTimeMillis() + 5 * 60 * 1000L)
-            else -> System.currentTimeMillis() + 5 * 60 * 1000L
+            }
+
+            else -> {
+                System.currentTimeMillis() + 5 * 60 * 1000L
+            }
         }
     }
 
