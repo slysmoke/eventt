@@ -240,9 +240,12 @@ fun DashboardScreen(
     }
 
     val pnlWindow = txBreakdown.toPnlWindow()
-    val todayPL = pnlWindow.todayNet
-    val week7PL = pnlWindow.net7d
-    val month30PL = pnlWindow.net30d
+    // Wallet in minus wallet out — cash flow, deliberately NOT labeled P&L anywhere in the UI:
+    // buying stock shows up as a huge negative here even when the trade will be profitable.
+    // Real profit is the Realized (FIFO cost-basis) section below.
+    val todayCashFlow = pnlWindow.todayNet
+    val week7CashFlow = pnlWindow.net7d
+    val month30CashFlow = pnlWindow.net30d
     val income30d = pnlWindow.income30d
     val spend30d = pnlWindow.expenses30d
 
@@ -306,10 +309,10 @@ fun DashboardScreen(
                 KpiCard(
                     modifier = Modifier.weight(1f),
                     icon = Icons.AutoMirrored.Filled.TrendingUp,
-                    label = "P&L 30d",
-                    value = formatIsk(month30PL, showSign = true),
-                    color = if (month30PL >= 0) POSITIVE else NEGATIVE,
-                    valueColor = if (month30PL >= 0) POSITIVE else NEGATIVE,
+                    label = "Cash Flow 30d",
+                    value = formatIsk(month30CashFlow, showSign = true),
+                    color = if (month30CashFlow >= 0) POSITIVE else NEGATIVE,
+                    valueColor = if (month30CashFlow >= 0) POSITIVE else NEGATIVE,
                 )
             }
         }
@@ -324,15 +327,12 @@ fun DashboardScreen(
         }
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                PnlMiniCard(modifier = Modifier.weight(1f), label = "P&L Today", value = todayPL, showSign = true)
-                PnlMiniCard(modifier = Modifier.weight(1f), label = "P&L 7 days", value = week7PL, showSign = true)
+                PnlMiniCard(modifier = Modifier.weight(1f), label = "Cash Flow Today", value = todayCashFlow, showSign = true)
+                PnlMiniCard(modifier = Modifier.weight(1f), label = "Cash Flow 7 days", value = week7CashFlow, showSign = true)
                 PnlMiniCard(modifier = Modifier.weight(1f), label = "Income 30d", value = income30d, forceColor = POSITIVE)
                 PnlMiniCard(modifier = Modifier.weight(1f), label = "Expenses 30d", value = spend30d, forceColor = NEGATIVE)
             }
         }
-
-        // Daily P&L bars — last 30 calendar days from the same cash-flow breakdown as the cards
-        item { PnlBarChart(txBreakdown) }
 
         // P&L mini cards — FIFO cost-basis (profit only counted once a lot is actually sold)
         if (fifoWindow != null) {
@@ -350,6 +350,23 @@ fun DashboardScreen(
                     PnlMiniCard(modifier = Modifier.weight(1f), label = "Realized 30 days", value = fifoWindow.pnl30d, showSign = true)
                     PnlMiniCard(modifier = Modifier.weight(1f), label = "Realized All-time", value = fifoWindow.pnlAll, showSign = true)
                 }
+            }
+            // Daily realized-P&L bars — profit per calendar day from the same FIFO matches as
+            // the cards above (each sale's profit lands on its sell date, not its buy date).
+            item {
+                val dailyRealized =
+                    remember(fifoResult) {
+                        fifoResult
+                            ?.realizedSells
+                            .orEmpty()
+                            .groupBy { it.date.substring(0, 10) }
+                            .mapValues { (_, sells) -> sells.sumOf { it.profit } }
+                    }
+                PnlBarChart(
+                    dailyValues = dailyRealized,
+                    title = "Daily Realized P&L — 30d",
+                    emptyHint = "No realized sales in the last 30 days",
+                )
             }
         }
 
@@ -522,20 +539,23 @@ private fun PnlMiniCard(
     }
 }
 
-// Diverging daily-net bars around a zero baseline. Scale is asymmetric (top = best day,
+// Diverging daily bars around a zero baseline. Scale is asymmetric (top = best day,
 // bottom = worst day) so an all-profit month uses the full height instead of half of it.
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun PnlBarChart(breakdown: List<org.eventt.core.model.DailyWalletEntry>) {
-    // Zero-fill the last 30 calendar days — the breakdown is sparse (active days only),
+private fun PnlBarChart(
+    dailyValues: Map<String, Double>,
+    title: String,
+    emptyHint: String,
+) {
+    // Zero-fill the last 30 calendar days — the data is sparse (active days only),
     // and missing bars would silently compress time.
     val days =
-        remember(breakdown) {
+        remember(dailyValues) {
             val today = LocalDate.now()
-            val byDate = breakdown.associateBy { it.date }
             (29 downTo 0).map { off ->
                 val d = today.minusDays(off.toLong()).toString()
-                d to (byDate[d]?.net ?: 0.0)
+                d to (dailyValues[d] ?: 0.0)
             }
         }
     var hovered by remember { mutableStateOf<Int?>(null) }
@@ -547,7 +567,7 @@ private fun PnlBarChart(breakdown: List<org.eventt.core.model.DailyWalletEntry>)
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Daily P&L — 30d", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 val h = hovered
                 Text(
                     if (h != null) "${days[h].first}   ${formatIsk(days[h].second, showSign = true)}" else "",
@@ -562,7 +582,7 @@ private fun PnlBarChart(breakdown: List<org.eventt.core.model.DailyWalletEntry>)
             }
             Spacer(Modifier.height(8.dp))
             if (days.all { it.second == 0.0 }) {
-                EmptyHint("No wallet activity in the last 30 days")
+                EmptyHint(emptyHint)
             } else {
                 val baseline = MaterialTheme.colorScheme.outlineVariant
                 val maxPos = days.maxOf { it.second }.coerceAtLeast(0.0)
