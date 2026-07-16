@@ -5,6 +5,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.eventt.core.database.ActiveOrderDao
 import org.eventt.core.database.MarketTopSnapshotDao
@@ -37,6 +40,11 @@ object MarketWatchService {
     // into this set. Null until the first sweep seeds it: no notification burst at startup for
     // orders that were already beaten before the app opened.
     private var previouslyBeaten: Set<Long>? = null
+
+    private val _beatenCount = MutableStateFlow(0)
+
+    /** How many active orders (all characters/corps) are currently beaten — drives the nav badge. */
+    val beatenCount: StateFlow<Int> = _beatenCount.asStateFlow()
 
     fun start() {
         if (scope != null) return
@@ -144,6 +152,7 @@ object MarketWatchService {
 
         MarketTopSnapshotDao.pruneOlderThan(System.currentTimeMillis() - CompetitionService.WINDOW_MILLIS)
         previouslyBeaten = beatenNow
+        _beatenCount.value = beatenNow.size
 
         if (freshlyBeatenNames.isNotEmpty() && StaticDataDao.getSetting(NOTIFY_BEATEN_SETTING) != "false") {
             val names = freshlyBeatenNames.take(3).joinToString(", ")

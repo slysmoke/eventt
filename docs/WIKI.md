@@ -34,10 +34,10 @@ These work even while the EVE client has focus.
 
 Summary for the selected character/corporation:
 
-- **KPIs**: wallet balance, asset value, 30-day P&L.
-- **Cash Flow** — money flow from the wallet journal (today / 7 days / 30-day income and expenses).
-- **Daily P&L — 30d** — daily P&L bars around a zero baseline; hovering shows the day and amount.
-- **Realized P&L (FIFO)** — profit counted only once a lot is actually sold, fees included.
+- **KPIs**: wallet balance, asset value, 30-day cash flow.
+- **Cash Flow** — money flow from the wallet journal (today / 7 days / 30-day income and expenses). Deliberately not called P&L: buying stock shows up as a big negative here even when the trade is profitable.
+- **Realized P&L (FIFO)** — profit counted only once a lot is actually sold, fees included. This is the real P&L.
+- **Daily Realized P&L — 30d** — realized profit per sell day as bars around a zero baseline; hovering shows the day and amount. Bars sum to the "Realized 30 days" card.
 - **Top Items — Realized 30d** — up to 5 most profitable and 5 most losing items over 30 days.
 - **Recent Transactions** — latest trades.
 
@@ -59,13 +59,16 @@ Two opportunity scanners:
 - **Station Trading** — finds items with a healthy margin between buy and sell orders at one station. Filters: region/station, item category, margin, traded volume, volume modifier. Results support drag-select and feed the Ctrl+Z queue: the first press opens the item's market window in-game and copies the buy price, the second copies the quantity to buy.
 - **Inter-Region** — cross-region hauling: five trade types (Sell→Buy instant, Sell→Sell Order, Buy Order→Buy, Buy→Sell, and Safe Buy→Sell with an "unattractive to outbid" source price). Computes shipping cost per m³, real profit by walking the order book (not just the single best price), the 7-day trend, and the deviation from the weekly average.
 
+**Margin is net everywhere**: after broker fees and sales tax (Inter-Region also nets out shipping), relative to the sell price — the same figure the Trade Calc overlay shows, and what the "Margin %" filter compares against. The separate **ROI** column is the same net profit relative to the capital outlaid (buy price, plus shipping for Inter-Region).
+
 With many candidates (>1000) the scanner switches to a bulk fetch of the whole region's order book — faster than thousands of per-type requests.
 
 ### Orders
 
 Your active orders and everything around them. Tabs: **Sell / Buy / History / Inventory**.
 
-- **Beaten orders**: after "Refresh Prices" the app compares your price against the best in the region (sell — at the same station, buy — region-wide) and highlights beaten orders in orange; the header shows an "N beaten" counter. Comparisons auto-refresh as soon as the ESI cache expires.
+- **Beaten orders**: the app compares your price against the best competing one (sell — at the same station, buy — region-wide) and highlights beaten orders in orange; the header shows an "N beaten" counter. A background watcher covers **every** character's orders as each order book's ESI cache expires — notifications and the beaten counter on the sidebar's Orders item stay live even while you're on another tab or switched to another character.
+- **Competition**: a per-order verdict built from a week of order-book snapshots (one per ~5-min ESI tick): **Calm / Contested / Bot war**, with time-on-top %, distinct rivals, and median survival before being undercut. The bot verdict comes from coverage, not speed — near-instant re-undercuts spread across 16+ hours of the day is not a human sleep schedule. Hover the cell for a plain-words breakdown of every number.
 - **The Ctrl+Z queue**: cycles through your orders (beaten first), opens the market window in-game, and puts the beat price on the clipboard (±1 tick on EVE's 4-significant-figures grid). The cycle position is keyed to the order and survives data refreshes. The **only beaten** toggle restricts the cycle to beaten orders. Clicking an order row repositions the cycle onto it.
 - **Notifications**: when an order becomes beaten — a system notification (tray, falling back to notify-send on Linux). Toggle with the bell next to Refresh Prices.
 - **Relist fees**: the app notices price changes on your orders via the public order book and tallies the modification fees paid, honoring the Advanced Broker Relations skill.
@@ -73,7 +76,9 @@ Your active orders and everything around them. Tabs: **Sell / Buy / History / In
 
 ### Wallet
 
-Wallet journal and transactions with daily breakdowns, operation types, and P&L windows (today/7d/30d/all-time). Works for corporation wallets too (per division).
+Wallet journal and transactions with daily breakdowns and operation types. Works for corporation wallets too (per division).
+
+The **P&L** tab separates two things that are often confused: **Cash Flow** cards (wallet in minus wallet out — restock days look hugely negative here, by design) and **Realized P&L (FIFO)** cards — actual profit at the moment of sale. **Avg Margin (realized)** is total FIFO profit minus relist fees on completed orders, relative to the cost of the units sold; **Profitable Days** counts days that closed with positive realized profit out of days that had any sales at all. The chart plots daily realized profit, mirroring the Dashboard.
 
 ### Assets
 
@@ -90,6 +95,10 @@ Contract tracker: item exchange / courier / auction, statuses, contents value.
 ### P2P Market
 
 Direct player-to-player trading over the **Nostr** protocol (decentralized relays, no central server): publish orders, make requests, handle incoming requests and reservations. Each order carries a savings badge relative to the regional market price (PLEX is compared to the global market).
+
+- **Online status**: every trader's presence is visible in Browse and on requests (`● Online` / `○ Seen … ago`), heartbeated while their app runs. The header shows how many people are running the app right now — counted via an anonymous per-install key, so it counts people, not characters, and doesn't link anyone's characters together.
+- **Requests reach you anywhere**: incoming buy requests arrive (and notify via the system tray) even for orders posted by a character other than the currently selected one; bursts are coalesced into a single "N new requests" popup.
+- Relays are checked against their published capabilities (NIP-11); Settings warns about relays that can't store orders or silently reject writes. Outgoing events are queued persistently and retried until at least one relay confirms them.
 
 ### Tools
 
@@ -120,6 +129,7 @@ Under each price sits a clickable `beat …` line: re-copies the beat price if t
 - **Error journal**: ESI and load failures aren't swallowed — an orange top-bar icon opens the list of recent errors (time, source, message).
 - **Updates**: the app checks GitHub releases and shows a one-click update banner.
 - **Marketlogs watcher**: the folder is polled periodically; a recognized export is imported and deleted.
+- **Background market watch**: an app-lifetime sweeper refreshes the order books of every character's active orders as their ESI caches expire — competition history, relist detection, and beaten-order notifications keep working without the Orders screen open. Between ESI ticks, responses come from the local cache, so this costs no extra requests.
 - **Database**: SQLite (WAL); all access is serialized through a single-threaded dispatcher — no concurrent `SQLITE_BUSY`.
 
 ---

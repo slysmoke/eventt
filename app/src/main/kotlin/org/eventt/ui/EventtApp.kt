@@ -59,6 +59,7 @@ import org.eventt.features.contracts.ContractTrackerScreen
 import org.eventt.features.dashboard.DashboardScreen
 import org.eventt.features.market.MarketAnalysisScreen
 import org.eventt.features.market.MarketBrowserScreen
+import org.eventt.features.orders.MarketWatchService
 import org.eventt.features.orders.OrdersScreen
 import org.eventt.features.overlay.OverlayController
 import org.eventt.features.overlay.OverlayWindow
@@ -692,6 +693,13 @@ private fun Sidebar(
                         )
                         if (screen == AppScreen.P2P_MARKET) {
                             CountBadge(rememberPendingBuyRequestCount())
+                        }
+                        if (screen == AppScreen.ORDERS) {
+                            // Currently-beaten orders across every character — fed by
+                            // MarketWatchService's background sweep, so it's live even
+                            // before the Orders screen has ever been opened.
+                            val beaten by MarketWatchService.beatenCount.collectAsState()
+                            CountBadge(beaten)
                         }
                     }
                 }

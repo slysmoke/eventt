@@ -547,7 +547,17 @@ private fun PnlChart(
     val netAll = window.netAll
     val incomeAll = window.incomeAll
     val expensesAll = window.expensesAll
-    val profitableDays = window.profitableDays
+    // Days that closed with positive realized FIFO profit, out of the days that had any realized
+    // sales at all — a heavy restock day is not a "losing day", and a day without sales is
+    // neither won nor lost. Falls back to the cash-flow count when there's no FIFO data yet.
+    val dailyRealizedByDay =
+        fifoResult
+            ?.realizedSells
+            ?.groupBy { it.date.substring(0, 10) }
+            ?.mapValues { (_, sells) -> sells.sumOf { it.profit } }
+            .orEmpty()
+    val profitableDays = if (dailyRealizedByDay.isNotEmpty()) dailyRealizedByDay.count { it.value > 0 } else window.profitableDays
+    val tradingDays = if (dailyRealizedByDay.isNotEmpty()) dailyRealizedByDay.size else chronological.size
     // Average realized margin over completed FIFO trades, net of relist fees — profit relative
     // to the capital those sold units cost. The old figure (net cash flow / income) mostly
     // measured how much restocking happened lately, not how profitable the trading was.
@@ -602,7 +612,7 @@ private fun PnlChart(
             )
             PnlStatCard(
                 "Profitable Days",
-                "$profitableDays / ${chronological.size}",
+                "$profitableDays / $tradingDays",
                 MaterialTheme.colorScheme.onSurface,
                 Modifier.weight(1f),
             )
@@ -615,13 +625,9 @@ private fun PnlChart(
         if (fifoResult != null) {
             ContentCard("Daily Realized P&L — 30d") {
                 val today = java.time.LocalDate.now()
-                val dailyRealized =
-                    fifoResult.realizedSells
-                        .groupBy { it.date.substring(0, 10) }
-                        .mapValues { (_, sells) -> sells.sumOf { it.profit } }
                 val days = (29 downTo 0).map { today.minusDays(it.toLong()).toString() }
                 PnlBarChart(
-                    data = days.map { dailyRealized[it] ?: 0.0 },
+                    data = days.map { dailyRealizedByDay[it] ?: 0.0 },
                     dates = days,
                     modifier = Modifier.fillMaxWidth().height(220.dp),
                 )
