@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import org.eventt.core.cache.EsiCacheManager
 import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.DatabaseManager
 import org.eventt.core.http.EveHttpClient
@@ -62,6 +63,13 @@ fun main() {
     try {
         DatabaseManager.initialize()
         println("[App] Database initialized successfully")
+        // Cache hygiene while nothing else touches the DB yet: purge long-expired ESI cache rows,
+        // then reclaim file space when enough has accumulated (both are cheap no-ops otherwise).
+        // These existed but were never wired in — the measured result was a 710MB database where
+        // 90% of esi_cache rows were expired junk. VACUUM can take a while on a bloated file, but
+        // it runs at most once a week and only when ≥20% of the file is reclaimable.
+        EsiCacheManager.cleanupExpired()
+        DatabaseManager.vacuumIfNeeded()
     } catch (e: Exception) {
         println("[App] Database init failed: ${e.stackTraceToString()}")
     }

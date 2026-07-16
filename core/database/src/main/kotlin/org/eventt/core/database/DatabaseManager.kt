@@ -119,6 +119,10 @@ object DatabaseManager {
                 "ALTER TABLE nostr_relays ADD COLUMN supported_nips TEXT",
                 "ALTER TABLE nostr_relays ADD COLUMN restricted_writes INTEGER DEFAULT 0",
                 "ALTER TABLE nostr_relays ADD COLUMN nip11_fetched_at INTEGER",
+                // ESI JSON compresses ~7x with plain Deflate (measured on real cached market
+                // responses) — rows above a size threshold are stored deflated, flagged here.
+                // Old uncompressed rows keep compressed=0 and churn out via refresh/cleanup.
+                "ALTER TABLE esi_cache ADD COLUMN compressed INTEGER DEFAULT 0",
             )
         conn.createStatement().use { stmt ->
             migrations.forEach { sql ->

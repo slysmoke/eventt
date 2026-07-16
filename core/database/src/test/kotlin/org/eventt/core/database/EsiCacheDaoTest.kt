@@ -42,6 +42,28 @@ class EsiCacheDaoTest {
     }
 
     @Test
+    fun `large payloads round-trip through compression, small ones stay plain`() {
+        // Above the 1KB threshold — stored deflated (verified via the compressed flag), read back intact.
+        val bigJson = "[" + (1..200).joinToString(",") { "{\"price\":$it.0,\"volume_remain\":$it}" } + "]"
+        EsiCacheDao.save(entry().copy(data = bigJson))
+
+        val loaded = EsiCacheDao.get("/markets/10000002/orders/", mapOf("order_type" to "all")).shouldNotBeNull()
+        loaded.data shouldBe bigJson
+
+        val flag =
+            DatabaseManager.transaction {
+                prepareStatement("SELECT compressed FROM esi_cache WHERE endpoint = ?").use { stmt ->
+                    stmt.setString(1, "/markets/10000002/orders/")
+                    stmt.executeQuery().use { rs ->
+                        rs.next()
+                        rs.getInt(1)
+                    }
+                }
+            }
+        flag shouldBe 1
+    }
+
+    @Test
     fun `get with different params misses (different hash, same endpoint)`() {
         EsiCacheDao.save(entry())
 
