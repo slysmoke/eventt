@@ -68,7 +68,7 @@ jobs:
           # jpackage output embeds that x64 JVM and is a genuinely native Intel app. UpdateChecker
           # matches the asset filename on "macos-x64"/"macos-arm64", so these platform values
           # must stay in sync with app/src/main/kotlin/org/eventt/update/UpdateChecker.kt.
-          - os: macos-latest
+          - os: macos-15-intel
             platform: macos-x64
             javaArch: x64
             exe: app/build/compose/binaries/main/app/eventt.app/Contents/MacOS/eventt
