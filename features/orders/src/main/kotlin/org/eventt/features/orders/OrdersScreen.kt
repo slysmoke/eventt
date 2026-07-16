@@ -185,59 +185,6 @@ internal fun mergeRelistStats(
         )
     }
 
-/**
- * Best competing prices for a (typeId, locationId) pair, excluding the character's own orders.
- * bestSell is scoped to that exact station — buyers browsing a station's sell listings never see
- * ones sitting elsewhere in the region, so only same-station supply actually competes with a sell
- * order. bestBuy stays region-wide (same value across every station in the region): buy orders
- * carry a range and compete across the whole region regardless of where they're placed.
- */
-private const val NOTIFY_BEATEN_SETTING = "orders.notify_beaten"
-
-// How much top-of-book history feeds the Competition column; snapshots older than this are pruned.
-private const val COMPETITION_WINDOW_MILLIS = 7L * 24 * 3600 * 1000
-
-/**
- * Persists the current best price per order book we hold an active order in: sell competition per
- * station (undercutting is station-local), buy competition per region (any regional buy order can
- * outbid ours). Called once per (typeId, regionId) ESI response inside fetchMarketComparisons.
- */
-private fun recordTopSnapshots(
-    all: List<Map<String, Any?>>,
-    ownIds: Set<Long>,
-    ownOrdersForPair: List<CharacterOrder>,
-    typeId: Int,
-    regionId: Int,
-    ts: Long,
-) {
-    fun record(
-        top: Map<String, Any?>,
-        scopeId: Long,
-        isBuy: Boolean,
-    ) {
-        val orderId = (top["order_id"] as? Number)?.toLong() ?: return
-        val price = (top["price"] as? Number)?.toDouble() ?: return
-        MarketTopSnapshotDao.insertIfAbsent(typeId, scopeId, isBuy, ts, price, orderId, orderId in ownIds)
-    }
-
-    ownOrdersForPair
-        .filter { !it.isBuyOrder }
-        .map { it.locationId }
-        .toSet()
-        .forEach { locationId ->
-            all
-                .filter { !(it["is_buy_order"] as? Boolean ?: false) && (it["location_id"] as? Number)?.toLong() == locationId }
-                .minByOrNull { (it["price"] as? Number)?.toDouble() ?: Double.MAX_VALUE }
-                ?.let { record(it, locationId, isBuy = false) }
-        }
-    if (ownOrdersForPair.any { it.isBuyOrder }) {
-        all
-            .filter { it["is_buy_order"] as? Boolean ?: false }
-            .maxByOrNull { (it["price"] as? Number)?.toDouble() ?: Double.MIN_VALUE }
-            ?.let { record(it, regionId.toLong(), isBuy = true) }
-    }
-}
-
 // Whether a competitor currently beats this order — a cheaper sell at the same station, or a
 // higher buy region-wide. Single source for the hotkey queue, the header badge, and notifications.
 internal fun CharacterOrder.isBeatenBy(comp: MarketComparison?): Boolean =
@@ -247,6 +194,13 @@ internal fun CharacterOrder.isBeatenBy(comp: MarketComparison?): Boolean =
         comp?.bestSell?.let { it < price } ?: false
     }
 
+/**
+ * Best competing prices for a (typeId, locationId) pair, excluding the character's own orders.
+ * bestSell is scoped to that exact station — buyers browsing a station's sell listings never see
+ * ones sitting elsewhere in the region, so only same-station supply actually competes with a sell
+ * order. bestBuy stays region-wide (same value across every station in the region): buy orders
+ * carry a range and compete across the whole region regardless of where they're placed.
+ */
 internal data class MarketComparison(
     val bestSell: Double?, // lowest sell from others at the same station — null means no sell competition there
     val bestBuy: Double?, // highest region-wide buy from others — null means no buy competition
@@ -442,7 +396,15 @@ fun OrdersScreen(context: ViewContext?) {
                             // ts = the response's own Last-Modified, so re-reading a still-cached
                             // response dedups on the primary key instead of minting fake ticks.
                             if (pairLastModified != null) {
-                                recordTopSnapshots(all, ownIds, ownOrdersForPair, typeId, regionId, pairLastModified)
+                                CompetitionService.recordTopSnapshots(
+                                    all,
+                                    ownIds,
+                                    sellStationIds = ownOrdersForPair.filter { !it.isBuyOrder }.map { it.locationId }.toSet(),
+                                    hasBuyOrders = ownOrdersForPair.any { it.isBuyOrder },
+                                    typeId = typeId,
+                                    regionId = regionId,
+                                    ts = pairLastModified,
+                                )
                             }
                             // Same response also carries this character's own orders (excluded above
                             // for competition purposes) — compare against the last-known price to
@@ -491,8 +453,7 @@ fun OrdersScreen(context: ViewContext?) {
                         } catch (_: Exception) {
                         }
                     }
-                    MarketTopSnapshotDao.pruneOlderThan(System.currentTimeMillis() - COMPETITION_WINDOW_MILLIS)
-                    val statsSince = System.currentTimeMillis() - COMPETITION_WINDOW_MILLIS
+                    val statsSince = System.currentTimeMillis() - CompetitionService.WINDOW_MILLIS
                     val stats = mutableMapOf<Pair<Int, Long>, CompetitionService.Stats>()
                     activeOrders
                         .filter { it.state == "active" }
@@ -847,24 +808,8 @@ fun OrdersScreen(context: ViewContext?) {
         PendingOrdersQueue.update(pending)
     }
 
-    // Tray notification for orders that just became beaten — computed over all active orders
-    // (not the tab-scoped hotkey queue) so switching tabs can't re-fire it. The first comparison
-    // snapshot only seeds the seen-set; notifications start from the next change.
-    var seenBeatenIds by remember(context) { mutableStateOf<Set<Long>?>(null) }
-    LaunchedEffect(orders, marketComparisons) {
-        if (marketComparisons.isEmpty()) return@LaunchedEffect
-        val beaten =
-            orders.filter { it.state == "active" && it.isBeatenBy(marketComparisons[it.typeId to it.locationId]) }
-        val prev = seenBeatenIds
-        seenBeatenIds = beaten.map { it.orderId }.toSet()
-        if (prev == null) return@LaunchedEffect
-        val fresh = beaten.filter { it.orderId !in prev }
-        if (fresh.isNotEmpty() && notifyBeaten) {
-            val names = fresh.take(3).joinToString(", ") { it.typeName }
-            val suffix = if (fresh.size > 3) " (+${fresh.size - 3} more)" else ""
-            PendingOrdersQueue.notifier?.invoke("Orders beaten", names + suffix)
-        }
-    }
+    // Beaten-order tray notifications live in MarketWatchService now — it watches every
+    // character's cached orders app-wide, so they fire even with another tab or character active.
 
     // Auto-refresh market comparisons once the ESI cache for every pair has expired, so beaten
     // detection (and the notification above) stays current without manual clicks.

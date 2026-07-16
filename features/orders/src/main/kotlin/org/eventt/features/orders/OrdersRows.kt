@@ -1,5 +1,7 @@
 package org.eventt.features.orders
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -148,7 +150,9 @@ internal fun SellOrderRow(
  * Two-line competition summary from a week of top-of-book snapshots (see CompetitionService):
  * a level word, then "time on top · rivals · median survival". "…" while the window is still
  * too thin to judge; "—" when there's no data at all (stats haven't been fetched yet).
+ * Hovering explains every number in plain words.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CompetitionCell(
     stats: CompetitionService.Stats?,
@@ -165,24 +169,95 @@ private fun CompetitionCell(
             CompetitionService.Level.CONTESTED -> "Contested" to UNDERCUT_COLOR
             CompetitionService.Level.BOT_WAR -> "Bot war" to LOSS_COLOR
         }
-    Column(modifier = modifier) {
-        Text(label, style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.SemiBold)
-        if (stats.level != CompetitionService.Level.COLLECTING) {
-            val details =
-                buildList {
-                    add("top ${(stats.timeOnTopPct * 100).toInt()}%")
-                    if (stats.competitors > 0) add("${stats.competitors} rivals")
-                    // Median ticks I survive on top, in wall-clock terms (one tick ≈ 5 min).
-                    stats.medianBeatTicks?.let { add("~${(it * 5).toInt()}m") }
-                }.joinToString(" · ")
-            Text(
-                details,
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+    TooltipArea(
+        tooltip = { CompetitionTooltip(stats, label) },
+        modifier = modifier,
+    ) {
+        Column {
+            Text(label, style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.SemiBold)
+            if (stats.level != CompetitionService.Level.COLLECTING) {
+                val details =
+                    buildList {
+                        add("top ${(stats.timeOnTopPct * 100).toInt()}%")
+                        if (stats.competitors > 0) add("${stats.competitors} ${if (stats.competitors == 1) "rival" else "rivals"}")
+                        // Median ticks I survive on top, in wall-clock terms (one tick ≈ 5 min).
+                        stats.medianBeatTicks?.let { add("~${(it * 5).toInt()}m") }
+                    }.joinToString(" · ")
+                Text(
+                    details,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun CompetitionTooltip(
+    stats: CompetitionService.Stats,
+    levelLabel: String,
+) {
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shadowElevation = 4.dp,
+    ) {
+        Column(modifier = Modifier.padding(10.dp).widthIn(max = 340.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            val levelHint =
+                when (stats.level) {
+                    CompetitionService.Level.COLLECTING ->
+                        "Collecting data — under an hour of snapshots so far. Stats build up while the app is running."
+                    CompetitionService.Level.CALM -> "Calm — you hold the top most of the time, or nobody competes at all."
+                    CompetitionService.Level.CONTESTED -> "Contested — you're being undercut at a human pace."
+                    CompetitionService.Level.BOT_WAR ->
+                        "Bot war — near-instant re-undercuts around the clock. Fighting this with relists mostly burns fees."
+                }
+            Text(
+                "$levelLabel — snapshots of this order book are taken every ~5 min (ESI tick), kept for 7 days.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(levelHint, style = MaterialTheme.typography.bodySmall)
+            HorizontalDivider()
+            TooltipStatLine(
+                "top ${(stats.timeOnTopPct * 100).toInt()}%",
+                "share of time your order was the best price — i.e. the one actually selling",
+            )
+            TooltipStatLine(
+                "${stats.competitors} ${if (stats.competitors == 1) "rival" else "rivals"}",
+                "distinct competing orders seen at the top (price edits keep an order's id, so this ≈ people)",
+            )
+            stats.medianBeatTicks?.let {
+                TooltipStatLine("~${(it * 5).toInt()}m", "median time you keep the top before someone retakes it")
+            }
+            stats.fastBeatShare?.let {
+                TooltipStatLine(
+                    "${(it * 100).toInt()}% instant",
+                    "of the times you were beaten, this share happened by the very next 5-min tick",
+                )
+            }
+            if (stats.beatHourCoverage > 0) {
+                TooltipStatLine(
+                    "${stats.beatHourCoverage}/24 hours",
+                    "distinct UTC hours of day with a beat — 16+ with instant beats means a bot, humans sleep",
+                )
+            }
+            TooltipStatLine("${stats.ticks} ticks", "sample size behind all of the above (~${stats.ticks * 5 / 60}h observed)")
+        }
+    }
+}
+
+@Composable
+private fun TooltipStatLine(
+    value: String,
+    explanation: String,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(value, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(80.dp))
+        Text(explanation, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

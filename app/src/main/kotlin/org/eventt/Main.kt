@@ -19,6 +19,7 @@ import org.eventt.core.model.CharacterModel
 import org.eventt.core.model.HotkeyBindings
 import org.eventt.core.nostr.NostrIdentityService
 import org.eventt.core.nostr.NostrRelayManager
+import org.eventt.features.orders.MarketWatchService
 import org.eventt.features.orders.PendingOrdersQueue
 import org.eventt.notify.TrayNotifier
 import org.eventt.ui.EventtApp
@@ -85,6 +86,9 @@ fun main() {
     // processed. A blind delete-on-startup step used to run here and would destroy exactly that
     // file before the watcher ever saw it — a real data-loss bug, not just theoretical.
     MarketLogWatcher.start()
+    // Watches every character's order books app-wide: competition snapshots, relist detection,
+    // beaten-order notifications — regardless of which tab/character is active.
+    MarketWatchService.start()
     NostrRelayManager.start()
     P2pRequestNotifier.start()
     // Keeps the P2P Market active identity following whichever character (or corp's acting
@@ -99,6 +103,7 @@ fun main() {
             onCloseRequest = {
                 GlobalHotkeyService.stop()
                 MarketLogWatcher.stop()
+                MarketWatchService.stop()
                 NostrRelayManager.stop()
                 exitApplication()
             },

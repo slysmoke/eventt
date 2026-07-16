@@ -1,6 +1,7 @@
 package org.eventt.features.orders
 
 import org.eventt.core.database.MarketTopSnapshot
+import org.eventt.core.database.MarketTopSnapshotDao
 import java.time.Instant
 import java.time.ZoneOffset
 
@@ -12,6 +13,9 @@ import java.time.ZoneOffset
  * "next tick") but round-the-clock *coverage*: humans sleep, bots respond at 04:00 too.
  */
 object CompetitionService {
+    /** How much top-of-book history feeds the metrics; older snapshots are pruned. */
+    internal const val WINDOW_MILLIS = 7L * 24 * 3600 * 1000
+
     enum class Level { COLLECTING, CALM, CONTESTED, BOT_WAR }
 
     data class Stats(
@@ -38,6 +42,45 @@ object CompetitionService {
 
     // Out of 24 — a human undercutter concentrated in a play session covers far fewer.
     private const val BOT_HOUR_COVERAGE = 16
+
+    /**
+     * Persists the current best price per order book we hold an active order in: sell competition
+     * per station (undercutting is station-local), buy competition per region (any regional buy
+     * order can outbid ours). [ts] must be the ESI response's own Last-Modified so re-reads of a
+     * still-cached response dedup on the snapshot table's primary key instead of minting fake ticks.
+     */
+    fun recordTopSnapshots(
+        book: List<Map<String, Any?>>,
+        ownIds: Set<Long>,
+        sellStationIds: Set<Long>,
+        hasBuyOrders: Boolean,
+        typeId: Int,
+        regionId: Int,
+        ts: Long,
+    ) {
+        fun record(
+            top: Map<String, Any?>,
+            scopeId: Long,
+            isBuy: Boolean,
+        ) {
+            val orderId = (top["order_id"] as? Number)?.toLong() ?: return
+            val price = (top["price"] as? Number)?.toDouble() ?: return
+            MarketTopSnapshotDao.insertIfAbsent(typeId, scopeId, isBuy, ts, price, orderId, orderId in ownIds)
+        }
+
+        sellStationIds.forEach { locationId ->
+            book
+                .filter { !(it["is_buy_order"] as? Boolean ?: false) && (it["location_id"] as? Number)?.toLong() == locationId }
+                .minByOrNull { (it["price"] as? Number)?.toDouble() ?: Double.MAX_VALUE }
+                ?.let { record(it, locationId, isBuy = false) }
+        }
+        if (hasBuyOrders) {
+            book
+                .filter { it["is_buy_order"] as? Boolean ?: false }
+                .maxByOrNull { (it["price"] as? Number)?.toDouble() ?: Double.MIN_VALUE }
+                ?.let { record(it, regionId.toLong(), isBuy = true) }
+        }
+    }
 
     fun compute(snapshots: List<MarketTopSnapshot>): Stats {
         val ticks = snapshots.size
