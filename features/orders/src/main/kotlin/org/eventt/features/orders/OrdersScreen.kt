@@ -223,25 +223,14 @@ internal fun computeMarginPct(
 /**
  * Net margin (%) of flipping at the market's current best prices: acquire via a buy order at
  * [MarketComparison.bestBuy], resell via a sell order at [MarketComparison.bestSell]. Used as-is
- * for buy orders' Best Margin; sell orders use [sellMarginPct] against their own cost basis instead
- * (see below) since a sell order already owns the item — buying it again isn't the hypothetical.
+ * for buy orders' Best Margin; sell orders compute their own Best Margin against cost basis and
+ * the relist fee instead (see [computeSellMetrics]), since a sell order already owns the item and
+ * matching a competing price means relisting, not buying again.
  */
 internal fun computeBestMarginPct(
     comparison: MarketComparison?,
     taxConfig: CostBasisService.TaxConfig,
 ): Double? = computeMarginPct(comparison?.bestBuy, comparison?.bestSell, taxConfig)
-
-/** Net margin (%) of selling at [price] (net of sales tax + broker fee) against an already-owned [costBasis]. */
-internal fun sellMarginPct(
-    price: Double?,
-    costBasis: Double?,
-    taxConfig: CostBasisService.TaxConfig,
-): Double? {
-    val p = price ?: return null
-    val cost = costBasis ?: return null
-    if (cost <= 0) return null
-    return (p * taxConfig.sellMultiplier - cost) / cost * 100
-}
 
 // COST/RELIST/PROFIT/MARGIN/BEST_MARGIN are Sell-only (sorted in sortSellMetrics, since they're
 // derived values, not fields on CharacterOrder); TOTAL/ORDER_AGE are Buy-only (applySort).

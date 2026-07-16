@@ -85,7 +85,7 @@ internal data class SellOrderMetrics(
     val competition: CompetitionService.Stats?,
 )
 
-private fun computeSellMetrics(
+internal fun computeSellMetrics(
     order: CharacterOrder,
     inventory: Map<Int, CostBasisService.InventoryItem>,
     historyCostBasis: Map<Int, Double>,
@@ -107,7 +107,29 @@ private fun computeSellMetrics(
         }
     // "If I matched the top competing sell price instead" against my own cost basis -- not the
     // region market-flip metric BuyOrderRow uses, since a sell order already owns the item.
-    val bestMarginPct = sellMarginPct(comparison?.bestSell, costBasis, taxConfig)
+    // Matching that price means relisting this order, which charges another modification fee on
+    // top of whatever relist fees are already sunk into it -- net out both, the same way
+    // totalProfit does, or "Best Margin" would overstate what relisting to the front actually nets.
+    val bestMarginPct =
+        comparison?.bestSell?.let { bestSell ->
+            costBasis?.let { cb ->
+                if (cb > 0 && order.volumeRemaining > 0) {
+                    val modFee =
+                        OrderFeeService.computeModificationFee(
+                            oldPrice = order.price,
+                            newPrice = bestSell,
+                            volumeRemaining = order.volumeRemaining,
+                            brokerFeePct = taxConfig.brokerFeePct,
+                            relistDiscountPct = relistDiscountPct,
+                        )
+                    val bestProfit =
+                        order.volumeRemaining * (bestSell * taxConfig.sellMultiplier - cb) - order.relistFeesPaid - modFee
+                    bestProfit / (cb * order.volumeRemaining) * 100
+                } else {
+                    null
+                }
+            }
+        }
     val updatesRemaining =
         OrderFeeService.estimateUpdatesRemaining(
             volumeRemaining = order.volumeRemaining,
