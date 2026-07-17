@@ -45,8 +45,9 @@ jobs:
         include:
         - language: actions
           build-mode: none
-        - language: java-kotlin
-          build-mode: none
+        # java-kotlin is disabled: CodeQL's Kotlin extractor rejects our pinned
+        # 2.4.10 (KotlinVersionTooRecentError, both autobuild and build-mode: none
+        # fail). Re-enable once https://github.com/github/codeql/issues/21938 lands.
         - language: python
           build-mode: none
         # CodeQL supports the following values keywords for 'language': 'actions', 'c-cpp', 'csharp', 'go', 'java-kotlin', 'javascript-typescript', 'python', 'ruby', 'rust', 'swift'
