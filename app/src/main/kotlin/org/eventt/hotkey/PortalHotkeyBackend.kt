@@ -6,6 +6,7 @@ import org.freedesktop.dbus.annotations.DBusInterfaceName
 import org.freedesktop.dbus.annotations.Position
 import org.freedesktop.dbus.connections.impl.DBusConnection
 import org.freedesktop.dbus.connections.impl.DBusConnectionBuilder
+import org.freedesktop.dbus.interfaces.DBus
 import org.freedesktop.dbus.interfaces.DBusInterface
 import org.freedesktop.dbus.interfaces.DBusSigHandler
 import org.freedesktop.dbus.interfaces.Introspectable
@@ -104,10 +105,17 @@ class PortalHotkeyBackend : HotkeyBackend {
                 return false
             }
 
+            // addSigHandler's `sender` filter matches against the unique connection id signals
+            // actually arrive with on the wire - a well-known name like BUS_NAME never matches.
+            val portalSender =
+                conn
+                    .getRemoteObject("org.freedesktop.DBus", "/org/freedesktop/DBus", DBus::class.java)
+                    .GetNameOwner(BUS_NAME)
+
             val globalShortcuts = conn.getRemoteObject(BUS_NAME, OBJECT_PATH, GlobalShortcuts::class.java)
 
             val sessionHandle =
-                callAndAwaitResponse(conn, "session") { token ->
+                callAndAwaitResponse(conn, portalSender, "session") { token ->
                     globalShortcuts.CreateSession(
                         mapOf(
                             "handle_token" to Variant(token),
@@ -125,7 +133,7 @@ class PortalHotkeyBackend : HotkeyBackend {
             val shortcut =
                 ShortcutDescription(shortcutId, mapOf("description" to Variant("EVE Night Trade Tools: ${key.label}")))
             val bound =
-                callAndAwaitResponse(conn, "bind") { token ->
+                callAndAwaitResponse(conn, portalSender, "bind") { token ->
                     globalShortcuts.BindShortcuts(sessionHandle, listOf(shortcut), "", mapOf("handle_token" to Variant(token)))
                 }
             if (bound == null) {
@@ -140,7 +148,7 @@ class PortalHotkeyBackend : HotkeyBackend {
                         onTrigger()
                     }
                 }
-            sigHandlerCloser = conn.addSigHandler(GlobalShortcuts.Activated::class.java, BUS_NAME, handler)
+            sigHandlerCloser = conn.addSigHandler(GlobalShortcuts.Activated::class.java, portalSender, handler)
 
             println(
                 "[Hotkey][Portal] Global shortcut session bound for ${key.label} - assign a key combo via the system dialog if prompted",
@@ -167,6 +175,7 @@ class PortalHotkeyBackend : HotkeyBackend {
     /** Invokes a portal method, then blocks briefly for its matching Request.Response signal. */
     private fun callAndAwaitResponse(
         conn: DBusConnection,
+        portalSender: String,
         label: String,
         invoke: (token: String) -> DBusPath,
     ): Map<String, Variant<*>>? {
@@ -179,7 +188,7 @@ class PortalHotkeyBackend : HotkeyBackend {
         val closer =
             conn.addSigHandler(
                 PortalRequest.Response::class.java,
-                BUS_NAME,
+                portalSender,
                 requestObj,
                 DBusSigHandler<PortalRequest.Response> { signal ->
                     if (signal.response.toInt() == 0) results = signal.results
