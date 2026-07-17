@@ -5,7 +5,7 @@ plugins {
     id("org.jetbrains.kotlin.jvm")
     id("org.jetbrains.compose")
     id("org.jetbrains.kotlin.plugin.compose")
-    id("com.gradleup.shadow") version "8.3.5"
+    id("com.gradleup.shadow") version "9.6.0"
     kotlin("plugin.serialization") version "2.0.21"
 }
 
