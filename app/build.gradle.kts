@@ -5,7 +5,7 @@ plugins {
     id("org.jetbrains.kotlin.jvm")
     id("org.jetbrains.compose")
     id("org.jetbrains.kotlin.plugin.compose")
-    id("com.gradleup.shadow") version "8.3.5"
+    id("com.gradleup.shadow") version "9.6.0"
     kotlin("plugin.serialization") version "2.4.10"
 }
 
@@ -109,7 +109,12 @@ dependencies {
     implementation(libs.jna)
     implementation(libs.jna.platform)
     implementation(libs.dbus.java.core)
-    implementation(libs.dbus.java.transport.junixsocket)
+    implementation(libs.dbus.java.transport.junixsocket) {
+        // junixsocket-core is a POM-only parent artifact (no jar) that shadow
+        // 9.x errors on when zipping the runtime classpath; it contributes no
+        // classes, so excluding it is a no-op at runtime.
+        exclude(group = "com.kohlschutter.junixsocket", module = "junixsocket-core")
+    }
 }
 
 compose.desktop {
