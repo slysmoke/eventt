@@ -12,6 +12,7 @@ slf4j = "2.0.18"
 jna = "5.19.1"
 dbus-java = "5.2.0"
 junit = "5.10.2"
+junit-platform = "1.10.2"
 mockk = "1.14.11"
 kotest = "6.2.2"
 turbine = "1.2.1"
@@ -61,6 +62,7 @@ dbus-java-transport-junixsocket = { module = "com.github.hypfvieh:dbus-java-tran
 
 # Testing
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-platform" }
 mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 kotest-assertions = { module = "io.kotest:kotest-assertions-core", version.ref = "kotest" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
