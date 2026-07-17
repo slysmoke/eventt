@@ -109,12 +109,7 @@ dependencies {
     implementation(libs.jna)
     implementation(libs.jna.platform)
     implementation(libs.dbus.java.core)
-    implementation(libs.dbus.java.transport.junixsocket) {
-        // junixsocket-core is a POM-only parent artifact (no jar) that shadow
-        // 9.x errors on when zipping the runtime classpath; it contributes no
-        // classes, so excluding it is a no-op at runtime.
-        exclude(group = "com.kohlschutter.junixsocket", module = "junixsocket-core")
-    }
+    implementation(libs.dbus.java.transport.junixsocket)
 }
 
 compose.desktop {
@@ -163,5 +158,12 @@ tasks.named<ShadowJar>("shadowJar") {
     exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "module-info.class")
     manifest {
         attributes["Main-Class"] = "org.eventt.MainKt"
+    }
+    dependencies {
+        // junixsocket-core is a POM-only parent artifact (no jar) that has no
+        // content to merge; shadow errors trying to zip it. Its actual classes
+        // ship in separate jars (junixsocket-common, junixsocket-native-common)
+        // that remain on the classpath and get merged normally.
+        exclude(dependency("com.kohlschutter.junixsocket:junixsocket-core"))
     }
 }
