@@ -6,7 +6,7 @@ plugins {
     id("org.jetbrains.compose")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.gradleup.shadow") version "8.3.5"
-    kotlin("plugin.serialization") version "2.0.21"
+    kotlin("plugin.serialization") version "2.4.10"
 }
 
 val appVersion: String = rootProject.properties["app.version"] as? String ?: "0.0.0"
