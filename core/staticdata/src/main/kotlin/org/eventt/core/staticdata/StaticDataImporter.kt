@@ -84,7 +84,7 @@ object StaticDataImporter {
         val request = Request.Builder().url(LATEST_URL).build()
         val body =
             EveHttpClient.getClient().newCall(request).execute().use { r ->
-                r.body?.string() ?: throw Exception("Empty response from latest.jsonl")
+                r.body.string()
             }
         val obj = Json.parseToJsonElement(body).jsonObject
         return obj["buildNumber"]?.jsonPrimitive?.intOrNull
@@ -98,7 +98,7 @@ object StaticDataImporter {
             throw Exception("Failed to download SDE ZIP: HTTP ${response.code}")
         }
 
-        response.body?.byteStream()?.use { bodyStream ->
+        response.body.byteStream().use { bodyStream ->
             ZipInputStream(bodyStream.buffered(1024 * 1024)).use { zip ->
                 var entry = zip.nextEntry
                 while (entry != null) {
@@ -144,7 +144,7 @@ object StaticDataImporter {
                     entry = zip.nextEntry
                 }
             }
-        } ?: throw Exception("Empty ZIP response body")
+        }
 
         // Save all parsed data to DB
         saveAll()

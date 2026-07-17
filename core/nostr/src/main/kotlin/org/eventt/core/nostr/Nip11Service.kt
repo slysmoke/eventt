@@ -79,7 +79,7 @@ object Nip11Service {
                         .build()
                 client.newCall(request).execute().use { resp ->
                     if (!resp.isSuccessful) return@use null
-                    json.decodeFromString<Nip11Doc>(resp.body?.string() ?: return@use null)
+                    json.decodeFromString<Nip11Doc>(resp.body.string())
                 }
             }.getOrNull()
         }

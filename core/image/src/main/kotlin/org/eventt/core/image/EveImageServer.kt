@@ -133,7 +133,7 @@ object EveImageServer {
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return null
 
-                val bytes = response.body?.bytes() ?: return null
+                val bytes = response.body.bytes()
 
                 // Save to disk cache
                 saveToDiskCache(cacheKey, bytes)

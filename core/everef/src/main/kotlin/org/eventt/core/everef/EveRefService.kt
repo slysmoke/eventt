@@ -201,7 +201,7 @@ object EveRefService {
             val body =
                 EveHttpClient.getClient().newCall(request).execute().use { response ->
                     if (!response.isSuccessful) return emptyList()
-                    response.body?.string() ?: return emptyList()
+                    response.body.string()
                 }
             val json = Json { ignoreUnknownKeys = true }
             val root = json.parseToJsonElement(body)
@@ -227,7 +227,7 @@ object EveRefService {
         val rows =
             EveHttpClient.getClient().newCall(request).execute().use { response ->
                 if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
-                val body = response.body ?: throw Exception("Empty response")
+                val body = response.body
 
                 // BufferedInputStream avoids byte-at-a-time reads into BZip2 decompressor
                 BZip2CompressorInputStream(body.byteStream().buffered(65536)).use { bzStream ->

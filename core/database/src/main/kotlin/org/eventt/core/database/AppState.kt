@@ -80,9 +80,7 @@ object AppState {
         val current = _selectedContext.value
         val stillValid = current != null && chars.any { it.id == current.actingCharId }
         when {
-            stillValid -> {
-                Unit
-            }
+            stillValid -> {}
 
             chars.isNotEmpty() -> {
                 selectCharacter(chars.first().id)

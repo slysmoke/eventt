@@ -85,7 +85,7 @@ object UpdateChecker {
             val response = client.newCall(request).execute()
             if (!response.isSuccessful) return null
 
-            val body = response.body?.string() ?: return null
+            val body = response.body.string()
             val root = json.parseToJsonElement(body).jsonObject
 
             val tagName = root["tag_name"]?.jsonPrimitive?.content ?: return null
@@ -157,9 +157,9 @@ object UpdateChecker {
                 onProgress(UpdateProgress.Error("Download failed: HTTP ${response.code}"))
                 return
             }
-            val total = response.body?.contentLength() ?: -1L
+            val total = response.body.contentLength()
             var received = 0L
-            response.body?.byteStream()?.use { src ->
+            response.body.byteStream().use { src ->
                 zipFile.outputStream().use { dst ->
                     val buf = ByteArray(65536)
                     var n: Int
@@ -236,9 +236,9 @@ object UpdateChecker {
             return
         }
         val newJar = File(updateDir, "update.jar")
-        val total = response.body?.contentLength() ?: -1L
+        val total = response.body.contentLength()
         var received = 0L
-        response.body?.byteStream()?.use { src ->
+        response.body.byteStream().use { src ->
             newJar.outputStream().use { dst ->
                 val buf = ByteArray(65536)
                 var n: Int

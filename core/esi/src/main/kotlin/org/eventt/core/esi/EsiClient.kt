@@ -239,10 +239,10 @@ object EsiClient {
 
             if (!response.isSuccessful) {
                 RequestQueueManager.completeRequest(queuedRequest.id, error = "HTTP ${response.code}")
-                throw IOException("ESI request failed: ${response.code} ${response.body?.string()}")
+                throw IOException("ESI request failed: ${response.code} ${response.body.string()}")
             }
 
-            val body = response.body?.string() ?: ""
+            val body = response.body.string()
             RequestQueueManager.updateProgress(queuedRequest.id, 0.9f)
 
             if (body.isEmpty()) {
@@ -378,7 +378,7 @@ object EsiClient {
                 .build()
         val response = EveHttpClient.getClient().newCall(request).execute()
         if (!response.isSuccessful) throw java.io.IOException("ESI POST $endpoint: HTTP ${response.code}")
-        return response.body?.string() ?: "[]"
+        return response.body.string()
     }
 
     @Serializable
@@ -452,12 +452,12 @@ object EsiClient {
             }
 
             if (!response.isSuccessful) {
-                val err = "HTTP ${response.code} ${response.body?.string()}"
+                val err = "HTTP ${response.code} ${response.body.string()}"
                 RequestQueueManager.completeRequest(queuedRequest.id, error = err)
                 throw IOException("ESI POST $endpoint failed: $err")
             }
 
-            val respBody = response.body?.string() ?: ""
+            val respBody = response.body.string()
             RequestQueueManager.completeRequest(queuedRequest.id)
             return json.decodeFromString(FittingResponseDto.serializer(), respBody).fittingId
         } catch (e: IOException) {

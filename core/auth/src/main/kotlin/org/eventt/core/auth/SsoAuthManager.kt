@@ -145,9 +145,9 @@ object SsoAuthManager {
         return client.newCall(request).execute().use { response ->
             if (response.isSuccessful) {
                 val json = Json { ignoreUnknownKeys = true }
-                json.decodeFromString<TokenResponse>(response.body?.string() ?: "")
+                json.decodeFromString<TokenResponse>(response.body.string())
             } else {
-                val errorBody = response.body?.string() ?: ""
+                val errorBody = response.body.string()
                 println("[Auth] Token refresh failed: ${response.code} — $errorBody")
                 null
             }
@@ -167,7 +167,7 @@ object SsoAuthManager {
         return client.newCall(request).execute().use { response ->
             if (response.isSuccessful) {
                 val json = Json { ignoreUnknownKeys = true }
-                val body = response.body?.string() ?: return null
+                val body = response.body.string()
                 runCatching {
                     json.decodeFromString<CharacterInfo>(body)
                 }.getOrNull()
@@ -318,7 +318,7 @@ object SsoAuthManager {
                 .build()
 
         return client.newCall(request).execute().use { response ->
-            val responseBody = response.body?.string() ?: ""
+            val responseBody = response.body.string()
             if (response.isSuccessful) {
                 println("[Auth] Token exchange successful")
                 val json = Json { ignoreUnknownKeys = true }

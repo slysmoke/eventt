@@ -51,7 +51,7 @@ object CitadelService {
         val request = Request.Builder().url(CITADEL_URL).build()
         EveHttpClient.getClient().newCall(request).execute().use { response ->
             if (!response.isSuccessful) error("HTTP ${response.code}")
-            return response.body?.string() ?: error("Empty response")
+            return response.body.string()
         }
     }
 
