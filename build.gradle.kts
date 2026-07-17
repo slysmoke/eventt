@@ -54,6 +54,7 @@ subprojects {
         }
         dependencies {
             "testImplementation"(rootProject.libs.junit.jupiter)
+            "testRuntimeOnly"(rootProject.libs.junit.platform.launcher)
             "testImplementation"(rootProject.libs.mockk)
             "testImplementation"(rootProject.libs.kotest.assertions)
             "testImplementation"(rootProject.libs.kotlinx.coroutines.test)
