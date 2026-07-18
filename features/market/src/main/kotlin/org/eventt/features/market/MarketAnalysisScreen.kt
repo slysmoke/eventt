@@ -175,20 +175,12 @@ internal fun regionFinalVol(
     tradeType: InterRegionTradeType,
     volCapEnabled: Boolean,
     volCapPct: Double,
-    maxCargoM3: Double = Double.MAX_VALUE,
-): Long {
-    val base =
-        when (tradeType) {
-            InterRegionTradeType.BUY_TO_SELL, InterRegionTradeType.SAFE_BUY_TO_SELL -> regionEffVol(opp, volCapEnabled, volCapPct)
-            InterRegionTradeType.SELL_TO_SELL -> minOf(opp.profitableVolume, regionEffVol(opp, volCapEnabled, volCapPct))
-            InterRegionTradeType.BUY_TO_BUY, InterRegionTradeType.SELL_TO_BUY -> opp.profitableVolume
-        }
-    // "Max m³" caps the suggested quantity by total cargo volume, not just excluding oversized
-    // single units (that exclusion happens earlier, at computeRegionOpportunityForType) — an item
-    // that fits at all still shouldn't suggest more than maxCargoM3 worth of it in one haul.
-    if (maxCargoM3 >= Double.MAX_VALUE || opp.itemVolumeM3 <= 0) return base
-    return minOf(base, (maxCargoM3 / opp.itemVolumeM3).toLong())
-}
+): Long =
+    when (tradeType) {
+        InterRegionTradeType.BUY_TO_SELL, InterRegionTradeType.SAFE_BUY_TO_SELL -> regionEffVol(opp, volCapEnabled, volCapPct)
+        InterRegionTradeType.SELL_TO_SELL -> minOf(opp.profitableVolume, regionEffVol(opp, volCapEnabled, volCapPct))
+        InterRegionTradeType.BUY_TO_BUY, InterRegionTradeType.SELL_TO_BUY -> opp.profitableVolume
+    }
 
 // Estimated total profit at regionFinalVol — the exact walked total when the vol/day cap didn't
 // bind, otherwise profitableTotalProfit scaled proportionally (a fair approximation: we don't know
@@ -198,9 +190,8 @@ internal fun regionDailyProfit(
     tradeType: InterRegionTradeType,
     volCapEnabled: Boolean,
     volCapPct: Double,
-    maxCargoM3: Double = Double.MAX_VALUE,
 ): Double {
-    val finalVol = regionFinalVol(opp, tradeType, volCapEnabled, volCapPct, maxCargoM3)
+    val finalVol = regionFinalVol(opp, tradeType, volCapEnabled, volCapPct)
     if (tradeType == InterRegionTradeType.BUY_TO_SELL || tradeType == InterRegionTradeType.SAFE_BUY_TO_SELL) return opp.netProfit * finalVol
     if (opp.profitableVolume <= 0) return 0.0
     if (finalVol >= opp.profitableVolume) return opp.profitableTotalProfit
@@ -214,11 +205,10 @@ internal fun sortRegion(
     asc: Boolean,
     volCapEnabled: Boolean = false,
     volCapPct: Double = 100.0,
-    maxCargoM3: Double = Double.MAX_VALUE,
 ): List<RegionOpportunity> {
     fun effVol(opp: RegionOpportunity) = regionEffVol(opp, volCapEnabled, volCapPct)
 
-    fun finalVol(opp: RegionOpportunity) = regionFinalVol(opp, tradeType, volCapEnabled, volCapPct, maxCargoM3)
+    fun finalVol(opp: RegionOpportunity) = regionFinalVol(opp, tradeType, volCapEnabled, volCapPct)
     val cmp: Comparator<RegionOpportunity> =
         when (col) {
             RegionSortCol.NAME -> compareBy { it.typeName }
@@ -231,7 +221,7 @@ internal fun sortRegion(
             RegionSortCol.NET_PROFIT -> compareBy { it.netProfit }
             RegionSortCol.VOLUME -> compareBy { effVol(it) }
             RegionSortCol.TREND_7D -> compareBy { if (it.priceChange7d.isNaN()) Double.MIN_VALUE else it.priceChange7d }
-            RegionSortCol.NET_VOL -> compareBy { regionDailyProfit(it, tradeType, volCapEnabled, volCapPct, maxCargoM3) }
+            RegionSortCol.NET_VOL -> compareBy { regionDailyProfit(it, tradeType, volCapEnabled, volCapPct) }
             RegionSortCol.QTY_TO_BUY -> compareBy { finalVol(it) }
         }
     return if (asc) list.sortedWith(cmp) else list.sortedWith(cmp.reversed())
@@ -266,12 +256,15 @@ internal object S {
     const val IR_MARGIN_LIMIT_ENABLED = "analysis.r.marginLimitEnabled"
     const val IR_MARGIN_LIMIT_PCT = "analysis.r.marginLimitPct"
     const val IR_ISK_PER_M3 = "analysis.r.iskPerM3"
+    const val IR_SHIP_BY_COST_ENABLED = "analysis.r.shipByCostEnabled"
+    const val IR_SHIP_COST_PCT = "analysis.r.shipCostPct"
     const val IR_MAX_CARGO = "analysis.r.maxCargo"
     const val IR_MIN_PROFIT = "analysis.r.minProfit"
     const val IR_VOL_CAP_ENABLED = "analysis.r.volCapEnabled"
     const val IR_VOL_CAP_PCT = "analysis.r.volCapPct"
     const val IR_COPY_VOLUME = "analysis.r.copyVolume"
     const val IR_SKIP_EXISTING = "analysis.r.skipExisting"
+    const val IR_PRESETS = "analysis.r.presets"
 
     fun get(key: String): String? = StaticDataDao.getSetting(key)
 

@@ -76,6 +76,7 @@ internal fun StationTradingTab(
     var copyVolumeEnabled by remember { mutableStateOf(true) }
     var skipExistingOrders by remember { mutableStateOf(false) }
     var histSourceIsEsi by remember { mutableStateOf(false) }
+    var detailTypeId by remember { mutableStateOf<Int?>(null) }
 
     // Load persisted settings + character tax values
     LaunchedEffect(charId) {
@@ -194,7 +195,7 @@ internal fun StationTradingTab(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.weight(1f),
                 ) {
-                    ParamField("Margin %", minMargin, 68.dp) {
+                    ParamField("Min Margin %", minMargin, 68.dp) {
                         minMargin = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MARGIN, it) } }
                     }
@@ -226,7 +227,7 @@ internal fun StationTradingTab(
                             scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_VOL_CAP_PCT, v) } }
                         },
                     )
-                    FilterControl("Skip Orders") {
+                    FilterControl("Skip Owned Items") {
                         Checkbox(
                             checked = skipExistingOrders,
                             onCheckedChange = {
@@ -605,10 +606,31 @@ internal fun StationTradingTab(
             ) {
                 LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                     itemsIndexed(sorted, key = { _, item -> item.typeId }) { idx, opp ->
-                        StationRow(opp, idx, opp.typeId in selectedIds, opp.typeId == activeTypeId, volCapEnabled, volCapPctVal)
+                        StationRow(
+                            opp,
+                            idx,
+                            opp.typeId in selectedIds,
+                            opp.typeId == activeTypeId,
+                            volCapEnabled,
+                            volCapPctVal,
+                            onShowDetails = { detailTypeId = it },
+                        )
                     }
                 }
             }
         }
+    }
+
+    detailTypeId?.let { id ->
+        val opp = results.find { it.typeId == id }
+        ItemDetailDialog(
+            typeId = id,
+            typeName = opp?.typeName ?: "",
+            primaryRegionId = regionId,
+            primaryRegionName = allRegions.find { it.regionId == regionId }?.name ?: "",
+            primaryStationId = stationId,
+            charId = charId,
+            onDismiss = { detailTypeId = null },
+        )
     }
 }

@@ -1245,10 +1245,11 @@ private fun VolumeBarChart(
 }
 
 @Composable
-private fun StatCard(
+internal fun StatCard(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
+    valueColor: Color = Color.Unspecified,
 ) {
     Card(
         modifier = modifier,
@@ -1256,7 +1257,7 @@ private fun StatCard(
     ) {
         Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-            Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = valueColor)
         }
     }
 }

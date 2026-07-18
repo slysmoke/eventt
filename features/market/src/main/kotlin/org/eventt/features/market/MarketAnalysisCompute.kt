@@ -229,6 +229,45 @@ internal fun walkCrossedBook(
     return volume to profit
 }
 
+// Solves netMarginPct = targetMarginPct for sellPrice, using this trade type's own fee formula
+// (mirrors the `fees` calc further down in computeRegionOpportunityForType) — i.e. "what would I
+// need to sell at, after tax/broker fees and shipping, to net exactly this much margin" — rather
+// than a flat markup on buyPrice that ignores fees entirely. Returns null if the target margin is
+// unreachable at any price (fees alone consume 100% or more of the sell price).
+private fun targetSellPriceForMargin(
+    tradeType: InterRegionTradeType,
+    buyPrice: Double,
+    shipping: Double,
+    brokerFeePct: Double,
+    salesTaxPct: Double,
+    targetMarginPct: Double,
+): Double? {
+    val taxFrac = salesTaxPct / 100.0
+    val brokerFrac = brokerFeePct / 100.0
+    val marginFrac = targetMarginPct / 100.0
+    val (cost, feeFrac) =
+        when (tradeType) {
+            InterRegionTradeType.SELL_TO_BUY -> {
+                (buyPrice + shipping) to taxFrac
+            }
+
+            InterRegionTradeType.SELL_TO_SELL -> {
+                (buyPrice + shipping) to (taxFrac + brokerFrac)
+            }
+
+            InterRegionTradeType.BUY_TO_BUY -> {
+                (buyPrice * (1.0 + brokerFrac) + shipping) to taxFrac
+            }
+
+            InterRegionTradeType.BUY_TO_SELL, InterRegionTradeType.SAFE_BUY_TO_SELL -> {
+                (buyPrice * (1.0 + brokerFrac) + shipping) to (taxFrac + brokerFrac)
+            }
+        }
+    val denominator = 1.0 - feeFrac - marginFrac
+    if (denominator <= 0.0) return null
+    return cost / denominator
+}
+
 internal fun computeRegionOpportunityForType(
     typeId: Int,
     buyRegionOrders: List<Map<String, Any?>>,
@@ -262,6 +301,12 @@ internal fun computeRegionOpportunityForType(
     // cost-based sell price rather than whatever the (possibly thin/unreliable) market shows.
     marginLimitEnabled: Boolean = false,
     marginLimitPct: Double = 0.0,
+    // Alternative to the iskPerM3 volume-based shipping estimate: many courier/freight services
+    // price a haul as a percentage of the cargo's value (collateral risk) rather than its bulk --
+    // more realistic for expensive, low-volume items where m3-based shipping understates the real
+    // cost. When on, shipping = buyPrice * shippingCostPct / 100 instead of itemVol * iskPerM3.
+    shippingByCostEnabled: Boolean = false,
+    shippingCostPct: Double = 0.0,
 ): RegionOpportunity? {
     fun Map<String, Any?>.price() = (get("price") as? Number)?.toDouble() ?: 0.0
 
@@ -326,17 +371,7 @@ internal fun computeRegionOpportunityForType(
         when (tradeType) {
             InterRegionTradeType.SELL_TO_BUY, InterRegionTradeType.BUY_TO_BUY -> dstBuy
             InterRegionTradeType.SELL_TO_SELL, InterRegionTradeType.BUY_TO_SELL, InterRegionTradeType.SAFE_BUY_TO_SELL -> dstSell
-        } ?: return null
-    // A single stale/outlier order can make the destination's best price look far better than
-    // it actually is to trade at — a thin market's "best sell" might be one listing nobody's
-    // going to pay, and its "best buy" one lowball nobody's going to fill either. Capping the
-    // assumed sell price at cost + marginLimitPct turns that into "what would this be worth at a
-    // realistic, cost-based margin" instead of trusting whatever number the order book happened
-    // to have — every profit figure below is computed from this, not the raw market price.
-    val sellPrice =
-        if (marginLimitEnabled) minOf(rawSellPrice, buyPrice * (1.0 + marginLimitPct / 100.0)) else rawSellPrice
-
-    if (sellPrice <= buyPrice) return null
+        }
 
     val type = StaticDataDao.getTypeById(typeId) ?: return null
     if (filterMarketGroupIds != null && type.marketGroupId !in filterMarketGroupIds) return null
@@ -344,7 +379,33 @@ internal fun computeRegionOpportunityForType(
     val itemVol = type.packagedVolume.takeIf { it > 0 } ?: type.volume.takeIf { it > 0 } ?: 1.0
     if (itemVol > maxCargoM3) return null
 
-    val shipping = itemVol * iskPerM3
+    val shipping = if (shippingByCostEnabled) buyPrice * shippingCostPct / 100.0 else itemVol * iskPerM3
+
+    // A single stale/outlier order can make the destination's best price look far better than
+    // it actually is to trade at — a thin market's "best sell" might be one listing nobody's
+    // going to pay, and its "best buy" one lowball nobody's going to fill either. targetSellPrice
+    // solves for the sell price that nets exactly marginLimitPct after this trade type's own
+    // tax/broker/shipping costs (not a flat markup on buyPrice that ignores them), so every profit
+    // figure below reflects a realistic, cost-based margin instead of trusting whatever number the
+    // order book happened to have. When the destination has no order at all (rawSellPrice null —
+    // e.g. the market's simply sold out), that computed price is the only thing to go on, so it's
+    // used outright rather than skipping the item.
+    val targetSellPrice =
+        if (marginLimitEnabled) {
+            targetSellPriceForMargin(tradeType, buyPrice, shipping, brokerFeePct, salesTaxPct, marginLimitPct)
+        } else {
+            null
+        }
+    val sellPrice =
+        when {
+            rawSellPrice != null && targetSellPrice != null -> minOf(rawSellPrice, targetSellPrice)
+            rawSellPrice != null -> rawSellPrice
+            targetSellPrice != null -> targetSellPrice
+            else -> return null
+        }
+
+    if (sellPrice <= buyPrice) return null
+
     val grossProfit = sellPrice - buyPrice
     val fees =
         when (tradeType) {
@@ -365,7 +426,6 @@ internal fun computeRegionOpportunityForType(
             }
         }
     val netProfit = grossProfit - fees - shipping
-    if (netProfit < minNetProfit) return null
     // NET margin relative to the sell price — same convention as Station Trading and the Trade
     // Calc overlay. The old gross/buyPrice figure lives on as roiPct below.
     val marginPct = netProfit / sellPrice * 100.0
@@ -405,6 +465,19 @@ internal fun computeRegionOpportunityForType(
     val volSell = medianDailyVolume(sellHistory)
     val volBuy = medianDailyVolume(buyHistory)
 
+    // Total profit potential (net per unit x achievable volume), not just the per-unit figure --
+    // 100k/unit x 100 units/day beats 6M on a single unit, but the old per-unit-only check let the
+    // single unit through and rejected the real opportunity. BUY_TO_SELL/SAFE_BUY_TO_SELL have no
+    // real order book to walk (both legs are our own placed orders, so profitableTotalProfit is
+    // always 0 for them) -- they use the destination's estimated daily volume instead.
+    val totalProfit =
+        if (tradeType == InterRegionTradeType.BUY_TO_SELL || tradeType == InterRegionTradeType.SAFE_BUY_TO_SELL) {
+            netProfit * volSell
+        } else {
+            profitableTotalProfit
+        }
+    if (totalProfit < minNetProfit) return null
+
     return RegionOpportunity(
         typeId = typeId,
         typeName = type.name,
@@ -424,7 +497,7 @@ internal fun computeRegionOpportunityForType(
         dailyVolume = volSell,
         dailyVolumeSrc = volBuy,
         priceChange7d = compute7dChange(sellHistory),
-        buyVsAvg7dPct = compute7dAvgDeviation(buyHistory, buyPrice) { it.lowest },
+        buyVsAvg7dPct = compute7dAvgDeviation(buyHistory, buyPrice) { it.average },
         sellVsAvg7dPct = compute7dAvgDeviation(sellHistory, sellPrice) { it.average },
     )
 }

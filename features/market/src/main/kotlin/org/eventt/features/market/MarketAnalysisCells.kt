@@ -102,6 +102,7 @@ internal fun StationRow(
     isActiveInGame: Boolean = false,
     volCapEnabled: Boolean = false,
     volCapPct: Double = 100.0,
+    onShowDetails: (Int) -> Unit = {},
 ) {
     val effVol = stationEffVol(opp, volCapEnabled, volCapPct)
     val bg =
@@ -125,15 +126,20 @@ internal fun StationRow(
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
             modifier = Modifier.width(28.dp),
         )
-        Text(
-            opp.typeName,
-            style = MaterialTheme.typography.bodySmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-            color = if (isActiveInGame) STATION_ACTIVE_IN_GAME else Color.Unspecified,
-            fontWeight = if (isActiveInGame) FontWeight.Bold else FontWeight.Normal,
-        )
+        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                opp.typeName,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+                color = if (isActiveInGame) STATION_ACTIVE_IN_GAME else Color.Unspecified,
+                fontWeight = if (isActiveInGame) FontWeight.Bold else FontWeight.Normal,
+            )
+            IconButton(onClick = { onShowDetails(opp.typeId) }, modifier = Modifier.size(20.dp)) {
+                Icon(Icons.Default.Info, contentDescription = "Item details", modifier = Modifier.size(14.dp))
+            }
+        }
         PriceText(opp.bestBuy, negativeColor, Modifier.width(95.dp))
         PriceText(opp.bestSell, positiveColor, Modifier.width(95.dp))
         MarginText(opp.marginPct, Modifier.width(65.dp))
@@ -170,11 +176,11 @@ internal fun RegionRow(
     volCapEnabled: Boolean = false,
     volCapPct: Double = 100.0,
     isActiveInGame: Boolean = false,
-    maxCargoM3: Double = Double.MAX_VALUE,
+    onShowDetails: (Int) -> Unit = {},
 ) {
     val effVol = regionEffVol(opp, volCapEnabled, volCapPct)
-    val qtyToBuy = regionFinalVol(opp, tradeType, volCapEnabled, volCapPct, maxCargoM3)
-    val dailyProfit = regionDailyProfit(opp, tradeType, volCapEnabled, volCapPct, maxCargoM3)
+    val qtyToBuy = regionFinalVol(opp, tradeType, volCapEnabled, volCapPct)
+    val dailyProfit = regionDailyProfit(opp, tradeType, volCapEnabled, volCapPct)
     val bg =
         when {
             selected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
@@ -196,24 +202,27 @@ internal fun RegionRow(
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
             modifier = Modifier.width(28.dp),
         )
-        Text(
-            opp.typeName,
-            style = MaterialTheme.typography.bodySmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-            color = if (isActiveInGame) STATION_ACTIVE_IN_GAME else Color.Unspecified,
-            fontWeight = if (isActiveInGame) FontWeight.Bold else FontWeight.Normal,
-        )
-        Column(Modifier.width(95.dp)) {
-            PriceText(opp.buyPrice, negativeColor, Modifier.fillMaxWidth())
-            // Paying more than a typical recent day is the bad direction when you're the buyer.
-            Avg7dDeviationText(opp.buyVsAvg7dPct, higherIsBetter = false)
+        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                opp.typeName,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+                color = if (isActiveInGame) STATION_ACTIVE_IN_GAME else Color.Unspecified,
+                fontWeight = if (isActiveInGame) FontWeight.Bold else FontWeight.Normal,
+            )
+            IconButton(onClick = { onShowDetails(opp.typeId) }, modifier = Modifier.size(20.dp)) {
+                Icon(Icons.Default.Info, contentDescription = "Item details", modifier = Modifier.size(14.dp))
+            }
         }
         Column(Modifier.width(95.dp)) {
-            PriceText(opp.sellPrice, positiveColor, Modifier.fillMaxWidth())
-            // Selling for more than a typical recent day is the good direction here.
-            Avg7dDeviationText(opp.sellVsAvg7dPct, higherIsBetter = true)
+            PriceText(opp.buyPrice, Color.White, Modifier.fillMaxWidth())
+            Avg7dDeviationText(opp.buyVsAvg7dPct)
+        }
+        Column(Modifier.width(95.dp)) {
+            PriceText(opp.sellPrice, Color.White, Modifier.fillMaxWidth())
+            Avg7dDeviationText(opp.sellVsAvg7dPct)
         }
         MarginText(opp.marginPct, Modifier.width(65.dp))
         MarginText(opp.roiPct, Modifier.width(65.dp))
@@ -320,23 +329,24 @@ private fun TrendText(
 }
 
 /**
- * Small "vs 7d avg" line shown under a Buy/Sell price cell — see [compute7dAvgDeviation].
- * [higherIsBetter] flips which direction (above/below the 7-day average) counts as the good
- * (green) one: paying more than usual is bad for a buy price, selling for more than usual is good
- * for a sell price. Renders nothing while there's no history yet, rather than a placeholder dash —
- * this is a secondary annotation under the price, not its own column that needs to hold a slot.
+ * Small "vs 7d avg" line shown under a Buy/Sell price cell — see [compute7dAvgDeviation]. Colored
+ * by how far above the 7-day average the price sits, not by whether that's "good" for a buyer vs
+ * seller: below average is always green, 0-10% above is normal (white), 11-20% orange, beyond
+ * that red. Renders nothing while there's no history yet, rather than a placeholder dash — this
+ * is a secondary annotation under the price, not its own column that needs to hold a slot.
  */
 @Composable
-private fun Avg7dDeviationText(
-    deviationPct: Double,
-    higherIsBetter: Boolean,
-) {
+private fun Avg7dDeviationText(deviationPct: Double) {
     if (deviationPct.isNaN()) return
-    val positive = deviationPct >= 0
-    val good = if (higherIsBetter) positive else !positive
-    val color = if (good) positiveColor else negativeColor
+    val color =
+        when {
+            deviationPct < 0 -> positiveColor
+            deviationPct <= 10.0 -> Color.White
+            deviationPct <= 20.0 -> warningColor
+            else -> negativeColor
+        }
     Text(
-        "${if (positive) "+" else ""}${String.format(Locale.US, "%.1f", deviationPct)}% vs 7d",
+        "${if (deviationPct >= 0) "+" else ""}${String.format(Locale.US, "%.1f", deviationPct)}% vs 7d",
         style = MaterialTheme.typography.labelSmall,
         color = color,
     )

@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -59,7 +60,7 @@ internal fun FilterBar(content: @Composable ColumnScope.() -> Unit) {
 // ─── Shared chip surface (base for all filter dropdowns) ─────────────────
 
 @Composable
-private fun ChipSurface(
+internal fun ChipSurface(
     onClick: () -> Unit,
     width: Dp,
     modifier: Modifier = Modifier,
@@ -224,22 +225,30 @@ internal fun FilterDivider() {
 
 // ─── Route arrow between buy-side and sell-side pickers (Inter-Region only) ────────────────
 // Same label-row top offset as FilterDivider, so the arrow points between the chips themselves.
+// Doubles as a swap button when [onSwap] is given: click flips buy<->sell region+station.
 
 @Composable
-internal fun RouteArrow() {
+internal fun RouteArrow(onSwap: (() -> Unit)? = null) {
     Box(
         modifier =
             Modifier
                 .padding(top = FilterLabelHeight + FilterLabelGap)
                 .height(FilterFieldHeight)
-                .padding(horizontal = 2.dp),
+                .padding(horizontal = 2.dp)
+                .then(
+                    if (onSwap != null) {
+                        Modifier.clip(CircleShape).clickable(onClick = onSwap).padding(4.dp)
+                    } else {
+                        Modifier
+                    },
+                ),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            Icons.AutoMirrored.Filled.ArrowForward,
-            null,
-            Modifier.size(16.dp),
-            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+            if (onSwap != null) Icons.Default.SwapHoriz else Icons.AutoMirrored.Filled.ArrowForward,
+            contentDescription = if (onSwap != null) "Swap buy/sell" else null,
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (onSwap != null) 0.7f else 0.35f),
         )
     }
 }
@@ -625,9 +634,10 @@ internal fun ParamField(
     label: String,
     value: String,
     width: Dp,
+    enabled: Boolean = true,
     onValue: (String) -> Unit,
 ) {
     FilterControl(label) {
-        CompactTextField(value = value, onValueChange = onValue, width = width)
+        CompactTextField(value = value, onValueChange = onValue, width = width, enabled = enabled)
     }
 }
