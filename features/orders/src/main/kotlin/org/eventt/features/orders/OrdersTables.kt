@@ -77,12 +77,14 @@ private fun sortSellMetrics(
 
             SortCol.VOLUME -> list.sortedBy { it.order.volumeRemaining }
 
+            SortCol.TOTAL -> list.sortedBy { it.order.total }
+
             SortCol.TIME_LEFT -> list.sortedBy { it.order.timeLeftSeconds }
 
             // Ascending = most contested first (least time on top); no data sorts last.
             SortCol.COMPETITION -> list.sortedBy { it.competition?.timeOnTopPct ?: 2.0 }
 
-            SortCol.TOTAL, SortCol.ORDER_AGE -> list // Buy-only columns, not shown here
+            SortCol.ORDER_AGE -> list // Buy-only column, not shown here
         }
     return if (dir == SortDir.DESC) sorted.reversed() else sorted
 }
@@ -220,6 +222,7 @@ internal fun SellOrdersTable(
             SortHeader("Margin", SortCol.MARGIN, sortCol, sortDir, onSort, Modifier.weight(1.2f))
             SortHeader("Best Margin", SortCol.BEST_MARGIN, sortCol, sortDir, onSort, Modifier.weight(1.4f))
             SortHeader("Volume", SortCol.VOLUME, sortCol, sortDir, onSort, Modifier.weight(2.5f))
+            SortHeader("Total", SortCol.TOTAL, sortCol, sortDir, onSort, Modifier.weight(2f))
             SortHeader("Competition", SortCol.COMPETITION, sortCol, sortDir, onSort, Modifier.weight(1.8f))
             SortHeader("Time Left", SortCol.TIME_LEFT, sortCol, sortDir, onSort, Modifier.weight(1.5f))
             StaticHeader("", Modifier.width(36.dp))
@@ -344,11 +347,62 @@ internal fun BuyOrdersTable(
     }
 }
 
+internal enum class HistorySortCol { NAME, TYPE, STATE, PRICE, PROFIT, MARGIN, VOLUME, ISSUED, STATION }
+
+// Profit/margin aren't stored on OrderHistoryRecord (historyPnl derives them from the FIFO
+// result), so they're computed once here rather than re-derived by both the sort and each row.
+internal data class HistoryRowMetrics(
+    val order: OrderHistoryDao.OrderHistoryRecord,
+    val pnl: Double?,
+    val marginPct: Double?,
+)
+
+private fun sortHistoryMetrics(
+    list: List<HistoryRowMetrics>,
+    col: HistorySortCol,
+    dir: SortDir,
+): List<HistoryRowMetrics> {
+    val sorted =
+        when (col) {
+            HistorySortCol.NAME -> list.sortedBy { it.order.typeName }
+            HistorySortCol.TYPE -> list.sortedBy { it.order.isBuyOrder }
+            HistorySortCol.STATE -> list.sortedBy { effectiveOrderState(it.order) }
+            HistorySortCol.PRICE -> list.sortedBy { it.order.price }
+            HistorySortCol.PROFIT -> list.sortedBy { it.pnl ?: Double.NEGATIVE_INFINITY }
+            HistorySortCol.MARGIN -> list.sortedBy { it.marginPct ?: Double.NEGATIVE_INFINITY }
+            HistorySortCol.VOLUME -> list.sortedBy { it.order.volumeTotal }
+            HistorySortCol.ISSUED -> list.sortedBy { it.order.issued }
+            HistorySortCol.STATION -> list.sortedBy { it.order.stationName }
+        }
+    return if (dir == SortDir.DESC) sorted.reversed() else sorted
+}
+
 @Composable
 internal fun OrderHistoryTable(
     orders: List<OrderHistoryDao.OrderHistoryRecord>,
     fifoResult: CostBasisService.FifoResult?,
 ) {
+    var sortCol by remember { mutableStateOf(HistorySortCol.ISSUED) }
+    var sortDir by remember { mutableStateOf(SortDir.DESC) }
+
+    fun toggleSort(col: HistorySortCol) {
+        if (sortCol == col) {
+            sortDir = if (sortDir == SortDir.ASC) SortDir.DESC else SortDir.ASC
+        } else {
+            sortCol = col
+            sortDir = SortDir.DESC
+        }
+    }
+
+    val metrics =
+        remember(orders, fifoResult) {
+            orders.map { order ->
+                val (pnl, margin) = historyPnl(order, fifoResult)
+                HistoryRowMetrics(order, pnl, margin)
+            }
+        }
+    val sorted = sortHistoryMetrics(metrics, sortCol, sortDir)
+
     Column {
         Row(
             modifier =
@@ -359,25 +413,57 @@ internal fun OrderHistoryTable(
                     ).padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            StaticHeader("Name", Modifier.weight(3f))
-            StaticHeader("Type", Modifier.weight(1f))
-            StaticHeader("State", Modifier.weight(1.5f))
-            StaticHeader("Price", Modifier.weight(2f))
-            StaticHeader("Profit", Modifier.weight(2f))
-            StaticHeader("Margin", Modifier.weight(1.2f))
-            StaticHeader("Volume", Modifier.weight(2f))
-            StaticHeader("Issued", Modifier.weight(2f))
-            StaticHeader("Station", Modifier.weight(2.5f))
+            SortHeader("Name", HistorySortCol.NAME, sortCol, sortDir, ::toggleSort, Modifier.weight(3f))
+            SortHeader("Type", HistorySortCol.TYPE, sortCol, sortDir, ::toggleSort, Modifier.weight(1f))
+            SortHeader("State", HistorySortCol.STATE, sortCol, sortDir, ::toggleSort, Modifier.weight(1.5f))
+            SortHeader("Price", HistorySortCol.PRICE, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
+            SortHeader("Profit", HistorySortCol.PROFIT, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
+            SortHeader("Margin", HistorySortCol.MARGIN, sortCol, sortDir, ::toggleSort, Modifier.weight(1.2f))
+            SortHeader("Volume", HistorySortCol.VOLUME, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
+            SortHeader("Issued", HistorySortCol.ISSUED, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
+            SortHeader("Station", HistorySortCol.STATION, sortCol, sortDir, ::toggleSort, Modifier.weight(2.5f))
         }
         HorizontalDivider()
         LazyColumn {
-            items(orders, key = { it.orderId }) { order ->
-                val (pnl, margin) = historyPnl(order, fifoResult)
-                OrderHistoryRow(order, pnl, margin)
+            items(sorted, key = { it.order.orderId }) { m ->
+                OrderHistoryRow(m.order, m.pnl, m.marginPct)
                 HorizontalDivider(thickness = 0.5.dp)
             }
         }
     }
+}
+
+internal enum class InventorySortCol { NAME, QTY, AGE, AVG_COST, TOTAL_COST, SELL_PRICE, PROFIT, MARGIN, REALIZED_PNL }
+
+// Sell price/profit/margin/realized P&L all depend on the active sell order + FIFO lookups below,
+// computed once here rather than re-derived by both the sort and each row.
+private data class InventoryRowMetrics(
+    val item: CostBasisService.InventoryItem,
+    val sellPrice: Double?,
+    val isOwnListing: Boolean,
+    val profitPerUnit: Double?,
+    val marginPct: Double?,
+    val realizedPnl: Double?,
+)
+
+private fun sortInventoryMetrics(
+    list: List<InventoryRowMetrics>,
+    col: InventorySortCol,
+    dir: SortDir,
+): List<InventoryRowMetrics> {
+    val sorted =
+        when (col) {
+            InventorySortCol.NAME -> list.sortedBy { it.item.typeName }
+            InventorySortCol.QTY -> list.sortedBy { it.item.remainingQty }
+            InventorySortCol.AGE -> list.sortedBy { it.item.daysHeld ?: -1 }
+            InventorySortCol.AVG_COST -> list.sortedBy { it.item.avgCostBasis }
+            InventorySortCol.TOTAL_COST -> list.sortedBy { it.item.totalCostBasis }
+            InventorySortCol.SELL_PRICE -> list.sortedBy { it.sellPrice ?: Double.NEGATIVE_INFINITY }
+            InventorySortCol.PROFIT -> list.sortedBy { it.profitPerUnit ?: Double.NEGATIVE_INFINITY }
+            InventorySortCol.MARGIN -> list.sortedBy { it.marginPct ?: Double.NEGATIVE_INFINITY }
+            InventorySortCol.REALIZED_PNL -> list.sortedBy { it.realizedPnl ?: Double.NEGATIVE_INFINITY }
+        }
+    return if (dir == SortDir.DESC) sorted.reversed() else sorted
 }
 
 @Composable
@@ -387,9 +473,35 @@ internal fun InventoryTable(
     fifoResult: CostBasisService.FifoResult?,
     marketPrices: Map<Int, Double>,
 ) {
+    var sortCol by remember { mutableStateOf(InventorySortCol.NAME) }
+    var sortDir by remember { mutableStateOf(SortDir.ASC) }
+
+    fun toggleSort(col: InventorySortCol) {
+        if (sortCol == col) {
+            sortDir = if (sortDir == SortDir.ASC) SortDir.DESC else SortDir.ASC
+        } else {
+            sortCol = col
+            sortDir = SortDir.DESC
+        }
+    }
+
     val sellByType = sellOrders.filter { !it.isBuyOrder && it.state == "active" }.groupBy { it.typeId }
     val realizedByType = fifoResult?.realizedByType ?: emptyMap()
-    val items = inventory.values.sortedBy { it.typeName }
+    val tax = fifoResult?.taxConfig ?: CostBasisService.TaxConfig()
+
+    val metrics =
+        remember(inventory, sellByType, realizedByType, marketPrices, tax) {
+            inventory.values.map { item ->
+                val activeOrder = sellByType[item.typeId]?.maxByOrNull { it.price }
+                val realized = realizedByType[item.typeId]?.sumOf { it.profit }
+                val sellPrice = activeOrder?.price ?: marketPrices[item.typeId]
+                val netSellPrice = sellPrice?.let { it * tax.sellMultiplier }
+                val profitPerUnit = netSellPrice?.let { it - item.avgCostBasis }
+                val marginPct = profitPerUnit?.let { if (item.avgCostBasis > 0) it / item.avgCostBasis * 100 else null }
+                InventoryRowMetrics(item, sellPrice, activeOrder != null, profitPerUnit, marginPct, realized)
+            }
+        }
+    val sorted = sortInventoryMetrics(metrics, sortCol, sortDir)
 
     Column {
         Row(
@@ -401,25 +513,20 @@ internal fun InventoryTable(
                     ).padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            StaticHeader("Name", Modifier.weight(3f))
-            StaticHeader("Qty", Modifier.weight(1.5f))
-            StaticHeader("Age", Modifier.weight(1f))
-            StaticHeader("Avg Cost", Modifier.weight(2f))
-            StaticHeader("Total Cost", Modifier.weight(2f))
-            StaticHeader("Sell Price", Modifier.weight(2f))
-            StaticHeader("Profit/unit", Modifier.weight(2f))
-            StaticHeader("Margin", Modifier.weight(1.2f))
-            StaticHeader("Realized P&L", Modifier.weight(2f))
+            SortHeader("Name", InventorySortCol.NAME, sortCol, sortDir, ::toggleSort, Modifier.weight(3f))
+            SortHeader("Qty", InventorySortCol.QTY, sortCol, sortDir, ::toggleSort, Modifier.weight(1.5f))
+            SortHeader("Age", InventorySortCol.AGE, sortCol, sortDir, ::toggleSort, Modifier.weight(1f))
+            SortHeader("Avg Cost", InventorySortCol.AVG_COST, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
+            SortHeader("Total Cost", InventorySortCol.TOTAL_COST, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
+            SortHeader("Sell Price", InventorySortCol.SELL_PRICE, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
+            SortHeader("Profit/unit", InventorySortCol.PROFIT, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
+            SortHeader("Margin", InventorySortCol.MARGIN, sortCol, sortDir, ::toggleSort, Modifier.weight(1.2f))
+            SortHeader("Realized P&L", InventorySortCol.REALIZED_PNL, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
         }
         HorizontalDivider()
-        val tax = fifoResult?.taxConfig ?: CostBasisService.TaxConfig()
         LazyColumn {
-            items(items, key = { it.typeId }) { item ->
-                val activeOrder = sellByType[item.typeId]?.maxByOrNull { it.price }
-                val realized = realizedByType[item.typeId]?.sumOf { it.profit }
-                val sellPrice = activeOrder?.price ?: marketPrices[item.typeId]
-                val isOwnListing = activeOrder != null
-                InventoryRow(item, sellPrice, isOwnListing, realized, tax)
+            items(sorted, key = { it.item.typeId }) { m ->
+                InventoryRow(m.item, m.sellPrice, m.isOwnListing, m.realizedPnl, tax)
                 HorizontalDivider(thickness = 0.5.dp)
             }
         }

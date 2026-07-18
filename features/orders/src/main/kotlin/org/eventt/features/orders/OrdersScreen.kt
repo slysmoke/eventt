@@ -55,6 +55,7 @@ internal val UNDERCUT_COLOR: Color @Composable get() = warningColor // order has
 internal val ACTIVE_IN_GAME = Color(0xFF4A90D9) // blue — currently open in EVE client
 
 private const val DEFAULT_REGION_ID = 10000002 // The Forge (Jita) — fallback for inventory items with no active order/region context
+private const val SHOW_BEATEN_ONLY_SETTING = "orders.show_beaten_only"
 
 private val beatenFilterIcon: @Composable () -> Unit = {
     Icon(Icons.Default.ArrowDownward, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -266,8 +267,11 @@ fun OrdersScreen(context: ViewContext?) {
     var sortCol by remember { mutableStateOf(SortCol.NAME) }
     var sortDir by remember { mutableStateOf(SortDir.ASC) }
     // Sell tab only: when on, hides every order that isn't currently beaten by a cheaper
-    // competing sell order at the same station. Off (show all) by default.
+    // competing sell order at the same station. Off (show all) by default; persisted.
     var showBeatenOnly by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        showBeatenOnly = withContext(Dispatchers.IO) { StaticDataDao.getSetting(SHOW_BEATEN_ONLY_SETTING) == "true" }
+    }
     // Buy tab only: when on, hides every order that isn't currently outbid by a higher
     // competing buy order region-wide. Off (show all) by default.
     var showOverbidOnly by remember { mutableStateOf(false) }
@@ -739,10 +743,13 @@ fun OrdersScreen(context: ViewContext?) {
         val acting = actingCharId
         if (acting != null) {
             // Show the last-known snapshot immediately — instant on launch instead of an empty
-            // table while the ESI fetch below is in flight.
+            // table while the ESI fetch below is in flight. Always assigned (even when empty):
+            // this effect also re-fires on every character/corp switch, and a stale non-empty
+            // guard here used to leave the *previous* context's orders on screen whenever the
+            // newly-selected one had no cached snapshot yet.
             val cachedOrders =
                 withContext(Dispatchers.IO) { ActiveOrderDao.getAll(characterId = charId, corporationId = corpId) }
-            if (cachedOrders.isNotEmpty()) orders = cachedOrders.map { it.toCharacterOrder() }
+            orders = cachedOrders.map { it.toCharacterOrder() }
 
             val stored = withContext(Dispatchers.IO) { OrderHistoryDao.getAll(characterId = charId, corporationId = corpId) }
             historyOrders = stored
@@ -1051,7 +1058,12 @@ fun OrdersScreen(context: ViewContext?) {
                             ) {
                                 FilterChip(
                                     selected = showBeatenOnly,
-                                    onClick = { showBeatenOnly = !showBeatenOnly },
+                                    onClick = {
+                                        showBeatenOnly = !showBeatenOnly
+                                        scope.launch(Dispatchers.IO) {
+                                            StaticDataDao.setSetting(SHOW_BEATEN_ONLY_SETTING, showBeatenOnly.toString())
+                                        }
+                                    },
                                     label = { Text(if (showBeatenOnly) "Beaten only" else "All orders") },
                                     leadingIcon = if (showBeatenOnly) beatenFilterIcon else null,
                                 )

@@ -124,6 +124,7 @@ internal fun SellOrderRow(
             color = bestMarginColor,
         )
         VolumeBar(order.volumeRemaining, order.volumeTotal, isSell = true, modifier = Modifier.weight(2.5f).padding(horizontal = 4.dp))
+        Text(formatIsk(order.total), modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodyMedium)
         CompetitionCell(metrics.competition, modifier = Modifier.weight(1.8f))
         Text(
             formatDuration(order.timeLeftSeconds),

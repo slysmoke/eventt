@@ -134,12 +134,12 @@ internal fun StatusDot(state: String) {
 }
 
 @Composable
-internal fun SortHeader(
+internal fun <T> SortHeader(
     label: String,
-    col: SortCol,
-    currentCol: SortCol,
+    col: T,
+    currentCol: T,
     dir: SortDir,
-    onSort: (SortCol) -> Unit,
+    onSort: (T) -> Unit,
     modifier: Modifier,
     rightAlign: Boolean = false,
 ) {
@@ -328,19 +328,20 @@ internal fun historyPnl(
     if (filled <= 0) return null to null // nothing actually sold (cancelled/expired with no fills)
 
     val taxConfig = fifoResult.taxConfig
-    val netSellPrice = order.price * taxConfig.sellMultiplier
+    // Relist fees are already netted into realizedSells' profit/margin as a per-type average (see
+    // CostBasisService.compute) — applied here too instead of this order's own relistFeesPaid, so
+    // this figure stays consistent with every other realized-profit number in the app.
+    val netSellPrice = order.price * taxConfig.sellMultiplier - (fifoResult.sellRelistPerUnit[order.typeId] ?: 0.0)
 
-    // Relist fees the order accumulated while active come straight off its profit — they were
-    // paid to keep this exact order competitive, so they belong to it, not to general overhead.
     val fifoProfit = CostBasisService.pnlForOrder(fifoResult, order.typeId, order.issued, filled)
     if (fifoProfit != null) {
         val cb = netSellPrice - fifoProfit / filled
         val margin = if (cb > 0) (netSellPrice - cb) / cb * 100 else 0.0
-        return (fifoProfit - order.relistFeesPaid) to margin
+        return fifoProfit to margin
     }
 
     val cb = fifoResult.avgCostBasisForType(order.typeId) ?: return null to null
-    val profit = (netSellPrice - cb) * filled - order.relistFeesPaid
+    val profit = (netSellPrice - cb) * filled
     val margin = if (cb > 0) (netSellPrice - cb) / cb * 100 else 0.0
     return profit to margin
 }
