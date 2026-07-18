@@ -100,7 +100,7 @@
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
             jdk21
-            gradle
+            gradle_9
             kotlin
             git
             libGL
