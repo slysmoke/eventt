@@ -1,0 +1,31 @@
+# Groups release notes by the verb this repo's commits already start with
+# (Add/Fix/Improve/...) instead of requiring Conventional Commits prefixes.
+# Used by .github/workflows/release.yml to build GitHub release notes.
+
+[changelog]
+header = ""
+body = """
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group }}
+{% for commit in commits %}
+- {{ commit.message | split(pat="\n") | first | trim }}
+{%- endfor %}
+{% endfor %}
+"""
+footer = ""
+trim = true
+
+[git]
+conventional_commits = false
+filter_unconventional = false
+filter_commits = false
+tag_pattern = "v[0-9]*"
+sort_commits = "oldest"
+commit_parsers = [
+  { message = "^(Bump|Merge pull request|Merge remote-tracking|flake:|CI:)", skip = true },
+  { message = "^Add", group = "Added" },
+  { message = "^Fix", group = "Fixed" },
+  { message = "^(Improve|Rework|Unify|Migrate|Switch|Trim|Pin)", group = "Changed" },
+  { message = "^(Remove|Drop|Disable|Exclude|Skip)", group = "Removed" },
+  { message = ".*", group = "Other" },
+]

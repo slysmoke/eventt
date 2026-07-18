@@ -210,11 +210,22 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          # git-cliff needs the full tag history to diff the previous tag against this one —
+          # the default shallow (depth-1) checkout only has this single commit.
+          fetch-depth: 0
 
       - name: Download all artifacts
         uses: actions/download-artifact@v8
         with:
           path: artifacts
+
+      - name: Generate changelog
+        id: cliff
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --latest
 
       - name: Create GitHub Release
         env:
@@ -222,7 +233,7 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" \
             --title "EVE Night Trade Tools $GITHUB_REF_NAME" \
-            --generate-notes \
+            --notes-file "${{ steps.cliff.outputs.changelog }}" \
             artifacts/eventt-linux/eventt-linux.zip \
             artifacts/eventt-windows/eventt-windows.zip \
             artifacts/eventt-macos-x64/eventt-macos-x64.zip \
