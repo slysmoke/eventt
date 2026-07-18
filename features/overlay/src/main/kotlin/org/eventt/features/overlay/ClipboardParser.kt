@@ -59,4 +59,31 @@ object ClipboardParser {
 
         return ParsedOrder(price = price, volume = volume, location = location, isBuy = isBuy)
     }
+
+    data class ManifestLine(
+        val name: String,
+        val quantity: Long,
+    )
+
+    // EVE's "copy" export from an inventory/cargo window: one row per stack, tab-separated, item
+    // name in the first column and quantity as the first integer-looking field after it (extra
+    // columns some players have visible, like Volume or Group, are ignored) -- e.g.
+    // "Dominix Navy Issue\t1\nPurifier\t2". Every non-blank line must fit this shape or the whole
+    // paste is rejected (returns null) rather than silently dropping lines it can't make sense of
+    // -- callers fall back to the single-order-row / single-item-name paths instead.
+    fun parseManifest(text: String?): List<ManifestLine>? {
+        val lines = text?.lines()?.map { it.trim() }?.filter { it.isNotEmpty() } ?: return null
+        if (lines.isEmpty()) return null
+        val parsed = mutableListOf<ManifestLine>()
+        for (line in lines) {
+            val parts = line.split("\t").map { it.trim() }.filter { it.isNotEmpty() }
+            if (parts.size < 2) return null
+            val name = parts[0]
+            if (name.length < 3 || name.none { it.isLetter() }) return null
+            val qty = parts.drop(1).firstNotNullOfOrNull { it.replace(",", "").toLongOrNull() } ?: return null
+            parsed += ManifestLine(name, qty)
+        }
+        // Merge duplicate stacks of the same item (e.g. two cargo holds of the same ammo) into one line.
+        return parsed.groupBy { it.name }.map { (name, group) -> ManifestLine(name, group.sumOf { it.quantity }) }
+    }
 }

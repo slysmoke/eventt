@@ -125,6 +125,14 @@ private fun copyBeatPrice(price: Double): String {
     return text
 }
 
+// Plain ISK total for a pasted inventory list — unlike copyBeatPrice this isn't a price tick to
+// paste into an order dialog, just the raw sum, so no EVE sigfig rounding.
+private fun copyManifestTotal(total: Double): String {
+    val text = "%.2f".format(total)
+    Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
+    return text
+}
+
 @Composable
 private fun OverlayContent(
     onClose: () -> Unit,
@@ -152,6 +160,13 @@ private fun OverlayContent(
     // every order's own price and volume, not just the best one.
     var sellBook by remember { mutableStateOf<List<Pair<Double, Long>>>(emptyList()) }
     var buyBook by remember { mutableStateOf<List<Pair<Double, Long>>>(emptyList()) }
+
+    // Pasted inventory/cargo list (name+quantity per line) → total liquidation value, priced off
+    // each item's best Jita buy order (what you'd actually get selling into the book right now).
+    var manifestTotal by remember { mutableStateOf<Double?>(null) }
+    var manifestResolved by remember { mutableStateOf(0) }
+    var manifestUnresolved by remember { mutableStateOf<List<String>>(emptyList()) }
+    var autoCopyManifest by remember { mutableStateOf(prefs.getBoolean("autoCopyManifest", false)) }
 
     // Tax rates come from the currently active character's own configured fees (Settings ›
     // Character Fees) instead of a manual slider here — one less place to keep in sync.
@@ -182,6 +197,41 @@ private fun OverlayContent(
             val text = ClipboardParser.readClipboard()
             if (text != null && text != lastClipboard) {
                 lastClipboard = text
+                val manifest = ClipboardParser.parseManifest(text)
+                if (manifest != null) {
+                    withContext(Dispatchers.IO) {
+                        var total = 0.0
+                        var resolved = 0
+                        val unresolved = mutableListOf<String>()
+                        for (line in manifest) {
+                            val type =
+                                runCatching { StaticDataDao.searchMarketTypes(line.name, limit = 1).firstOrNull() }
+                                    .getOrNull()
+                                    ?.takeIf { it.name.equals(line.name, ignoreCase = true) }
+                            val bestBuy =
+                                type
+                                    ?.let { fetchTypeBook(it.typeId) }
+                                    ?.second
+                                    ?.maxByOrNull { it.first }
+                                    ?.first
+                            if (bestBuy != null) {
+                                total += bestBuy * line.quantity
+                                resolved++
+                            } else {
+                                unresolved += line.name
+                            }
+                        }
+                        withContext(Dispatchers.Main) {
+                            manifestTotal = total
+                            manifestResolved = resolved
+                            manifestUnresolved = unresolved
+                            if (autoCopyManifest) {
+                                lastClipboard = copyManifestTotal(total)
+                            }
+                        }
+                    }
+                    continue
+                }
                 val p = ClipboardParser.parse(text)
                 if (p == null) {
                     // Not an order row — maybe a copied item name: exact market-type match pulls
@@ -496,6 +546,42 @@ private fun OverlayContent(
                                 avgTopPrice(buyBook, cheapestFirst = false)?.let {
                                     CalcRow("Buy wall: avg (top 5%)", fmtIsk(it), dimText)
                                 }
+                            }
+                        }
+                    }
+
+                    // ─── Inventory value — pasted name+quantity list from a cargo/inventory window
+                    if (manifestTotal != null) {
+                        HorizontalDivider(color = overlayBorder)
+                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Inventory value", color = dimText, style = MaterialTheme.typography.labelSmall)
+                                Spacer(Modifier.weight(1f))
+                                TextButton(
+                                    onClick = {
+                                        autoCopyManifest = !autoCopyManifest
+                                        prefs.putBoolean("autoCopyManifest", autoCopyManifest)
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                                    modifier = Modifier.height(22.dp),
+                                ) {
+                                    Text(
+                                        "AUTO-COPY",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (autoCopyManifest) accent else dimText,
+                                        fontWeight = if (autoCopyManifest) FontWeight.Bold else FontWeight.Normal,
+                                    )
+                                }
+                            }
+                            CalcRow("Total ($manifestResolved items)", fmtIsk(manifestTotal!!), buyColor, bold = true)
+                            if (manifestUnresolved.isNotEmpty()) {
+                                Text(
+                                    "Unresolved: ${manifestUnresolved.joinToString(", ")}",
+                                    color = dimText,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
                             }
                         }
                     }
