@@ -1,6 +1,5 @@
 package org.eventt
 
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
@@ -10,6 +9,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import org.eventt.app.generated.resources.Res
+import org.eventt.app.generated.resources.icon
 import org.eventt.core.cache.EsiCacheManager
 import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.DatabaseManager
@@ -24,6 +25,7 @@ import org.eventt.features.orders.MarketWatchService
 import org.eventt.features.orders.PendingOrdersQueue
 import org.eventt.notify.TrayNotifier
 import org.eventt.ui.EventtApp
+import org.jetbrains.compose.resources.painterResource
 
 // Fake ESI character ID (outside EVE's real ID range) used only to give the P2P Market
 // test instance (see scripts/run-p2p-test.sh) a character to hang a Nostr identity off of —
@@ -107,7 +109,7 @@ fun main() {
         Window(
             title = if (isP2pTestInstance) "EVE Night Trade Tools — P2P TEST" else "EVE Night Trade Tools",
             state = rememberWindowState(width = 1200.dp, height = 800.dp),
-            icon = painterResource("icon.png"),
+            icon = painterResource(Res.drawable.icon),
             onCloseRequest = {
                 GlobalHotkeyService.stop()
                 MarketLogWatcher.stop()
