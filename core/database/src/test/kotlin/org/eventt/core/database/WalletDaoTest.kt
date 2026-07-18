@@ -232,6 +232,62 @@ class WalletDaoTest {
     }
 
     @Test
+    fun `insertTransaction does not let a later personal sync overwrite a transaction already attributed to a corp`() {
+        WalletDao.insertTransaction(
+            transactionId = 1,
+            date = "2024-01-01",
+            typeId = 34,
+            typeName = "Tritanium",
+            quantity = 100,
+            unitPrice = 5.0,
+            total = 500.0,
+            isBuy = false,
+            clientId = 0,
+            clientName = "",
+            locationId = 0L,
+            locationName = "",
+            isCorp = true,
+            characterId = null,
+            corporationId = 999,
+        )
+
+        // A later personal re-sync of the character's own wallet transactions happens to include
+        // the same ESI transaction_id (the character funded it through the corp wallet).
+        insertTx(1, "2024-01-01", isBuy = false, total = 500.0, characterId = 1)
+
+        val row = WalletDao.getTransactions(corporationId = 999).single()
+        row["corporation_id"] shouldBe 999
+        WalletDao.getTransactions(characterId = 1) shouldHaveSize 0
+    }
+
+    @Test
+    fun `insertJournalEntry does not let a later personal sync overwrite an entry already attributed to a corp`() {
+        WalletDao.insertJournalEntry(
+            entryId = 1,
+            date = "2024-01-01T10:00:00",
+            amount = -16.0,
+            balance = 1000.0,
+            reason = "",
+            refType = "transaction_tax",
+            firstPartyId = 0,
+            firstPartyName = "",
+            secondPartyId = 0,
+            secondPartyName = "",
+            taxAmount = null,
+            isCorp = true,
+            characterId = null,
+            corporationId = 999,
+            divisionId = 1,
+        )
+
+        insertJournal(1, "2024-01-01T10:00:00", amount = -16.0, balance = 1000.0, characterId = 1)
+
+        val row = WalletDao.getJournalEntries(corporationId = 999).single()
+        row["corporation_id"] shouldBe 999
+        WalletDao.getJournalEntries(characterId = 1) shouldHaveSize 0
+    }
+
+    @Test
     fun `getTradingPnlBreakdown ignores market escrow and other non-trading journal entries`() {
         insertTx(1, "2024-01-01", isBuy = false, total = 200.0)
         insertJournal(101, "2024-01-01T10:00:00", amount = -500.0, balance = 1000.0, refType = "market_escrow")

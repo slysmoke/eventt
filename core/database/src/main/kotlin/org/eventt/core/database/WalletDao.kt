@@ -5,6 +5,21 @@ import org.eventt.core.model.WalletSummary
 import org.eventt.core.model.utcToLocalDateTime
 
 object WalletDao {
+    // Both transactions and journal are keyed by ESI's own id (transaction_id/entry_id), so a
+    // personal sync re-inserting a row that's already attributed to a corporation would silently
+    // flip it back to personal (INSERT OR REPLACE on the same primary key) — that corp attribution
+    // must win once established, since ESI's character-scoped wallet endpoints aren't guaranteed
+    // to exclude entries that are actually funded through a corp wallet division.
+    private fun java.sql.Connection.isAlreadyCorpOwned(
+        table: String,
+        idColumn: String,
+        id: Long,
+    ): Boolean =
+        prepareStatement("SELECT 1 FROM $table WHERE $idColumn = ? AND corporation_id IS NOT NULL").use { stmt ->
+            stmt.setLong(1, id)
+            stmt.executeQuery().use { it.next() }
+        }
+
     // ─── Transactions ─────────────────────────────────────────────────────
 
     fun insertTransaction(
@@ -25,6 +40,7 @@ object WalletDao {
         corporationId: Int?,
     ) {
         DatabaseManager.transaction {
+            if (!isCorp && isAlreadyCorpOwned("transactions", "transaction_id", transactionId)) return@transaction
             prepareStatement(
                 """
                 INSERT OR REPLACE INTO transactions (transaction_id, date, type_id, type_name, quantity, unit_price, total, is_buy, client_id, client_name, location_id, location_name, is_corp, character_id, corporation_id)
@@ -174,6 +190,7 @@ object WalletDao {
         divisionId: Int?,
     ) {
         DatabaseManager.transaction {
+            if (!isCorp && isAlreadyCorpOwned("journal", "entry_id", entryId)) return@transaction
             prepareStatement(
                 """
                 INSERT OR REPLACE INTO journal (entry_id, date, amount, balance, reason, ref_type, first_party_id, first_party_name, second_party_id, second_party_name, tax_amount, is_corp, character_id, corporation_id, division_id)
