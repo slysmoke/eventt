@@ -42,12 +42,17 @@ class EsiClientTest {
         EsiCacheManager.clearAll()
         RequestQueueManager.clearAll()
         mockkObject(SsoAuthManager)
+        // Otherwise the first getRaw() call in the suite triggers a real fetch of the real ESI's
+        // /meta/status before hitting the MockWebServer.
+        mockkObject(EsiStatusService)
+        every { EsiStatusService.isHealthy(any(), any()) } returns true
     }
 
     @AfterEach
     fun tearDown() {
         server.shutdown()
         unmockkObject(SsoAuthManager)
+        unmockkObject(EsiStatusService)
     }
 
     @Test
@@ -115,6 +120,28 @@ class EsiClientTest {
         val (body, _) = EsiClient.getRaw(endpoint)
 
         body shouldBe """{"stale":true}"""
+    }
+
+    @Test
+    fun `getRaw serves stale cache without hitting the server when ESI reports the endpoint degraded`() {
+        val endpoint = "/test-degraded-stale/"
+        val fullParams = mapOf("datasource" to "tranquility")
+        EsiCacheManager.save(endpoint, fullParams, data = """{"stale":true}""", expiresAtMs = System.currentTimeMillis() - 1_000)
+        every { EsiStatusService.isHealthy(any(), any()) } returns false
+
+        val (body, _) = EsiClient.getRaw(endpoint)
+
+        body shouldBe """{"stale":true}"""
+        server.requestCount shouldBe 0
+    }
+
+    @Test
+    fun `getRaw throws EsiDegradedException when the endpoint is degraded and there is no cached data`() {
+        every { EsiStatusService.isHealthy(any(), any()) } returns false
+
+        org.junit.jupiter.api.Assertions.assertThrows(EsiDegradedException::class.java) {
+            EsiClient.getRaw("/test-degraded-miss/")
+        }
     }
 
     @Test

@@ -180,6 +180,15 @@ object EsiClient {
             return cacheResult.data!! to EsiResponseMetadata()
         }
 
+        // ESI itself reports this route degraded — ride out a stale snapshot rather than spend a
+        // request that's likely to fail, or fail fast rather than hang the caller on a doomed call.
+        if (!EsiStatusService.isHealthy("GET", endpoint)) {
+            if (cacheResult.state == CacheState.STALE && cacheResult.data != null) {
+                return cacheResult.data!! to EsiResponseMetadata()
+            }
+            throw EsiDegradedException(endpoint)
+        }
+
         val queryString = fullParams.entries.joinToString("&") { "${it.key}=${it.value}" }
         val url = "$esiBaseUrl$endpoint${if (queryString.isNotEmpty()) "?$queryString" else ""}"
 
