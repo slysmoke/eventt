@@ -9,8 +9,16 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # ktlintFormat below can push a formatting-fix commit back to the branch.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Empty for push events, which checkout treats as "default ref" (the pushed commit) —
+          # only pull_request needs this, to get the actual PR branch instead of the ephemeral
+          # merge commit checkout defaults to (which has nowhere to push a fix commit back to).
+          ref: ${{ github.head_ref }}
 
       - uses: actions/setup-java@v5
         with:
@@ -27,6 +35,19 @@ jobs:
 
       - name: Run ktlint format
         run: ./gradlew ktlintFormat
+
+      # Same-repo only: a fork PR's GITHUB_TOKEN has no push access to the fork, and shouldn't --
+      # ktlintCheck below still catches unformatted forked contributions, it just can't self-fix.
+      - name: Commit formatting fixes
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "style: auto-format via ktlint"
+            git push
+          fi
 
       - name: Run tests
         run: ./gradlew test
