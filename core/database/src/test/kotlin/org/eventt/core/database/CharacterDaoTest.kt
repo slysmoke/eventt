@@ -32,7 +32,12 @@ class CharacterDaoTest {
 
     @AfterEach
     fun cleanUp() {
-        DatabaseManager.transaction { createStatement().use { it.execute("DELETE FROM characters") } }
+        DatabaseManager.transaction {
+            createStatement().use {
+                it.execute("DELETE FROM characters")
+                it.execute("DELETE FROM corporations")
+            }
+        }
     }
 
     private fun character(
@@ -124,5 +129,26 @@ class CharacterDaoTest {
         CharacterDao.insert(character(corporationId = null))
 
         CharacterDao.getById(1)?.corporationId.shouldBeNull()
+    }
+
+    @Test
+    fun `delete also drops the corporation once no character remains in it`() {
+        CorporationDao.insert(id = 200, name = "Test Corp", ticker = "TEST", allianceId = null)
+        CharacterDao.insert(character(id = 1))
+
+        CharacterDao.delete(1)
+
+        CorporationDao.getAll().any { it["id"] == 200 } shouldBe false
+    }
+
+    @Test
+    fun `delete keeps the corporation while another character still belongs to it`() {
+        CorporationDao.insert(id = 200, name = "Test Corp", ticker = "TEST", allianceId = null)
+        CharacterDao.insert(character(id = 1))
+        CharacterDao.insert(character(id = 2))
+
+        CharacterDao.delete(1)
+
+        CorporationDao.getAll().any { it["id"] == 200 } shouldBe true
     }
 }

@@ -123,6 +123,12 @@ object DatabaseManager {
                 // responses) — rows above a size threshold are stored deflated, flagged here.
                 // Old uncompressed rows keep compressed=0 and churn out via refresh/cleanup.
                 "ALTER TABLE esi_cache ADD COLUMN compressed INTEGER DEFAULT 0",
+                // Cleans up corporations left behind by character deletions that predate
+                // CharacterDao.delete() dropping the now-unreferenced corp row itself.
+                """
+                DELETE FROM corporations WHERE id NOT IN
+                    (SELECT corporation_id FROM characters WHERE corporation_id IS NOT NULL)
+                """,
             )
         conn.createStatement().use { stmt ->
             migrations.forEach { sql ->

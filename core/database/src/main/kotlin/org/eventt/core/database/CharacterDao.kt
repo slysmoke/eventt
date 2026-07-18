@@ -76,11 +76,31 @@ object CharacterDao {
         }
     }
 
+    // Also drops the character's corporation row once no other locally-added character
+    // belongs to it — otherwise it lingers in `corporations` forever with nothing referencing it.
     fun delete(id: Int) {
         DatabaseManager.transaction {
+            val corporationId =
+                prepareStatement("SELECT corporation_id FROM characters WHERE id = ?").use { stmt ->
+                    stmt.setInt(1, id)
+                    stmt.executeQuery().use { rs ->
+                        if (rs.next()) rs.getInt("corporation_id").takeIf { !rs.wasNull() } else null
+                    }
+                }
             prepareStatement("DELETE FROM characters WHERE id = ?").use { stmt ->
                 stmt.setInt(1, id)
                 stmt.executeUpdate()
+            }
+            if (corporationId != null) {
+                prepareStatement(
+                    """
+                    DELETE FROM corporations WHERE id = ? AND id NOT IN
+                        (SELECT corporation_id FROM characters WHERE corporation_id IS NOT NULL)
+                    """.trimIndent(),
+                ).use { stmt ->
+                    stmt.setInt(1, corporationId)
+                    stmt.executeUpdate()
+                }
             }
         }
     }
