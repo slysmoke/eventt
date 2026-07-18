@@ -62,6 +62,8 @@ fun DashboardScreen(
     var recentTx by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
     var topWinners by remember { mutableStateOf<List<ItemPnl>>(emptyList()) }
     var topLosers by remember { mutableStateOf<List<ItemPnl>>(emptyList()) }
+    var topSellers by remember { mutableStateOf<List<CounterpartyStat>>(emptyList()) }
+    var topBuyers by remember { mutableStateOf<List<CounterpartyStat>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
 
     LaunchedEffect(context, refreshTrigger, combined) {
@@ -85,7 +87,11 @@ fun DashboardScreen(
                     }
                 txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = qCharId, corporationId = qCorpId, since = since90)
                 assetValue = if (context != null) AssetDao.getTotalValue(characterId = qCharId, corporationId = qCorpId) else 0.0
-                recentTx = WalletDao.getTransactions(characterId = qCharId, corporationId = qCorpId, limit = 12)
+                val txWindow = WalletDao.getTransactions(characterId = qCharId, corporationId = qCorpId, limit = 2000)
+                recentTx = txWindow.take(12)
+                val (sellers, buyers) = computeCounterpartyStats(txWindow)
+                topSellers = sellers
+                topBuyers = buyers
             } catch (e: Exception) {
                 AppLog.warn("Dashboard", e)
             }
@@ -170,7 +176,11 @@ fun DashboardScreen(
                         } catch (_: Exception) {
                         }
                     }
-                    recentTx = WalletDao.getTransactions(characterId = charId, corporationId = corpId, limit = 12)
+                    val txWindow = WalletDao.getTransactions(characterId = charId, corporationId = corpId, limit = 2000)
+                    recentTx = txWindow.take(12)
+                    val (sellers, buyers) = computeCounterpartyStats(txWindow)
+                    topSellers = sellers
+                    topBuyers = buyers
                     txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = charId, corporationId = corpId, since = since90)
                 } catch (e: Exception) {
                     AppLog.warn("Dashboard", "transactions ESI: ${e.message}")
@@ -378,7 +388,7 @@ fun DashboardScreen(
                 verticalAlignment = Alignment.Top,
             ) {
                 Card(
-                    modifier = Modifier.weight(0.6f),
+                    modifier = Modifier.weight(1f),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
@@ -401,7 +411,7 @@ fun DashboardScreen(
                 }
 
                 Card(
-                    modifier = Modifier.weight(0.4f),
+                    modifier = Modifier.weight(1f),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
@@ -419,6 +429,45 @@ fun DashboardScreen(
                                 )
                             }
                             topLosers.forEach { ItemPnlRow(it) }
+                        }
+                    }
+                }
+
+                Card(
+                    modifier = Modifier.weight(1f),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        SectionHeader("Top Buyers & Sellers")
+                        Spacer(Modifier.height(8.dp))
+                        if (topSellers.isEmpty() && topBuyers.isEmpty()) {
+                            EmptyHint("No transactions recorded")
+                        } else {
+                            Text(
+                                "Sellers",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            )
+                            if (topSellers.isEmpty()) {
+                                EmptyHint("No purchases recorded")
+                            } else {
+                                topSellers.forEach { CounterpartyRow(it) }
+                            }
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 4.dp),
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                            )
+                            Text(
+                                "Buyers",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            )
+                            if (topBuyers.isEmpty()) {
+                                EmptyHint("No sales recorded")
+                            } else {
+                                topBuyers.forEach { CounterpartyRow(it) }
+                            }
                         }
                     }
                 }
@@ -683,6 +732,34 @@ private data class ItemPnl(
     val qty: Int,
 )
 
+// A trading counterparty ranked by ISK moved. A transaction's client is whoever was on the other
+// side of it: is_buy=true means we bought, so the client sold to us (a seller); is_buy=false means
+// we sold, so the client bought from us (a buyer).
+private data class CounterpartyStat(
+    val name: String,
+    val total: Double,
+    val count: Int,
+)
+
+private fun txTotal(tx: Map<String, Any?>): Double {
+    val unitPrice = (tx["unit_price"] as? Number)?.toDouble() ?: 0.0
+    val quantity = (tx["quantity"] as? Number)?.toInt() ?: 0
+    return (tx["total"] as? Number)?.toDouble()?.takeIf { it > 0 } ?: (unitPrice * quantity)
+}
+
+// Top 5 sellers (transactions where we bought) and top 5 buyers (where we sold), ranked by total
+// ISK traded with that client over whatever transaction window is passed in.
+private fun computeCounterpartyStats(transactions: List<Map<String, Any?>>): Pair<List<CounterpartyStat>, List<CounterpartyStat>> {
+    fun rank(isBuy: Boolean) =
+        transactions
+            .filter { (it["is_buy"] as? Boolean) == isBuy }
+            .groupBy { (it["client_name"] as? String)?.ifEmpty { null } ?: "Unknown" }
+            .map { (name, txs) -> CounterpartyStat(name, txs.sumOf(::txTotal), txs.size) }
+            .sortedByDescending { it.total }
+            .take(5)
+    return rank(isBuy = true) to rank(isBuy = false)
+}
+
 @Composable
 private fun ItemPnlRow(item: ItemPnl) {
     val color = if (item.profit >= 0) positiveColor else negativeColor
@@ -704,6 +781,30 @@ private fun ItemPnlRow(item: ItemPnl) {
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium,
             color = color,
+        )
+    }
+}
+
+@Composable
+private fun CounterpartyRow(stat: CounterpartyStat) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(stat.name, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                "${stat.count} trade${if (stat.count == 1) "" else "s"}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+            )
+        }
+        Text(
+            formatIsk(stat.total),
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
         )
     }
 }
