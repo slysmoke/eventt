@@ -7,37 +7,11 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ── Tests + linters gate the whole release — nothing packages until this passes ────
-  verify:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-java@v5
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-
-      - uses: actions/cache@v6
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-linux-${{ hashFiles('**/*.gradle.kts', 'gradle/libs.versions.toml') }}
-          restore-keys: gradle-linux-
-
-      - name: Run tests
-        run: ./gradlew test
-
-      - name: Run ktlint
-        run: ./gradlew ktlintCheck
-
-      - name: Run detekt
-        run: ./gradlew detekt
-
   # ── Build on each platform ────────────────────────────────────────────────
+  # No separate verify/lint gate here — build.yml already runs tests + ktlint + detekt on
+  # every push/PR to main, so by release time the commit has already passed those. The
+  # per-platform smoke test below is the real functional check for a release build.
   build:
-    needs: verify
     strategy:
       fail-fast: false
       matrix:
