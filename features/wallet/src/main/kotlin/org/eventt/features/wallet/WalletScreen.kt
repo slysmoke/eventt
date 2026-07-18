@@ -2,6 +2,7 @@ package org.eventt.features.wallet
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -170,6 +171,77 @@ fun WalletScreen(context: ViewContext?) {
     LoadingOverlay(isLoading = isLoading, message = "Loading wallet data...")
 }
 
+private enum class SortDirection { ASC, DESC }
+
+/** Clickable column header — click toggles sort on this column, arrow shows direction only when active. */
+@Composable
+private fun SortHeaderCell(
+    label: String,
+    modifier: Modifier = Modifier,
+    active: Boolean,
+    direction: SortDirection,
+    rightAlign: Boolean = false,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = modifier.clickable(onClick = onClick),
+        horizontalArrangement = if (rightAlign) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.SemiBold,
+        )
+        if (active) {
+            Icon(
+                if (direction == SortDirection.ASC) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                contentDescription = null,
+                modifier = Modifier.size(12.dp).padding(start = 2.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PaginationBar(
+    page: Int,
+    totalPages: Int,
+    totalCount: Int,
+    onPageChange: (Int) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "$totalCount entries",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            IconButton(onClick = { onPageChange(page - 1) }, enabled = page > 0) {
+                Icon(Icons.Default.ChevronLeft, contentDescription = "Previous page")
+            }
+            Text("Page ${page + 1} of $totalPages", style = MaterialTheme.typography.bodySmall)
+            IconButton(onClick = { onPageChange(page + 1) }, enabled = page < totalPages - 1) {
+                Icon(Icons.Default.ChevronRight, contentDescription = "Next page")
+            }
+        }
+    }
+}
+
+private enum class TxSortColumn { DATE, SIDE, ITEM, QTY, UNIT_PRICE, TOTAL, CLIENT, STATION }
+
+private fun txTotal(tx: Map<String, Any?>): Double {
+    val unitPrice = (tx["unit_price"] as? Number)?.toDouble() ?: 0.0
+    val quantity = (tx["quantity"] as? Number)?.toInt() ?: 0
+    return (tx["total"] as? Number)?.toDouble()?.takeIf { it > 0 } ?: (unitPrice * quantity)
+}
+
 @Composable
 private fun TransactionList(transactions: List<Map<String, Any?>>) {
     if (transactions.isEmpty()) {
@@ -177,7 +249,72 @@ private fun TransactionList(transactions: List<Map<String, Any?>>) {
         return
     }
 
-    Column {
+    var searchQuery by remember { mutableStateOf("") }
+    var sortColumn by remember { mutableStateOf(TxSortColumn.DATE) }
+    var sortDirection by remember { mutableStateOf(SortDirection.DESC) }
+    var page by remember { mutableStateOf(0) }
+
+    fun toggleSort(column: TxSortColumn) {
+        if (sortColumn == column) {
+            sortDirection = if (sortDirection == SortDirection.ASC) SortDirection.DESC else SortDirection.ASC
+        } else {
+            sortColumn = column
+            sortDirection = SortDirection.DESC
+        }
+    }
+
+    val filtered =
+        remember(transactions, searchQuery) {
+            val q = searchQuery.trim()
+            if (q.isEmpty()) {
+                transactions
+            } else {
+                transactions.filter { tx ->
+                    listOfNotNull(
+                        tx["type_name"]?.toString(),
+                        tx["client_name"]?.toString(),
+                        tx["location_name"]?.toString(),
+                    ).any { it.contains(q, ignoreCase = true) }
+                }
+            }
+        }
+
+    val sorted =
+        remember(filtered, sortColumn, sortDirection) {
+            val comparator: Comparator<Map<String, Any?>> =
+                when (sortColumn) {
+                    TxSortColumn.DATE -> compareBy { it["date"]?.toString() ?: "" }
+                    TxSortColumn.SIDE -> compareBy { (it["is_buy"] as? Boolean) ?: false }
+                    TxSortColumn.ITEM -> compareBy { it["type_name"]?.toString() ?: "" }
+                    TxSortColumn.QTY -> compareBy { (it["quantity"] as? Number)?.toInt() ?: 0 }
+                    TxSortColumn.UNIT_PRICE -> compareBy { (it["unit_price"] as? Number)?.toDouble() ?: 0.0 }
+                    TxSortColumn.TOTAL -> compareBy { txTotal(it) }
+                    TxSortColumn.CLIENT -> compareBy { it["client_name"]?.toString() ?: "" }
+                    TxSortColumn.STATION -> compareBy { it["location_name"]?.toString() ?: "" }
+                }
+            filtered.sortedWith(if (sortDirection == SortDirection.DESC) comparator.reversed() else comparator)
+        }
+
+    LaunchedEffect(transactions, searchQuery) { page = 0 }
+
+    val pageSize = 100
+    val totalPages = maxOf(1, (sorted.size + pageSize - 1) / pageSize)
+    val clampedPage = page.coerceIn(0, totalPages - 1)
+    val pageItems = sorted.drop(clampedPage * pageSize).take(pageSize)
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        SearchField(
+            query = searchQuery,
+            onQueryChange = { searchQuery = it },
+            placeholder = "Search item, client, station...",
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+
+        if (sorted.isEmpty()) {
+            EmptyState(icon = Icons.Default.Receipt, title = "No Matches", description = "No transactions match your search.")
+            return
+        }
+
         // Header
         Row(
             modifier =
@@ -187,25 +324,50 @@ private fun TransactionList(transactions: List<Map<String, Any?>>) {
                     .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TxHeader("Date", Modifier.weight(1.8f))
-            TxHeader("B/S", Modifier.weight(0.6f))
-            TxHeader("Item", Modifier.weight(3f))
-            TxHeader("Qty", Modifier.weight(1f), rightAlign = true)
-            TxHeader("Unit Price", Modifier.weight(2f), rightAlign = true)
-            TxHeader("Total", Modifier.weight(2f), rightAlign = true)
-            TxHeader("Client", Modifier.weight(2f))
-            TxHeader("Station", Modifier.weight(2.5f))
+            SortHeaderCell("Date", Modifier.weight(1.8f), sortColumn == TxSortColumn.DATE, sortDirection) { toggleSort(TxSortColumn.DATE) }
+            SortHeaderCell("B/S", Modifier.weight(0.6f), sortColumn == TxSortColumn.SIDE, sortDirection) { toggleSort(TxSortColumn.SIDE) }
+            SortHeaderCell("Item", Modifier.weight(3f), sortColumn == TxSortColumn.ITEM, sortDirection) { toggleSort(TxSortColumn.ITEM) }
+            SortHeaderCell(
+                "Qty",
+                Modifier.weight(1f),
+                sortColumn == TxSortColumn.QTY,
+                sortDirection,
+                rightAlign = true,
+            ) { toggleSort(TxSortColumn.QTY) }
+            SortHeaderCell(
+                "Unit Price",
+                Modifier.weight(2f),
+                sortColumn == TxSortColumn.UNIT_PRICE,
+                sortDirection,
+                rightAlign = true,
+            ) { toggleSort(TxSortColumn.UNIT_PRICE) }
+            SortHeaderCell(
+                "Total",
+                Modifier.weight(2f),
+                sortColumn == TxSortColumn.TOTAL,
+                sortDirection,
+                rightAlign = true,
+            ) { toggleSort(TxSortColumn.TOTAL) }
+            SortHeaderCell(
+                "Client",
+                Modifier.weight(2f),
+                sortColumn == TxSortColumn.CLIENT,
+                sortDirection,
+            ) { toggleSort(TxSortColumn.CLIENT) }
+            SortHeaderCell(
+                "Station",
+                Modifier.weight(2.5f),
+                sortColumn == TxSortColumn.STATION,
+                sortDirection,
+            ) { toggleSort(TxSortColumn.STATION) }
         }
         HorizontalDivider()
-        LazyColumn(modifier = Modifier.fillMaxWidth()) {
-            items(transactions) { tx ->
+        LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            items(pageItems) { tx ->
                 val isBuy = tx["is_buy"] as? Boolean ?: false
                 val unitPrice = (tx["unit_price"] as? Number)?.toDouble() ?: 0.0
                 val quantity = (tx["quantity"] as? Number)?.toInt() ?: 0
-                val total =
-                    (tx["total"] as? Number)
-                        ?.toDouble()
-                        ?.takeIf { it > 0 } ?: (unitPrice * quantity)
+                val total = txTotal(tx)
                 val typeName =
                     tx["type_name"]?.toString()?.ifEmpty { null }
                         ?: "Unknown (${tx["type_id"]})"
@@ -289,6 +451,7 @@ private fun TransactionList(transactions: List<Map<String, Any?>>) {
                 HorizontalDivider(thickness = 0.5.dp)
             }
         }
+        PaginationBar(page = clampedPage, totalPages = totalPages, totalCount = sorted.size, onPageChange = { page = it })
     }
 }
 
@@ -308,6 +471,8 @@ private fun TxHeader(
     )
 }
 
+private enum class JournalSortColumn { DATE, TYPE, DESCRIPTION, AMOUNT, TAX, BALANCE }
+
 @Composable
 private fun JournalList(journal: List<Map<String, Any?>>) {
     if (journal.isEmpty()) {
@@ -318,7 +483,64 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
     val totalTax = journal.filter { it["ref_type"] == "transaction_tax" }.sumOf { (it["amount"] as? Number)?.toDouble() ?: 0.0 }
     val totalBroker = journal.filter { it["ref_type"] == "brokers_fee" }.sumOf { (it["amount"] as? Number)?.toDouble() ?: 0.0 }
 
-    Column {
+    var searchQuery by remember { mutableStateOf("") }
+    var sortColumn by remember { mutableStateOf(JournalSortColumn.DATE) }
+    var sortDirection by remember { mutableStateOf(SortDirection.DESC) }
+    var page by remember { mutableStateOf(0) }
+
+    fun toggleSort(column: JournalSortColumn) {
+        if (sortColumn == column) {
+            sortDirection = if (sortDirection == SortDirection.ASC) SortDirection.DESC else SortDirection.ASC
+        } else {
+            sortColumn = column
+            sortDirection = SortDirection.DESC
+        }
+    }
+
+    val filtered =
+        remember(journal, searchQuery) {
+            val q = searchQuery.trim()
+            if (q.isEmpty()) {
+                journal
+            } else {
+                journal.filter { entry ->
+                    listOfNotNull(
+                        formatRefType(entry["ref_type"]?.toString() ?: ""),
+                        entry["reason"]?.toString(),
+                    ).any { it.contains(q, ignoreCase = true) }
+                }
+            }
+        }
+
+    val sorted =
+        remember(filtered, sortColumn, sortDirection) {
+            val comparator: Comparator<Map<String, Any?>> =
+                when (sortColumn) {
+                    JournalSortColumn.DATE -> compareBy { it["date"]?.toString() ?: "" }
+                    JournalSortColumn.TYPE -> compareBy { formatRefType(it["ref_type"]?.toString() ?: "") }
+                    JournalSortColumn.DESCRIPTION -> compareBy { it["reason"]?.toString()?.trim() ?: "" }
+                    JournalSortColumn.AMOUNT -> compareBy { (it["amount"] as? Number)?.toDouble() ?: 0.0 }
+                    JournalSortColumn.TAX -> compareBy { (it["tax_amount"] as? Number)?.toDouble() ?: 0.0 }
+                    JournalSortColumn.BALANCE -> compareBy { (it["balance"] as? Number)?.toDouble() ?: 0.0 }
+                }
+            filtered.sortedWith(if (sortDirection == SortDirection.DESC) comparator.reversed() else comparator)
+        }
+
+    LaunchedEffect(journal, searchQuery) { page = 0 }
+
+    val pageSize = 100
+    val totalPages = maxOf(1, (sorted.size + pageSize - 1) / pageSize)
+    val clampedPage = page.coerceIn(0, totalPages - 1)
+    val pageItems = sorted.drop(clampedPage * pageSize).take(pageSize)
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        SearchField(
+            query = searchQuery,
+            onQueryChange = { searchQuery = it },
+            placeholder = "Search type, description...",
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+
         // Tax summary
         if (totalTax != 0.0 || totalBroker != 0.0) {
             Surface(
@@ -388,6 +610,11 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
             Spacer(modifier = Modifier.height(6.dp))
         }
 
+        if (sorted.isEmpty()) {
+            EmptyState(icon = Icons.AutoMirrored.Filled.List, title = "No Matches", description = "No journal entries match your search.")
+            return
+        }
+
         // Table header
         Row(
             modifier =
@@ -397,17 +624,50 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
                     .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TxHeader("Date", Modifier.weight(1.8f))
-            TxHeader("Type", Modifier.weight(2.5f))
-            TxHeader("Description", Modifier.weight(3f))
-            TxHeader("Amount", Modifier.weight(2f), rightAlign = true)
-            TxHeader("Tax", Modifier.weight(1.5f), rightAlign = true)
-            TxHeader("Balance", Modifier.weight(2f), rightAlign = true)
+            SortHeaderCell(
+                "Date",
+                Modifier.weight(1.8f),
+                sortColumn == JournalSortColumn.DATE,
+                sortDirection,
+            ) { toggleSort(JournalSortColumn.DATE) }
+            SortHeaderCell(
+                "Type",
+                Modifier.weight(2.5f),
+                sortColumn == JournalSortColumn.TYPE,
+                sortDirection,
+            ) { toggleSort(JournalSortColumn.TYPE) }
+            SortHeaderCell(
+                "Description",
+                Modifier.weight(3f),
+                sortColumn == JournalSortColumn.DESCRIPTION,
+                sortDirection,
+            ) { toggleSort(JournalSortColumn.DESCRIPTION) }
+            SortHeaderCell(
+                "Amount",
+                Modifier.weight(2f),
+                sortColumn == JournalSortColumn.AMOUNT,
+                sortDirection,
+                rightAlign = true,
+            ) { toggleSort(JournalSortColumn.AMOUNT) }
+            SortHeaderCell(
+                "Tax",
+                Modifier.weight(1.5f),
+                sortColumn == JournalSortColumn.TAX,
+                sortDirection,
+                rightAlign = true,
+            ) { toggleSort(JournalSortColumn.TAX) }
+            SortHeaderCell(
+                "Balance",
+                Modifier.weight(2f),
+                sortColumn == JournalSortColumn.BALANCE,
+                sortDirection,
+                rightAlign = true,
+            ) { toggleSort(JournalSortColumn.BALANCE) }
         }
         HorizontalDivider()
 
-        LazyColumn(modifier = Modifier.fillMaxWidth()) {
-            items(journal) { entry ->
+        LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            items(pageItems) { entry ->
                 val amount = (entry["amount"] as? Number)?.toDouble() ?: 0.0
                 val taxAmount = (entry["tax_amount"] as? Number)?.toDouble()
                 val balance = (entry["balance"] as? Number)?.toDouble() ?: 0.0
@@ -474,6 +734,7 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
                 HorizontalDivider(thickness = 0.5.dp)
             }
         }
+        PaginationBar(page = clampedPage, totalPages = totalPages, totalCount = sorted.size, onPageChange = { page = it })
     }
 }
 
@@ -931,7 +1192,7 @@ private suspend fun loadWalletData(
         dailyCallback(summary.dailyBreakdown)
         pnlCallback(WalletDao.getTradingPnlBreakdown(characterId = characterId, corporationId = corporationId))
         transactionsCallback(
-            resolveAllNames(WalletDao.getTransactions(characterId = characterId, corporationId = corporationId, limit = 200)),
+            resolveAllNames(WalletDao.getTransactions(characterId = characterId, corporationId = corporationId, limit = 5000)),
         )
         journalCallback(WalletDao.getJournalEntries(characterId = characterId, corporationId = corporationId))
 
@@ -1025,7 +1286,7 @@ private suspend fun loadWalletData(
                 }
             }
             transactionsCallback(
-                resolveAllNames(WalletDao.getTransactions(characterId = characterId, corporationId = corporationId, limit = 200)),
+                resolveAllNames(WalletDao.getTransactions(characterId = characterId, corporationId = corporationId, limit = 5000)),
             )
         } catch (e: Exception) {
             println("Error fetching transactions: ${e.message}")
