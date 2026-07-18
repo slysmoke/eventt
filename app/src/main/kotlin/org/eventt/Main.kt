@@ -21,6 +21,7 @@ import org.eventt.core.model.CharacterModel
 import org.eventt.core.model.HotkeyBindings
 import org.eventt.core.nostr.NostrIdentityService
 import org.eventt.core.nostr.NostrRelayManager
+import org.eventt.features.contracts.ContractWatchService
 import org.eventt.features.orders.MarketWatchService
 import org.eventt.features.orders.PendingOrdersQueue
 import org.eventt.notify.TrayNotifier
@@ -99,6 +100,8 @@ fun main() {
     // Watches every character's order books app-wide: competition snapshots, relist detection,
     // beaten-order notifications — regardless of which tab/character is active.
     MarketWatchService.start()
+    // Opt-in background contract refresh + status-change badge — see ContractWatchService.
+    ContractWatchService.start()
     NostrRelayManager.start()
     P2pRequestNotifier.start()
     // Keeps the P2P Market active identity following whichever character (or corp's acting
@@ -114,6 +117,7 @@ fun main() {
                 GlobalHotkeyService.stop()
                 MarketLogWatcher.stop()
                 MarketWatchService.stop()
+                ContractWatchService.stop()
                 NostrRelayManager.stop()
                 exitApplication()
             },

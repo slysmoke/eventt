@@ -14,9 +14,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.ContractDao
+import org.eventt.core.database.StaticDataDao
+import org.eventt.core.database.ViewContext
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.ContractModel
 import org.eventt.ui.common.*
@@ -24,15 +27,86 @@ import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.eventt.ui.theme.warningColor
 
+private const val SHOW_ALL_CONTRACTS_SETTING = "contracts.show_all"
+
 @Composable
-fun ContractTrackerScreen(charId: Int?) {
+fun ContractTrackerScreen(context: ViewContext?) {
     val scope = rememberCoroutineScope()
+    val charId = (context as? ViewContext.Character)?.charId
+    val corpId = (context as? ViewContext.Corporation)?.corporationId
+    val actingCharId = context?.actingCharId
+
     var contracts by remember { mutableStateOf<List<ContractModel>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var statusFilter by remember { mutableStateOf("all") }
+    // Ignores the character/corp scope below and shows every locally-stored contract, across
+    // every character and corporation — mirrors Dashboard's "Combine all" switch. Persisted.
+    var showAll by remember { mutableStateOf(false) }
+    // Persisted; also gates ContractWatchService's background sweep (see there for why it's
+    // opt-in rather than always-on).
+    var autoRefresh by remember { mutableStateOf(false) }
+    var refreshAvailableAt by remember { mutableStateOf<Long?>(null) }
+
+    fun contractsEndpoint(): String? =
+        when {
+            corpId != null -> "/corporations/$corpId/contracts/"
+            charId != null -> "/characters/$charId/contracts/"
+            else -> null
+        }
+
+    fun reload() {
+        contracts =
+            when {
+                showAll && statusFilter == "all" -> ContractDao.getAll()
+                showAll -> ContractDao.getByStatus(statusFilter)
+                statusFilter == "all" -> ContractDao.getAll(characterId = charId, corporationId = corpId)
+                else -> ContractDao.getByStatus(statusFilter, characterId = charId, corporationId = corpId)
+            }
+    }
+
+    fun refresh() {
+        val acting = actingCharId ?: return
+        isLoading = true
+        scope.launch(Dispatchers.IO) {
+            try {
+                ContractSyncService.refresh(characterId = charId, corporationId = corpId, actingCharId = acting)
+                val expiry = contractsEndpoint()?.let { EsiClient.getEndpointExpiry(it) }
+                withContext(Dispatchers.Main) {
+                    reload()
+                    refreshAvailableAt = expiry
+                    isLoading = false
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) { isLoading = false }
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
-        loadContracts { contracts = it }
+        withContext(Dispatchers.IO) {
+            showAll = StaticDataDao.getSetting(SHOW_ALL_CONTRACTS_SETTING) == "true"
+            autoRefresh = StaticDataDao.getSetting(CONTRACTS_AUTO_REFRESH_SETTING) == "true"
+        }
+    }
+
+    LaunchedEffect(context, showAll, statusFilter) {
+        withContext(Dispatchers.IO) { reload() }
+        refreshAvailableAt =
+            if (showAll) {
+                null
+            } else {
+                withContext(Dispatchers.IO) { contractsEndpoint()?.let { EsiClient.getEndpointExpiry(it) } }
+            }
+    }
+
+    // Keeps refreshing this context's contracts on an interval while the toggle is on and this
+    // screen is open — ContractWatchService's own sweep covers the "screen not open" case.
+    LaunchedEffect(autoRefresh, context, showAll) {
+        if (!autoRefresh || showAll || actingCharId == null) return@LaunchedEffect
+        while (true) {
+            delay(CONTRACTS_REFRESH_INTERVAL_MILLIS)
+            refresh()
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -42,57 +116,31 @@ fun ContractTrackerScreen(charId: Int?) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Contract Tracker", style = MaterialTheme.typography.headlineMedium)
-            charId?.let { id ->
-                Button(
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = autoRefresh,
                     onClick = {
-                        isLoading = true
-                        scope.launch(Dispatchers.IO) {
-                            try {
-                                val rawContracts = EsiClient.getCharacterContracts(id)
-                                val models =
-                                    rawContracts.mapNotNull { raw ->
-                                        val contractId = (raw["contract_id"] as? Number)?.toInt() ?: return@mapNotNull null
-                                        ContractModel(
-                                            contractId = contractId,
-                                            issuerId = (raw["issuer_id"] as? Number)?.toInt() ?: 0,
-                                            issuerCorpId = (raw["issuer_corporation_id"] as? Number)?.toInt() ?: 0,
-                                            assigneeId = (raw["assignee_id"] as? Number)?.toInt() ?: 0,
-                                            acceptorId = (raw["acceptor_id"] as? Number)?.toInt() ?: 0,
-                                            startStationId = (raw["start_location_id"] as? Number)?.toLong() ?: 0,
-                                            endStationId = (raw["end_location_id"] as? Number)?.toLong() ?: 0,
-                                            type = raw["type"] as? String ?: "unknown",
-                                            status = raw["status"] as? String ?: "outstanding",
-                                            title = raw["title"] as? String ?: "",
-                                            description = raw["description"] as? String ?: "",
-                                            dateIssued = raw["date_issued"] as? String ?: "",
-                                            dateExpired = raw["date_expired"] as? String ?: "",
-                                            dateAccepted = raw["date_accepted"] as? String,
-                                            dateCompleted = raw["date_completed"] as? String,
-                                            numDays = (raw["num_days"] as? Number)?.toInt() ?: 0,
-                                            price = (raw["price"] as? Number)?.toDouble() ?: 0.0,
-                                            reward = (raw["reward"] as? Number)?.toDouble() ?: 0.0,
-                                            collateral = (raw["collateral"] as? Number)?.toDouble() ?: 0.0,
-                                            buyout = (raw["buyout"] as? Number)?.toDouble() ?: 0.0,
-                                            forCorp = (raw["for_corporation"] as? Boolean) ?: false,
-                                            isCorp = false,
-                                            characterId = id,
-                                        )
-                                    }
-                                models.forEach { ContractDao.upsert(it) }
-                                withContext(Dispatchers.Main) {
-                                    loadContracts { contracts = it }
-                                    isLoading = false
-                                }
-                            } catch (e: Exception) {
-                                withContext(Dispatchers.Main) { isLoading = false }
-                            }
-                        }
+                        autoRefresh = !autoRefresh
+                        scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(CONTRACTS_AUTO_REFRESH_SETTING, autoRefresh.toString()) }
                     },
-                    enabled = !isLoading,
-                ) {
-                    Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Refresh")
+                    label = { Text("Auto-refresh", style = MaterialTheme.typography.bodySmall) },
+                    leadingIcon = if (autoRefresh) autoRefreshIcon else null,
+                )
+                FilterChip(
+                    selected = showAll,
+                    onClick = {
+                        showAll = !showAll
+                        scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SHOW_ALL_CONTRACTS_SETTING, showAll.toString()) }
+                    },
+                    label = { Text("Show All", style = MaterialTheme.typography.bodySmall) },
+                )
+                if (!showAll && actingCharId != null) {
+                    EsiRefreshButton(
+                        isLoading = isLoading,
+                        expiresAtMs = refreshAvailableAt,
+                        onClick = ::refresh,
+                        label = "Refresh",
+                    )
                 }
             }
         }
@@ -112,14 +160,7 @@ fun ContractTrackerScreen(charId: Int?) {
             ) { (key, label) ->
                 FilterChip(
                     selected = statusFilter == key,
-                    onClick = {
-                        statusFilter = key
-                        if (key == "all") {
-                            loadContracts { contracts = it }
-                        } else {
-                            loadContractsByStatus(key) { contracts = it }
-                        }
-                    },
+                    onClick = { statusFilter = key },
                     label = { Text(label, style = MaterialTheme.typography.bodySmall) },
                 )
             }
@@ -136,7 +177,7 @@ fun ContractTrackerScreen(charId: Int?) {
             )
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                items(contracts) { contract ->
+                items(contracts, key = { it.contractId }) { contract ->
                     ContractCard(contract)
                 }
             }
@@ -144,6 +185,10 @@ fun ContractTrackerScreen(charId: Int?) {
     }
 
     LoadingOverlay(isLoading = isLoading, message = "Fetching contracts from ESI...")
+}
+
+private val autoRefreshIcon: @Composable () -> Unit = {
+    Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
 }
 
 @Composable
@@ -227,25 +272,6 @@ private fun InfoItem(
     Column {
         Text(label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
         Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-    }
-}
-
-private fun loadContracts(callback: (List<ContractModel>) -> Unit) {
-    try {
-        callback(ContractDao.getAll())
-    } catch (e: Exception) {
-        println("Error loading contracts: ${e.message}")
-    }
-}
-
-private fun loadContractsByStatus(
-    status: String,
-    callback: (List<ContractModel>) -> Unit,
-) {
-    try {
-        callback(ContractDao.getByStatus(status))
-    } catch (e: Exception) {
-        println("Error loading contracts by status: ${e.message}")
     }
 }
 

@@ -62,6 +62,7 @@ import org.eventt.features.alerts.PriceAlertsScreen
 import org.eventt.features.assets.AssetViewerScreen
 import org.eventt.features.characters.CharacterManagementScreen
 import org.eventt.features.contracts.ContractTrackerScreen
+import org.eventt.features.contracts.ContractWatchService
 import org.eventt.features.dashboard.DashboardScreen
 import org.eventt.features.market.MarketAnalysisScreen
 import org.eventt.features.market.MarketBrowserScreen
@@ -846,6 +847,12 @@ private fun Sidebar(
                             val beaten by MarketWatchService.beatenCount.collectAsState()
                             CountBadge(beaten)
                         }
+                        if (screen == AppScreen.CONTRACTS) {
+                            // Contracts whose status changed since the tab was last viewed — fed
+                            // by ContractWatchService's opt-in background sweep, cleared above.
+                            val changed by ContractWatchService.changedCount.collectAsState()
+                            CountBadge(changed)
+                        }
                     }
                 }
             }
@@ -1088,7 +1095,6 @@ private fun ScreenContent(
     screen: AppScreen,
     selectedContext: ViewContext?,
 ) {
-    val selectedCharId = selectedContext?.actingCharId
     // Track which screens have been visited so we only mount them on first visit,
     // but keep them in the composition afterwards to preserve their state.
     var visited by remember { mutableStateOf(setOf(screen)) }
@@ -1096,6 +1102,10 @@ private fun ScreenContent(
     LaunchedEffect(screen) {
         visited = visited + screen
         if (screen == AppScreen.DASHBOARD) dashboardRefreshTrigger++
+        // Screens stay mounted (just collapsed) after their first visit rather than being
+        // disposed, so a LaunchedEffect(Unit) inside ContractTrackerScreen itself would only ever
+        // fire once per session -- this fires on every switch back to the tab instead.
+        if (screen == AppScreen.CONTRACTS) ContractWatchService.markSeen()
     }
 
     Surface(
@@ -1122,7 +1132,7 @@ private fun ScreenContent(
                             AppScreen.WALLET -> WalletScreen(context = selectedContext)
                             AppScreen.ORDERS -> OrdersScreen(context = selectedContext)
                             AppScreen.ALERTS -> PriceAlertsScreen()
-                            AppScreen.CONTRACTS -> ContractTrackerScreen(charId = selectedCharId)
+                            AppScreen.CONTRACTS -> ContractTrackerScreen(context = selectedContext)
                             AppScreen.TOOLS -> ToolsScreen(context = selectedContext)
                             AppScreen.P2P_MARKET -> P2pMarketScreen()
                             AppScreen.SETTINGS -> SettingsScreen()
