@@ -33,7 +33,6 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.eventt.core.database.OrderHistoryDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.ViewContext
 import org.eventt.core.database.WalletDao
@@ -58,10 +57,6 @@ fun WalletScreen(context: ViewContext?) {
     var dailyBreakdown by remember { mutableStateOf<List<DailyWalletEntry>>(emptyList()) }
     var pnlBreakdown by remember { mutableStateOf<List<DailyWalletEntry>>(emptyList()) }
     var fifoResult by remember { mutableStateOf<CostBasisService.FifoResult?>(null) }
-    // Relist (order-modification) fees summed over completed orders — the FIFO profit above
-    // doesn't know about them (they're journal entries, not transactions), so the realized
-    // margin card subtracts them separately.
-    var relistFeesTotal by remember { mutableStateOf(0.0) }
     var transactions by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
     var journal by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
@@ -80,7 +75,6 @@ fun WalletScreen(context: ViewContext?) {
                 dailyCallback = { dailyBreakdown = it },
                 pnlCallback = { pnlBreakdown = it },
                 fifoCallback = { fifoResult = it },
-                relistFeesCallback = { relistFeesTotal = it },
                 transactionsCallback = { transactions = it },
                 journalCallback = { journal = it },
                 expiryCallback = { refreshAvailableAt = it },
@@ -111,7 +105,6 @@ fun WalletScreen(context: ViewContext?) {
                                 dailyCallback = { dailyBreakdown = it },
                                 pnlCallback = { pnlBreakdown = it },
                                 fifoCallback = { fifoResult = it },
-                                relistFeesCallback = { relistFeesTotal = it },
                                 transactionsCallback = { transactions = it },
                                 journalCallback = { journal = it },
                                 expiryCallback = { refreshAvailableAt = it },
@@ -163,7 +156,7 @@ fun WalletScreen(context: ViewContext?) {
             when (activeTab) {
                 0 -> TransactionList(transactions)
                 1 -> JournalList(journal)
-                2 -> PnlChart(pnlBreakdown, fifoResult, relistFeesTotal)
+                2 -> PnlChart(pnlBreakdown, fifoResult)
             }
         }
     }
@@ -862,7 +855,6 @@ private fun pnlColor(value: Double): Color =
 private fun PnlChart(
     dailyBreakdown: List<DailyWalletEntry>,
     fifoResult: CostBasisService.FifoResult?,
-    relistFeesTotal: Double,
 ) {
     if (dailyBreakdown.isEmpty()) {
         EmptyState(
@@ -894,13 +886,14 @@ private fun PnlChart(
             .orEmpty()
     val profitableDays = if (dailyRealizedByDay.isNotEmpty()) dailyRealizedByDay.count { it.value > 0 } else window.profitableDays
     val tradingDays = if (dailyRealizedByDay.isNotEmpty()) dailyRealizedByDay.size else chronological.size
-    // Average realized margin over completed FIFO trades, net of relist fees — profit relative
-    // to the capital those sold units cost. The old figure (net cash flow / income) mostly
-    // measured how much restocking happened lately, not how profitable the trading was.
+    // Average realized margin over completed FIFO trades — profit (already net of relist fees,
+    // see CostBasisService.compute) relative to the capital those sold units cost. The old figure
+    // (net cash flow / income) mostly measured how much restocking happened lately, not how
+    // profitable the trading was.
     val realizedCost = fifoResult?.realizedSells?.sumOf { it.costBasis * it.qty } ?: 0.0
     val margin =
         if (fifoResult != null && realizedCost > 0) {
-            (fifoResult.totalRealizedPnl - relistFeesTotal) / realizedCost * 100
+            fifoResult.totalRealizedPnl / realizedCost * 100
         } else {
             null
         }
@@ -1178,7 +1171,6 @@ private suspend fun loadWalletData(
     dailyCallback: (List<DailyWalletEntry>) -> Unit,
     pnlCallback: (List<DailyWalletEntry>) -> Unit,
     fifoCallback: (CostBasisService.FifoResult) -> Unit,
-    relistFeesCallback: (Double) -> Unit,
     transactionsCallback: (List<Map<String, Any?>>) -> Unit,
     journalCallback: (List<Map<String, Any?>>) -> Unit,
     expiryCallback: (Long?) -> Unit = {},
@@ -1301,9 +1293,6 @@ private suspend fun loadWalletData(
                     brokerFeePct = StaticDataDao.getCharBrokersFee(actingCharId),
                 )
             fifoCallback(CostBasisService.compute(characterId = characterId, corporationId = corporationId, taxConfig = taxConfig))
-            relistFeesCallback(
-                OrderHistoryDao.getAll(characterId = characterId, corporationId = corporationId).sumOf { it.relistFeesPaid },
-            )
         } catch (_: Exception) {
         }
 

@@ -1,5 +1,6 @@
 package org.eventt.features.orders
 
+import org.eventt.core.database.OrderHistoryDao
 import org.eventt.core.database.WalletDao
 import org.eventt.core.model.utcToLocalDateTime
 import java.time.LocalDate
@@ -58,6 +59,10 @@ object CostBasisService {
         val inventory: Map<Int, InventoryItem>,
         val realizedSells: List<RealizedSellTx>, // sorted by date asc
         val taxConfig: TaxConfig,
+        // Per-type average relist fee already netted out of realizedSells' profit/margin above —
+        // exposed so a caller re-deriving a single order's own P&L (historyPnl) applies the same
+        // adjustment instead of subtracting that order's exact relistFeesPaid a second time.
+        val sellRelistPerUnit: Map<Int, Double> = emptyMap(),
     ) {
         val totalRealizedPnl: Double = realizedSells.sumOf { it.profit }
         val realizedByType: Map<Int, List<RealizedSellTx>> = realizedSells.groupBy { it.typeId }
@@ -73,12 +78,32 @@ object CostBasisService {
         }
     }
 
+    // ESI doesn't link a wallet transaction to the order that placed it, so a specific closed
+    // order's relist fees can't be pinned to the exact units it filled. Spread each closed order's
+    // relist fees evenly across the units it filled, then average per type -- every buy/sell of
+    // that type carries a representative share instead of the fee being lost (buy side) or handled
+    // ad hoc in just one summary number (sell side, as it used to be).
+    private fun relistPerUnitByType(
+        characterId: Int?,
+        corporationId: Int?,
+        isBuyOrder: Boolean,
+    ): Map<Int, Double> =
+        OrderHistoryDao
+            .getAll(characterId = characterId, corporationId = corporationId, isBuyOrder = isBuyOrder, limit = 10_000)
+            .groupBy { it.typeId }
+            .mapNotNull { (typeId, orders) ->
+                val filled = orders.sumOf { it.volumeTotal - it.volumeRemaining }
+                if (filled <= 0) null else typeId to orders.sumOf { it.relistFeesPaid } / filled
+            }.toMap()
+
     fun compute(
         characterId: Int? = null,
         corporationId: Int? = null,
         taxConfig: TaxConfig = TaxConfig(),
     ): FifoResult {
         val transactions = WalletDao.getAllTransactions(characterId, corporationId)
+        val buyRelistPerUnit = relistPerUnitByType(characterId, corporationId, isBuyOrder = true)
+        val sellRelistPerUnit = relistPerUnitByType(characterId, corporationId, isBuyOrder = false)
 
         val lots = mutableMapOf<Int, ArrayDeque<Lot>>()
         val typeNames = mutableMapOf<Int, String>()
@@ -87,8 +112,9 @@ object CostBasisService {
         for (tx in transactions) { // already sorted ASC by WalletDao
             typeNames[tx.typeId] = tx.typeName
             if (tx.isBuy) {
-                // Store adjusted cost: price + broker fee paid to place the buy order.
-                val adjustedCost = tx.unitPrice * taxConfig.buyMultiplier
+                // Store adjusted cost: price + broker fee paid to place the buy order, plus this
+                // type's average buy-side relist fee per unit (see relistPerUnitByType).
+                val adjustedCost = tx.unitPrice * taxConfig.buyMultiplier + (buyRelistPerUnit[tx.typeId] ?: 0.0)
                 lots.getOrPut(tx.typeId) { ArrayDeque() }.addLast(Lot(tx.quantity, adjustedCost, tx.date))
             } else {
                 val queue = lots.getOrPut(tx.typeId) { ArrayDeque() }
@@ -107,7 +133,9 @@ object CostBasisService {
 
                 if (qtyMatched > 0) {
                     val cb = costConsumed / qtyMatched
-                    val netSellPrice = tx.unitPrice * taxConfig.sellMultiplier
+                    // Net of tax/broker fee (sellMultiplier) and this type's average sell-side
+                    // relist fee per unit (see relistPerUnitByType).
+                    val netSellPrice = tx.unitPrice * taxConfig.sellMultiplier - (sellRelistPerUnit[tx.typeId] ?: 0.0)
                     val profit = qtyMatched * (netSellPrice - cb)
                     val margin = if (cb > 0) (netSellPrice - cb) / cb * 100.0 else 0.0
                     realized.add(RealizedSellTx(tx.date, tx.typeId, qtyMatched, tx.unitPrice, cb, profit, margin))
@@ -130,7 +158,7 @@ object CostBasisService {
                     )
                 }.filter { it.value.remainingQty > 0 }
 
-        return FifoResult(inventory, realized, taxConfig)
+        return FifoResult(inventory, realized, taxConfig, sellRelistPerUnit)
     }
 
     // Returns realized P&L for a specific fulfilled sell order using date+qty matching.
