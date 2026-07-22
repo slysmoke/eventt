@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -82,6 +83,8 @@ import org.eventt.ui.theme.*
 import org.eventt.update.UpdateChecker
 import org.eventt.update.UpdateInfo
 import org.eventt.update.UpdateProgress
+import java.awt.Desktop
+import java.net.URI
 
 enum class AppScreen(
     val label: String,
@@ -856,6 +859,47 @@ private fun Sidebar(
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.weight(1f))
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+            SidebarVersionFooter(eveColors = eveColors)
+        }
+    }
+}
+
+// Clickable app version at the bottom of the sidebar — opens the GitHub release page for the
+// running version so patch notes are one click away instead of a trip to the repo.
+@Composable
+private fun SidebarVersionFooter(eveColors: EveColors) {
+    val releaseUrl =
+        AppVersion.GITHUB_REPO.takeIf { it.isNotBlank() }
+            ?.let { "https://github.com/$it/releases/tag/v${AppVersion.NAME}" }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
+        shape = MaterialTheme.shapes.small,
+        color = Color.Transparent,
+        onClick = {
+            releaseUrl ?: return@Surface
+            runCatching { Desktop.getDesktop().browse(URI(releaseUrl)) }
+        },
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "v${AppVersion.NAME}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                Icons.AutoMirrored.Filled.OpenInNew,
+                contentDescription = "View release notes on GitHub",
+                tint = eveColors.accentColor.copy(alpha = 0.6f),
+                modifier = Modifier.size(12.dp),
+            )
         }
     }
 }
