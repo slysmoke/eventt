@@ -73,3 +73,7 @@ compose_resources/
 /CLAUDE.md
 /QWEN.md
 /.qwen/
+
+# Demo-video recording/captioning scripts — local tooling, not shipped with the app
+/scripts/video-tour/
+/remotion-video/
