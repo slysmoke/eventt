@@ -89,6 +89,26 @@ object WalletDao {
         }
     }
 
+    // Names already resolved by a previous sync (from either the Wallet or Dashboard screen)
+    // live on past transaction rows — reuse them so callers skip an ESI /universe/names/ round
+    // trip for IDs we've already looked up.
+    fun getKnownClientNames(clientIds: Collection<Int>): Map<Int, String> {
+        if (clientIds.isEmpty()) return emptyMap()
+        return DatabaseManager.transaction {
+            val placeholders = clientIds.joinToString(",") { "?" }
+            prepareStatement(
+                "SELECT DISTINCT client_id, client_name FROM transactions WHERE client_name != '' AND client_id IN ($placeholders)",
+            ).use { stmt ->
+                clientIds.forEachIndexed { i, id -> stmt.setInt(i + 1, id) }
+                stmt.executeQuery().use { rs ->
+                    val result = mutableMapOf<Int, String>()
+                    while (rs.next()) result[rs.getInt("client_id")] = rs.getString("client_name")
+                    result
+                }
+            }
+        }
+    }
+
     data class RawTxRecord(
         val date: String,
         val typeId: Int,

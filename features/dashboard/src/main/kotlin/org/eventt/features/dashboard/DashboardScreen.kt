@@ -151,10 +151,16 @@ fun DashboardScreen(
                             .mapNotNull { (it["type_id"] as? Number)?.toInt() }
                             .toSet()
                             .associateWith { id -> StaticDataDao.getTypeName(id) ?: "" }
+                    val clientIds = txList.mapNotNull { (it["client_id"] as? Number)?.toInt() }.filter { it > 0 }.toSet()
+                    val knownClientNames = WalletDao.getKnownClientNames(clientIds)
+                    val missingClientIds = clientIds - knownClientNames.keys
+                    val freshClientNames = if (missingClientIds.isNotEmpty()) EsiClient.resolveNames(missingClientIds.toList()) else emptyMap()
+                    val clientNames = knownClientNames + freshClientNames
                     txList.forEach { tx ->
                         val typeId = (tx["type_id"] as? Number)?.toInt() ?: 0
                         val unitPrice = (tx["unit_price"] as? Number)?.toDouble() ?: 0.0
                         val quantity = (tx["quantity"] as? Number)?.toInt() ?: 0
+                        val clientId = (tx["client_id"] as? Number)?.toInt() ?: 0
                         try {
                             WalletDao.insertTransaction(
                                 transactionId = (tx["transaction_id"] as? Number)?.toLong() ?: 0,
@@ -165,8 +171,8 @@ fun DashboardScreen(
                                 unitPrice = unitPrice,
                                 total = unitPrice * quantity,
                                 isBuy = (tx["is_buy"] as? Boolean) ?: false,
-                                clientId = (tx["client_id"] as? Number)?.toInt() ?: 0,
-                                clientName = "",
+                                clientId = clientId,
+                                clientName = clientNames[clientId] ?: "",
                                 locationId = (tx["location_id"] as? Number)?.toLong() ?: 0L,
                                 locationName = "",
                                 isCorp = isCorp,
