@@ -78,6 +78,10 @@ object ClipboardParser {
         for (line in lines) {
             val parts = line.split("\t").map { it.trim() }.filter { it.isNotEmpty() }
             if (parts.size < 2) return null
+            // An "ISK" field means this is an order row (Range/Volume/Price/...), not an item-list
+            // row — reject the whole paste so the caller falls back to parse() instead of
+            // misreading the Range column as an item name.
+            if (parts.any { it.contains("ISK") }) return null
             val name = parts[0]
             if (name.length < 3 || name.none { it.isLetter() }) return null
             val qty = parts.drop(1).firstNotNullOfOrNull { it.replace(",", "").toLongOrNull() } ?: return null
