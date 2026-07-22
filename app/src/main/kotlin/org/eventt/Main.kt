@@ -8,16 +8,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import org.eventt.app.generated.resources.Res
 import org.eventt.app.generated.resources.icon
 import org.eventt.core.cache.EsiCacheManager
-import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.DatabaseManager
 import org.eventt.core.http.EveHttpClient
 import org.eventt.core.marketlogs.MarketLogWatcher
 import org.eventt.core.model.AppPaths
-import org.eventt.core.model.CharacterModel
 import org.eventt.core.model.HotkeyBindings
 import org.eventt.core.nostr.NostrIdentityService
 import org.eventt.core.nostr.NostrRelayManager
@@ -27,26 +24,30 @@ import org.eventt.features.orders.PendingOrdersQueue
 import org.eventt.notify.TrayNotifier
 import org.eventt.ui.EventtApp
 import org.jetbrains.compose.resources.painterResource
+import java.io.File
+import java.io.RandomAccessFile
+import javax.swing.JOptionPane
+import kotlin.system.exitProcess
 
-// Fake ESI character ID (outside EVE's real ID range) used only to give the P2P Market
-// test instance (see scripts/run-p2p-test.sh) a character to hang a Nostr identity off of —
-// this instance never makes authenticated ESI calls, so there's no real SSO token behind it.
-private const val P2P_TEST_CHARACTER_ID = 900_000_001
-private const val P2P_TEST_CHARACTER_NAME = "P2P Test Trader"
+// Held for the process lifetime once acquired; released automatically when the JVM exits.
+private var singleInstanceLock: RandomAccessFile? = null
 
-private fun seedP2pTestIdentityIfNeeded() {
-    if (CharacterDao.getById(P2P_TEST_CHARACTER_ID) == null) {
-        CharacterDao.insert(
-            CharacterModel(
-                id = P2P_TEST_CHARACTER_ID,
-                name = P2P_TEST_CHARACTER_NAME,
-                refreshToken = "",
-            ),
+// One SQLite file under WAL mode expects a single writer process — a second instance racing
+// the first would risk SQLITE_BUSY/corruption, not just a confusing duplicate window.
+private fun acquireSingleInstanceLockOrExit() {
+    val lockFile = File(AppPaths.appDataDir, "app.lock")
+    val raf = RandomAccessFile(lockFile, "rw")
+    if (raf.channel.tryLock() == null) {
+        raf.close()
+        JOptionPane.showMessageDialog(
+            null,
+            "EVE Night Trade Tools is already running.",
+            "Already running",
+            JOptionPane.WARNING_MESSAGE,
         )
+        exitProcess(1)
     }
-    runBlocking {
-        NostrIdentityService.ensureIdentityForCharacter(CharacterDao.getById(P2P_TEST_CHARACTER_ID)!!)
-    }
+    singleInstanceLock = raf
 }
 
 fun main() {
@@ -56,6 +57,10 @@ fun main() {
     EveHttpClient.configure(
         "EventNightTradeTools/${AppVersion.NAME}" + (repoUrl?.let { " (+$it)" } ?: ""),
     )
+
+    // Must run before anything touches the DB — a second instance racing the first on the
+    // same SQLite file is exactly what this guards against.
+    acquireSingleInstanceLockOrExit()
 
     // One-time pickup of data from the old ~/.eve-trader / ~/.eventt home-dir locations, before
     // anything (DB, token key) reads/writes the new per-OS app-data directory.
@@ -77,17 +82,9 @@ fun main() {
         println("[App] Database init failed: ${e.stackTraceToString()}")
     }
 
-    val isP2pTestInstance = System.getenv("EVENTT_DATA_DIR") != null
-    if (isP2pTestInstance) seedP2pTestIdentityIfNeeded()
-
-    // X11's XGrabKey is exclusive process-wide — the main instance already holds these combos,
-    // so a test instance's grab can never succeed (X11HotkeyBackend detects the BadAccess and
-    // backs off gracefully); don't even try.
-    if (!isP2pTestInstance) {
-        GlobalHotkeyService.start()
-        // Settings saves new hotkey letters, then calls this to re-register without a restart.
-        HotkeyBindings.applyChange = GlobalHotkeyService::restart
-    }
+    GlobalHotkeyService.start()
+    // Settings saves new hotkey letters, then calls this to re-register without a restart.
+    HotkeyBindings.applyChange = GlobalHotkeyService::restart
     // Beaten-order tray notifications: OrdersScreen detects the transition, this supplies the
     // tray (the icon resource and windowing live in the app module, not features:orders).
     PendingOrdersQueue.notifier = TrayNotifier::notify
@@ -110,7 +107,7 @@ fun main() {
 
     application {
         Window(
-            title = if (isP2pTestInstance) "EVE Night Trade Tools — P2P TEST" else "EVE Night Trade Tools",
+            title = "EVE Night Trade Tools",
             state = rememberWindowState(width = 1200.dp, height = 800.dp),
             icon = painterResource(Res.drawable.icon),
             onCloseRequest = {

@@ -66,8 +66,6 @@ Login uses EVE SSO's OAuth2 Authorization Code flow with PKCE — no client secr
 
 Off-market player-to-player trading, built on [Nostr](https://nostr.com/) instead of a central server: orders are NIP-33 addressable events published to a handful of public relays (configurable in Settings), and buy/sell negotiation happens over NIP-17 encrypted DMs. Each EVE character gets its own signing identity automatically, generated the first time you open the P2P Market tab with that character selected — nothing to configure beyond that.
 
-For testing both sides of a trade locally, `./scripts/run-p2p-test.sh` launches a second, isolated instance of the app (its own database and Nostr identity, seeded with a throwaway test character) so you can post an order in one window and answer it from the other.
-
 ## Building & running
 
 ```bash

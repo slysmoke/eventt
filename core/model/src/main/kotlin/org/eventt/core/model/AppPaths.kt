@@ -24,10 +24,7 @@ object AppPaths {
             else -> xdgDataHomeEnv ?: "$home/.local/share"
         }
 
-    // Lets a second, isolated instance of the app run alongside the real one (own DB, own Nostr
-    // identity) for exercising the P2P Market as both sides of a trade — see scripts/run-p2p-test.sh.
     val appDataDir: File by lazy {
-        System.getenv("EVENTT_DATA_DIR")?.let { return@lazy File(it).apply { mkdirs() } }
         val base =
             resolveBaseDir(
                 osName = System.getProperty("os.name"),
