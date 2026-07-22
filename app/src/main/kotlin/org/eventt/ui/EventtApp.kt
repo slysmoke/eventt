@@ -85,6 +85,7 @@ import org.eventt.update.UpdateInfo
 import org.eventt.update.UpdateProgress
 import java.awt.Desktop
 import java.net.URI
+import kotlin.math.roundToInt
 
 enum class AppScreen(
     val label: String,
@@ -106,14 +107,16 @@ enum class AppScreen(
 
 private const val THEME_SETTING_KEY = "app.theme"
 private const val FONT_SETTING_KEY = "app.font"
+private const val CUSTOM_THEME_SETTING_KEY = "app.customTheme"
 
 @Composable
 fun EventtApp() {
     var themeVariant by remember { mutableStateOf(ThemeVariant.EVE_DARK) }
     var fontChoice by remember { mutableStateOf(FontChoice.SYSTEM_SANS) }
+    var customThemeColors by remember { mutableStateOf(CustomThemeColors.DEFAULT) }
 
-    val colorScheme = themeVariant.colorScheme
-    val eveColors = themeVariant.eveColors
+    val colorScheme = if (themeVariant == ThemeVariant.CUSTOM) customThemeColors.toColorScheme() else themeVariant.colorScheme
+    val eveColors = if (themeVariant == ThemeVariant.CUSTOM) customThemeColors.toEveColors() else themeVariant.eveColors
 
     val importState by StaticDataImporter.state.collectAsState()
     val everefState by EveRefService.state.collectAsState()
@@ -129,6 +132,9 @@ fun EventtApp() {
             }
             StaticDataDao.getSetting(FONT_SETTING_KEY)?.let { saved ->
                 FontChoice.entries.firstOrNull { it.name == saved }?.let { fontChoice = it }
+            }
+            StaticDataDao.getSetting(CUSTOM_THEME_SETTING_KEY)?.let { saved ->
+                customThemeColors = decodeCustomThemeColors(saved)
             }
         }
         // EveRef sync runs in parallel — does not block UI or AppState init
@@ -224,6 +230,17 @@ fun EventtApp() {
                     onFontChange = { choice ->
                         fontChoice = choice
                         coroutineScope.launch(Dispatchers.IO) { StaticDataDao.setSetting(FONT_SETTING_KEY, choice.name) }
+                    },
+                    customThemeColors = customThemeColors,
+                    // Live preview as sliders drag — cheap in-memory update, no DB write.
+                    onCustomThemeChange = { colors -> customThemeColors = colors },
+                    // Fired once when a slider drag ends (Slider.onValueChangeFinished) rather
+                    // than on every tick, so dragging one slider can't fire dozens of synchronous
+                    // SQLite commits.
+                    onCustomThemeCommit = {
+                        coroutineScope.launch(Dispatchers.IO) {
+                            StaticDataDao.setSetting(CUSTOM_THEME_SETTING_KEY, customThemeColors.encode())
+                        }
                     },
                     currentScreen = selectedScreen,
                     eveColors = eveColors,
@@ -411,6 +428,9 @@ private fun TopBar(
     onThemeChange: (ThemeVariant) -> Unit,
     fontChoice: FontChoice,
     onFontChange: (FontChoice) -> Unit,
+    customThemeColors: CustomThemeColors,
+    onCustomThemeChange: (CustomThemeColors) -> Unit,
+    onCustomThemeCommit: () -> Unit,
     currentScreen: AppScreen,
     eveColors: EveColors,
     onShowProgress: () -> Unit,
@@ -481,6 +501,7 @@ private fun TopBar(
                     )
                 }
                 var themeMenuExpanded by remember { mutableStateOf(false) }
+                var showCustomThemeEditor by remember { mutableStateOf(false) }
                 Box {
                     IconButton(onClick = { themeMenuExpanded = true }) {
                         Icon(
@@ -508,6 +529,24 @@ private fun TopBar(
                                         Text(variant.label)
                                     }
                                 },
+                                trailingIcon = {
+                                    if (variant == ThemeVariant.CUSTOM) {
+                                        IconButton(
+                                            modifier = Modifier.size(20.dp),
+                                            onClick = {
+                                                showCustomThemeEditor = true
+                                                themeMenuExpanded = false
+                                            },
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Edit,
+                                                contentDescription = "Edit custom theme",
+                                                modifier = Modifier.size(14.dp),
+                                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                            )
+                                        }
+                                    }
+                                },
                                 onClick = {
                                     onThemeChange(variant)
                                     themeMenuExpanded = false
@@ -515,6 +554,14 @@ private fun TopBar(
                             )
                         }
                     }
+                }
+                if (showCustomThemeEditor) {
+                    CustomThemeEditorDialog(
+                        colors = customThemeColors,
+                        onColorsChange = onCustomThemeChange,
+                        onCommit = onCustomThemeCommit,
+                        onDismiss = { showCustomThemeEditor = false },
+                    )
                 }
                 var fontMenuExpanded by remember { mutableStateOf(false) }
                 Box {
@@ -872,7 +919,8 @@ private fun Sidebar(
 @Composable
 private fun SidebarVersionFooter(eveColors: EveColors) {
     val releaseUrl =
-        AppVersion.GITHUB_REPO.takeIf { it.isNotBlank() }
+        AppVersion.GITHUB_REPO
+            .takeIf { it.isNotBlank() }
             ?.let { "https://github.com/$it/releases/tag/v${AppVersion.NAME}" }
 
     Surface(
@@ -1031,6 +1079,85 @@ private fun ErrorLogDialog(onDismiss: () -> Unit) {
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
         dismissButton = { TextButton(onClick = { AppLog.clear() }) { Text("Clear") } },
     )
+}
+
+// The 6 colors CustomThemeColors exposes, each with a getter/setter against it — lets the dialog
+// below share one row of sliders across all of them instead of repeating per-role UI code.
+private enum class ThemeRole(
+    val label: String,
+    val get: (CustomThemeColors) -> Color,
+    val with: (CustomThemeColors, Color) -> CustomThemeColors,
+) {
+    PRIMARY("Primary", { it.primary }, { c, v -> c.copy(primary = v) }),
+    SECONDARY("Secondary", { it.secondary }, { c, v -> c.copy(secondary = v) }),
+    TERTIARY("Tertiary", { it.tertiary }, { c, v -> c.copy(tertiary = v) }),
+    BACKGROUND("Background", { it.background }, { c, v -> c.copy(background = v) }),
+    SURFACE("Surface", { it.surface }, { c, v -> c.copy(surface = v) }),
+    HEADER("Header", { it.headerColor }, { c, v -> c.copy(headerColor = v) }),
+}
+
+// One role edited at a time via RGB sliders. onColorsChange fires on every drag tick (cheap
+// in-memory update — the whole app repaints live since colorScheme/eveColors in EventtApp are
+// derived from this state) while onCommit only fires once a drag ends, which is where the actual
+// settings-table write happens — otherwise a single drag could fire dozens of synchronous commits.
+@Composable
+private fun CustomThemeEditorDialog(
+    colors: CustomThemeColors,
+    onColorsChange: (CustomThemeColors) -> Unit,
+    onCommit: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var selectedRole by remember { mutableStateOf(ThemeRole.PRIMARY) }
+    val currentColor = selectedRole.get(colors)
+
+    fun updateChannel(channel: (Color, Float) -> Color): (Float) -> Unit =
+        { value -> onColorsChange(selectedRole.with(colors, channel(currentColor, value))) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Custom theme") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ThemeRole.entries.forEach { role ->
+                        FilterChip(
+                            selected = role == selectedRole,
+                            onClick = { selectedRole = role },
+                            label = { Text(role.label, style = MaterialTheme.typography.labelSmall) },
+                        )
+                    }
+                }
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .background(currentColor, MaterialTheme.shapes.small),
+                )
+                ColorChannelSlider("R", currentColor.red, onValueChange = updateChannel { c, v -> c.copy(red = v) }, onCommit)
+                ColorChannelSlider("G", currentColor.green, onValueChange = updateChannel { c, v -> c.copy(green = v) }, onCommit)
+                ColorChannelSlider("B", currentColor.blue, onValueChange = updateChannel { c, v -> c.copy(blue = v) }, onCommit)
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+    )
+}
+
+@Composable
+private fun ColorChannelSlider(
+    label: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    onCommit: () -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "$label ${(value * 255).roundToInt()}",
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.width(48.dp),
+        )
+        Slider(value = value, onValueChange = onValueChange, onValueChangeFinished = onCommit, valueRange = 0f..1f)
+    }
 }
 
 private data class IncomingRequestNotice(

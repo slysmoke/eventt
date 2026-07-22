@@ -4,6 +4,8 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 
 val DarkColorScheme =
     darkColorScheme(
@@ -186,4 +188,93 @@ enum class ThemeVariant(
     GRUVBOX_LIGHT("Gruvbox Light", GruvboxLightColorScheme, GruvboxLightEveColors),
     SRCERY("Srcery", SrceryColorScheme, SrceryEveColors),
     SOLARIZED_LIGHT("Solarized Light", SolarizedLightColorScheme, SolarizedLightEveColors),
+
+    // colorScheme/eveColors here are inert placeholders — never read once CUSTOM is actually
+    // selected, since the app resolves the real colors from CustomThemeColors at that point.
+    CUSTOM("Custom", DarkColorScheme, DarkEveColors),
+}
+
+// User-editable palette: the handful of colors every built-in theme above is ultimately built
+// from (a Material3 ColorScheme's primary/secondary/tertiary/background/surface, plus
+// EveColors.headerColor, the one field ColorScheme has no equivalent for).
+data class CustomThemeColors(
+    val primary: Color,
+    val secondary: Color,
+    val tertiary: Color,
+    val background: Color,
+    val surface: Color,
+    val headerColor: Color,
+) {
+    companion object {
+        val DEFAULT =
+            CustomThemeColors(
+                primary = EveBlue,
+                secondary = EveAccent,
+                tertiary = EveOrange,
+                background = EveDarkBg,
+                surface = EveDarkSurface,
+                headerColor = EveDarkHeader,
+            )
+    }
+}
+
+// White or black text reads legibly on any background/surface color a user picks — sidesteps
+// asking them to separately pick 5 more "on*" text colors just to keep things readable.
+private fun autoOn(background: Color): Color = if (background.luminance() > 0.5f) Color.Black else Color.White
+
+fun CustomThemeColors.toColorScheme(): ColorScheme =
+    if (background.luminance() > 0.5f) {
+        lightColorScheme(
+            primary = primary,
+            onPrimary = autoOn(primary),
+            secondary = secondary,
+            onSecondary = autoOn(secondary),
+            tertiary = tertiary,
+            onTertiary = autoOn(tertiary),
+            background = background,
+            onBackground = autoOn(background),
+            surface = surface,
+            onSurface = autoOn(surface),
+        )
+    } else {
+        darkColorScheme(
+            primary = primary,
+            onPrimary = autoOn(primary),
+            secondary = secondary,
+            onSecondary = autoOn(secondary),
+            tertiary = tertiary,
+            onTertiary = autoOn(tertiary),
+            background = background,
+            onBackground = autoOn(background),
+            surface = surface,
+            onSurface = autoOn(surface),
+        )
+    }
+
+fun CustomThemeColors.toEveColors(): EveColors =
+    EveColors(
+        accentColor = primary,
+        headerColor = headerColor,
+        surfaceColor = surface,
+    )
+
+// Plain "RRGGBB,RRGGBB,..." (6 values, no alpha — these are opaque UI colors), matching the
+// simple string key-value settings store; falls back to DEFAULT on anything unparseable rather
+// than crashing on a corrupted or hand-edited setting.
+fun CustomThemeColors.encode(): String =
+    listOf(primary, secondary, tertiary, background, surface, headerColor)
+        .joinToString(",") { "%06X".format(it.toArgb() and 0xFFFFFF) }
+
+fun decodeCustomThemeColors(raw: String?): CustomThemeColors {
+    val parts = raw?.split(",")?.mapNotNull { it.toIntOrNull(16) }
+    if (parts?.size != 6) return CustomThemeColors.DEFAULT
+    val colors = parts.map { Color(0xFF000000 or it.toLong()) }
+    return CustomThemeColors(
+        primary = colors[0],
+        secondary = colors[1],
+        tertiary = colors[2],
+        background = colors[3],
+        surface = colors[4],
+        headerColor = colors[5],
+    )
 }
