@@ -70,6 +70,7 @@ compose_resources/
 /CLAUDE.md
 /QWEN.md
 /.qwen/
+/DEPENDABOT.md
 
 # Demo-video recording/captioning scripts — local tooling, not shipped with the app
 /scripts/video-tour/
