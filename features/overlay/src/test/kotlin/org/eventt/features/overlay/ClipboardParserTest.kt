@@ -112,8 +112,9 @@ class ClipboardParserTest {
     fun `an order row with an alphabetic Range column is not mistaken for a manifest`() {
         // Regression: "Station" (Range) looked enough like an item name that parseManifest used
         // to accept this as a 1-line manifest, swallowing the paste before parse() ever ran.
-        ClipboardParser.parseManifest(
-            "Station\t50\t123.45 ISK\tJita IV - Moon 4 - Caldari Navy Assembly Plant\t2024-01-15 12:00:00",
-        ).shouldBeNull()
+        ClipboardParser
+            .parseManifest(
+                "Station\t50\t123.45 ISK\tJita IV - Moon 4 - Caldari Navy Assembly Plant\t2024-01-15 12:00:00",
+            ).shouldBeNull()
     }
 }

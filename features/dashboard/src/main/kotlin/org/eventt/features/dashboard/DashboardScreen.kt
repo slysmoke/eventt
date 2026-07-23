@@ -154,7 +154,14 @@ fun DashboardScreen(
                     val clientIds = txList.mapNotNull { (it["client_id"] as? Number)?.toInt() }.filter { it > 0 }.toSet()
                     val knownClientNames = WalletDao.getKnownClientNames(clientIds)
                     val missingClientIds = clientIds - knownClientNames.keys
-                    val freshClientNames = if (missingClientIds.isNotEmpty()) EsiClient.resolveNames(missingClientIds.toList()) else emptyMap()
+                    val freshClientNames =
+                        if (missingClientIds.isNotEmpty()) {
+                            EsiClient.resolveNames(
+                                missingClientIds.toList(),
+                            )
+                        } else {
+                            emptyMap()
+                        }
                     val clientNames = knownClientNames + freshClientNames
                     txList.forEach { tx ->
                         val typeId = (tx["type_id"] as? Number)?.toInt() ?: 0
