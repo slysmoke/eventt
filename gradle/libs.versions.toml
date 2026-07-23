@@ -13,7 +13,7 @@ jna = "5.19.1"
 dbus-java = "5.2.0"
 junit = "6.1.2"
 mockk = "1.14.11"
-kotest = "6.2.2"
+kotest = "6.2.3"
 turbine = "1.2.1"
 quartz = "1.12.6"
 
