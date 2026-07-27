@@ -56,5 +56,6 @@ class StreamOverlayServerTest {
         response.body() shouldContain "\"iskInOrders\":0.0"
         response.body() shouldContain "\"expectedProfit\":0.0"
         response.body() shouldContain "\"relistFeesPaid\":0.0"
+        response.body() shouldContain "\"beatenCount\":0"
     }
 }

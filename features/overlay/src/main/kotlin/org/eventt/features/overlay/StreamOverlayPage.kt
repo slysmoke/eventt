@@ -63,6 +63,7 @@ object StreamOverlayPage {
           <div class="row">
             <div class="stat"><div class="icon">&#128228;</div><div class="label">Sell Orders</div><div class="value" id="sellOrders">0</div></div>
             <div class="stat"><div class="icon">&#128229;</div><div class="label">Buy Orders</div><div class="value" id="buyOrders">0</div></div>
+            <div class="stat"><div class="icon">&#9888;</div><div class="label">Beaten</div><div class="value" id="beaten">0</div></div>
             <div class="stat"><div class="icon">&#128230;</div><div class="label">ISK in Orders</div><div class="value" id="iskInOrders">0 ISK</div></div>
             <div class="stat"><div class="icon">&#127919;</div><div class="label">Expected Profit</div><div class="value" id="expectedProfit">0 ISK</div></div>
             <div class="stat"><div class="icon">&#129534;</div><div class="label">Relist Fees</div><div class="value" id="relistFees">0 ISK</div></div>
@@ -94,18 +95,21 @@ object StreamOverlayPage {
             setTimeout(function () { el.classList.remove('up', 'down'); }, 600);
           }
 
-          function setStat(id, value, prevRef, isIsk) {
+          function setStat(id, value, prevRef, isIsk, invert) {
             var el = document.getElementById(id);
             var prev = prevRef.value;
             el.textContent = isIsk ? fmtIsk(value) : value;
-            if (prev !== null && value !== prev) flash(el, value > prev ? 'up' : 'down');
+            if (prev !== null && value !== prev) {
+              var grew = value > prev;
+              flash(el, invert ? (grew ? 'down' : 'up') : (grew ? 'up' : 'down'));
+            }
             prevRef.value = value;
           }
 
           var refs = {
             trades: { value: null }, profit: { value: null }, relists: { value: null },
-            sellOrders: { value: null }, buyOrders: { value: null }, iskInOrders: { value: null },
-            expectedProfit: { value: null }, relistFees: { value: null }
+            sellOrders: { value: null }, buyOrders: { value: null }, beaten: { value: null },
+            iskInOrders: { value: null }, expectedProfit: { value: null }, relistFees: { value: null }
           };
 
           function tickTimer() {
@@ -123,6 +127,7 @@ object StreamOverlayPage {
               setStat('relists', d.relistsSession, refs.relists, false);
               setStat('sellOrders', d.sellOrdersCount, refs.sellOrders, false);
               setStat('buyOrders', d.buyOrdersCount, refs.buyOrders, false);
+              setStat('beaten', d.beatenCount, refs.beaten, false, true);
               setStat('iskInOrders', d.iskInOrders, refs.iskInOrders, true);
               setStat('expectedProfit', d.expectedProfit, refs.expectedProfit, true);
               setStat('relistFees', d.relistFeesPaid, refs.relistFees, true);

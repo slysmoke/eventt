@@ -18,18 +18,20 @@ internal const val NOTIFY_BEATEN_SETTING = "orders.notify_beaten"
 
 /**
  * App-lifetime market watcher (same start()/stop()-from-Main.kt shape as MarketLogWatcher): every
- * sweep it walks the cached active orders of EVERY character and corp — not just whoever's on
- * screen — refreshes each (type, region) order book, records competition snapshots, detects
- * relists, and fires the beaten-order tray notification. This is what keeps "you got undercut"
- * working while you're on another tab or switched to another character.
+ * sweep it first refreshes EVERY character's and corp's own active-order list from ESI (see
+ * [ActiveOrdersSyncService.syncAll] — not just whoever's on screen, so a character nobody has
+ * opened the Orders tab for recently doesn't keep showing long-filled/cancelled orders forever,
+ * which used to make both this sweep's own beaten-order detection and the OBS overlay's order
+ * counts silently drift stale), then walks the now-fresh active orders to refresh each (type,
+ * region) public order book, record competition snapshots, detect relists, and fire the
+ * beaten-order tray notification. This is what keeps "you got undercut" working while you're on
+ * another tab or switched to another character.
  *
- * Costs almost nothing between ESI ticks: EsiClient serves cached market responses locally during
- * their ~5-min cooldown, so only expired pairs actually hit the network. Detection is idempotent
- * with the Orders screen's own fetch (bumpRelistStats rejects duplicates, snapshots dedup by
- * Last-Modified), so both can look at the same response safely.
- *
- * Orders that vanished from the public book (filled/cancelled since that character's last screen
- * visit) are skipped — a stale cached row must not produce a false "beaten" notification.
+ * Costs almost nothing between ESI ticks: EsiClient serves cached responses locally during their
+ * cooldown (~25-30min for the per-character/corp order list, ~5min for public market books), so
+ * only expired pairs actually hit the network. Detection is idempotent with the Orders screen's
+ * own fetch (bumpRelistStats rejects duplicates, snapshots dedup by Last-Modified), so both can
+ * look at the same response safely.
  */
 object MarketWatchService {
     private const val SWEEP_INTERVAL_MILLIS = 2L * 60 * 1000
@@ -65,6 +67,7 @@ object MarketWatchService {
     }
 
     private fun sweep() {
+        ActiveOrdersSyncService.syncAll()
         val active = ActiveOrderDao.getAll().filter { it.state == "active" }
         if (active.isEmpty()) return
 

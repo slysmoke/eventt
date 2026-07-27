@@ -8,8 +8,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.eventt.core.database.ActiveOrderDao
+import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.features.orders.CostBasisService
+import org.eventt.features.orders.MarketWatchService
 import java.net.InetSocketAddress
 import java.time.Duration
 import java.util.concurrent.Executors
@@ -29,6 +31,7 @@ data class StreamOverlayStats(
     val iskInOrders: Double,
     val expectedProfit: Double,
     val relistFeesPaid: Double,
+    val beatenCount: Int,
 )
 
 /**
@@ -81,31 +84,107 @@ object StreamOverlayServer {
         if (isAutostartEnabled()) start()
     }
 
-    private fun currentStats(): StreamOverlayStats {
-        val since = StreamOverlaySession.startedAtKey
-        val fifo = CostBasisService.compute()
+    // Mutable accumulator across every local character/corp — see currentStats(). A plain data
+    // class instead of local `var`s so accumulate() can build one and the caller folds it in.
+    private data class Totals(
+        val trades: Int = 0,
+        val profit: Double = 0.0,
+        val sellOrders: Int = 0,
+        val buyOrders: Int = 0,
+        val iskInOrders: Double = 0.0,
+        val expectedProfit: Double = 0.0,
+        val relistFees: Double = 0.0,
+    ) {
+        operator fun plus(o: Totals) =
+            Totals(
+                trades + o.trades,
+                profit + o.profit,
+                sellOrders + o.sellOrders,
+                buyOrders + o.buyOrders,
+                iskInOrders + o.iskInOrders,
+                expectedProfit + o.expectedProfit,
+                relistFees + o.relistFees,
+            )
+    }
+
+    // Each character's/corp's own FIFO, computed and summed separately — never one merged FIFO
+    // across everyone. CostBasisService.compute(characterId=null, corporationId=null) runs FIFO
+    // over every character's transactions pooled into one chronological queue, so a cheap lot one
+    // character bought can end up "consumed" by a completely unrelated character's sell — cost
+    // basis (and so expected profit) silently drifts from what that character's own Orders screen
+    // shows. Summing independent per-entity results avoids that entirely.
+    private fun accumulate(
+        since: String,
+        characterId: Int?,
+        corporationId: Int?,
+        // Whose tax/broker-fee settings apply — the character itself in personal mode, or (same
+        // stand-in ActiveOrdersSyncService/WalletSyncService use for ESI auth) the first known
+        // member in corp mode. Using CostBasisService's plain defaults here — same bug already
+        // fixed in LeaderboardPublisher — silently mismatched real orders by billions of ISK at
+        // real trading volumes.
+        actingCharId: Int,
+    ): Totals {
+        val taxConfig =
+            CostBasisService.TaxConfig(
+                salesTaxPct = StaticDataDao.getCharSalesTax(actingCharId),
+                brokerFeePct = StaticDataDao.getCharBrokersFee(actingCharId),
+            )
+        val fifo = CostBasisService.compute(characterId = characterId, corporationId = corporationId, taxConfig = taxConfig)
         val sellsThisSession = fifo.realizedSells.filter { it.date >= since }
 
-        val activeOrders = ActiveOrderDao.getAll()
+        // Same "active" filter OrdersSummaryBar/MarketWatchService apply — active_orders can hold
+        // rows in a non-"active" ESI state (expired/cancelled) briefly before they roll into
+        // history; counting those inflated buy/sell counts and ISK totals.
+        val activeOrders = ActiveOrderDao.getAll(characterId = characterId, corporationId = corporationId).filter { it.state == "active" }
         val sellOrders = activeOrders.filter { !it.isBuyOrder }
 
-        return StreamOverlayStats(
-            tradesSession = sellsThisSession.size,
-            profitSession = sellsThisSession.sumOf { it.profit },
-            relistsSession = StreamOverlaySession.relistsSinceStart(),
-            elapsedSeconds = Duration.between(StreamOverlaySession.startedAt, java.time.LocalDateTime.now()).seconds,
-            sellOrdersCount = sellOrders.size,
-            buyOrdersCount = activeOrders.size - sellOrders.size,
+        return Totals(
+            trades = sellsThisSession.size,
+            profit = sellsThisSession.sumOf { it.profit },
+            sellOrders = sellOrders.size,
+            buyOrders = activeOrders.size - sellOrders.size,
             iskInOrders = activeOrders.sumOf { it.price * it.volumeRemaining },
             // Potential profit if every active sell order fully fills at its listed price, against
-            // this type's current FIFO cost basis — buy orders aren't inventory yet, so they don't
-            // contribute (nothing to net against a cost basis until they actually fill).
+            // this type's current inventory cost basis — same lookup OrdersSummaryBar uses
+            // (inventory only, no realized-sells fallback), and buy orders aren't inventory yet so
+            // they don't contribute.
             expectedProfit =
                 sellOrders.sumOf { order ->
-                    val costBasis = fifo.avgCostBasisForType(order.typeId) ?: return@sumOf 0.0
+                    val costBasis = fifo.inventory[order.typeId]?.avgCostBasis ?: return@sumOf 0.0
                     (order.price * fifo.taxConfig.sellMultiplier - costBasis) * order.volumeRemaining
                 },
-            relistFeesPaid = activeOrders.sumOf { it.relistFeesPaid },
+            relistFees = activeOrders.sumOf { it.relistFeesPaid },
+        )
+    }
+
+    private fun currentStats(): StreamOverlayStats {
+        val since = StreamOverlaySession.startedAtKey
+        val characters = CharacterDao.getAll()
+
+        var totals = Totals()
+        characters.forEach { totals += accumulate(since, characterId = it.id, corporationId = null, actingCharId = it.id) }
+        characters
+            .mapNotNull { it.corporationId }
+            .distinct()
+            .forEach { corpId ->
+                val actingId = characters.first { it.corporationId == corpId }.id
+                totals += accumulate(since, characterId = null, corporationId = corpId, actingCharId = actingId)
+            }
+
+        return StreamOverlayStats(
+            tradesSession = totals.trades,
+            profitSession = totals.profit,
+            relistsSession = StreamOverlaySession.relistsSinceStart(),
+            elapsedSeconds = Duration.between(StreamOverlaySession.startedAt, java.time.LocalDateTime.now()).seconds,
+            sellOrdersCount = totals.sellOrders,
+            buyOrdersCount = totals.buyOrders,
+            iskInOrders = totals.iskInOrders,
+            expectedProfit = totals.expectedProfit,
+            relistFeesPaid = totals.relistFees,
+            // Already computed globally (every local character/corp) by MarketWatchService's own
+            // background sweep — same number that drives the Orders tab's nav badge, just read
+            // here instead of recomputed.
+            beatenCount = MarketWatchService.beatenCount.value,
         )
     }
 

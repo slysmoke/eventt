@@ -111,14 +111,17 @@ object ActiveOrderDao {
     // view them. Deleting/replacing per placer — instead of the whole corp scope at once — means
     // a fetch that happens not to include every member this time (a role check, a transient ESI
     // hiccup) never wipes another member's relist history out from under them.
-    // ponytail: a member who drops from "has open corp orders" to zero leaves a stale cached row
-    // behind (nobody to key the delete off) until their next non-empty refresh cleans it up —
-    // acceptable staleness, upgrade to a known-members delete list if that turns out to matter.
+    // Deletes for every locally-known corp member, not just placers present in this fetch's
+    // response — a member who drops from "has open corp orders" to zero would otherwise leave a
+    // stale row behind forever (nobody left to key the delete off once they stop appearing in
+    // [records] at all). Was the ponytail-flagged version of this; upgraded once real order counts
+    // (OBS overlay, leaderboard) started visibly drifting from actually-empty order books.
     fun replaceCorpOrders(
         corporationId: Int,
         records: List<ActiveOrderRecord>,
     ) {
-        val placers = records.mapNotNull { it.characterId }.toSet()
+        val knownMembers = CharacterDao.getAll().filter { it.corporationId == corporationId }.map { it.id }
+        val placers = (records.mapNotNull { it.characterId } + knownMembers).toSet()
         if (placers.isEmpty()) return
         DatabaseManager.transaction {
             prepareStatement("DELETE FROM active_orders WHERE corporation_id = ? AND character_id = ?").use { ps ->

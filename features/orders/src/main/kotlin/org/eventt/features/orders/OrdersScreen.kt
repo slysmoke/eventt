@@ -115,9 +115,40 @@ internal data class CharacterOrder(
     val issuedFormatted: String get() = issued.take(16).replace("T", " ")
 }
 
+/** Parses one raw ESI order-list entry (character- or corp-scoped) into a [CharacterOrder]. */
+internal fun parseOrder(
+    m: Map<String, Any?>,
+    issuedByCharId: Int?,
+): CharacterOrder {
+    val typeId = (m["type_id"] as? Number)?.toInt() ?: 0
+    val locationId = (m["location_id"] as? Number)?.toLong() ?: 0L
+    // Corp orders report region_id directly; character orders don't, so it's derived from
+    // the station. Prefer the direct value when present — it also covers citadels/structures
+    // (locationId > 10^12) that the station lookup can't resolve.
+    val directRegionId = (m["region_id"] as? Number)?.toInt()
+    return CharacterOrder(
+        orderId = (m["order_id"] as? Number)?.toLong() ?: 0L,
+        typeId = typeId,
+        typeName = StaticDataDao.getTypeName(typeId) ?: "Unknown ($typeId)",
+        locationId = locationId,
+        regionId =
+            directRegionId
+                ?: if (locationId < 1_000_000_000_000L) StaticDataDao.getStationById(locationId)?.regionId ?: 0 else 0,
+        stationName = StaticDataDao.getStationById(locationId)?.name ?: locationId.toString(),
+        price = (m["price"] as? Number)?.toDouble() ?: 0.0,
+        volumeTotal = (m["volume_total"] as? Number)?.toInt() ?: 0,
+        volumeRemaining = (m["volume_remain"] as? Number)?.toInt() ?: 0,
+        isBuyOrder = (m["is_buy_order"] as? Boolean) ?: false,
+        duration = (m["duration"] as? Number)?.toInt() ?: 0,
+        issued = (m["issued"] as? String) ?: "",
+        state = (m["state"] as? String) ?: "active",
+        issuedByCharId = issuedByCharId,
+    )
+}
+
 // Mirrors CharacterOrder into the local active-orders cache so the screen has something to show
 // instantly on the next launch, instead of an empty table until ESI's live fetch completes.
-private fun CharacterOrder.toActiveOrderRecord(
+internal fun CharacterOrder.toActiveOrderRecord(
     characterId: Int?,
     corporationId: Int?,
 ): ActiveOrderDao.ActiveOrderRecord =
@@ -539,36 +570,6 @@ fun OrdersScreen(context: ViewContext?) {
             }
             withContext(Dispatchers.Main) { inventoryMarketPrices = result }
         }
-    }
-
-    fun parseOrder(
-        m: Map<String, Any?>,
-        issuedByCharId: Int?,
-    ): CharacterOrder {
-        val typeId = (m["type_id"] as? Number)?.toInt() ?: 0
-        val locationId = (m["location_id"] as? Number)?.toLong() ?: 0L
-        // Corp orders report region_id directly; character orders don't, so it's derived from
-        // the station. Prefer the direct value when present — it also covers citadels/structures
-        // (locationId > 10^12) that the station lookup can't resolve.
-        val directRegionId = (m["region_id"] as? Number)?.toInt()
-        return CharacterOrder(
-            orderId = (m["order_id"] as? Number)?.toLong() ?: 0L,
-            typeId = typeId,
-            typeName = StaticDataDao.getTypeName(typeId) ?: "Unknown ($typeId)",
-            locationId = locationId,
-            regionId =
-                directRegionId
-                    ?: if (locationId < 1_000_000_000_000L) StaticDataDao.getStationById(locationId)?.regionId ?: 0 else 0,
-            stationName = StaticDataDao.getStationById(locationId)?.name ?: locationId.toString(),
-            price = (m["price"] as? Number)?.toDouble() ?: 0.0,
-            volumeTotal = (m["volume_total"] as? Number)?.toInt() ?: 0,
-            volumeRemaining = (m["volume_remain"] as? Number)?.toInt() ?: 0,
-            isBuyOrder = (m["is_buy_order"] as? Boolean) ?: false,
-            duration = (m["duration"] as? Number)?.toInt() ?: 0,
-            issued = (m["issued"] as? String) ?: "",
-            state = (m["state"] as? String) ?: "active",
-            issuedByCharId = issuedByCharId,
-        )
     }
 
     fun resolveIssuerNames(ids: Set<Int>) {
