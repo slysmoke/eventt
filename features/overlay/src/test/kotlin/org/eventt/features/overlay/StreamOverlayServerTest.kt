@@ -51,5 +51,10 @@ class StreamOverlayServerTest {
         response.body() shouldContain "\"tradesSession\":0"
         response.body() shouldContain "\"profitSession\":0.0"
         response.body() shouldContain "\"relistsSession\":0"
+        response.body() shouldContain "\"sellOrdersCount\":0"
+        response.body() shouldContain "\"buyOrdersCount\":0"
+        response.body() shouldContain "\"iskInOrders\":0.0"
+        response.body() shouldContain "\"expectedProfit\":0.0"
+        response.body() shouldContain "\"relistFeesPaid\":0.0"
     }
 }

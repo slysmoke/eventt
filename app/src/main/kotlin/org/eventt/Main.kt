@@ -22,6 +22,7 @@ import org.eventt.features.contracts.ContractWatchService
 import org.eventt.features.orders.LeaderboardPublisher
 import org.eventt.features.orders.MarketWatchService
 import org.eventt.features.orders.PendingOrdersQueue
+import org.eventt.features.overlay.StreamOverlayServer
 import org.eventt.notify.TrayNotifier
 import org.eventt.ui.EventtApp
 import org.jetbrains.compose.resources.painterResource
@@ -103,6 +104,8 @@ fun main() {
     NostrRelayManager.start()
     // Opt-in trader leaderboard republish sweep — see LeaderboardPublisher.
     LeaderboardPublisher.start()
+    // Opt-in OBS overlay server — see StreamOverlaySettingsCard's autostart checkbox.
+    StreamOverlayServer.startIfAutostartEnabled()
     P2pRequestNotifier.start()
     // Keeps the P2P Market active identity following whichever character (or corp's acting
     // character) is selected in the main nav — there's no separate manual picker for it anymore.
@@ -119,6 +122,7 @@ fun main() {
                 MarketWatchService.stop()
                 ContractWatchService.stop()
                 LeaderboardPublisher.stop()
+                StreamOverlayServer.stop()
                 NostrRelayManager.stop()
                 exitApplication()
             },

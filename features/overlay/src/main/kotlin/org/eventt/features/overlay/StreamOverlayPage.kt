@@ -22,7 +22,8 @@ object StreamOverlayPage {
           }
           #panel {
             display: inline-flex;
-            gap: 22px;
+            flex-direction: column;
+            gap: 12px;
             margin: 14px;
             padding: 16px 22px;
             border-radius: 14px;
@@ -36,11 +37,13 @@ object StreamOverlayPage {
             0%, 100% { box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 25%, transparent), inset 0 0 20px rgba(0,0,0,0.35); }
             50% { box-shadow: 0 0 26px color-mix(in srgb, var(--accent) 55%, transparent), inset 0 0 20px rgba(0,0,0,0.35); }
           }
-          .stat { display: flex; flex-direction: column; align-items: center; min-width: 84px; }
-          .stat .icon { font-size: 20px; line-height: 1; margin-bottom: 4px; filter: drop-shadow(0 0 4px var(--accent)); }
+          .row { display: flex; gap: 22px; }
+          .row + .row { padding-top: 12px; border-top: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); }
+          .stat { display: flex; flex-direction: column; align-items: center; min-width: 80px; }
+          .stat .icon { font-size: 18px; line-height: 1; margin-bottom: 4px; filter: drop-shadow(0 0 4px var(--accent)); }
           .stat .label { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #9fb3c0; margin-bottom: 2px; }
           .stat .value {
-            font-size: 22px; font-weight: 700; color: #f2f8fb;
+            font-size: 20px; font-weight: 700; color: #f2f8fb;
             font-variant-numeric: tabular-nums;
             text-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent);
             transition: color 0.25s ease, transform 0.25s ease;
@@ -51,10 +54,19 @@ object StreamOverlayPage {
         </head>
         <body>
         <div id="panel">
-          <div class="stat"><div class="icon">&#9201;</div><div class="label">Session</div><div class="value" id="timer">00:00:00</div></div>
-          <div class="stat"><div class="icon">&#128200;</div><div class="label">Trades</div><div class="value" id="trades">0</div></div>
-          <div class="stat"><div class="icon">&#128176;</div><div class="label">Profit</div><div class="value" id="profit">0 ISK</div></div>
-          <div class="stat"><div class="icon">&#128260;</div><div class="label">Relists</div><div class="value" id="relists">0</div></div>
+          <div class="row">
+            <div class="stat"><div class="icon">&#9201;</div><div class="label">Session</div><div class="value" id="timer">00:00:00</div></div>
+            <div class="stat"><div class="icon">&#128200;</div><div class="label">Trades</div><div class="value" id="trades">0</div></div>
+            <div class="stat"><div class="icon">&#128176;</div><div class="label">Profit</div><div class="value" id="profit">0 ISK</div></div>
+            <div class="stat"><div class="icon">&#128260;</div><div class="label">Relists</div><div class="value" id="relists">0</div></div>
+          </div>
+          <div class="row">
+            <div class="stat"><div class="icon">&#128228;</div><div class="label">Sell Orders</div><div class="value" id="sellOrders">0</div></div>
+            <div class="stat"><div class="icon">&#128229;</div><div class="label">Buy Orders</div><div class="value" id="buyOrders">0</div></div>
+            <div class="stat"><div class="icon">&#128230;</div><div class="label">ISK in Orders</div><div class="value" id="iskInOrders">0 ISK</div></div>
+            <div class="stat"><div class="icon">&#127919;</div><div class="label">Expected Profit</div><div class="value" id="expectedProfit">0 ISK</div></div>
+            <div class="stat"><div class="icon">&#129534;</div><div class="label">Relist Fees</div><div class="value" id="relistFees">0 ISK</div></div>
+          </div>
         </div>
         <script>
           var params = new URLSearchParams(location.search);
@@ -62,7 +74,6 @@ object StreamOverlayPage {
           if (accent) document.documentElement.style.setProperty('--accent', '#' + accent.replace('#', ''));
 
           var elapsedBase = 0, elapsedTickedAt = Date.now();
-          var lastProfit = null, lastTrades = null, lastRelists = null;
 
           function pad(n) { return n < 10 ? '0' + n : '' + n; }
 
@@ -83,15 +94,19 @@ object StreamOverlayPage {
             setTimeout(function () { el.classList.remove('up', 'down'); }, 600);
           }
 
-          function setStat(id, value, prevRef) {
+          function setStat(id, value, prevRef, isIsk) {
             var el = document.getElementById(id);
             var prev = prevRef.value;
-            if (id === 'profit') el.textContent = fmtIsk(value); else el.textContent = value;
+            el.textContent = isIsk ? fmtIsk(value) : value;
             if (prev !== null && value !== prev) flash(el, value > prev ? 'up' : 'down');
             prevRef.value = value;
           }
 
-          var profitRef = { value: null }, tradesRef = { value: null }, relistsRef = { value: null };
+          var refs = {
+            trades: { value: null }, profit: { value: null }, relists: { value: null },
+            sellOrders: { value: null }, buyOrders: { value: null }, iskInOrders: { value: null },
+            expectedProfit: { value: null }, relistFees: { value: null }
+          };
 
           function tickTimer() {
             var secs = elapsedBase + Math.floor((Date.now() - elapsedTickedAt) / 1000);
@@ -103,9 +118,14 @@ object StreamOverlayPage {
             fetch('/api/stats').then(function (r) { return r.json(); }).then(function (d) {
               elapsedBase = d.elapsedSeconds;
               elapsedTickedAt = Date.now();
-              setStat('trades', d.tradesSession, tradesRef);
-              setStat('profit', d.profitSession, profitRef);
-              setStat('relists', d.relistsSession, relistsRef);
+              setStat('trades', d.tradesSession, refs.trades, false);
+              setStat('profit', d.profitSession, refs.profit, true);
+              setStat('relists', d.relistsSession, refs.relists, false);
+              setStat('sellOrders', d.sellOrdersCount, refs.sellOrders, false);
+              setStat('buyOrders', d.buyOrdersCount, refs.buyOrders, false);
+              setStat('iskInOrders', d.iskInOrders, refs.iskInOrders, true);
+              setStat('expectedProfit', d.expectedProfit, refs.expectedProfit, true);
+              setStat('relistFees', d.relistFeesPaid, refs.relistFees, true);
             }).catch(function () {});
           }
 

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -46,10 +47,12 @@ internal fun StreamOverlaySettingsCard() {
     val scope = rememberCoroutineScope()
     val isRunning by StreamOverlayServer.isRunning.collectAsState()
     var accent by remember { mutableStateOf(DEFAULT_ACCENT) }
+    var autostart by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             accent = StaticDataDao.getSetting(ACCENT_SETTING)?.takeIf { it.isNotBlank() } ?: DEFAULT_ACCENT
+            autostart = StreamOverlayServer.isAutostartEnabled()
         }
     }
 
@@ -89,6 +92,17 @@ internal fun StreamOverlaySettingsCard() {
                     modifier = Modifier.width(140.dp),
                     singleLine = true,
                 )
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = autostart,
+                    onCheckedChange = { checked ->
+                        autostart = checked
+                        scope.launch(Dispatchers.IO) { StreamOverlayServer.setAutostartEnabled(checked) }
+                    },
+                )
+                Text("Start automatically when the app launches", style = MaterialTheme.typography.bodySmall)
             }
 
             if (isRunning) {
