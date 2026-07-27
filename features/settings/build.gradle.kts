@@ -14,6 +14,7 @@ dependencies {
     implementation(project(":core:staticdata"))
     implementation(project(":core:marketlogs"))
     implementation(project(":core:nostr"))
+    implementation(project(":features:overlay")) // StreamOverlayServer, for the OBS overlay settings card
     implementation(project(":ui:theme"))
     implementation(project(":ui:common"))
     implementation(compose.desktop.currentOs)

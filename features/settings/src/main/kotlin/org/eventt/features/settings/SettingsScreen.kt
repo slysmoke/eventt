@@ -102,6 +102,8 @@ fun SettingsScreen() {
 
         HotkeysCard()
 
+        StreamOverlaySettingsCard()
+
         NostrIdentityCard()
 
         NostrRelaysCard()
