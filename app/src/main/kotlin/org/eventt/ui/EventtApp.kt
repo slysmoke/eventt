@@ -94,10 +94,10 @@ enum class AppScreen(
     val icon: ImageVector,
 ) {
     DASHBOARD("Dashboard", Icons.Default.Dashboard),
+    LEADERBOARD("Leaderboard", Icons.Default.Leaderboard),
     CHARACTERS("Characters", Icons.Default.Person),
     MARKET("Market", Icons.Default.Store),
     P2P_MARKET("P2P Market", Icons.AutoMirrored.Filled.CompareArrows),
-    LEADERBOARD("Leaderboard", Icons.Default.Leaderboard),
     ANALYSIS("Analysis", Icons.Default.Analytics),
     ASSETS("Assets", Icons.Default.Inventory),
     WALLET("Wallet", Icons.Default.AccountBalance),
