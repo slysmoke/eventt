@@ -35,8 +35,6 @@ internal fun SellOrderRow(
     isActiveInGame: Boolean,
     onSelect: () -> Unit,
     onAction: () -> Unit,
-    buyoutHintEnabled: Boolean = false,
-    onBuyout: (BuyoutPlan) -> Unit = {},
 ) {
     val order = metrics.order
     val comparison = metrics.comparison
@@ -46,7 +44,6 @@ internal fun SellOrderRow(
     val marginPct = metrics.marginPct
     val bestMarginPct = metrics.bestMarginPct
     val isBeaten = metrics.isBeaten
-    val buyoutPlan = metrics.buyoutPlan
     val profitColor = totalProfit?.let { if (it >= 0) PROFIT_COLOR else LOSS_COLOR } ?: MaterialTheme.colorScheme.onSurfaceVariant
     val bestMarginColor = bestMarginPct?.let { if (it >= 0) PROFIT_COLOR else LOSS_COLOR } ?: MaterialTheme.colorScheme.onSurfaceVariant
     val rowBg =
@@ -112,10 +109,6 @@ internal fun SellOrderRow(
                     color = UNDERCUT_COLOR.copy(alpha = 0.8f),
                 )
             }
-        }
-
-        if (buyoutHintEnabled) {
-            BuyoutCell(buyoutPlan, onBuy = onBuyout, modifier = Modifier.weight(1.8f))
         }
 
         RelistCell(order.relistCount, order.relistFeesPaid, metrics.updatesRemaining, modifier = Modifier.weight(1.8f))
@@ -326,44 +319,6 @@ private fun RelistCell(
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             )
-        }
-    }
-}
-
-// How much of this order's same-station competitors could be bought out (cheapest-first, up to
-// this order's own remaining volume) and resold against it, at what blended cost — a buy button
-// only appears when the total profit is actually positive, so it's never an invitation to buy
-// at a loss. Null plan (nothing cheaper to buy, or nothing left to buy it with) shows as "—".
-@Composable
-private fun BuyoutCell(
-    plan: BuyoutPlan?,
-    onBuy: (BuyoutPlan) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                plan?.let { "${it.volume} @ ${formatIsk(it.avgCost)}" } ?: "—",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (plan != null) {
-                Text(
-                    "+${formatIsk(plan.totalProfit)}",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                    color = if (plan.totalProfit > 0) positiveColor else negativeColor,
-                )
-            }
-        }
-        if (plan != null && plan.totalProfit > 0) {
-            IconButton(modifier = Modifier.size(28.dp), onClick = { onBuy(plan) }) {
-                Icon(
-                    Icons.Default.ShoppingCart,
-                    contentDescription = "Open market & copy buyout quantity",
-                    modifier = Modifier.size(14.dp),
-                    tint = positiveColor,
-                )
-            }
         }
     }
 }

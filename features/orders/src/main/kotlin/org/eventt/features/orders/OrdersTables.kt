@@ -105,47 +105,7 @@ internal data class SellOrderMetrics(
     // Beaten: another sell order at the same station is currently cheaper than ours.
     val isBeaten: Boolean,
     val competition: CompetitionService.Stats?,
-    // Buying out same-station competitors cheaper than this order and reselling against it --
-    // null when there's no profitable volume to buy (including when buyout hint is off, since
-    // callers only pass a populated competingSellBooks map when it's on).
-    val buyoutPlan: BuyoutPlan?,
 )
-
-// Volume, blended average cost, and total profit of buying out same-station competitors cheaper
-// than targetPrice and reselling that stock against this order.
-internal data class BuyoutPlan(
-    val volume: Long,
-    val avgCost: Double,
-    val totalProfit: Double,
-)
-
-// Walks the competing sell book from cheapest, buying out every whole layer priced strictly below
-// maxBuyPrice and stopping at the first layer that isn't (sorted ascending, so nothing after that
-// point could help either) -- mixing any two prices each <= maxBuyPrice can only ever blend to <=
-// maxBuyPrice, so no partial-layer break-even math is needed except to apply the volume cap, which
-// can land mid-layer. maxBuyPrice and resalePrice are deliberately separate: resalePrice (this
-// order's own price) is what profit is measured against, while maxBuyPrice is how cheap a layer
-// has to be to even qualify -- e.g. capped further by a reference hub's price, so only genuinely
-// underpriced competitors get bought out, not merely-cheaper-than-me ones. maxVolume is this
-// order's own remaining volume: no point recommending a buyout bigger than it can absorb.
-internal fun computeBuyoutPlan(
-    competingSellOrders: List<Pair<Double, Long>>,
-    maxBuyPrice: Double,
-    resalePrice: Double,
-    maxVolume: Long,
-): BuyoutPlan? {
-    if (maxVolume <= 0) return null
-    var volume = 0L
-    var cost = 0.0
-    for ((price, layerVolume) in competingSellOrders.sortedBy { it.first }) {
-        if (price >= maxBuyPrice || volume >= maxVolume) break
-        val take = minOf(layerVolume, maxVolume - volume)
-        volume += take
-        cost += take * price
-    }
-    if (volume <= 0) return null
-    return BuyoutPlan(volume, cost / volume, resalePrice * volume - cost)
-}
 
 internal fun computeSellMetrics(
     order: CharacterOrder,
@@ -155,8 +115,6 @@ internal fun computeSellMetrics(
     comparisons: Map<Pair<Int, Long>, MarketComparison>,
     competition: Map<Pair<Int, Long>, CompetitionService.Stats>,
     relistDiscountPct: Double,
-    competingSellBooks: Map<Pair<Int, Long>, List<Pair<Double, Long>>> = emptyMap(),
-    jitaSellPrices: Map<Int, Double?> = emptyMap(),
 ): SellOrderMetrics {
     val comparison = comparisons[order.typeId to order.locationId]
     val costBasis = inventory[order.typeId]?.avgCostBasis ?: historyCostBasis[order.typeId]
@@ -207,19 +165,6 @@ internal fun computeSellMetrics(
         )
     val isBeaten = comparison?.bestSell != null && comparison.bestSell < order.price
     val competitionStats = competition[order.typeId to order.locationId]
-    // Jita comparison is required, not just a nice-to-have -- a competitor undercutting me is
-    // only worth buying out when their price is *also* below Jita's, i.e. a genuine steal by
-    // galaxy standards, not just "cheaper than me." No Jita data yet -> no recommendation.
-    val jitaPrice = jitaSellPrices[order.typeId]
-    val buyoutPlan =
-        jitaPrice?.let {
-            computeBuyoutPlan(
-                competingSellOrders = competingSellBooks[order.typeId to order.locationId] ?: emptyList(),
-                maxBuyPrice = minOf(order.price, it),
-                resalePrice = order.price,
-                maxVolume = order.volumeRemaining.toLong(),
-            )
-        }
     return SellOrderMetrics(
         order,
         comparison,
@@ -231,7 +176,6 @@ internal fun computeSellMetrics(
         updatesRemaining,
         isBeaten,
         competitionStats,
-        buyoutPlan,
     )
 }
 
@@ -252,10 +196,6 @@ internal fun SellOrdersTable(
     activeOrderId: Long?,
     onSelect: (Long) -> Unit,
     onAction: (CharacterOrder) -> Unit,
-    buyoutHintEnabled: Boolean = false,
-    competingSellBooks: Map<Pair<Int, Long>, List<Pair<Double, Long>>> = emptyMap(),
-    jitaSellPrices: Map<Int, Double?> = emptyMap(),
-    onBuyout: (CharacterOrder, BuyoutPlan) -> Unit = { _, _ -> },
 ) {
     val metrics =
         remember(
@@ -266,8 +206,6 @@ internal fun SellOrdersTable(
             comparisons,
             competition,
             relistDiscountPct,
-            competingSellBooks,
-            jitaSellPrices,
         ) {
             orders.map {
                 computeSellMetrics(
@@ -278,8 +216,6 @@ internal fun SellOrdersTable(
                     comparisons,
                     competition,
                     relistDiscountPct,
-                    competingSellBooks,
-                    jitaSellPrices,
                 )
             }
         }
@@ -299,9 +235,6 @@ internal fun SellOrdersTable(
             SortHeader("Name", SortCol.NAME, sortCol, sortDir, onSort, Modifier.weight(3f))
             SortHeader("Cost", SortCol.COST, sortCol, sortDir, onSort, Modifier.weight(1.8f))
             SortHeader("Price / Best", SortCol.PRICE, sortCol, sortDir, onSort, Modifier.weight(2.4f))
-            if (buyoutHintEnabled) {
-                StaticHeader("Buyout", Modifier.weight(1.8f))
-            }
             SortHeader("Relist", SortCol.RELIST, sortCol, sortDir, onSort, Modifier.weight(1.8f))
             SortHeader("Profit", SortCol.PROFIT, sortCol, sortDir, onSort, Modifier.weight(1.8f))
             SortHeader("Margin", SortCol.MARGIN, sortCol, sortDir, onSort, Modifier.weight(1.2f))
@@ -329,8 +262,6 @@ internal fun SellOrdersTable(
                     isActiveInGame = activeOrderId == m.order.orderId,
                     onSelect = { onSelect(m.order.orderId) },
                     onAction = { onAction(m.order) },
-                    buyoutHintEnabled = buyoutHintEnabled,
-                    onBuyout = { plan -> onBuyout(m.order, plan) },
                 )
                 HorizontalDivider(thickness = 0.5.dp)
             }
