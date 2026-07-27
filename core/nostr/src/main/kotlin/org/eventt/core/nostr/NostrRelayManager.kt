@@ -48,6 +48,7 @@ private const val ORDERS_SUBSCRIPTION_ID = "p2pmarket-orders"
 private const val DMS_SUBSCRIPTION_ID = "p2pmarket-dms"
 private const val RECEIPTS_SUBSCRIPTION_ID = "p2pmarket-receipts"
 private const val PRESENCE_SUBSCRIPTION_ID = "p2pmarket-presence"
+private const val LEADERBOARD_SUBSCRIPTION_ID = "p2pmarket-leaderboard"
 private const val GIFT_WRAP_KIND = 1059
 private const val EXPIRED_HOLD_SWEEP_MILLIS = 10L * 60 * 1000
 
@@ -290,6 +291,26 @@ object NostrRelayManager {
                             forFilters: List<Filter>?,
                         ) {
                             PresenceService.onPresenceEvent(event)
+                        }
+                    },
+                )
+
+                // Every opted-in trader's leaderboard entry, everyone's not just counterparties' —
+                // same reasoning as the presence filter above (the network is only this app's
+                // users). Addressable kind = at most one event per pubkey under our fixed d tag.
+                val leaderboardFilter =
+                    Filter(null, null, listOf(LEADERBOARD_KIND), mapOf("d" to listOf(LEADERBOARD_D_TAG)), null, null, null, null, null)
+                c.subscribe(
+                    LEADERBOARD_SUBSCRIPTION_ID,
+                    relayUrls.associateWith { listOf(leaderboardFilter) },
+                    object : SubscriptionListener {
+                        override fun onEvent(
+                            event: Event,
+                            isLive: Boolean,
+                            relay: NormalizedRelayUrl,
+                            forFilters: List<Filter>?,
+                        ) {
+                            LeaderboardService.onEvent(event)
                         }
                     },
                 )

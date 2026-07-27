@@ -28,7 +28,7 @@ private const val FAILURE_TINT_MILLIS = 3000L
  * rather than silently doing nothing, which otherwise looks identical to a successful click.
  */
 @Composable
-internal fun TraderInfoButton(
+fun TraderInfoButton(
     characterName: String,
     characterId: Int? = null,
 ) {

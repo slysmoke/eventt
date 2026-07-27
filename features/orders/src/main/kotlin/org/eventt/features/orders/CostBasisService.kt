@@ -204,6 +204,9 @@ data class RealizedPnlWindow(
     val todayPnl: Double,
     val pnl7d: Double,
     val pnl30d: Double,
+    // Trailing 365 days, not calendar year — same "rolling window from today" convention as
+    // pnl7d/pnl30d, not a Jan-1 reset (used by the Nostr trader leaderboard, issue #17).
+    val pnl365d: Double,
     val pnlAll: Double,
 )
 
@@ -211,12 +214,14 @@ fun CostBasisService.FifoResult.realizedPnlWindow(referenceDate: LocalDate = Loc
     val today = referenceDate.toString()
     val week7Start = referenceDate.minusDays(7).toString()
     val month30Start = referenceDate.minusDays(30).toString()
+    val year365Start = referenceDate.minusDays(365).toString()
 
     fun dayOf(sell: CostBasisService.RealizedSellTx) = sell.date.substring(0, 10)
     return RealizedPnlWindow(
         todayPnl = realizedSells.filter { dayOf(it) == today }.sumOf { it.profit },
         pnl7d = realizedSells.filter { dayOf(it) >= week7Start }.sumOf { it.profit },
         pnl30d = realizedSells.filter { dayOf(it) >= month30Start }.sumOf { it.profit },
+        pnl365d = realizedSells.filter { dayOf(it) >= year365Start }.sumOf { it.profit },
         pnlAll = totalRealizedPnl,
     )
 }

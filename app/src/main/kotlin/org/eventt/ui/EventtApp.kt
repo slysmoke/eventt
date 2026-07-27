@@ -69,9 +69,11 @@ import org.eventt.features.market.MarketAnalysisScreen
 import org.eventt.features.market.MarketBrowserScreen
 import org.eventt.features.orders.MarketWatchService
 import org.eventt.features.orders.OrdersScreen
+import org.eventt.features.orders.WalletSyncService
 import org.eventt.features.overlay.OverlayController
 import org.eventt.features.overlay.OverlayWindow
 import org.eventt.features.p2pmarket.CountBadge
+import org.eventt.features.p2pmarket.LeaderboardScreen
 import org.eventt.features.p2pmarket.P2pMarketScreen
 import org.eventt.features.p2pmarket.rememberPendingBuyRequestCount
 import org.eventt.features.settings.SettingsScreen
@@ -95,6 +97,7 @@ enum class AppScreen(
     CHARACTERS("Characters", Icons.Default.Person),
     MARKET("Market", Icons.Default.Store),
     P2P_MARKET("P2P Market", Icons.AutoMirrored.Filled.CompareArrows),
+    LEADERBOARD("Leaderboard", Icons.Default.Leaderboard),
     ANALYSIS("Analysis", Icons.Default.Analytics),
     ASSETS("Assets", Icons.Default.Inventory),
     WALLET("Wallet", Icons.Default.AccountBalance),
@@ -146,6 +149,11 @@ fun EventtApp() {
         // Player structure (citadel) names — same reasoning, runs alongside rather than
         // blocking startup on a network call.
         launch(Dispatchers.IO) { CitadelService.sync() }
+        // Wallet journal + transactions for every local character and corp, not just whichever
+        // one happens to be selected — keeps Dashboard's "Combine all" view and the trader
+        // leaderboard (which computes off the same unfiltered local data) fresh from launch
+        // instead of only ever syncing whatever context a screen happened to be viewed under.
+        launch(Dispatchers.IO) { WalletSyncService.syncAll() }
         // Purges long-expired ESI cache rows — otherwise nothing ever deletes them and the
         // table grows without bound (found this at ~730MB / 55k dead rows on a real install).
         launch(Dispatchers.IO) { EsiCacheManager.cleanupExpired() }
@@ -1313,6 +1321,7 @@ private fun ScreenContent(
                             AppScreen.CONTRACTS -> ContractTrackerScreen(context = selectedContext)
                             AppScreen.TOOLS -> ToolsScreen(context = selectedContext)
                             AppScreen.P2P_MARKET -> P2pMarketScreen()
+                            AppScreen.LEADERBOARD -> LeaderboardScreen()
                             AppScreen.SETTINGS -> SettingsScreen()
                         }
                     }

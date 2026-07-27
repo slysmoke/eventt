@@ -19,6 +19,7 @@ import org.eventt.core.model.HotkeyBindings
 import org.eventt.core.nostr.NostrIdentityService
 import org.eventt.core.nostr.NostrRelayManager
 import org.eventt.features.contracts.ContractWatchService
+import org.eventt.features.orders.LeaderboardPublisher
 import org.eventt.features.orders.MarketWatchService
 import org.eventt.features.orders.PendingOrdersQueue
 import org.eventt.notify.TrayNotifier
@@ -100,6 +101,8 @@ fun main() {
     // Opt-in background contract refresh + status-change badge — see ContractWatchService.
     ContractWatchService.start()
     NostrRelayManager.start()
+    // Opt-in trader leaderboard republish sweep — see LeaderboardPublisher.
+    LeaderboardPublisher.start()
     P2pRequestNotifier.start()
     // Keeps the P2P Market active identity following whichever character (or corp's acting
     // character) is selected in the main nav — there's no separate manual picker for it anymore.
@@ -115,6 +118,7 @@ fun main() {
                 MarketLogWatcher.stop()
                 MarketWatchService.stop()
                 ContractWatchService.stop()
+                LeaderboardPublisher.stop()
                 NostrRelayManager.stop()
                 exitApplication()
             },

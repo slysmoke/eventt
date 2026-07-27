@@ -29,6 +29,7 @@ import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.AppLog
 import org.eventt.core.model.toPnlWindow
 import org.eventt.features.orders.CostBasisService
+import org.eventt.features.orders.WalletSyncService
 import org.eventt.features.orders.realizedPnlWindow
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
@@ -105,99 +106,17 @@ fun DashboardScreen(
                     AppLog.warn("Dashboard", "wallet ESI: ${e.message}")
                 }
 
-                try {
-                    val journalEntries =
-                        if (isCorp) {
-                            EsiClient.getCorporationJournal(
-                                corpId,
-                                acting,
-                            )
-                        } else {
-                            EsiClient.getCharacterJournal(acting)
-                        }
-                    journalEntries.forEach { entry ->
-                        try {
-                            WalletDao.insertJournalEntry(
-                                entryId = (entry["id"] as? Number)?.toLong() ?: 0,
-                                date = entry["date"] as? String ?: "",
-                                amount = (entry["amount"] as? Number)?.toDouble() ?: 0.0,
-                                balance = (entry["balance"] as? Number)?.toDouble() ?: 0.0,
-                                reason = entry["reason"] as? String ?: "",
-                                refType = entry["ref_type"] as? String ?: "",
-                                firstPartyId = (entry["first_party_id"] as? Number)?.toInt() ?: 0,
-                                firstPartyName = "",
-                                secondPartyId = (entry["second_party_id"] as? Number)?.toInt() ?: 0,
-                                secondPartyName = "",
-                                taxAmount = (entry["tax"] as? Number)?.toDouble(),
-                                isCorp = isCorp,
-                                characterId = if (isCorp) null else charId,
-                                corporationId = corpId,
-                                divisionId = if (isCorp) (entry["division"] as? Number)?.toInt() else null,
-                            )
-                        } catch (_: Exception) {
-                        }
-                    }
-                    walletBalance = WalletDao.getWalletSummary(characterId = charId, corporationId = corpId).balance
-                    txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = charId, corporationId = corpId, since = since90)
-                } catch (e: Exception) {
-                    AppLog.warn("Dashboard", "journal ESI: ${e.message}")
-                }
-
-                try {
-                    val txList =
-                        if (isCorp) EsiClient.getCorporationTransactions(corpId, acting) else EsiClient.getCharacterTransactions(acting)
-                    val typeNames =
-                        txList
-                            .mapNotNull { (it["type_id"] as? Number)?.toInt() }
-                            .toSet()
-                            .associateWith { id -> StaticDataDao.getTypeName(id) ?: "" }
-                    val clientIds = txList.mapNotNull { (it["client_id"] as? Number)?.toInt() }.filter { it > 0 }.toSet()
-                    val knownClientNames = WalletDao.getKnownClientNames(clientIds)
-                    val missingClientIds = clientIds - knownClientNames.keys
-                    val freshClientNames =
-                        if (missingClientIds.isNotEmpty()) {
-                            EsiClient.resolveNames(
-                                missingClientIds.toList(),
-                            )
-                        } else {
-                            emptyMap()
-                        }
-                    val clientNames = knownClientNames + freshClientNames
-                    txList.forEach { tx ->
-                        val typeId = (tx["type_id"] as? Number)?.toInt() ?: 0
-                        val unitPrice = (tx["unit_price"] as? Number)?.toDouble() ?: 0.0
-                        val quantity = (tx["quantity"] as? Number)?.toInt() ?: 0
-                        val clientId = (tx["client_id"] as? Number)?.toInt() ?: 0
-                        try {
-                            WalletDao.insertTransaction(
-                                transactionId = (tx["transaction_id"] as? Number)?.toLong() ?: 0,
-                                date = tx["date"] as? String ?: "",
-                                typeId = typeId,
-                                typeName = typeNames[typeId] ?: "",
-                                quantity = quantity,
-                                unitPrice = unitPrice,
-                                total = unitPrice * quantity,
-                                isBuy = (tx["is_buy"] as? Boolean) ?: false,
-                                clientId = clientId,
-                                clientName = clientNames[clientId] ?: "",
-                                locationId = (tx["location_id"] as? Number)?.toLong() ?: 0L,
-                                locationName = "",
-                                isCorp = isCorp,
-                                characterId = if (isCorp) null else charId,
-                                corporationId = corpId,
-                            )
-                        } catch (_: Exception) {
-                        }
-                    }
-                    val txWindow = WalletDao.getTransactions(characterId = charId, corporationId = corpId, limit = 2000)
-                    recentTx = txWindow.take(12)
-                    val (sellers, buyers) = computeCounterpartyStats(txWindow)
-                    topSellers = sellers
-                    topBuyers = buyers
-                    txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = charId, corporationId = corpId, since = since90)
-                } catch (e: Exception) {
-                    AppLog.warn("Dashboard", "transactions ESI: ${e.message}")
-                }
+                // Journal + transactions fetch-and-insert is shared with WalletSyncService.syncAll()
+                // (the startup/pre-leaderboard-publish sweep across every character/corp) — this is
+                // just that same sync scoped to whichever context is on screen right now.
+                if (isCorp) WalletSyncService.syncCorporation(corpId, acting) else WalletSyncService.syncCharacter(acting)
+                walletBalance = WalletDao.getWalletSummary(characterId = charId, corporationId = corpId).balance
+                txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = charId, corporationId = corpId, since = since90)
+                val txWindow = WalletDao.getTransactions(characterId = charId, corporationId = corpId, limit = 2000)
+                recentTx = txWindow.take(12)
+                val (sellers, buyers) = computeCounterpartyStats(txWindow)
+                topSellers = sellers
+                topBuyers = buyers
             }
 
             try {

@@ -734,6 +734,15 @@ object StaticDataDao {
         level: Int,
     ) = setSetting("char.$charId.relist_skill_level", level.coerceIn(0, 5).toString())
 
+    // Opt-in (off by default) to the Nostr trader leaderboard (issue #17). One global entry, not
+    // one per character: the published numbers are the combined realized P&L across every local
+    // character and corporation (CostBasisService.compute with no character/corp filter) — this
+    // setting is which single character's identity signs and publishes that combined entry, i.e.
+    // "who's the main." Null = opted out entirely.
+    fun getLeaderboardPublisherCharId(): Int? = getSetting("leaderboard.publisher_char_id")?.toIntOrNull()
+
+    fun setLeaderboardPublisherCharId(charId: Int?) = setSetting("leaderboard.publisher_char_id", charId?.toString() ?: "")
+
     // ─── Helpers ──────────────────────────────────────────────────────────
 
     private fun java.sql.ResultSet.mapResultSetToType(): StaticTypeModel =

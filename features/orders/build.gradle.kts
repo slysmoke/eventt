@@ -13,6 +13,7 @@ dependencies {
     implementation(project(":core:auth"))
     implementation(project(":core:esi"))
     implementation(project(":core:marketlogs"))
+    implementation(project(":core:nostr")) // LeaderboardService, for the opt-in trader leaderboard publisher
     implementation(project(":ui:theme"))
     implementation(project(":ui:common"))
     implementation(compose.desktop.currentOs)
