@@ -113,8 +113,11 @@ object CostBasisService {
             typeNames[tx.typeId] = tx.typeName
             if (tx.isBuy) {
                 // Store adjusted cost: price + broker fee paid to place the buy order, plus this
-                // type's average buy-side relist fee per unit (see relistPerUnitByType).
-                val adjustedCost = tx.unitPrice * taxConfig.buyMultiplier + (buyRelistPerUnit[tx.typeId] ?: 0.0)
+                // type's average buy-side relist fee per unit (see relistPerUnitByType). Neither
+                // applies to a P2P trade — it's a direct exchange outside the market, with no
+                // order (and so no broker fee/relists) behind it at all.
+                val adjustedCost =
+                    if (tx.isP2p) tx.unitPrice else tx.unitPrice * taxConfig.buyMultiplier + (buyRelistPerUnit[tx.typeId] ?: 0.0)
                 lots.getOrPut(tx.typeId) { ArrayDeque() }.addLast(Lot(tx.quantity, adjustedCost, tx.date))
             } else {
                 val queue = lots.getOrPut(tx.typeId) { ArrayDeque() }
@@ -134,8 +137,10 @@ object CostBasisService {
                 if (qtyMatched > 0) {
                     val cb = costConsumed / qtyMatched
                     // Net of tax/broker fee (sellMultiplier) and this type's average sell-side
-                    // relist fee per unit (see relistPerUnitByType).
-                    val netSellPrice = tx.unitPrice * taxConfig.sellMultiplier - (sellRelistPerUnit[tx.typeId] ?: 0.0)
+                    // relist fee per unit (see relistPerUnitByType) — again, neither applies to a
+                    // P2P disposal.
+                    val netSellPrice =
+                        if (tx.isP2p) tx.unitPrice else tx.unitPrice * taxConfig.sellMultiplier - (sellRelistPerUnit[tx.typeId] ?: 0.0)
                     val profit = qtyMatched * (netSellPrice - cb)
                     val margin = if (cb > 0) (netSellPrice - cb) / cb * 100.0 else 0.0
                     realized.add(RealizedSellTx(tx.date, tx.typeId, qtyMatched, tx.unitPrice, cb, profit, margin))

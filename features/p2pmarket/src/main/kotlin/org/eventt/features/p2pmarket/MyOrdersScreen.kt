@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -47,7 +48,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.NostrOrderModel
+import org.eventt.core.database.P2pAttributionDefault
 import org.eventt.core.database.StaticDataDao
+import org.eventt.core.database.TransactionAttribution
 import org.eventt.core.model.StaticRegionModel
 import org.eventt.core.model.StaticTypeModel
 import org.eventt.core.nostr.MinLotUnit
@@ -97,6 +100,11 @@ fun MyOrdersScreen() {
     var tradingAs by remember { mutableStateOf<String?>(null) }
     var isPosting by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
+    var defaultAttribution by remember { mutableStateOf<TransactionAttribution?>(null) }
+
+    LaunchedEffect(Unit) {
+        defaultAttribution = withContext(Dispatchers.IO) { P2pAttributionDefault.get() }
+    }
 
     LaunchedEffect(Unit) {
         val savedRegion =
@@ -235,6 +243,21 @@ fun MyOrdersScreen() {
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                "Attribute new trades to:",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            AttributionPicker(
+                defaultAttribution,
+                onSelect = { attribution ->
+                    defaultAttribution = attribution
+                    scope.launch(Dispatchers.IO) { P2pAttributionDefault.set(attribution) }
+                },
+            )
+        }
+        Spacer(Modifier.height(8.dp))
         if (!showPostForm) {
             OutlinedButton(onClick = { showPostForm = true }, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.Add, null, Modifier.size(16.dp))
@@ -426,6 +449,9 @@ fun MyOrdersScreen() {
                         row,
                         onRenew = { scope.launch(Dispatchers.IO) { OrderRepository.renewOrder(row.order) } },
                         onCancel = { scope.launch(Dispatchers.IO) { OrderRepository.cancelOrder(row.order) } },
+                        onEdit = { newPrice, newQtyRemaining ->
+                            scope.launch(Dispatchers.IO) { OrderRepository.editOrder(row.order, newPrice, newQtyRemaining) }
+                        },
                     )
                 }
             }
@@ -465,7 +491,7 @@ private fun MyOrdersTableHeader(
             active = sortColumn == MyOrdersSortColumn.EXPIRY,
             direction = sortDirection,
         ) { onSort(MyOrdersSortColumn.EXPIRY, SortDirection.ASC) }
-        Spacer(Modifier.width(200.dp))
+        Spacer(Modifier.width(270.dp))
     }
 }
 
@@ -474,8 +500,20 @@ private fun MyOrderTableRow(
     row: MyOrderRowData,
     onRenew: () -> Unit,
     onCancel: () -> Unit,
+    onEdit: (newPrice: Double, newQtyRemaining: Long) -> Unit,
 ) {
     val order = row.order
+    var showEditDialog by remember { mutableStateOf(false) }
+    if (showEditDialog) {
+        EditOrderDialog(
+            order = order,
+            onDismiss = { showEditDialog = false },
+            onSave = { newPrice, newQtyRemaining ->
+                onEdit(newPrice, newQtyRemaining)
+                showEditDialog = false
+            },
+        )
+    }
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -509,9 +547,61 @@ private fun MyOrderTableRow(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.width(110.dp),
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(200.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(270.dp)) {
+            OutlinedButton(onClick = { showEditDialog = true }, contentPadding = COMPACT_BUTTON_PADDING) { Text("Edit") }
             OutlinedButton(onClick = onRenew, contentPadding = COMPACT_BUTTON_PADDING) { Text("Renew") }
             OutlinedButton(onClick = onCancel, contentPadding = COMPACT_BUTTON_PADDING) { Text("Cancel") }
         }
     }
+}
+
+// Price/qty are the only fields that actually change trader intent — region, item, side and min
+// lot stay fixed for the life of an order_uuid (changing any of those is a new order, not an
+// edit). Qty here is what's *remaining* right now (matching the qty column everywhere else),
+// not the order's original total; already-reserved stock still carries over untouched, see
+// OrderRepository.editOrder.
+@Composable
+private fun EditOrderDialog(
+    order: NostrOrderModel,
+    onDismiss: () -> Unit,
+    onSave: (newPrice: Double, newQtyRemaining: Long) -> Unit,
+) {
+    var priceText by remember { mutableStateOf(String.format(Locale.US, "%.2f", order.price)) }
+    var qtyText by remember { mutableStateOf(order.qtyRemaining.toString()) }
+    val price = priceText.toDoubleOrNull()
+    val qty = qtyText.toLongOrNull()
+    val error =
+        when {
+            price == null || price <= 0 -> "Invalid price"
+            qty == null || qty <= 0 -> "Invalid quantity"
+            else -> null
+        }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit order") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = priceText,
+                    onValueChange = { priceText = it },
+                    label = { Text("Price / unit (ISK)") },
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = qtyText,
+                    onValueChange = { qtyText = it },
+                    label = { Text("Quantity available") },
+                    singleLine = true,
+                )
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onSave(price!!, qty!!) }, enabled = error == null) { Text("Save") }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
 }

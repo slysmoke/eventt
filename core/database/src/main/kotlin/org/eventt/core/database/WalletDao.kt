@@ -116,6 +116,11 @@ object WalletDao {
         val quantity: Int,
         val unitPrice: Double,
         val isBuy: Boolean,
+        // Booked from a P2P trade (core:nostr's ReceiptService.bookCostBasisEntry) rather than a
+        // real ESI market transaction — negative transaction_id is that source's own marker (see
+        // p2pTransactionId). A P2P trade is a direct item/ISK exchange outside the market, so
+        // unlike a real transaction it never carries sales tax or a broker fee.
+        val isP2p: Boolean = false,
     )
 
     fun getAllTransactions(
@@ -125,7 +130,7 @@ object WalletDao {
         DatabaseManager.transaction {
             val where = buildWhereClause(characterId, corporationId)
             prepareStatement(
-                "SELECT date, type_id, type_name, quantity, unit_price, is_buy FROM transactions ${where.sql} ORDER BY date ASC",
+                "SELECT transaction_id, date, type_id, type_name, quantity, unit_price, is_buy FROM transactions ${where.sql} ORDER BY date ASC",
             ).use { stmt ->
                 where.params.forEachIndexed { i, param -> stmt.setObject(i + 1, param) }
                 stmt.executeQuery().use { rs ->
@@ -139,10 +144,36 @@ object WalletDao {
                                 quantity = rs.getInt("quantity"),
                                 unitPrice = rs.getDouble("unit_price"),
                                 isBuy = rs.getInt("is_buy") == 1,
+                                isP2p = rs.getLong("transaction_id") < 0,
                             ),
                         )
                     }
                     result
+                }
+            }
+        }
+
+    /** Stored date of a transaction, if it already exists — lets a re-booked P2P entry keep its original date instead of drifting to "now" on every attribution edit. */
+    fun getTransactionDate(transactionId: Long): String? =
+        DatabaseManager.transaction {
+            prepareStatement("SELECT date FROM transactions WHERE transaction_id = ?").use { stmt ->
+                stmt.setLong(1, transactionId)
+                stmt.executeQuery().use { rs -> if (rs.next()) rs.getString("date") else null }
+            }
+        }
+
+    /** Who a transaction (P2P-synthetic or real) currently counts against — null if it's attributed to neither. */
+    fun getAttribution(transactionId: Long): TransactionAttribution? =
+        DatabaseManager.transaction {
+            prepareStatement("SELECT character_id, corporation_id, is_corp FROM transactions WHERE transaction_id = ?").use { stmt ->
+                stmt.setLong(1, transactionId)
+                stmt.executeQuery().use { rs ->
+                    if (!rs.next()) return@transaction null
+                    if (rs.getInt("is_corp") == 1) {
+                        rs.getInt("corporation_id").takeIf { !rs.wasNull() }?.let { TransactionAttribution.Corporation(it) }
+                    } else {
+                        rs.getInt("character_id").takeIf { !rs.wasNull() }?.let { TransactionAttribution.Character(it) }
+                    }
                 }
             }
         }

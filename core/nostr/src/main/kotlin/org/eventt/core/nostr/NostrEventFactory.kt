@@ -94,14 +94,16 @@ object NostrEventFactory {
         )
 
     /**
-     * Republishes an existing order under the same order_uuid with a new qty_remaining and/or a
-     * refreshed expiration (manual Renew) — this republish IS the reservation-confirmation,
-     * cancel (qtyRemaining=0), and renew mechanism; there's no separate protocol message for any
-     * of them.
+     * Republishes an existing order under the same order_uuid with a new price, qty_total,
+     * qty_remaining, and/or a refreshed expiration (manual Renew) — this republish IS the
+     * reservation-confirmation, cancel (qtyRemaining=0), price/qty edit, and renew mechanism;
+     * there's no separate protocol message for any of them.
      */
     fun republishOrder(
         signer: NostrSignerSync,
         previous: ParsedOrder,
+        newPrice: Double = previous.price,
+        newQtyTotal: Long = previous.qtyTotal,
         newQtyRemaining: Long = previous.qtyRemaining,
         renew: Boolean = false,
     ): Event {
@@ -116,8 +118,8 @@ object NostrEventFactory {
                 previous.side,
                 previous.typeId,
                 previous.regionId,
-                previous.price,
-                previous.qtyTotal,
+                newPrice,
+                newQtyTotal,
                 newQtyRemaining,
                 previous.minLot,
                 previous.minLotUnit,

@@ -129,6 +129,20 @@ object DatabaseManager {
                 DELETE FROM corporations WHERE id NOT IN
                     (SELECT corporation_id FROM characters WHERE corporation_id IS NOT NULL)
                 """,
+                // Price/type snapshotted at request time so a completed trade's recorded value
+                // survives the seller later editing the order's price (OrderRepository.editOrder) —
+                // and so cost-basis bookkeeping (ReceiptService) never has to re-resolve a possibly
+                // stale/pruned local order row just to know what type_id or price it was for.
+                "ALTER TABLE nostr_reservations ADD COLUMN price REAL NOT NULL DEFAULT 0",
+                "ALTER TABLE nostr_reservations ADD COLUMN type_id INTEGER NOT NULL DEFAULT 0",
+                // Reservation `role` ("buyer" sent the request / "seller" owns the order) is a
+                // *negotiation* role, not the trade's economic direction -- those only coincide
+                // when the order itself is a sell order. On a BUY order, the requester is the one
+                // supplying the item (economically the seller) and the order owner is the one
+                // paying ISK for it (economically the buyer) -- exactly inverted. Snapshotting the
+                // order's own side lets ReceiptService combine the two correctly instead of
+                // recording every P2P purchase against a BUY order backwards (as a sale).
+                "ALTER TABLE nostr_reservations ADD COLUMN order_side TEXT NOT NULL DEFAULT ''",
             )
         conn.createStatement().use { stmt ->
             migrations.forEach { sql ->

@@ -83,6 +83,31 @@ object OrderRepository {
     suspend fun renewOrder(order: NostrOrderModel): ParsedOrder? =
         republish(order) { signer, parsed -> NostrEventFactory.republishOrder(signer, parsed, renew = true) }
 
+    /**
+     * Changes price and/or how much is left available on an existing order — [newQtyRemaining]
+     * is what the seller/buyer actually has on hand right now, matching the "remaining" figure
+     * shown everywhere else in the UI (Browse/My Orders' qty column), not the order's original
+     * qtyTotal. Qty already spoken for by a confirmed reservation (qtyTotal - qtyRemaining)
+     * carries over untouched — qtyTotal is derived as [newQtyRemaining] plus that held-back
+     * amount, so the reservation's own accounting never gets disturbed. Null if [order] isn't ours.
+     */
+    suspend fun editOrder(
+        order: NostrOrderModel,
+        newPrice: Double,
+        newQtyRemaining: Long,
+    ): ParsedOrder? =
+        republish(order) { signer, parsed ->
+            val alreadyReserved = parsed.qtyTotal - parsed.qtyRemaining
+            val newQtyTotal = newQtyRemaining + alreadyReserved
+            NostrEventFactory.republishOrder(
+                signer,
+                parsed,
+                newPrice = newPrice,
+                newQtyTotal = newQtyTotal,
+                newQtyRemaining = newQtyRemaining,
+            )
+        }
+
     /** Republishes with a new qty_remaining — this is also the reservation-confirmation step once a DM handshake lands in a later phase. Null if [order] isn't ours. */
     suspend fun setRemainingQty(
         order: NostrOrderModel,

@@ -8,6 +8,14 @@ data class NostrReservationModel(
     val sellerPubkey: String,
     val role: String,
     val qty: Long,
+    // Snapshotted from the order at request time — see the migration comment in
+    // DatabaseManager for why these can't just be re-read off the order later.
+    val price: Double,
+    val typeId: Int,
+    // "buy" or "sell" — the order's own side, not this trade's economic direction. [role] tells
+    // you who sent the request vs who owns the order, which only matches buyer/seller of the
+    // *item* when the order is a sell order; combine the two (see ReceiptService) to get it right.
+    val orderSide: String,
     val note: String,
     val buyerChar: String,
     val buyerCharacterId: Int?,
@@ -36,6 +44,9 @@ object NostrReservationDao {
         sellerPubkey: String,
         role: String,
         qty: Long,
+        price: Double,
+        typeId: Int,
+        orderSide: String,
         note: String,
         buyerChar: String,
         buyerCharacterId: Int?,
@@ -45,8 +56,8 @@ object NostrReservationDao {
             prepareStatement(
                 """
                 INSERT OR IGNORE INTO nostr_reservations
-                (trade_id, order_uuid, order_pubkey, buyer_pubkey, seller_pubkey, role, qty, note, buyer_char, buyer_char_id, requested_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (trade_id, order_uuid, order_pubkey, buyer_pubkey, seller_pubkey, role, qty, price, type_id, order_side, note, buyer_char, buyer_char_id, requested_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent(),
             ).use { stmt ->
                 stmt.setString(1, tradeId)
@@ -56,10 +67,13 @@ object NostrReservationDao {
                 stmt.setString(5, sellerPubkey)
                 stmt.setString(6, role)
                 stmt.setLong(7, qty)
-                stmt.setString(8, note)
-                stmt.setString(9, buyerChar)
-                buyerCharacterId?.let { stmt.setInt(10, it) } ?: stmt.setNull(10, java.sql.Types.INTEGER)
-                stmt.setLong(11, requestedAt)
+                stmt.setDouble(8, price)
+                stmt.setInt(9, typeId)
+                stmt.setString(10, orderSide)
+                stmt.setString(11, note)
+                stmt.setString(12, buyerChar)
+                buyerCharacterId?.let { stmt.setInt(13, it) } ?: stmt.setNull(13, java.sql.Types.INTEGER)
+                stmt.setLong(14, requestedAt)
                 stmt.executeUpdate() > 0
             }
         }
@@ -154,6 +168,9 @@ object NostrReservationDao {
             sellerPubkey = getString("seller_pubkey"),
             role = getString("role"),
             qty = getLong("qty"),
+            price = getDouble("price"),
+            typeId = getInt("type_id"),
+            orderSide = getString("order_side") ?: "",
             note = getString("note") ?: "",
             buyerChar = getString("buyer_char") ?: "",
             buyerCharacterId = getInt("buyer_char_id").takeIf { !wasNull() },

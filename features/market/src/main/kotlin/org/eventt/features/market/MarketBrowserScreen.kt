@@ -39,6 +39,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.AlertDao
+import org.eventt.core.database.AppState
 import org.eventt.core.database.MarketDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.esi.EsiClient
@@ -99,6 +100,21 @@ fun MarketBrowserScreen() {
     var isSdeImporting by remember { mutableStateOf(false) }
     var showAddToAlert by remember { mutableStateOf(false) }
     var contextMenuOrder by remember { mutableStateOf<MarketOrder?>(null) }
+
+    // Deep link from another tab (e.g. Orders' "view price" button) — preselect the requested
+    // item exactly as a search-result click would, then clear the one-shot signal.
+    val pendingTypeId by AppState.pendingMarketTypeId.collectAsState()
+    LaunchedEffect(pendingTypeId) {
+        val typeId = pendingTypeId ?: return@LaunchedEffect
+        val type = withContext(Dispatchers.IO) { StaticDataDao.getTypeById(typeId) }
+        if (type != null) {
+            selectedType = type
+            searchQuery = ""
+            searchResults = emptyList()
+            loadMarketData(selectedRegionId, type.typeId, ordersCallback = { orderBook = it }, historyCallback = { history = it })
+        }
+        AppState.clearPendingMarketTypeId()
+    }
 
     LaunchedEffect(Unit) {
         val groups = withContext(Dispatchers.IO) { StaticDataDao.getTopMarketGroups() }

@@ -56,6 +56,12 @@ internal val ACTIVE_IN_GAME = Color(0xFF4A90D9) // blue — currently open in EV
 
 private const val DEFAULT_REGION_ID = 10000002 // The Forge (Jita) — fallback for inventory items with no active order/region context
 private const val SHOW_BEATEN_ONLY_SETTING = "orders.show_beaten_only"
+private const val BUYOUT_HINT_ENABLED_SETTING = "orders.buyout_hint"
+
+// Jita IV - Moon 4 - Caldari Navy Assembly Plant -- verified against the real static_stations
+// table, not trusted from memory. The buyout hint's reference floor: a same-station competitor
+// only gets recommended for buyout when their price also undercuts Jita, not just my own order.
+private const val JITA_STATION_ID = 60003760L
 
 private val beatenFilterIcon: @Composable () -> Unit = {
     Icon(Icons.Default.ArrowDownward, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -254,6 +260,8 @@ fun OrdersScreen(context: ViewContext?) {
     var orders by remember { mutableStateOf<List<CharacterOrder>>(emptyList()) }
     var historyOrders by remember { mutableStateOf<List<OrderHistoryDao.OrderHistoryRecord>>(emptyList()) }
     var fifoResult by remember { mutableStateOf<CostBasisService.FifoResult?>(null) }
+    var failedContractLines by remember { mutableStateOf<List<FailedContractLine>>(emptyList()) }
+    var showWriteOffDialog by remember { mutableStateOf(false) }
     var relistDiscountPct by remember { mutableStateOf(OrderFeeService.relistDiscountPct(0)) }
     var isLoading by remember { mutableStateOf(false) }
     // Superseded on every new loadOrders()/fetchMarketComparisons() call so switching characters
@@ -295,6 +303,22 @@ fun OrdersScreen(context: ViewContext?) {
     }
     var isLoadingMarket by remember { mutableStateOf(false) }
     var marketComparisonsExpiresAt by remember { mutableStateOf<Long?>(null) }
+
+    // Opt-in "buy out the competition" hint (Sell tab only): off by default, since it's an extra
+    // column/button most people won't want, and the Jita fetch below (see fetchJitaPrices) is an
+    // extra ESI call per distinct sold type.
+    var buyoutHintEnabled by remember { mutableStateOf(false) }
+    // (typeId, locationId) -> every other seller's (price, volumeRemain) at that exact station,
+    // sorted or not (computeBuyoutPlan sorts) -- the same filtered list fetchMarketComparisons
+    // already builds to take bestSell's minOrNull() from, just not discarded here. Free byproduct
+    // of that fetch, unlike jitaSellPrices below.
+    var competingSellBooks by remember { mutableStateOf<Map<Pair<Int, Long>, List<Pair<Double, Long>>>>(emptyMap()) }
+    // typeId -> best sell price at Jita right now -- the reference floor a same-station
+    // competitor's price must also undercut before buyoutPlan recommends buying them out.
+    var jitaSellPrices by remember { mutableStateOf<Map<Int, Double?>>(emptyMap()) }
+    LaunchedEffect(Unit) {
+        buyoutHintEnabled = withContext(Dispatchers.IO) { StaticDataDao.getSetting(BUYOUT_HINT_ENABLED_SETTING) == "true" }
+    }
 
     // Best market sell price per type — used as an estimated Sell Price for inventory items
     // that don't have a matching active sell order of their own.
@@ -344,6 +368,7 @@ fun OrdersScreen(context: ViewContext?) {
                             .toSet()
 
                     val result = mutableMapOf<Pair<Int, Long>, MarketComparison>()
+                    val competingBooks = mutableMapOf<Pair<Int, Long>, List<Pair<Double, Long>>>()
                     // Relists detected from the live public order book -- ~5min fresh, versus
                     // ~25-30min for /characters/{id}/orders/, so this catches a price change well
                     // before the next full loadOrders() poll would.
@@ -372,12 +397,17 @@ fun OrdersScreen(context: ViewContext?) {
                             // One entry per station this character actually has an active order at —
                             // bestSell only counts other sellers at that same station.
                             ownOrdersForPair.map { it.locationId }.toSet().forEach { locationId ->
-                                val bestSell =
-                                    sellersElsewhere
-                                        .filter { (it["location_id"] as? Number)?.toLong() == locationId }
-                                        .mapNotNull { (it["price"] as? Number)?.toDouble() }
-                                        .minOrNull()
+                                val ordersHere = sellersElsewhere.filter { (it["location_id"] as? Number)?.toLong() == locationId }
+                                val bestSell = ordersHere.mapNotNull { (it["price"] as? Number)?.toDouble() }.minOrNull()
                                 result[typeId to locationId] = MarketComparison(bestSell, bestBuy)
+                                // Buyout hint's raw material -- the same filtered list bestSell's
+                                // minOrNull() above comes from, just not collapsed to one number.
+                                competingBooks[typeId to locationId] =
+                                    ordersHere.mapNotNull { o ->
+                                        val price = (o["price"] as? Number)?.toDouble() ?: return@mapNotNull null
+                                        val vol = (o["volume_remain"] as? Number)?.toLong() ?: return@mapNotNull null
+                                        price to vol
+                                    }
                             }
                             val pairParams = mapOf("order_type" to "all", "type_id" to typeId.toString())
                             // The public order book's own "as of" time for this (typeId, regionId)
@@ -464,12 +494,38 @@ fun OrdersScreen(context: ViewContext?) {
                         marketComparisons = result
                         marketComparisonsExpiresAt = latestExpiry
                         competitionStats = stats
+                        competingSellBooks = competingBooks
                         if (detectedChanges.isNotEmpty()) orders = orders.map { detectedChanges[it.orderId] ?: it }
                     }
                 } finally {
                     withContext(Dispatchers.Main) { isLoadingMarket = false }
                 }
             }
+    }
+
+    // Buyout hint's reference floor (see JITA_STATION_ID) -- sell orders only, since the buyout
+    // hint itself only applies to sells. A separate fetch from fetchMarketComparisons above:
+    // Jita is a different region from wherever these orders actually are, so it can't ride along
+    // on that same per-order-region loop.
+    fun fetchJitaPrices(sellOrders: List<CharacterOrder>) {
+        if (!buyoutHintEnabled || sellOrders.isEmpty()) return
+        scope.launch(Dispatchers.IO) {
+            val typeIds = sellOrders.filter { it.state == "active" }.map { it.typeId }.toSet()
+            val result = mutableMapOf<Int, Double?>()
+            for (typeId in typeIds) {
+                try {
+                    val sellersAtJita =
+                        EsiClient
+                            .getMarketRegionOrders(DEFAULT_REGION_ID, "sell", typeId)
+                            .filter { (it["location_id"] as? Number)?.toLong() == JITA_STATION_ID }
+                    result[typeId] = sellersAtJita.mapNotNull { (it["price"] as? Number)?.toDouble() }.minOrNull()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                }
+            }
+            withContext(Dispatchers.Main) { jitaSellPrices = result }
+        }
     }
 
     fun fetchInventoryMarketPrices(inventory: Map<Int, CostBasisService.InventoryItem>) {
@@ -684,6 +740,7 @@ fun OrdersScreen(context: ViewContext?) {
 
                     // Load market comparison data after orders are parsed
                     fetchMarketComparisons(parsed)
+                    fetchJitaPrices(parsed.filter { !it.isBuyOrder })
                     fetchInventoryMarketPrices(fifo.inventory)
                 } catch (e: CancellationException) {
                     throw e
@@ -725,6 +782,28 @@ fun OrdersScreen(context: ViewContext?) {
         }
     }
 
+    // Buyout action: open market window in-game + copy the recommended quantity to clipboard.
+    // Unlike triggerOrderAction above (which prepares a limit-order price to paste), this is an
+    // instant market buy against existing sell orders -- it fills cheapest-first automatically up
+    // to whatever quantity you enter, so quantity is the useful paste target here, not a price.
+    fun triggerBuyoutAction(
+        order: CharacterOrder,
+        plan: BuyoutPlan,
+    ) {
+        if (isLoading || isLoadingMarket) return
+        scope.launch(Dispatchers.IO) {
+            try {
+                actingCharId?.let { EsiClient.openMarketWindow(it, order.typeId) }
+            } catch (_: Exception) {
+            }
+            withContext(Dispatchers.Main) {
+                val text = plan.volume.toString()
+                val sel = StringSelection(text)
+                Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, sel)
+            }
+        }
+    }
+
     fun recalculateFifo() {
         val acting = actingCharId ?: return
         scope.launch(Dispatchers.IO) {
@@ -736,6 +815,13 @@ fun OrdersScreen(context: ViewContext?) {
             val fifo = CostBasisService.compute(characterId = charId, corporationId = corpId, taxConfig = taxConfig)
             withContext(Dispatchers.Main) { fifoResult = fifo }
             fetchInventoryMarketPrices(fifo.inventory)
+        }
+    }
+
+    fun loadFailedContracts() {
+        scope.launch(Dispatchers.IO) {
+            val lines = runCatching { FailedContractWriteOffService.findWriteOffs(charId, corpId) }.getOrDefault(emptyList())
+            withContext(Dispatchers.Main) { failedContractLines = lines }
         }
     }
 
@@ -768,8 +854,10 @@ fun OrdersScreen(context: ViewContext?) {
             relistDiscountPct =
                 withContext(Dispatchers.IO) { OrderFeeService.relistDiscountPct(StaticDataDao.getCharRelistSkillLevel(acting)) }
             loadOrders()
+            loadFailedContracts()
         } else {
             PendingOrdersQueue.clear()
+            failedContractLines = emptyList()
         }
     }
 
@@ -818,8 +906,15 @@ fun OrdersScreen(context: ViewContext?) {
             val expiry = marketComparisonsExpiresAt ?: continue
             if (System.currentTimeMillis() >= expiry && !isLoadingMarket && !isLoading && orders.isNotEmpty()) {
                 fetchMarketComparisons(orders)
+                fetchJitaPrices(orders.filter { !it.isBuyOrder })
             }
         }
+    }
+
+    // Flipping the toggle fetches immediately instead of waiting for the next scheduled refresh --
+    // fetchJitaPrices itself is a no-op while disabled.
+    LaunchedEffect(buyoutHintEnabled) {
+        fetchJitaPrices(orders.filter { !it.isBuyOrder })
     }
 
     LaunchedEffect(Unit) {
@@ -955,7 +1050,10 @@ fun OrdersScreen(context: ViewContext?) {
                         isLoading = isLoadingMarket,
                         enabled = !isLoading,
                         expiresAtMs = marketComparisonsExpiresAt,
-                        onClick = { fetchMarketComparisons(orders) },
+                        onClick = {
+                            fetchMarketComparisons(orders)
+                            fetchJitaPrices(orders.filter { !it.isBuyOrder })
+                        },
                         label = "Refresh Prices",
                     )
                     EsiRefreshButton(
@@ -1002,6 +1100,30 @@ fun OrdersScreen(context: ViewContext?) {
             Tab(selected = activeTab == 3, onClick = { activeTab = 3 }) {
                 Text("Inventory (${inventory.size})", modifier = Modifier.padding(8.dp))
             }
+        }
+
+        if (failedContractLines.isNotEmpty()) {
+            TextButton(onClick = { showWriteOffDialog = true }) {
+                Icon(Icons.Default.Warning, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "${failedContractLines.size} item(s) lost to failed courier contracts — write off from inventory",
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+        if (showWriteOffDialog) {
+            FailedContractWriteOffDialog(
+                lines = failedContractLines,
+                onWriteOff = { line ->
+                    scope.launch(Dispatchers.IO) {
+                        FailedContractWriteOffService.writeOff(line)
+                        withContext(Dispatchers.Main) { failedContractLines = failedContractLines - line }
+                        recalculateFifo()
+                    }
+                },
+                onDismiss = { showWriteOffDialog = false },
+            )
         }
 
         fun onSort(col: SortCol) {
@@ -1055,7 +1177,19 @@ fun OrdersScreen(context: ViewContext?) {
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
                                 horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
+                                FilterChip(
+                                    selected = buyoutHintEnabled,
+                                    onClick = {
+                                        buyoutHintEnabled = !buyoutHintEnabled
+                                        scope.launch(Dispatchers.IO) {
+                                            StaticDataDao.setSetting(BUYOUT_HINT_ENABLED_SETTING, buyoutHintEnabled.toString())
+                                        }
+                                    },
+                                    label = { Text("Buyout hint") },
+                                )
+                                Spacer(Modifier.width(8.dp))
                                 FilterChip(
                                     selected = showBeatenOnly,
                                     onClick = {
@@ -1084,6 +1218,10 @@ fun OrdersScreen(context: ViewContext?) {
                                 activeOrderId = activeOrderId,
                                 onSelect = { id -> selectedOrderId = if (selectedOrderId == id) null else id },
                                 onAction = { order -> triggerOrderAction(order) },
+                                buyoutHintEnabled = buyoutHintEnabled,
+                                competingSellBooks = competingSellBooks,
+                                jitaSellPrices = jitaSellPrices,
+                                onBuyout = { order, plan -> triggerBuyoutAction(order, plan) },
                             )
                         }
                     } else {

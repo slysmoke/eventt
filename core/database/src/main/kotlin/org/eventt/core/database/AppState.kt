@@ -39,6 +39,21 @@ object AppState {
     private val _selectedCharId = MutableStateFlow<Int?>(null)
     val selectedCharId: StateFlow<Int?> = _selectedCharId.asStateFlow()
 
+    // Cross-tab deep link: set by any screen that wants to jump to the Market tab pre-loaded
+    // with a given item (e.g. an Orders row's "view price" button). EventtApp switches tabs on
+    // this changing, MarketBrowserScreen consumes it to preselect and then clears it back to
+    // null — a one-shot signal, not persisted state.
+    private val _pendingMarketTypeId = MutableStateFlow<Int?>(null)
+    val pendingMarketTypeId: StateFlow<Int?> = _pendingMarketTypeId.asStateFlow()
+
+    fun openInMarket(typeId: Int) {
+        _pendingMarketTypeId.value = typeId
+    }
+
+    fun clearPendingMarketTypeId() {
+        _pendingMarketTypeId.value = null
+    }
+
     private const val SETTING_KEY = "app.selected_context"
 
     fun init() {

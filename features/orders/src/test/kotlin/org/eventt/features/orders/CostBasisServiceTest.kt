@@ -51,6 +51,20 @@ class CostBasisServiceTest {
         typeId: Int = TYPE_ID,
     ) = WalletDao.RawTxRecord(date, typeId, "Tritanium", qty, price, isBuy = false)
 
+    private fun p2pBuy(
+        date: String,
+        qty: Int,
+        price: Double,
+        typeId: Int = TYPE_ID,
+    ) = WalletDao.RawTxRecord(date, typeId, "Tritanium", qty, price, isBuy = true, isP2p = true)
+
+    private fun p2pSell(
+        date: String,
+        qty: Int,
+        price: Double,
+        typeId: Int = TYPE_ID,
+    ) = WalletDao.RawTxRecord(date, typeId, "Tritanium", qty, price, isBuy = false, isP2p = true)
+
     @Test
     fun `a full sell of a single buy lot computes cost basis net of tax and broker fee`() {
         stubTransactions(
@@ -65,6 +79,41 @@ class CostBasisServiceTest {
         tx.qty shouldBe 10
         tx.costBasis should (100.0 * 1.03 plusOrMinus TOLERANCE) // buy price + 3% broker fee
         tx.profit should (10 * (150.0 * 0.89 - 103.0) plusOrMinus TOLERANCE) // net of 8% tax + 3% fee
+    }
+
+    @Test
+    fun `a P2P buy and sell apply no tax or broker fee, unlike a market transaction`() {
+        stubTransactions(
+            p2pBuy("2024-01-01", 10, 100.0),
+            p2pSell("2024-01-02", 10, 150.0),
+        )
+
+        val result = CostBasisService.compute(characterId = 1)
+
+        val tx = result.realizedSells.single()
+        tx.costBasis should (100.0 plusOrMinus TOLERANCE) // no 3% broker fee added
+        tx.profit should (10 * (150.0 - 100.0) plusOrMinus TOLERANCE) // no 8% tax / 3% fee subtracted
+    }
+
+    @Test
+    fun `tax and fee are decided per side of the trade, not by how the lot was originally acquired`() {
+        // Bought P2P (no fee) then sold on the market (real tax+fee applies to that sell).
+        stubTransactions(
+            p2pBuy("2024-01-01", 10, 100.0),
+            sell("2024-01-02", 10, 150.0),
+        )
+        val p2pBuyThenMarketSell = CostBasisService.compute(characterId = 1).realizedSells.single()
+        p2pBuyThenMarketSell.costBasis should (100.0 plusOrMinus TOLERANCE) // no broker fee on the P2P buy
+        p2pBuyThenMarketSell.profit should (10 * (150.0 * 0.89 - 100.0) plusOrMinus TOLERANCE) // tax+fee on the market sell
+
+        // Bought on the market (real broker fee applies) then sold P2P (no fee on that sell).
+        stubTransactions(
+            buy("2024-02-01", 10, 100.0),
+            p2pSell("2024-02-02", 10, 150.0),
+        )
+        val marketBuyThenP2pSell = CostBasisService.compute(characterId = 1).realizedSells.single()
+        marketBuyThenP2pSell.costBasis should (103.0 plusOrMinus TOLERANCE) // 3% broker fee on the market buy
+        marketBuyThenP2pSell.profit should (10 * (150.0 - 103.0) plusOrMinus TOLERANCE) // no tax/fee on the P2P sell
     }
 
     @Test

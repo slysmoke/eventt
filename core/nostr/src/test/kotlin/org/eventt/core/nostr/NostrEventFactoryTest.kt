@@ -71,6 +71,22 @@ class NostrEventFactoryTest {
     }
 
     @Test
+    fun `republishOrder can change price and qty_total together, independent of qty_remaining`() {
+        val original = NostrEventFactory.buildOrderEvent(signer, draft(), orderUuid = "order-abc", createdAt = 1_700_000_000L)
+        val previous = requireNotNull(NostrEventFactory.parseOrderEvent(original))
+
+        val edited =
+            NostrEventFactory.republishOrder(signer, previous, newPrice = 512.0, newQtyTotal = 6_000L, newQtyRemaining = 4_500L)
+        val parsed = requireNotNull(NostrEventFactory.parseOrderEvent(edited))
+
+        parsed.orderUuid shouldBe previous.orderUuid
+        parsed.price shouldBe 512.0
+        parsed.qtyTotal shouldBe 6_000L
+        parsed.qtyRemaining shouldBe 4_500L
+        parsed.expiration shouldBe previous.expiration
+    }
+
+    @Test
     fun `republishOrder with renew pushes expiration two weeks past the new created_at`() {
         val original = NostrEventFactory.buildOrderEvent(signer, draft(), orderUuid = "order-abc", createdAt = 1_700_000_000L)
         val previous = requireNotNull(NostrEventFactory.parseOrderEvent(original))
@@ -80,6 +96,18 @@ class NostrEventFactoryTest {
 
         (parsed.expiration > previous.expiration) shouldBe true
         parsed.expiration shouldBe parsed.createdAt + 14L * 24 * 3600
+    }
+
+    @Test
+    fun `p2pTransactionId is always negative and deterministic per tradeId and role`() {
+        val buyerId = p2pTransactionId("trade-abc", "buyer")
+        val sellerId = p2pTransactionId("trade-abc", "seller")
+
+        (buyerId < 0) shouldBe true
+        (sellerId < 0) shouldBe true
+        buyerId shouldBe p2pTransactionId("trade-abc", "buyer")
+        (buyerId == sellerId) shouldBe false
+        (buyerId == p2pTransactionId("trade-xyz", "buyer")) shouldBe false
     }
 
     @Test

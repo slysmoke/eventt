@@ -199,6 +199,13 @@ fun EventtApp() {
         // from which queue was updated most recently.
         LaunchedEffect(selectedScreen) { GlobalHotkeyService.activeScreen = selectedScreen }
 
+        // Cross-tab deep link (e.g. "view price" from an Orders row) — jump to Market as soon
+        // as something requests it; MarketBrowserScreen does the actual preselect + clears it.
+        val pendingMarketTypeId by AppState.pendingMarketTypeId.collectAsState()
+        LaunchedEffect(pendingMarketTypeId) {
+            if (pendingMarketTypeId != null) selectedScreen = AppScreen.MARKET
+        }
+
         // P2P Market incoming-request notifications — shown regardless of which tab is currently
         // open, since a new buy request otherwise stays invisible until you happen to check My
         // Orders yourself. Enriched with the item name (an extra DB round-trip) before display

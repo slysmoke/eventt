@@ -18,6 +18,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,19 +26,30 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.NostrOrderDao
+import org.eventt.core.database.NostrOrderModel
 import org.eventt.core.database.NostrReceiptDao
 import org.eventt.core.database.NostrReservationDao
 import org.eventt.core.database.NostrReservationModel
 import org.eventt.core.database.StaticDataDao
+import org.eventt.core.database.TransactionAttribution
+import org.eventt.core.database.WalletDao
 import org.eventt.core.nostr.NostrRelayEvent
 import org.eventt.core.nostr.NostrRelayManager
+import org.eventt.core.nostr.ReceiptService
+import org.eventt.core.nostr.p2pTransactionId
+import java.time.Instant
 
 private data class InboxRowData(
     val reservation: NostrReservationModel,
     val typeName: String,
     val isConfirmed: Boolean,
+    val attribution: TransactionAttribution?,
+    // Fallback source for price/type_id when the reservation predates that snapshot (see
+    // ReceiptService.bookCostBasisEntry) — null once every trade postdates the snapshot.
+    val order: NostrOrderModel?,
 )
 
 private enum class InboxSortColumn { QTY, REQUESTED }
@@ -51,6 +63,7 @@ private enum class InboxSortColumn { QTY, REQUESTED }
  */
 @Composable
 fun InboxScreen() {
+    val scope = rememberCoroutineScope()
     var rows by remember { mutableStateOf<List<InboxRowData>>(emptyList()) }
     var sortColumn by remember { mutableStateOf(InboxSortColumn.REQUESTED) }
     var sortDirection by remember { mutableStateOf(SortDirection.DESC) }
@@ -78,7 +91,8 @@ fun InboxScreen() {
                 completed.map { reservation ->
                     val order = NostrOrderDao.getByCoordinate(reservation.orderUuid, reservation.orderPubkey)
                     val typeName = order?.let { StaticDataDao.getTypeById(it.typeId)?.name } ?: "Order ${reservation.orderUuid.take(8)}…"
-                    InboxRowData(reservation, typeName, NostrReceiptDao.hasMutualReceipt(reservation.tradeId))
+                    val attribution = WalletDao.getAttribution(p2pTransactionId(reservation.tradeId, reservation.role))
+                    InboxRowData(reservation, typeName, NostrReceiptDao.hasMutualReceipt(reservation.tradeId), attribution, order)
                 }
             }
     }
@@ -106,7 +120,23 @@ fun InboxScreen() {
             InboxTableHeader(sortColumn, sortDirection, onSort = ::toggleSort)
             HorizontalDivider()
             LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                items(displayedRows, key = { it.reservation.tradeId }) { row -> InboxTableRow(row) }
+                items(displayedRows, key = { it.reservation.tradeId }) { row ->
+                    InboxTableRow(
+                        row,
+                        onAttributionChange = { attribution ->
+                            scope.launch(Dispatchers.IO) {
+                                val reservation = row.reservation
+                                ReceiptService.bookCostBasisEntry(
+                                    reservation,
+                                    attribution,
+                                    fallbackOrder = row.order,
+                                    dateIfNew = Instant.ofEpochSecond(reservation.respondedAt ?: reservation.requestedAt).toString(),
+                                )
+                                reload()
+                            }
+                        },
+                    )
+                }
             }
         }
     }
@@ -132,6 +162,12 @@ private fun InboxTableHeader(
         ) { onSort(InboxSortColumn.QTY, SortDirection.DESC) }
         Text("Role", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(80.dp))
         Text("Status", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(260.dp))
+        Text(
+            "Attributed to",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.width(160.dp),
+        )
         SortHeaderCell(
             "Requested",
             Modifier.width(110.dp),
@@ -142,7 +178,10 @@ private fun InboxTableHeader(
 }
 
 @Composable
-private fun InboxTableRow(row: InboxRowData) {
+private fun InboxTableRow(
+    row: InboxRowData,
+    onAttributionChange: (TransactionAttribution) -> Unit,
+) {
     val reservation = row.reservation
     val nowSec = System.currentTimeMillis() / 1000
 
@@ -166,6 +205,7 @@ private fun InboxTableRow(row: InboxRowData) {
             color = if (row.isConfirmed) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.width(260.dp),
         )
+        AttributionPicker(row.attribution, onAttributionChange, modifier = Modifier.width(160.dp))
         Text(
             "${formatDurationShort(nowSec - reservation.requestedAt)} ago",
             style = MaterialTheme.typography.labelSmall,

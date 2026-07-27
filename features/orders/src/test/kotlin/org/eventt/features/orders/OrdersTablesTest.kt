@@ -1,8 +1,10 @@
 package org.eventt.features.orders
 
 import io.kotest.matchers.doubles.plusOrMinus
+import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.should
+import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 
 private const val TOLERANCE = 0.0001
@@ -78,5 +80,103 @@ class OrdersTablesTest {
         // Same as above but profit is additionally reduced by the 300 already paid:
         // 18153.84 - 300 = 17853.84; margin = 17853.84 / 50000 * 100 = 35.71%
         metrics.bestMarginPct.shouldNotBeNull() should (35.7077 plusOrMinus TOLERANCE)
+    }
+
+    // Buying out same-station competitors cheaper than my own price and reselling against this
+    // order -- two profitable layers combine: their volumes sum and their prices blend into one
+    // average, both cheaper than my price so the blend stays cheaper too.
+    @Test
+    fun `computeBuyoutPlan combines multiple profitable layers into one blended average`() {
+        val plan =
+            computeBuyoutPlan(
+                competingSellOrders = listOf(4.00 to 100L, 5.00 to 50L),
+                maxBuyPrice = 6.00,
+                resalePrice = 6.00,
+                maxVolume = 1_000L,
+            )
+
+        // volume = 150; cost = 400 + 250 = 650; avg = 650/150 = 4.3333; profit = 6*150 - 650 = 250
+        plan.shouldNotBeNull()
+        plan.volume shouldBe 150L
+        plan.avgCost should (4.3333 plusOrMinus TOLERANCE)
+        plan.totalProfit should (250.0 plusOrMinus TOLERANCE)
+    }
+
+    // A layer priced at or above maxBuyPrice can't help -- and since the book is walked
+    // cheapest-first, nothing after it could either, so the walk stops there.
+    @Test
+    fun `computeBuyoutPlan stops at the first layer priced at or above maxBuyPrice`() {
+        val plan =
+            computeBuyoutPlan(
+                competingSellOrders = listOf(4.00 to 100L, 6.00 to 500L, 4.50 to 50L),
+                maxBuyPrice = 6.00,
+                resalePrice = 6.00,
+                maxVolume = 1_000L,
+            )
+
+        // Only the two layers priced below 6.00 count, regardless of list order (sorted first).
+        plan.shouldNotBeNull()
+        plan.volume shouldBe 150L
+    }
+
+    // maxVolume is this order's own remaining volume -- no point buying more than it can absorb,
+    // even if the competing book has more profitable stock available.
+    @Test
+    fun `computeBuyoutPlan caps volume and splits the final layer to fit`() {
+        val plan =
+            computeBuyoutPlan(
+                competingSellOrders = listOf(4.00 to 100L, 5.00 to 100L),
+                maxBuyPrice = 6.00,
+                resalePrice = 6.00,
+                maxVolume = 120L,
+            )
+
+        // Takes all 100 of the first layer, then only 20 of the second.
+        plan.shouldNotBeNull()
+        plan.volume shouldBe 120L
+        plan.avgCost should ((400.0 + 100.0) / 120L plusOrMinus TOLERANCE)
+    }
+
+    // The Jita gate in practice: a competitor priced below my own order (5.00 < 6.00, technically
+    // "beaten") but above Jita's current price (4.20) doesn't qualify -- maxBuyPrice is
+    // min(myPrice, jitaPrice), so only the layer that's also cheaper than Jita gets bought, and
+    // profit is still measured against my own resale price, not Jita's.
+    @Test
+    fun `maxBuyPrice below resalePrice excludes layers cheaper than me but not cheaper than Jita`() {
+        val plan =
+            computeBuyoutPlan(
+                competingSellOrders = listOf(3.50 to 100L, 5.00 to 200L),
+                maxBuyPrice = minOf(6.00, 4.20),
+                resalePrice = 6.00,
+                maxVolume = 1_000L,
+            )
+
+        // Only the 3.50 layer qualifies (< 4.20); the 5.00 layer is excluded even though it's
+        // still < my own 6.00 price. Profit is still measured against 6.00, not 4.20.
+        plan.shouldNotBeNull()
+        plan.volume shouldBe 100L
+        plan.totalProfit should (250.0 plusOrMinus TOLERANCE) // 6.00*100 - 350 = 250
+    }
+
+    @Test
+    fun `computeBuyoutPlan is null when nothing is cheaper than maxBuyPrice or maxVolume is zero`() {
+        computeBuyoutPlan(
+            competingSellOrders = listOf(7.00 to 100L),
+            maxBuyPrice = 6.00,
+            resalePrice = 6.00,
+            maxVolume = 1_000L,
+        ).shouldBeNull()
+        computeBuyoutPlan(
+            competingSellOrders = listOf(4.00 to 100L),
+            maxBuyPrice = 6.00,
+            resalePrice = 6.00,
+            maxVolume = 0L,
+        ).shouldBeNull()
+        computeBuyoutPlan(
+            competingSellOrders = emptyList(),
+            maxBuyPrice = 6.00,
+            resalePrice = 6.00,
+            maxVolume = 1_000L,
+        ).shouldBeNull()
     }
 }
