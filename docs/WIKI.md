@@ -43,6 +43,12 @@ Summary for the selected character/corporation:
 
 The **Combine all** switch in the header aggregates everything across all characters and corporations at once (balances are summed per entity; ESI sync is skipped in this mode — it uses the locally accumulated data).
 
+### Leaderboard
+
+Opt-in trader leaderboard published over Nostr — self-reported, never independently verified against ESI data. Shows three ranked tables side by side (7 days / 30 days / 365 days), each listing every opted-in trader's *combined* realized P&L across all of their own local characters and corporations.
+
+To publish your own numbers, pick a character under **Publish as** at the top of the page — that character's identity signs and republishes your combined totals roughly every 2 hours. Switching the publisher (or setting it back to Off) removes your previous entry from everyone else's view right away. Off by default.
+
 ### Characters
 
 Add characters via EVE SSO, manage tokens, and pick the active context — a character or a corporation (a corporation acts through one of its characters' tokens).
@@ -107,7 +113,7 @@ Direct player-to-player trading over the **Nostr** protocol (decentralized relay
 
 ### Settings
 
-Character fees (Sales Tax / Broker Fee / relist skill), Marketlogs folder, SDE static-data import, EveRef price sync, P2P Market settings, database maintenance.
+Character fees (Sales Tax / Broker Fee / relist skill), Marketlogs folder, SDE static-data import, EveRef price sync, P2P Market settings, Stream Overlay (accent color, autostart), database maintenance.
 
 ---
 
@@ -123,13 +129,27 @@ Under each price sits a clickable `beat …` line: re-copies the beat price if t
 
 ---
 
+## OBS Stream Overlay
+
+A local, transparent, animated overlay page for OBS's Browser Source — for streaming a trading session. Enable it in **Settings → Stream Overlay**: Start/Stop, an accent color, and a checkbox to start it automatically when the app launches. Copy the shown URL (`http://127.0.0.1:8001/?accent=…`) into an OBS Browser Source.
+
+Two rows of live tiles, polled every couple of seconds:
+
+- **Session** — elapsed time, trades and profit since the overlay was (re)started or reset, relists.
+- **Order book** (every local character/corp, a live snapshot, not session-scoped) — sell/buy order counts, beaten-order count, ISK tied up in orders, expected profit against current FIFO cost basis, and relist fees paid.
+
+Local only — nothing here is reachable off the machine running it.
+
+---
+
 ## How it works inside
 
 - **ESI cache**: three-state (FRESH / STALE / MISS) driven by the `Expires` header; a stale response is served immediately while the refresh runs in the background. All request progress is visible via the sync icon in the top bar.
 - **Error journal**: ESI and load failures aren't swallowed — an orange top-bar icon opens the list of recent errors (time, source, message).
 - **Updates**: the app checks GitHub releases and shows a one-click update banner.
 - **Marketlogs watcher**: the folder is polled periodically; a recognized export is imported and deleted.
-- **Background market watch**: an app-lifetime sweeper refreshes the order books of every character's active orders as their ESI caches expire — competition history, relist detection, and beaten-order notifications keep working without the Orders screen open. Between ESI ticks, responses come from the local cache, so this costs no extra requests.
+- **Background market watch**: an app-lifetime sweeper refreshes every character's/corp's own active-order list from ESI — not just whoever's on screen — alongside the public order books, as ESI caches expire. Competition history, relist detection, and beaten-order notifications keep working without the Orders screen open, and figures shown elsewhere (Leaderboard, OBS overlay) don't drift stale for characters nobody has looked at recently.
+- **Wallet sync**: every character's/corp's wallet journal and transactions are pulled in the background too — on launch, and again before every trader-leaderboard publish.
 - **Database**: SQLite (WAL); all access is serialized through a single-threaded dispatcher — no concurrent `SQLITE_BUSY`.
 
 ---
