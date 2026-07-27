@@ -104,6 +104,7 @@ Direct player-to-player trading over the **Nostr** protocol (decentralized relay
 
 - **Online status**: every trader's presence is visible in Browse and on requests (`● Online` / `○ Seen … ago`), heartbeated while their app runs. The header shows how many people are running the app right now — counted via an anonymous per-install key, so it counts people, not characters, and doesn't link anyone's characters together.
 - **Requests reach you anywhere**: incoming buy requests arrive (and notify via the system tray) even for orders posted by a character other than the currently selected one; bursts are coalesced into a single "N new requests" popup.
+- **Counts toward your P&L**: ESI has no visibility into a player-to-player trade, so a completed deal only shows up in cost-basis/Dashboard P&L once it's attributed to a character or corporation — set a default under **My Orders → "Attribute new trades to:"**, or override it for any single trade, any time (including old ones), from **Inbox → "Attributed to"**. Attributed trades carry neither broker fee nor sales tax — a direct exchange, not a market order.
 - Relays are checked against their published capabilities (NIP-11); Settings warns about relays that can't store orders or silently reject writes. Outgoing events are queued persistently and retried until at least one relay confirms them.
 
 ### Tools
