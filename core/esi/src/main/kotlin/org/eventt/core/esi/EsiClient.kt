@@ -739,7 +739,18 @@ object EsiClient {
         characterId: Int,
     ): List<Map<String, Any?>> = getAllMaps(characterId = characterId, endpoint = "/corporations/$corporationId/contracts/")
 
-    fun getContractItems(contractId: Int): List<Map<String, Any?>> = getAllMaps(endpoint = "/contracts/$contractId/items/")
+    // ESI has no bare "/contracts/{id}/items/" route -- items only exist under the
+    // character-or-corporation-scoped contract endpoints, same as the contract list itself.
+    fun getContractItems(
+        contractId: Int,
+        characterId: Int,
+        corporationId: Int? = null,
+    ): List<Map<String, Any?>> =
+        if (corporationId != null) {
+            getAllMaps(characterId = characterId, endpoint = "/corporations/$corporationId/contracts/$contractId/items/")
+        } else {
+            getAllMaps(characterId = characterId, endpoint = "/characters/$characterId/contracts/$contractId/items/")
+        }
 
     fun getEndpointExpiry(
         endpoint: String,

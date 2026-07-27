@@ -67,7 +67,7 @@ internal fun SellOrderRow(
     ) {
         // Name + status dot
         Row(
-            modifier = Modifier.weight(3f),
+            modifier = Modifier.weight(3f).padding(end = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
@@ -75,7 +75,13 @@ internal fun SellOrderRow(
             if (isBeaten) {
                 Icon(Icons.Default.ArrowDownward, contentDescription = "Undercut", modifier = Modifier.size(11.dp), tint = UNDERCUT_COLOR)
             }
-            Text(order.typeName, style = MaterialTheme.typography.bodyMedium, overflow = TextOverflow.Ellipsis, maxLines = 1)
+            Text(
+                order.typeName,
+                style = MaterialTheme.typography.bodyMedium,
+                overflow = TextOverflow.Ellipsis,
+                maxLines = 1,
+                modifier = Modifier.weight(1f),
+            )
             ViewInMarketButton(order.typeId)
         }
 
@@ -394,7 +400,7 @@ internal fun BuyOrderRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
-            modifier = Modifier.weight(3f),
+            modifier = Modifier.weight(3f).padding(end = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
@@ -402,7 +408,13 @@ internal fun BuyOrderRow(
             if (isOverbid) {
                 Icon(Icons.Default.ArrowUpward, contentDescription = "Overbid", modifier = Modifier.size(11.dp), tint = UNDERCUT_COLOR)
             }
-            Text(order.typeName, style = MaterialTheme.typography.bodyMedium, overflow = TextOverflow.Ellipsis, maxLines = 1)
+            Text(
+                order.typeName,
+                style = MaterialTheme.typography.bodyMedium,
+                overflow = TextOverflow.Ellipsis,
+                maxLines = 1,
+                modifier = Modifier.weight(1f),
+            )
             ViewInMarketButton(order.typeId)
         }
 

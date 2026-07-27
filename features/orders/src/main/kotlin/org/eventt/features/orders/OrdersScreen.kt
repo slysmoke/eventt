@@ -260,8 +260,6 @@ fun OrdersScreen(context: ViewContext?) {
     var orders by remember { mutableStateOf<List<CharacterOrder>>(emptyList()) }
     var historyOrders by remember { mutableStateOf<List<OrderHistoryDao.OrderHistoryRecord>>(emptyList()) }
     var fifoResult by remember { mutableStateOf<CostBasisService.FifoResult?>(null) }
-    var failedContractLines by remember { mutableStateOf<List<FailedContractLine>>(emptyList()) }
-    var showWriteOffDialog by remember { mutableStateOf(false) }
     var relistDiscountPct by remember { mutableStateOf(OrderFeeService.relistDiscountPct(0)) }
     var isLoading by remember { mutableStateOf(false) }
     // Superseded on every new loadOrders()/fetchMarketComparisons() call so switching characters
@@ -818,13 +816,6 @@ fun OrdersScreen(context: ViewContext?) {
         }
     }
 
-    fun loadFailedContracts() {
-        scope.launch(Dispatchers.IO) {
-            val lines = runCatching { FailedContractWriteOffService.findWriteOffs(charId, corpId) }.getOrDefault(emptyList())
-            withContext(Dispatchers.Main) { failedContractLines = lines }
-        }
-    }
-
     LaunchedEffect(context) {
         val acting = actingCharId
         if (acting != null) {
@@ -854,10 +845,8 @@ fun OrdersScreen(context: ViewContext?) {
             relistDiscountPct =
                 withContext(Dispatchers.IO) { OrderFeeService.relistDiscountPct(StaticDataDao.getCharRelistSkillLevel(acting)) }
             loadOrders()
-            loadFailedContracts()
         } else {
             PendingOrdersQueue.clear()
-            failedContractLines = emptyList()
         }
     }
 
@@ -1100,30 +1089,6 @@ fun OrdersScreen(context: ViewContext?) {
             Tab(selected = activeTab == 3, onClick = { activeTab = 3 }) {
                 Text("Inventory (${inventory.size})", modifier = Modifier.padding(8.dp))
             }
-        }
-
-        if (failedContractLines.isNotEmpty()) {
-            TextButton(onClick = { showWriteOffDialog = true }) {
-                Icon(Icons.Default.Warning, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    "${failedContractLines.size} item(s) lost to failed courier contracts — write off from inventory",
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-        }
-        if (showWriteOffDialog) {
-            FailedContractWriteOffDialog(
-                lines = failedContractLines,
-                onWriteOff = { line ->
-                    scope.launch(Dispatchers.IO) {
-                        FailedContractWriteOffService.writeOff(line)
-                        withContext(Dispatchers.Main) { failedContractLines = failedContractLines - line }
-                        recalculateFifo()
-                    }
-                },
-                onDismiss = { showWriteOffDialog = false },
-            )
         }
 
         fun onSort(col: SortCol) {

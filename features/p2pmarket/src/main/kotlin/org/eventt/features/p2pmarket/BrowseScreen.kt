@@ -234,7 +234,13 @@ private fun BrowseTableRow(
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 OrderSideBadge(side)
-                Text(row.typeName, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    row.typeName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
                 IconButton(modifier = Modifier.size(20.dp), onClick = { AppState.openInMarket(order.typeId) }) {
                     Icon(
                         Icons.AutoMirrored.Filled.OpenInNew,

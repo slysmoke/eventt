@@ -1,5 +1,7 @@
 package org.eventt.notify
 
+import kotlinx.coroutines.runBlocking
+import org.eventt.app.generated.resources.Res
 import org.eventt.core.model.AppLog
 import java.awt.SystemTray
 import java.awt.Toolkit
@@ -14,7 +16,13 @@ object TrayNotifier {
     private val trayIcon: TrayIcon? by lazy {
         runCatching {
             if (!SystemTray.isSupported()) return@runCatching null
-            val image = Toolkit.getDefaultToolkit().getImage(javaClass.getResource("/icon.png"))
+            // The app icon only exists at runtime via Compose Resources (composeResources/
+            // drawable/icon.png, read through the generated Res accessor) -- there's no plain
+            // classpath resource at "/icon.png" for AWT's Class.getResource to find, which used
+            // to make this silently NPE on every platform (masked on Linux only because the
+            // notify-send fallback below happened to still work there).
+            val bytes = runBlocking { Res.readBytes("drawable/icon.png") }
+            val image = Toolkit.getDefaultToolkit().createImage(bytes)
             TrayIcon(image, "EVE Night Trade Tools").apply {
                 isImageAutoSize = true
                 SystemTray.getSystemTray().add(this)
