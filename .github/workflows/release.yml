@@ -207,6 +207,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
 
     steps:
       - uses: actions/checkout@v7
@@ -254,7 +255,12 @@ jobs:
       # requiring a manual edit before every release.
       - uses: cachix/install-nix-action@v31
 
+      # main requires the "test" status check (see build.yml), which blocks a bare `git push`
+      # of an unchecked commit even from Actions — so this opens a PR and lets it auto-merge
+      # once that check runs and passes, instead of pushing straight to main.
       - name: Update flake.nix
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           HASH=$(nix hash convert --hash-algo sha256 --to sri \
@@ -271,5 +277,12 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add flake.nix
           git diff --staged --quiet && exit 0
+
+          BRANCH="flake-bump-$GITHUB_REF_NAME"
+          git checkout -b "$BRANCH"
           git commit -m "flake: bump to $GITHUB_REF_NAME"
-          git push origin HEAD:main
+          git push origin "$BRANCH"
+          gh pr create --base main --head "$BRANCH" \
+            --title "flake: bump to $GITHUB_REF_NAME" \
+            --body "Automated flake.nix version/hash bump for $GITHUB_REF_NAME."
+          gh pr merge "$BRANCH" --auto --squash
