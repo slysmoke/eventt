@@ -127,4 +127,33 @@ object WalletSyncService {
             AppLog.warn("WalletSync", "transactions ESI: ${e.message}")
         }
     }
+
+    /**
+     * Retries ESI name resolution for rows whose `client_name` is still blank — e.g. a prior
+     * sync's ESI lookup for that id failed or got rate-limited — and persists any names it
+     * recovers, so callers reading straight from the DB (Dashboard's top buyers/sellers) don't
+     * get stuck showing "Unknown" until someone happens to reopen Wallet, which already retries
+     * this same way.
+     */
+    fun resolveMissingClientNames(rows: List<Map<String, Any?>>): List<Map<String, Any?>> {
+        val missingIds =
+            rows
+                .filter { (it["client_name"] as? String).isNullOrEmpty() }
+                .mapNotNull { (it["client_id"] as? Number)?.toInt() }
+                .filter { it > 0 }
+                .distinct()
+        if (missingIds.isEmpty()) return rows
+
+        val resolved = try { EsiClient.resolveNames(missingIds) } catch (_: Exception) { emptyMap() }
+        if (resolved.isEmpty()) return rows
+
+        return rows.map { tx ->
+            if (!(tx["client_name"] as? String).isNullOrEmpty()) return@map tx
+            val clientId = (tx["client_id"] as? Number)?.toInt() ?: return@map tx
+            val name = resolved[clientId] ?: return@map tx
+            val txId = (tx["transaction_id"] as? Number)?.toLong() ?: return@map tx
+            WalletDao.updateTransactionNames(txId, clientName = name, locationName = null)
+            tx.toMutableMap().apply { put("client_name", name) }
+        }
+    }
 }
