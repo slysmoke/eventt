@@ -89,9 +89,10 @@ class OrdersScreenTest {
 
         val (profit, margin) = historyPnl(sellOrder(), fifoResult)
 
-        // netSellPrice = 150*0.89 = 133.5; cb = 133.5 - 300.0/10 = 103.5
+        // profit and margin both come from the matched sell itself, not order.price:
+        // cost = costBasis(100) * qty(10) = 1000; margin = profit(300) / cost(1000) * 100
         profit.shouldNotBeNull() should (300.0 plusOrMinus TOLERANCE)
-        margin.shouldNotBeNull() should ((133.5 - 103.5) / 103.5 * 100 plusOrMinus TOLERANCE)
+        margin.shouldNotBeNull() should (30.0 plusOrMinus TOLERANCE)
     }
 
     @Test

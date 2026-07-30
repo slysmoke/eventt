@@ -88,7 +88,10 @@ fun DashboardScreen(
                     }
                 txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = qCharId, corporationId = qCorpId, since = since90)
                 assetValue = if (context != null) AssetDao.getTotalValue(characterId = qCharId, corporationId = qCorpId) else 0.0
-                val txWindow = WalletSyncService.resolveMissingClientNames(WalletDao.getTransactions(characterId = qCharId, corporationId = qCorpId, limit = 2000))
+                val txWindow =
+                    WalletSyncService.resolveMissingClientNames(
+                        WalletDao.getTransactions(characterId = qCharId, corporationId = qCorpId, limit = 2000),
+                    )
                 recentTx = txWindow.take(12)
                 val (sellers, buyers) = computeCounterpartyStats(txWindow)
                 topSellers = sellers
@@ -112,7 +115,10 @@ fun DashboardScreen(
                 if (isCorp) WalletSyncService.syncCorporation(corpId, acting) else WalletSyncService.syncCharacter(acting)
                 walletBalance = WalletDao.getWalletSummary(characterId = charId, corporationId = corpId).balance
                 txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = charId, corporationId = corpId, since = since90)
-                val txWindow = WalletSyncService.resolveMissingClientNames(WalletDao.getTransactions(characterId = charId, corporationId = corpId, limit = 2000))
+                val txWindow =
+                    WalletSyncService.resolveMissingClientNames(
+                        WalletDao.getTransactions(characterId = charId, corporationId = corpId, limit = 2000),
+                    )
                 recentTx = txWindow.take(12)
                 val (sellers, buyers) = computeCounterpartyStats(txWindow)
                 topSellers = sellers

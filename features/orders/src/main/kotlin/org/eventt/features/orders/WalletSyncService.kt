@@ -144,7 +144,12 @@ object WalletSyncService {
                 .distinct()
         if (missingIds.isEmpty()) return rows
 
-        val resolved = try { EsiClient.resolveNames(missingIds) } catch (_: Exception) { emptyMap() }
+        val resolved =
+            try {
+                EsiClient.resolveNames(missingIds)
+            } catch (_: Exception) {
+                emptyMap()
+            }
         if (resolved.isEmpty()) return rows
 
         return rows.map { tx ->

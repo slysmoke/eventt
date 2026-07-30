@@ -227,19 +227,21 @@ class CostBasisServiceTest {
         )
 
     @Test
-    fun `pnlForOrder pro-rates profit across the sells that cover the filled quantity`() {
-        val profit =
+    fun `pnlForOrder pro-rates profit and cost-weighted margin across the sells that cover the filled quantity`() {
+        val (profit, margin) =
             CostBasisService
                 .pnlForOrder(sampleResult(), TYPE_ID, issuedDate = "2024-01-01", filledQty = 8)
                 .shouldNotBeNull()
 
         // full 50.0 from the first sell (5 of 5) + 3/10 of the second sell's 100.0
         profit should (80.0 plusOrMinus TOLERANCE)
+        // cost matched: 5*100.0 + 3*100.0 = 800.0 -> 80.0 / 800.0 * 100
+        margin should (10.0 plusOrMinus TOLERANCE)
     }
 
     @Test
     fun `pnlForOrder ignores sells before the order was issued`() {
-        val profit =
+        val (profit, _) =
             CostBasisService
                 .pnlForOrder(sampleResult(), TYPE_ID, issuedDate = "2024-01-02", filledQty = 10)
                 .shouldNotBeNull()
@@ -283,7 +285,7 @@ class CostBasisServiceTest {
                 taxConfig = TaxConfig(),
             )
 
-        val profit = CostBasisService.pnlForOrder(result, TYPE_ID, issuedDate = utcIssuedDate, filledQty = 5).shouldNotBeNull()
+        val (profit, _) = CostBasisService.pnlForOrder(result, TYPE_ID, issuedDate = utcIssuedDate, filledQty = 5).shouldNotBeNull()
 
         profit should (50.0 plusOrMinus TOLERANCE)
     }

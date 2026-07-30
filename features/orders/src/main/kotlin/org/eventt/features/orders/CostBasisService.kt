@@ -166,7 +166,9 @@ object CostBasisService {
         return FifoResult(inventory, realized, taxConfig, sellRelistPerUnit)
     }
 
-    // Returns realized P&L for a specific fulfilled sell order using date+qty matching.
+    // Returns realized profit and cost-weighted margin % for a specific fulfilled sell order,
+    // using date+qty matching against the type's real realized sells (not the order's own listed
+    // price, which is just its last ESI snapshot and can be stale after manual re-pricing).
     // `issuedDate` comes from ActiveOrderDao/OrderHistoryDao, stored as the raw UTC timestamp ESI
     // sent (its offset is needed elsewhere for exact expiry/duration math). `result`'s sell dates
     // come from WalletDao, which converts to local time at ingestion -- so this comparison must
@@ -176,7 +178,7 @@ object CostBasisService {
         typeId: Int,
         issuedDate: String,
         filledQty: Int,
-    ): Double? {
+    ): Pair<Double, Double>? {
         if (filledQty <= 0) return null
         val localIssuedDate = issuedDate.utcToLocalDateTime()
         val sells =
@@ -186,15 +188,19 @@ object CostBasisService {
 
         var remaining = filledQty
         var totalProfit = 0.0
+        var totalCost = 0.0
 
         for (sell in sells) {
             if (remaining <= 0) break
             val take = minOf(remaining, sell.qty)
             totalProfit += sell.profit * (take.toDouble() / sell.qty)
+            totalCost += sell.costBasis * take
             remaining -= take
         }
 
-        return if (remaining < filledQty) totalProfit else null
+        if (remaining == filledQty) return null
+        val margin = if (totalCost > 0) totalProfit / totalCost * 100 else 0.0
+        return totalProfit to margin
     }
 }
 

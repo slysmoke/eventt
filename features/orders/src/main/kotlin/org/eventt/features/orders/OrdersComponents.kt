@@ -327,19 +327,18 @@ internal fun historyPnl(
     val filled = order.volumeTotal - order.volumeRemaining
     if (filled <= 0) return null to null // nothing actually sold (cancelled/expired with no fills)
 
-    val taxConfig = fifoResult.taxConfig
-    // Relist fees are already netted into realizedSells' profit/margin as a per-type average (see
-    // CostBasisService.compute) — applied here too instead of this order's own relistFeesPaid, so
-    // this figure stays consistent with every other realized-profit number in the app.
-    val netSellPrice = order.price * taxConfig.sellMultiplier - (fifoResult.sellRelistPerUnit[order.typeId] ?: 0.0)
-
-    val fifoProfit = CostBasisService.pnlForOrder(fifoResult, order.typeId, order.issued, filled)
-    if (fifoProfit != null) {
-        val cb = netSellPrice - fifoProfit / filled
-        val margin = if (cb > 0) (netSellPrice - cb) / cb * 100 else 0.0
-        return fifoProfit to margin
+    // Profit and margin both come straight from the real matched sell transactions (see
+    // CostBasisService.pnlForOrder) — not from order.price, which is just this order's last ESI
+    // listing snapshot and drifts from the actual fill prices once a standing order gets
+    // re-priced over its lifetime.
+    CostBasisService.pnlForOrder(fifoResult, order.typeId, order.issued, filled)?.let { (profit, margin) ->
+        return profit to margin
     }
 
+    // Fallback: no realized-sell rows matched this order (e.g. it predates tracked wallet
+    // history) — approximate from this type's average cost basis and the order's listed price.
+    val taxConfig = fifoResult.taxConfig
+    val netSellPrice = order.price * taxConfig.sellMultiplier - (fifoResult.sellRelistPerUnit[order.typeId] ?: 0.0)
     val cb = fifoResult.avgCostBasisForType(order.typeId) ?: return null to null
     val profit = (netSellPrice - cb) * filled
     val margin = if (cb > 0) (netSellPrice - cb) / cb * 100 else 0.0
