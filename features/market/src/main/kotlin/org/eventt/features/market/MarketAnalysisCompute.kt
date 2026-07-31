@@ -137,21 +137,36 @@ internal fun computeOpportunityForType(
 
 // ─── Order-book walkers (inter-region "real quantity" calculation) ────────
 
+// (volume, exact accumulated profit, volume-weighted avg buy price, volume-weighted avg sell
+// price) for the lots actually consumed by a walk. For the two single-sided walkers, the side
+// that's held fixed just echoes its constant price back — only the walked side is a real average
+// — so callers can use avgBuyPrice/avgSellPrice uniformly regardless of trade type. avgBuyPrice
+// exists precisely because the best (first) lot's price used to stand in for the whole walked
+// volume: e.g. SELL_TO_SELL might walk 10 cheap units plus 200 pricier ones, and the buy price
+// shown to the user needs to reflect what the 210 units actually cost on average, not the price
+// of the first 10.
+internal data class LotWalkResult(
+    val volume: Long,
+    val profit: Double,
+    val avgBuyPrice: Double,
+    val avgSellPrice: Double,
+)
+
 // Walks a source SELL order book (ascending price — cheapest first) against a FIXED destination
 // price, accumulating volume from each lot while its own NET margin (after fees and shipping,
 // relative to the sell price — the same definition the opportunity-level filter uses) still
 // clears minMarginPct. Stops at the first lot that doesn't clear it: prices only get worse
-// deeper into the book, so nothing beyond that point would either. Returns (volume, exact
-// accumulated profit for that volume).
+// deeper into the book, so nothing beyond that point would either.
 internal fun walkSourceSellLots(
     lots: List<Pair<Double, Long>>, // (price, volume_remain), ascending by price
     fixedSellPrice: Double,
     shippingPerUnit: Double,
     minMarginPct: Double,
     feeForBuyPrice: (Double) -> Double,
-): Pair<Long, Double> {
+): LotWalkResult {
     var volume = 0L
     var profit = 0.0
+    var buyPriceSum = 0.0
     for ((buyPrice, qty) in lots) {
         if (qty <= 0) continue
         val gross = fixedSellPrice - buyPrice
@@ -160,8 +175,10 @@ internal fun walkSourceSellLots(
         if (net <= 0 || margin < minMarginPct) break
         volume += qty
         profit += net * qty
+        buyPriceSum += buyPrice * qty
     }
-    return volume to profit
+    val avgBuyPrice = if (volume > 0) buyPriceSum / volume else fixedSellPrice
+    return LotWalkResult(volume, profit, avgBuyPrice, fixedSellPrice)
 }
 
 // Walks a destination BUY order book (descending price — best first) against a FIXED source
@@ -172,9 +189,10 @@ internal fun walkDestBuyLots(
     shippingPerUnit: Double,
     minMarginPct: Double,
     feeForSellPrice: (Double) -> Double,
-): Pair<Long, Double> {
+): LotWalkResult {
     var volume = 0L
     var profit = 0.0
+    var sellPriceSum = 0.0
     for ((sellPrice, qty) in lots) {
         if (qty <= 0) continue
         val gross = sellPrice - fixedBuyPrice
@@ -183,8 +201,10 @@ internal fun walkDestBuyLots(
         if (net <= 0 || margin < minMarginPct) break
         volume += qty
         profit += net * qty
+        sellPriceSum += sellPrice * qty
     }
-    return volume to profit
+    val avgSellPrice = if (volume > 0) sellPriceSum / volume else fixedBuyPrice
+    return LotWalkResult(volume, profit, fixedBuyPrice, avgSellPrice)
 }
 
 // Walks BOTH the source sell book and destination buy book at once (SELL_TO_BUY, where neither
@@ -197,13 +217,15 @@ internal fun walkCrossedBook(
     shippingPerUnit: Double,
     minMarginPct: Double,
     feeFor: (buyPrice: Double, sellPrice: Double) -> Double,
-): Pair<Long, Double> {
+): LotWalkResult {
     var i = 0
     var j = 0
     var remainingSell = sellLots.getOrNull(0)?.second ?: 0L
     var remainingBuy = buyLots.getOrNull(0)?.second ?: 0L
     var volume = 0L
     var profit = 0.0
+    var buyPriceSum = 0.0
+    var sellPriceSum = 0.0
     while (i < sellLots.size && j < buyLots.size) {
         val buyPrice = sellLots[i].first
         val sellPrice = buyLots[j].first
@@ -215,6 +237,8 @@ internal fun walkCrossedBook(
         if (take <= 0) break
         volume += take
         profit += net * take
+        buyPriceSum += buyPrice * take
+        sellPriceSum += sellPrice * take
         remainingSell -= take
         remainingBuy -= take
         if (remainingSell <= 0) {
@@ -226,7 +250,9 @@ internal fun walkCrossedBook(
             remainingBuy = buyLots.getOrNull(j)?.second ?: 0L
         }
     }
-    return volume to profit
+    val avgBuyPrice = if (volume > 0) buyPriceSum / volume else 0.0
+    val avgSellPrice = if (volume > 0) sellPriceSum / volume else 0.0
+    return LotWalkResult(volume, profit, avgBuyPrice, avgSellPrice)
 }
 
 // Solves netMarginPct = targetMarginPct for sellPrice, using this trade type's own fee formula
@@ -406,25 +432,32 @@ internal fun computeRegionOpportunityForType(
 
     if (sellPrice <= buyPrice) return null
 
-    val grossProfit = sellPrice - buyPrice
-    val fees =
-        when (tradeType) {
-            InterRegionTradeType.SELL_TO_BUY -> {
-                sellPrice * salesTaxPct / 100.0
-            }
-
-            InterRegionTradeType.SELL_TO_SELL -> {
-                sellPrice * (salesTaxPct + brokerFeePct) / 100.0
-            }
-
-            InterRegionTradeType.BUY_TO_BUY -> {
-                buyPrice * brokerFeePct / 100.0 + sellPrice * salesTaxPct / 100.0
-            }
-
-            InterRegionTradeType.BUY_TO_SELL, InterRegionTradeType.SAFE_BUY_TO_SELL -> {
-                buyPrice * brokerFeePct / 100.0 + sellPrice * (salesTaxPct + brokerFeePct) / 100.0
-            }
+    // Fee formula per trade type, parameterized on whichever buy/sell price is in play — reused
+    // below both for the best-price headline numbers and, after the walk, for the volume-weighted
+    // average price numbers (their fee shape is identical, only the prices plugged in differ).
+    fun feesFor(
+        bp: Double,
+        sp: Double,
+    ) = when (tradeType) {
+        InterRegionTradeType.SELL_TO_BUY -> {
+            sp * salesTaxPct / 100.0
         }
+
+        InterRegionTradeType.SELL_TO_SELL -> {
+            sp * (salesTaxPct + brokerFeePct) / 100.0
+        }
+
+        InterRegionTradeType.BUY_TO_BUY -> {
+            bp * brokerFeePct / 100.0 + sp * salesTaxPct / 100.0
+        }
+
+        InterRegionTradeType.BUY_TO_SELL, InterRegionTradeType.SAFE_BUY_TO_SELL -> {
+            bp * brokerFeePct / 100.0 + sp * (salesTaxPct + brokerFeePct) / 100.0
+        }
+    }
+
+    val grossProfit = sellPrice - buyPrice
+    val fees = feesFor(buyPrice, sellPrice)
     val netProfit = grossProfit - fees - shipping
     // NET margin relative to the sell price — same convention as Station Trading and the Trade
     // Calc overlay. The old gross/buyPrice figure lives on as roiPct below.
@@ -435,7 +468,7 @@ internal fun computeRegionOpportunityForType(
     // (not our own placed order) from the best price down, stopping once a lot's own margin drops
     // below minMarginPct — a deep, cheap/expensive tail lot shouldn't inflate the "buy this many"
     // figure just because the *best* price on the book was great.
-    val (profitableVolume, profitableTotalProfit) =
+    val walkResult =
         when (tradeType) {
             InterRegionTradeType.BUY_TO_BUY -> {
                 walkDestBuyLots(dstBuyLots, fixedBuyPrice = buyPrice, shippingPerUnit = shipping, minMarginPct = minMarginPct) { sellP ->
@@ -456,9 +489,25 @@ internal fun computeRegionOpportunityForType(
             }
 
             InterRegionTradeType.BUY_TO_SELL, InterRegionTradeType.SAFE_BUY_TO_SELL -> {
-                0L to 0.0
+                LotWalkResult(0L, 0.0, buyPrice, sellPrice)
             }
         }
+    val profitableVolume = walkResult.volume
+    val profitableTotalProfit = walkResult.profit
+
+    // The headline buy/sell prices above are the *best* price on the book — real for a single
+    // unit, but misleading once the walk had to reach past it to fill profitableVolume units.
+    // Once volume was actually walked, replace them with the volume-weighted average price paid/
+    // received for that volume, and recompute profit/margin from those — so "Buy" and "Margin" in
+    // the UI describe the whole batch, not just its first, cheapest unit. Every fee formula above
+    // is affine in the walked price(s), so the average-of-margins equals the margin-of-averages:
+    // this isn't an approximation, it's the exact same number the walk already accounted for.
+    val (finalBuyPrice, finalSellPrice) =
+        if (profitableVolume > 0) walkResult.avgBuyPrice to walkResult.avgSellPrice else buyPrice to sellPrice
+    val finalGrossProfit = finalSellPrice - finalBuyPrice
+    val finalFees = feesFor(finalBuyPrice, finalSellPrice)
+    val finalNetProfit = finalGrossProfit - finalFees - shipping
+    val finalMarginPct = finalNetProfit / finalSellPrice * 100.0
 
     val sellHistory = fetchHistory(typeId, sellRegionId, historySource)
     val buyHistory = fetchHistory(typeId, buyRegionId, historySource)
@@ -472,7 +521,7 @@ internal fun computeRegionOpportunityForType(
     // always 0 for them) -- they use the destination's estimated daily volume instead.
     val totalProfit =
         if (tradeType == InterRegionTradeType.BUY_TO_SELL || tradeType == InterRegionTradeType.SAFE_BUY_TO_SELL) {
-            netProfit * volSell
+            finalNetProfit * volSell
         } else {
             profitableTotalProfit
         }
@@ -483,22 +532,22 @@ internal fun computeRegionOpportunityForType(
         typeName = type.name,
         buyRegionName = buyRegionName,
         sellRegionName = sellRegionName,
-        buyPrice = buyPrice,
-        sellPrice = sellPrice,
-        grossProfit = grossProfit,
-        netProfit = netProfit,
+        buyPrice = finalBuyPrice,
+        sellPrice = finalSellPrice,
+        grossProfit = finalGrossProfit,
+        netProfit = finalNetProfit,
         profitableVolume = profitableVolume,
         profitableTotalProfit = profitableTotalProfit,
-        marginPct = marginPct,
+        marginPct = finalMarginPct,
         // Return on the capital actually outlaid per unit: the item plus its hauling cost.
-        roiPct = netProfit / (buyPrice + shipping) * 100.0,
+        roiPct = finalNetProfit / (finalBuyPrice + shipping) * 100.0,
         itemVolumeM3 = itemVol,
         shippingCostPerUnit = shipping,
         dailyVolume = volSell,
         dailyVolumeSrc = volBuy,
         priceChange7d = compute7dChange(sellHistory),
-        buyVsAvg7dPct = compute7dAvgDeviation(buyHistory, buyPrice) { it.average },
-        sellVsAvg7dPct = compute7dAvgDeviation(sellHistory, sellPrice) { it.average },
+        buyVsAvg7dPct = compute7dAvgDeviation(buyHistory, finalBuyPrice) { it.average },
+        sellVsAvg7dPct = compute7dAvgDeviation(sellHistory, finalSellPrice) { it.average },
     )
 }
 

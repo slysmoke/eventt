@@ -16,7 +16,7 @@ class OrderBookWalkersTest {
     fun `walkSourceSellLots accumulates lots while margin holds, then stops`() {
         val lots = listOf(50.0 to 10L, 80.0 to 5L, 95.0 to 3L)
 
-        val (volume, profit) =
+        val result =
             walkSourceSellLots(
                 lots,
                 fixedSellPrice = 100.0,
@@ -26,8 +26,12 @@ class OrderBookWalkersTest {
             )
 
         // lot1: margin 100% (50->100), lot2: margin 25% (80->100), lot3: margin ~5.3% (95->100) -> cut
-        volume shouldBe 15L
-        profit should (600.0 plusOrMinus TOLERANCE) // 10*50 + 5*20
+        result.volume shouldBe 15L
+        result.profit should (600.0 plusOrMinus TOLERANCE) // 10*50 + 5*20
+        // avg buy price is volume-weighted across the two consumed lots, not just the first (best)
+        // lot's price: (10*50 + 5*80) / 15 = 60, not 50.
+        result.avgBuyPrice should (60.0 plusOrMinus TOLERANCE)
+        result.avgSellPrice should (100.0 plusOrMinus TOLERANCE) // fixed side, echoed back unchanged
     }
 
     @Test
@@ -102,7 +106,7 @@ class OrderBookWalkersTest {
     fun `walkDestBuyLots accumulates lots while margin holds, then stops`() {
         val lots = listOf(100.0 to 10L, 70.0 to 5L, 52.0 to 3L)
 
-        val (volume, profit) =
+        val result =
             walkDestBuyLots(
                 lots,
                 fixedBuyPrice = 50.0,
@@ -112,8 +116,11 @@ class OrderBookWalkersTest {
             )
 
         // lot1: margin 100%, lot2: margin 40%, lot3: margin 4% -> cut
-        volume shouldBe 15L
-        profit should (600.0 plusOrMinus TOLERANCE) // 10*50 + 5*20
+        result.volume shouldBe 15L
+        result.profit should (600.0 plusOrMinus TOLERANCE) // 10*50 + 5*20
+        // (10*100 + 5*70) / 15 = 90, not the first lot's 100
+        result.avgSellPrice should (90.0 plusOrMinus TOLERANCE)
+        result.avgBuyPrice should (50.0 plusOrMinus TOLERANCE) // fixed side, echoed back unchanged
     }
 
     @Test
@@ -138,11 +145,14 @@ class OrderBookWalkersTest {
         val sellLots = listOf(50.0 to 10L, 60.0 to 10L)
         val buyLots = listOf(100.0 to 5L, 90.0 to 20L)
 
-        val (volume, profit) = walkCrossedBook(sellLots, buyLots, shippingPerUnit = 0.0, minMarginPct = 10.0, feeFor = NO_FEE_2)
+        val result = walkCrossedBook(sellLots, buyLots, shippingPerUnit = 0.0, minMarginPct = 10.0, feeFor = NO_FEE_2)
 
         // 5 @ (50->100) + 5 @ (50->90) + 10 @ (60->90) = 250 + 200 + 300
-        volume shouldBe 20L
-        profit should (750.0 plusOrMinus TOLERANCE)
+        result.volume shouldBe 20L
+        result.profit should (750.0 plusOrMinus TOLERANCE)
+        // buy side: (5*50 + 5*50 + 10*60) / 20 = 55; sell side: (5*100 + 5*90 + 10*90) / 20 = 92.5
+        result.avgBuyPrice should (55.0 plusOrMinus TOLERANCE)
+        result.avgSellPrice should (92.5 plusOrMinus TOLERANCE)
     }
 
     @Test
