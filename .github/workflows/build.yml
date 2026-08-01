@@ -20,7 +20,7 @@ jobs:
           # merge commit checkout defaults to (which has nowhere to push a fix commit back to).
           ref: ${{ github.head_ref }}
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v5.6.0
         with:
           java-version: '21'
           distribution: 'temurin'
