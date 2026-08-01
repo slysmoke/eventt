@@ -15,7 +15,7 @@ junit = "6.1.2"
 mockk = "1.14.11"
 kotest = "6.2.3"
 turbine = "1.2.1"
-quartz = "1.12.6"
+quartz = "1.13.1"
 
 [libraries]
 # Nostr (P2P Market — Phase 0 spike)
