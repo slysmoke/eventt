@@ -138,9 +138,29 @@ object StreamOverlayServer {
         val activeOrders = ActiveOrderDao.getAll(characterId = characterId, corporationId = corporationId).filter { it.state == "active" }
         val sellOrders = activeOrders.filter { !it.isBuyOrder }
 
+        // Live profit estimate from the order book (volume_remaining dropping since session start,
+        // same cost-basis lookup as expectedProfit below) blended with the tx-confirmed FIFO profit
+        // above, per type. max() rather than +: once a wallet-transactions sync (ESI cache ~1h+)
+        // confirms a type's real sells, that number is truth and must replace the estimate, not
+        // stack with it — the estimate only fills the gap before that sync lands.
+        val provisionalProfitByType =
+            sellOrders
+                .groupBy { it.typeId }
+                .mapValues { (_, orders) ->
+                    orders.sumOf { order ->
+                        val costBasis = fifo.inventory[order.typeId]?.avgCostBasis ?: return@sumOf 0.0
+                        val filled = StreamOverlaySession.provisionalFilledQty(order.orderId, order.volumeTotal - order.volumeRemaining)
+                        (order.price * fifo.taxConfig.sellMultiplier - costBasis) * filled
+                    }
+                }
+        val confirmedProfitByType = sellsThisSession.groupBy { it.typeId }.mapValues { (_, sells) -> sells.sumOf { it.profit } }
+        val blendedProfit =
+            (provisionalProfitByType.keys + confirmedProfitByType.keys)
+                .sumOf { typeId -> maxOf(provisionalProfitByType[typeId] ?: 0.0, confirmedProfitByType[typeId] ?: 0.0) }
+
         return Totals(
             trades = sellsThisSession.size,
-            profit = sellsThisSession.sumOf { it.profit },
+            profit = blendedProfit,
             sellOrders = sellOrders.size,
             buyOrders = activeOrders.size - sellOrders.size,
             iskInOrders = activeOrders.sumOf { it.price * it.volumeRemaining },
