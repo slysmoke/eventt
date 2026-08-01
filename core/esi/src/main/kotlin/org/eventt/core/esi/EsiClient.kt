@@ -84,6 +84,7 @@ object EsiClient {
         val rawBodies = mutableListOf<String>()
         var serverExpiry = 0L
         var firstPageLastModified: String? = null
+        var loggedMidPaginationChange = false
         var page = 1
 
         while (true) {
@@ -105,15 +106,18 @@ object EsiClient {
             // ESI best practice: a paginated resource's Last-Modified should be identical across
             // all pages of one fetch. A mismatch means the data changed mid-fetch — the merged
             // result below may mix an old and new snapshot. We don't retry the whole fetch (a
-            // rare case, and pages are already individually cached/valid), just surface it.
+            // rare case, and pages are already individually cached/valid), just surface it once —
+            // the snapshot only rotates once per fetch in practice, so every page after that still
+            // mismatches firstPageLastModified and would otherwise reprint this on every page.
             if (!fromCache && metadata.lastModified != null) {
                 if (firstPageLastModified == null) {
                     firstPageLastModified = metadata.lastModified
-                } else if (metadata.lastModified != firstPageLastModified) {
+                } else if (metadata.lastModified != firstPageLastModified && !loggedMidPaginationChange) {
                     println(
                         "[EsiClient] $endpoint: Last-Modified changed mid-pagination (page $page) — " +
                             "results may mix data from different snapshots",
                     )
+                    loggedMidPaginationChange = true
                 }
             }
             // A cache hit doesn't carry its real expiry in metadata, so look it up directly —

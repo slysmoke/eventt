@@ -169,6 +169,48 @@ class EsiClientTest {
     }
 
     @Test
+    fun `a Last-Modified change mid-pagination is logged once, not on every later page`() {
+        every { SsoAuthManager.ensureTokenFresh(99) } returns "token-99"
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody("""[{"order_id":1}]""")
+                .setHeader("X-Pages", "3")
+                .setHeader("Last-Modified", "Mon, 01 Jan 2024 00:00:00 GMT")
+                .setHeader("Cache-Control", "max-age=300"),
+        )
+        // Snapshot rotates once, here — every later page keeps this same new value.
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody("""[{"order_id":2}]""")
+                .setHeader("X-Pages", "3")
+                .setHeader("Last-Modified", "Mon, 01 Jan 2024 00:05:00 GMT")
+                .setHeader("Cache-Control", "max-age=300"),
+        )
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody("""[{"order_id":3}]""")
+                .setHeader("X-Pages", "3")
+                .setHeader("Last-Modified", "Mon, 01 Jan 2024 00:05:00 GMT")
+                .setHeader("Cache-Control", "max-age=300"),
+        )
+
+        val originalOut = System.out
+        val captured = java.io.ByteArrayOutputStream()
+        System.setOut(java.io.PrintStream(captured))
+        try {
+            EsiClient.getCharacterOrders(99)
+        } finally {
+            System.setOut(originalOut)
+        }
+
+        val occurrences = Regex("changed mid-pagination").findAll(captured.toString()).count()
+        occurrences shouldBe 1
+    }
+
+    @Test
     fun `a second call for the same paginated resource is served from the merged cache`() {
         every { SsoAuthManager.ensureTokenFresh(99) } returns "token-99"
         server.enqueue(
