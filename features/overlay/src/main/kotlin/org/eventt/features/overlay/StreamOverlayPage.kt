@@ -27,7 +27,7 @@ object StreamOverlayPage {
             margin: 14px;
             padding: 16px 22px;
             border-radius: 14px;
-            background: linear-gradient(135deg, rgba(10,14,20,0.78), rgba(10,14,20,0.55));
+            background: linear-gradient(135deg, rgba(10,14,20,0.95), rgba(10,14,20,0.95));
             border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
             box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 35%, transparent), inset 0 0 20px rgba(0,0,0,0.35);
             backdrop-filter: blur(4px);
