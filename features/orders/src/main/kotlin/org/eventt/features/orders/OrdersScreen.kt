@@ -23,7 +23,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.ActiveOrderDao
-import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.MarketTopSnapshotDao
 import org.eventt.core.database.OrderHistoryDao
 import org.eventt.core.database.StaticDataDao
@@ -331,13 +330,13 @@ fun OrdersScreen(context: ViewContext?) {
     // that don't have a matching active sell order of their own.
     var inventoryMarketPrices by remember { mutableStateOf<Map<Int, Double>>(emptyMap()) }
 
-    // Corp view only: issuedByCharId -> character name, for the "Character" column.
-    var issuerNames by remember { mutableStateOf<Map<Int, String>>(emptyMap()) }
-
     // Corp view only: narrows the Sell/Buy tabs (and the Ctrl+Z queue) down to orders placed by
-    // one specific member — null means show every member's orders. Resets whenever the selected
-    // corp/character changes so a stale filter doesn't silently hide orders after switching.
-    var issuerFilter by remember(corpId) { mutableStateOf<Int?>(null) }
+    // whichever member is currently selected in the sidebar — null means show every member's
+    // orders. Defaults to that member (not "all") so switching characters in the sidebar alone is
+    // enough to see just their orders; the "All characters" checkbox opts back out. Keyed on both
+    // corpId and actingCharId so switching to a different member of the same corp resets it too,
+    // instead of silently keeping a stale filter pointed at the character you switched away from.
+    var issuerFilter by remember(corpId, actingCharId) { mutableStateOf(actingCharId.takeIf { corpId != null }) }
 
     fun applyIssuerFilter(list: List<CharacterOrder>): List<CharacterOrder> =
         if (issuerFilter != null) list.filter { it.issuedByCharId == issuerFilter } else list
@@ -515,28 +514,6 @@ fun OrdersScreen(context: ViewContext?) {
         }
     }
 
-    fun resolveIssuerNames(ids: Set<Int>) {
-        if (ids.isEmpty()) {
-            issuerNames = emptyMap()
-            return
-        }
-        scope.launch(Dispatchers.IO) {
-            val local = ids.mapNotNull { id -> CharacterDao.getById(id)?.let { id to it.name } }.toMap()
-            val missing = ids - local.keys
-            val resolved =
-                if (missing.isNotEmpty()) {
-                    try {
-                        EsiClient.resolveNames(missing.toList())
-                    } catch (_: Exception) {
-                        emptyMap()
-                    }
-                } else {
-                    emptyMap()
-                }
-            withContext(Dispatchers.Main) { issuerNames = local + resolved }
-        }
-    }
-
     fun loadOrders() {
         val cid = charId
         val corp = corpId
@@ -575,7 +552,6 @@ fun OrdersScreen(context: ViewContext?) {
                     val parsed = mergeRelistStats(previousSnapshot, freshlyParsed, fetchAsOf)
                     withContext(Dispatchers.Main) { orders = parsed }
                     if (corp != null) {
-                        resolveIssuerNames(parsed.mapNotNull { it.issuedByCharId }.toSet())
                         // Stored per placing character (not a flat corp-wide scope) — see
                         // ActiveOrderDao.replaceCorpOrders for why.
                         val byPlacer =
@@ -928,11 +904,10 @@ fun OrdersScreen(context: ViewContext?) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    if (corpId != null && issuerNames.isNotEmpty()) {
-                        IssuerFilterChip(
-                            issuerNames = issuerNames,
-                            selected = issuerFilter,
-                            onSelect = { issuerFilter = it },
+                    if (corpId != null && actingCharId != null) {
+                        AllCharactersCheckbox(
+                            checked = issuerFilter == null,
+                            onCheckedChange = { allChars -> issuerFilter = if (allChars) null else actingCharId },
                         )
                     }
                     IconButton(onClick = {

@@ -25,63 +25,20 @@ import java.util.Locale
 
 // ── Sub-components ────────────────────────────────────────────────────────
 
-// Corp view: narrows the Sell/Buy tables (and the Ctrl+Z queue) down to one member's orders.
+// Corp view: which member's orders the Sell/Buy tables (and the Ctrl+Z queue) show is driven by
+// the sidebar's corp/character selector — this just toggles between that one member and everyone.
 @Composable
-internal fun IssuerFilterChip(
-    issuerNames: Map<Int, String>,
-    selected: Int?,
-    onSelect: (Int?) -> Unit,
+internal fun AllCharactersCheckbox(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    val sortedIssuers = remember(issuerNames) { issuerNames.entries.sortedBy { it.value } }
-
-    Box {
-        Surface(
-            shape = MaterialTheme.shapes.small,
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            onClick = { expanded = true },
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(14.dp))
-                Text(
-                    selected?.let { issuerNames[it] } ?: "All characters",
-                    style = MaterialTheme.typography.labelMedium,
-                )
-                Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp))
-            }
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            DropdownMenuItem(
-                text = {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (selected == null) Icon(Icons.Default.Check, null, Modifier.size(14.dp)) else Spacer(Modifier.size(14.dp))
-                        Text("All characters")
-                    }
-                },
-                onClick = {
-                    onSelect(null)
-                    expanded = false
-                },
-            )
-            sortedIssuers.forEach { (charId, name) ->
-                DropdownMenuItem(
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            if (selected == charId) Icon(Icons.Default.Check, null, Modifier.size(14.dp)) else Spacer(Modifier.size(14.dp))
-                            Text(name)
-                        }
-                    },
-                    onClick = {
-                        onSelect(charId)
-                        expanded = false
-                    },
-                )
-            }
-        }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.clickable { onCheckedChange(!checked) },
+    ) {
+        Checkbox(checked = checked, onCheckedChange = onCheckedChange, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.width(2.dp))
+        Text("All characters", style = MaterialTheme.typography.labelMedium)
     }
 }
 
