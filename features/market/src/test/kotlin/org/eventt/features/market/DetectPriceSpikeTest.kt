@@ -114,4 +114,31 @@ class DetectPriceSpikeTest {
         detectPriceSpike(history, priceMultiplier = 30.0, volumeMultiplier = 5.0) shouldBe true
         detectPriceSpike(history, priceMultiplier = 30.0, volumeMultiplier = 100.0) shouldBe false
     }
+
+    @Test
+    fun `regression - a live price spike not yet in ESI's history is still caught via currentPrice`() {
+        // Real Anathema/The Forge data: history tops out around 17.49M (yesterday's published
+        // day), but ESI's daily history always lags real time by ~1 day, so a spike that started
+        // *today* has no row in history at all yet. Without checking the live order-book price
+        // separately, this sailed through as "no spike" even though the current sell order (27.5M)
+        // is already ~1.78x the 5-day baseline.
+        val history =
+            listOf(
+                historyRow(0, 17_490_000.0, 373),
+                historyRow(1, 16_190_000.0, 108),
+                historyRow(2, 15_432_150.54, 93),
+                historyRow(3, 15_128_285.71, 35),
+                historyRow(4, 15_110_298.51, 67),
+            )
+
+        detectPriceSpike(history, priceMultiplier = 1.7, volumeMultiplier = 5.0, windowDays = 5) shouldBe false
+        detectPriceSpike(history, priceMultiplier = 1.7, volumeMultiplier = 5.0, windowDays = 5, currentPrice = 27_500_000.0) shouldBe true
+    }
+
+    @Test
+    fun `currentPrice below the threshold doesn't false-trigger`() {
+        val history = (0..9).map { historyRow(it.toLong(), average = 10_000_000.0) }
+
+        detectPriceSpike(history, priceMultiplier = 1.5, currentPrice = 12_000_000.0) shouldBe false
+    }
 }

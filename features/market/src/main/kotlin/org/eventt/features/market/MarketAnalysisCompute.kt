@@ -122,7 +122,9 @@ internal fun computeOpportunityForType(
     val medianDailyVol = medianDailyVolume(history)
     if (medianDailyVol < minDailyVol && minDailyVol > 0) return null
 
-    val spikeDetected = detectPriceSpike(history, spikePriceMultiplier, spikeVolumeMultiplier, spikeWindowDays)
+    val spikeDetected =
+        detectPriceSpike(history, spikePriceMultiplier, spikeVolumeMultiplier, spikeWindowDays, currentPrice = bestSell) ||
+            detectPriceSpike(history, spikePriceMultiplier, spikeVolumeMultiplier, spikeWindowDays, currentPrice = bestBuy)
     if (spikeFilter == SpikeFilter.EXCLUDE && spikeDetected) return null
     if (spikeFilter == SpikeFilter.ONLY && !spikeDetected) return null
 
@@ -530,8 +532,8 @@ internal fun computeRegionOpportunityForType(
     // Either leg spiking is enough to flag the route — a manipulated price on either side makes
     // the trade look better (or worse) than it durably is, whether or not it's already settled.
     val spikeDetected =
-        detectPriceSpike(sellHistory, spikePriceMultiplier, spikeVolumeMultiplier, spikeWindowDays) ||
-            detectPriceSpike(buyHistory, spikePriceMultiplier, spikeVolumeMultiplier, spikeWindowDays)
+        detectPriceSpike(sellHistory, spikePriceMultiplier, spikeVolumeMultiplier, spikeWindowDays, currentPrice = finalSellPrice) ||
+            detectPriceSpike(buyHistory, spikePriceMultiplier, spikeVolumeMultiplier, spikeWindowDays, currentPrice = finalBuyPrice)
     if (spikeFilter == SpikeFilter.EXCLUDE && spikeDetected) return null
     if (spikeFilter == SpikeFilter.ONLY && !spikeDetected) return null
 
@@ -642,17 +644,36 @@ private fun compute7dAvgDeviation(
  * price's even on an ordinary day (one buyer clearing a stack is common and not a price signal),
  * so the same multiplier for both either misses real price spikes or flags every liquid item on
  * volume noise alone. Either threshold crossing on its own is enough to flag the item.
+ *
+ * [currentPrice] (the live best buy/sell order, not a historical trade) is checked against the
+ * window's median separately from the in-history peak check above -- ESI's daily history always
+ * lags real time by about a day, so a spike that started *today* has no row in [history] yet at
+ * all and the peak-vs-baseline check above is structurally blind to it. Comparing the live price
+ * directly against the recent baseline catches exactly that still-forming case.
  */
 internal fun detectPriceSpike(
     history: List<org.eventt.core.model.MarketHistoryModel>,
     priceMultiplier: Double = 1.5,
     volumeMultiplier: Double = 5.0,
     windowDays: Int = 30,
+    currentPrice: Double? = null,
 ): Boolean {
     val recent = history.take(windowDays)
     if (recent.size < 3) return false
-    return hasOutlierPeak(recent.map { it.average }, priceMultiplier) ||
-        hasOutlierPeak(recent.map { it.volume.toDouble() }, volumeMultiplier)
+    if (hasOutlierPeak(recent.map { it.average }, priceMultiplier)) return true
+    if (hasOutlierPeak(recent.map { it.volume.toDouble() }, volumeMultiplier)) return true
+    if (currentPrice != null && currentPrice > 0.0) {
+        val baseline = median(recent.map { it.average })
+        if (baseline > 0.0 && currentPrice >= baseline * priceMultiplier) return true
+    }
+    return false
+}
+
+private fun median(values: List<Double>): Double {
+    if (values.isEmpty()) return 0.0
+    val sorted = values.sorted()
+    val mid = sorted.size / 2
+    return if (sorted.size % 2 == 0) (sorted[mid - 1] + sorted[mid]) / 2.0 else sorted[mid]
 }
 
 // True when the single highest value in [values] is at least [multiplier]x the median of every
@@ -664,9 +685,7 @@ private fun hasOutlierPeak(
     val peakIdx = values.indices.maxBy { values[it] }
     val peak = values[peakIdx]
     if (peak <= 0.0) return false
-    val baselineSample = values.filterIndexed { i, _ -> i != peakIdx }.sorted()
-    val mid = baselineSample.size / 2
-    val baseline = if (baselineSample.size % 2 == 0) (baselineSample[mid - 1] + baselineSample[mid]) / 2.0 else baselineSample[mid]
+    val baseline = median(values.filterIndexed { i, _ -> i != peakIdx })
     if (baseline <= 0.0) return false
     return peak >= baseline * multiplier
 }
