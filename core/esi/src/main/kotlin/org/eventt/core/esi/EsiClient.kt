@@ -677,9 +677,20 @@ object EsiClient {
     fun getMarketRegionHistory(
         regionId: Int,
         typeId: Int,
-    ): List<Map<String, Any?>> {
-        val (body, _) = getRaw("/markets/$regionId/history/", mapOf("type_id" to typeId.toString()))
-        return body.parseToListOfMaps()
+    ): List<Map<String, Any?>> = getMarketRegionHistoryChecked(regionId, typeId).first
+
+    /**
+     * Same call, but also reports whether the response came from EsiCacheManager's own FRESH
+     * cache (expires == 0L is that path's marker — see getRaw) rather than a real network
+     * response. Callers that persist this into their own DAO-backed mirror can use it to skip
+     * re-parsing/re-writing data that's byte-for-byte identical to what they already have.
+     */
+    fun getMarketRegionHistoryChecked(
+        regionId: Int,
+        typeId: Int,
+    ): Pair<List<Map<String, Any?>>, Boolean> {
+        val (body, metadata) = getRaw("/markets/$regionId/history/", mapOf("type_id" to typeId.toString()))
+        return body.parseToListOfMaps() to (metadata.expires == 0L)
     }
 
     // --- Character Endpoints ---

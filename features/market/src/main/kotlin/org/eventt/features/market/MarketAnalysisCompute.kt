@@ -702,37 +702,74 @@ private fun fetchHistory(
     if (historySource != "esi") {
         return MarketDao.getHistory(typeId, effectiveRegionId, days)
     }
-    // Always go through EsiClient rather than short-circuiting on "MarketDao already has some
-    // rows" -- getMarketRegionHistory routes through getRaw/EsiCacheManager, which already serves
-    // this from its own disk cache with no network call at all while the server's real Expires
-    // header says it's still fresh, and only re-hits ESI once that TTL actually elapses. A
-    // separate "is MarketDao's copy non-empty/recent enough" check here would just be a second,
-    // independently-timed cache on top of that one -- which is exactly how this used to go stale
-    // for weeks on some type/region pairs while looking fine on others. MarketDao is kept purely
-    // as a queryable mirror of whatever EsiCacheManager's cache currently holds.
-    return try {
-        val entries = EsiClient.getMarketRegionHistory(effectiveRegionId, typeId)
-        entries.forEach { entry ->
-            runCatching {
-                MarketDao.insertHistory(
-                    org.eventt.core.model.MarketHistoryModel(
-                        typeId = typeId,
-                        regionId = effectiveRegionId,
-                        date = entry["date"] as? String ?: "",
-                        average = (entry["average"] as? Number)?.toDouble() ?: 0.0,
-                        volume = (entry["volume"] as? Number)?.toLong() ?: 0L,
-                        orderCount = (entry["order_count"] as? Number)?.toLong() ?: 0L,
-                        highest = (entry["highest"] as? Number)?.toDouble() ?: 0.0,
-                        lowest = (entry["lowest"] as? Number)?.toDouble() ?: 0.0,
-                    ),
-                )
-            }
-        }
-        MarketDao.getHistoryBySource(typeId, effectiveRegionId, days, source = "esi")
-    } catch (_: Exception) {
-        // ESI unreachable/degraded with nothing even stale left inside getRaw's own cache to fall
-        // back to -- use whatever MarketDao still has saved from an earlier session rather than
-        // treating the item as having no history at all.
-        MarketDao.getHistoryBySource(typeId, effectiveRegionId, days, source = "esi")
+    // A pure-arithmetic filter edit (margin/spike settings/etc.) re-runs
+    // computeOpportunityForType/computeRegionOpportunityForType — and this history lookup with
+    // it — for every cached item several times in the space of a few seconds (once per debounced
+    // keystroke). This short in-memory memo dedupes that burst to one real lookup per item
+    // instead of re-parsing ESI's response body and re-hitting MarketDao every time. It's not a
+    // substitute for real cache freshness — EsiCacheManager's own Expires-header check inside
+    // getRaw still owns that — just short enough to absorb one editing burst without drifting.
+    val cacheKey = HistoryCacheKey(typeId, effectiveRegionId, days)
+    historyMemo[cacheKey]?.let { hit ->
+        if (System.currentTimeMillis() - hit.cachedAtMs < HISTORY_MEMO_TTL_MS) return hit.data
     }
+    // Still always go through EsiClient rather than short-circuiting on "MarketDao already has
+    // some rows" -- getMarketRegionHistoryChecked routes through getRaw/EsiCacheManager, which
+    // already serves this from its own disk cache with no network call at all while the server's
+    // real Expires header says it's still fresh, and only re-hits ESI once that TTL actually
+    // elapses. A separate "is MarketDao's copy non-empty/recent enough" check here would just be
+    // a second, independently-timed cache on top of that one -- which is exactly how this used to
+    // go stale for weeks on some type/region pairs while looking fine on others.
+    val result =
+        try {
+            val (entries, fromCache) = EsiClient.getMarketRegionHistoryChecked(effectiveRegionId, typeId)
+            // fromCache means this response is byte-for-byte what we already stored last time --
+            // skip re-writing every day of it (each insertHistory is its own SQLite transaction;
+            // for a long-lived item that's hundreds of them, on every single one of these calls).
+            if (!fromCache) {
+                entries.forEach { entry ->
+                    runCatching {
+                        MarketDao.insertHistory(
+                            org.eventt.core.model.MarketHistoryModel(
+                                typeId = typeId,
+                                regionId = effectiveRegionId,
+                                date = entry["date"] as? String ?: "",
+                                average = (entry["average"] as? Number)?.toDouble() ?: 0.0,
+                                volume = (entry["volume"] as? Number)?.toLong() ?: 0L,
+                                orderCount = (entry["order_count"] as? Number)?.toLong() ?: 0L,
+                                highest = (entry["highest"] as? Number)?.toDouble() ?: 0.0,
+                                lowest = (entry["lowest"] as? Number)?.toDouble() ?: 0.0,
+                            ),
+                        )
+                    }
+                }
+            }
+            MarketDao.getHistoryBySource(typeId, effectiveRegionId, days, source = "esi")
+        } catch (_: Exception) {
+            // ESI unreachable/degraded with nothing even stale left inside getRaw's own cache to
+            // fall back to -- use whatever MarketDao still has saved from an earlier session
+            // rather than treating the item as having no history at all.
+            MarketDao.getHistoryBySource(typeId, effectiveRegionId, days, source = "esi")
+        }
+    historyMemo[cacheKey] = HistoryCacheEntry(result, System.currentTimeMillis())
+    return result
 }
+
+private data class HistoryCacheKey(
+    val typeId: Int,
+    val regionId: Int,
+    val days: Int,
+)
+
+private data class HistoryCacheEntry(
+    val data: List<org.eventt.core.model.MarketHistoryModel>,
+    val cachedAtMs: Long,
+)
+
+private const val HISTORY_MEMO_TTL_MS = 60_000L
+
+// ponytail: unbounded for the process lifetime -- entries are small and expire in value (TTL
+// checked on read) but a stale key is never actively evicted, so a very long session touching
+// many thousands of distinct (type, region) pairs slowly grows this map. Add size-based LRU
+// eviction if that ever shows up as real memory pressure.
+private val historyMemo = java.util.concurrent.ConcurrentHashMap<HistoryCacheKey, HistoryCacheEntry>()
