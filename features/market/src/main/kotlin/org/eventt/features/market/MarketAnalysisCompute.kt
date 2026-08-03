@@ -87,6 +87,7 @@ internal fun computeOpportunityForType(
     stationSystemId: Int? = null,
     distanceFromStation: Map<Int, Int> = emptyMap(),
     locationSystemCache: java.util.concurrent.ConcurrentHashMap<Long, Int?>? = null,
+    spikeFilter: SpikeFilter = SpikeFilter.ANY,
 ): StationOpportunity? {
     fun Map<String, Any?>.loc() = (get("location_id") as? Number)?.toLong()
 
@@ -118,6 +119,10 @@ internal fun computeOpportunityForType(
     val medianDailyVol = medianDailyVolume(history)
     if (medianDailyVol < minDailyVol && minDailyVol > 0) return null
 
+    val spikeDetected = detectPriceSpikeReverted(history)
+    if (spikeFilter == SpikeFilter.EXCLUDE && spikeDetected) return null
+    if (spikeFilter == SpikeFilter.ONLY && !spikeDetected) return null
+
     return StationOpportunity(
         typeId = typeId,
         typeName = type.name,
@@ -132,6 +137,7 @@ internal fun computeOpportunityForType(
         buyOrderCount = buys.size,
         estimatedDailyProfit = netProfit * medianDailyVol.coerceAtLeast(1),
         priceChange7d = compute7dChange(history),
+        spikeDetected = spikeDetected,
     )
 }
 
@@ -333,6 +339,7 @@ internal fun computeRegionOpportunityForType(
     // cost. When on, shipping = buyPrice * shippingCostPct / 100 instead of itemVol * iskPerM3.
     shippingByCostEnabled: Boolean = false,
     shippingCostPct: Double = 0.0,
+    spikeFilter: SpikeFilter = SpikeFilter.ANY,
 ): RegionOpportunity? {
     fun Map<String, Any?>.price() = (get("price") as? Number)?.toDouble() ?: 0.0
 
@@ -514,6 +521,12 @@ internal fun computeRegionOpportunityForType(
     val volSell = medianDailyVolume(sellHistory)
     val volBuy = medianDailyVolume(buyHistory)
 
+    // Either leg spiking-and-reverting is enough to flag the route — a manipulated price on
+    // either side makes the trade look better (or worse) than it durably is.
+    val spikeDetected = detectPriceSpikeReverted(sellHistory) || detectPriceSpikeReverted(buyHistory)
+    if (spikeFilter == SpikeFilter.EXCLUDE && spikeDetected) return null
+    if (spikeFilter == SpikeFilter.ONLY && !spikeDetected) return null
+
     // Total profit potential (net per unit x achievable volume), not just the per-unit figure --
     // 100k/unit x 100 units/day beats 6M on a single unit, but the old per-unit-only check let the
     // single unit through and rejected the real opportunity. BUY_TO_SELL/SAFE_BUY_TO_SELL have no
@@ -548,6 +561,7 @@ internal fun computeRegionOpportunityForType(
         priceChange7d = compute7dChange(sellHistory),
         buyVsAvg7dPct = compute7dAvgDeviation(buyHistory, finalBuyPrice) { it.average },
         sellVsAvg7dPct = compute7dAvgDeviation(sellHistory, finalSellPrice) { it.average },
+        spikeDetected = spikeDetected,
     )
 }
 
@@ -609,6 +623,36 @@ private fun compute7dAvgDeviation(
     val avg7d = recent.map(selector).average()
     if (avg7d <= 0.0) return Double.NaN
     return (currentPrice - avg7d) / avg7d * 100.0
+}
+
+/**
+ * True when [history] shows a sharp price spike that has since reverted back near its prior
+ * baseline — e.g. a one-off buyout or wash-trading event, not a genuine price move (see the
+ * EVE price-history chart pattern this matches: a tall single-day/short spike followed by a
+ * return to the pre-spike range). Baseline is the median of the window excluding its single
+ * highest day, so the spike itself can't drag its own baseline up; "reverted" means the most
+ * recent day is back within [revertTolerancePct] of that baseline.
+ */
+internal fun detectPriceSpikeReverted(
+    history: List<org.eventt.core.model.MarketHistoryModel>,
+    spikeMultiplier: Double = 2.0,
+    revertTolerancePct: Double = 25.0,
+    windowDays: Int = 30,
+): Boolean {
+    val recent = history.take(windowDays).sortedBy { it.date } // oldest -> newest
+    if (recent.size < 3) return false
+    val prices = recent.map { it.average }
+    val peakIdx = prices.indices.maxBy { prices[it] }
+    val peak = prices[peakIdx]
+    if (peak <= 0.0) return false
+    val baselineSample = prices.filterIndexed { i, _ -> i != peakIdx }.sorted()
+    val mid = baselineSample.size / 2
+    val baseline = if (baselineSample.size % 2 == 0) (baselineSample[mid - 1] + baselineSample[mid]) / 2.0 else baselineSample[mid]
+    if (baseline <= 0.0) return false
+    val current = prices.last()
+    val spiked = peak >= baseline * spikeMultiplier
+    val reverted = kotlin.math.abs(current - baseline) / baseline * 100.0 <= revertTolerancePct
+    return spiked && reverted
 }
 
 private fun fetchHistory(

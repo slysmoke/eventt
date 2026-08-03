@@ -75,6 +75,7 @@ internal fun StationTradingTab(
     var volCapPct by remember { mutableStateOf("10") }
     var copyVolumeEnabled by remember { mutableStateOf(true) }
     var skipExistingOrders by remember { mutableStateOf(false) }
+    var spikeFilter by remember { mutableStateOf(SpikeFilter.ANY) }
     var histSourceIsEsi by remember { mutableStateOf(false) }
     var detailTypeId by remember { mutableStateOf<Int?>(null) }
 
@@ -92,6 +93,7 @@ internal fun StationTradingTab(
             S.get(S.ST_VOL_CAP_PCT)?.let { volCapPct = it }
             S.get(S.ST_COPY_VOLUME)?.let { copyVolumeEnabled = it == "true" }
             S.get(S.ST_SKIP_EXISTING)?.let { skipExistingOrders = it == "true" }
+            S.get(S.ST_SPIKE_FILTER)?.let { name -> SpikeFilter.entries.find { it.name == name }?.let { spikeFilter = it } }
             if (charId != null) {
                 brokerFeePct = StaticDataDao.getCharBrokersFee(charId)
                 salesTaxPct = StaticDataDao.getCharSalesTax(charId)
@@ -237,6 +239,10 @@ internal fun StationTradingTab(
                             modifier = Modifier.size(24.dp),
                         )
                     }
+                    SpikeFilterChip(spikeFilter) {
+                        spikeFilter = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_SPIKE_FILTER, it.name) } }
+                    }
                     FilterDivider()
                     // Toggles whether the hotkey's second press copies the suggested volume, or just
                     // advances straight to the next item after copying the price.
@@ -322,6 +328,7 @@ internal fun StationTradingTab(
                                         val brokerFeePctD = brokerFeePct
                                         val salesTaxPctD = salesTaxPct
                                         val stationIdSnap = stationId
+                                        val spikeFilterSnap = spikeFilter
                                         val histSrc = withContext(Dispatchers.IO) { EveRefService.getSelectedSource() }
 
                                         // Buy orders sitting at a different station/citadel — even in a
@@ -416,6 +423,7 @@ internal fun StationTradingTab(
                                                                                 emptyMap()
                                                                             },
                                                                         locationSystemCache = locationSystemCache,
+                                                                        spikeFilter = spikeFilterSnap,
                                                                     )
                                                                 // Protect shared list mutation on IO, then update Compose state on Main
                                                                 val (sorted, c, f) =

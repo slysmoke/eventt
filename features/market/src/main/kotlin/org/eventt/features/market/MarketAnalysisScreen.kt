@@ -38,6 +38,9 @@ data class StationOpportunity(
     val buyOrderCount: Int,
     val estimatedDailyProfit: Double,
     val priceChange7d: Double = Double.NaN,
+    // True when the item's price history shows a sharp spike (e.g. a one-off buyout) that has
+    // since reverted back near its prior baseline — see detectPriceSpikeReverted.
+    val spikeDetected: Boolean = false,
 )
 
 data class RegionOpportunity(
@@ -75,6 +78,9 @@ data class RegionOpportunity(
     // not just the best ask). See compute7dAvgDeviation.
     val buyVsAvg7dPct: Double = Double.NaN,
     val sellVsAvg7dPct: Double = Double.NaN,
+    // True when either region's price history shows a sharp spike that has since reverted back
+    // near its prior baseline — see detectPriceSpikeReverted.
+    val spikeDetected: Boolean = false,
 )
 
 // ─── Sort / trade-type enums ───────────────────────────────────────────────
@@ -112,6 +118,16 @@ internal enum class InterRegionTradeType(
     // don't care about capturing margin at the source station, just about a cheap, low-competition
     // fill. Sell leg is a placed sell order at the destination, same as BUY_TO_SELL.
     SAFE_BUY_TO_SELL("Safe Buy → Sell (orders)"),
+}
+
+// Tri-state: don't care either way, cut items that look like a spike-and-reverted event, or
+// show only those — see detectPriceSpikeReverted for what qualifies.
+internal enum class SpikeFilter(
+    val label: String,
+) {
+    ANY("Any"),
+    EXCLUDE("Exclude spikes"),
+    ONLY("Only spikes"),
 }
 
 // The effective daily volume for a station opportunity once the volume modifier is applied —
@@ -243,6 +259,7 @@ internal object S {
     const val ST_VOL_CAP_PCT = "analysis.s.volCapPct"
     const val ST_COPY_VOLUME = "analysis.s.copyVolume"
     const val ST_SKIP_EXISTING = "analysis.s.skipExisting"
+    const val ST_SPIKE_FILTER = "analysis.s.spikeFilter"
 
     // Inter-region keys
     const val IR_BUY_REGION = "analysis.r.buyRegion"
@@ -264,6 +281,7 @@ internal object S {
     const val IR_VOL_CAP_PCT = "analysis.r.volCapPct"
     const val IR_COPY_VOLUME = "analysis.r.copyVolume"
     const val IR_SKIP_EXISTING = "analysis.r.skipExisting"
+    const val IR_SPIKE_FILTER = "analysis.r.spikeFilter"
     const val IR_PRESETS = "analysis.r.presets"
 
     fun get(key: String): String? = StaticDataDao.getSetting(key)

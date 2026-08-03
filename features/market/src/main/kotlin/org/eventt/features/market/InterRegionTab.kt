@@ -96,6 +96,7 @@ internal fun InterRegionTab(
     var volCapPct by remember { mutableStateOf("10") }
     var copyVolumeEnabled by remember { mutableStateOf(true) }
     var skipExistingOrders by remember { mutableStateOf(false) }
+    var spikeFilter by remember { mutableStateOf(SpikeFilter.ANY) }
     var histSourceIsEsi by remember { mutableStateOf(false) }
     var routePresets by remember { mutableStateOf<List<RoutePreset>>(emptyList()) }
     var showSavePresetDialog by remember { mutableStateOf(false) }
@@ -127,6 +128,7 @@ internal fun InterRegionTab(
             S.get(S.IR_VOL_CAP_PCT)?.let { volCapPct = it }
             S.get(S.IR_COPY_VOLUME)?.let { copyVolumeEnabled = it == "true" }
             S.get(S.IR_SKIP_EXISTING)?.let { skipExistingOrders = it == "true" }
+            S.get(S.IR_SPIKE_FILTER)?.let { name -> SpikeFilter.entries.find { it.name == name }?.let { spikeFilter = it } }
             routePresets = decodeRoutePresets(S.get(S.IR_PRESETS))
             if (charId != null) {
                 brokerFeePct = StaticDataDao.getCharBrokersFee(charId)
@@ -267,6 +269,7 @@ internal fun InterRegionTab(
                             locationSystemCache = locationSystemCache,
                             shippingByCostEnabled = shippingByCostEnabled,
                             shippingCostPct = shippingCostPctD,
+                            spikeFilter = spikeFilter,
                         )
                     }.sortedByDescending { it.netProfit }
             withContext(Dispatchers.Main) {
@@ -289,6 +292,7 @@ internal fun InterRegionTab(
         maxCargoM3,
         shippingByCostEnabled,
         shippingCostPct,
+        spikeFilter,
     ) {
         if (cachedAnalysis == null || isAnalyzing) return@LaunchedEffect
         delay(400)
@@ -480,6 +484,10 @@ internal fun InterRegionTab(
                             modifier = Modifier.size(24.dp),
                         )
                     }
+                    SpikeFilterChip(spikeFilter) {
+                        spikeFilter = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SPIKE_FILTER, it.name) } }
+                    }
                     FilterDivider()
                     // Toggles whether the hotkey's second press copies the suggested volume, or just
                     // advances straight to the next item after copying the price.
@@ -551,6 +559,7 @@ internal fun InterRegionTab(
                                     val salesTaxD = salesTaxPct
                                     val buyStSnap = buyStationId
                                     val sellStSnap = sellStationId
+                                    val spikeFilterSnap = spikeFilter
                                     val histSrc = withContext(Dispatchers.IO) { EveRefService.getSelectedSource() }
                                     try {
                                         // Same citadel/jump-range reachability as Station Trading, built once up
@@ -712,6 +721,7 @@ internal fun InterRegionTab(
                                                                         locationSystemCache = locationSystemCache,
                                                                         shippingByCostEnabled = shippingByCostEnabled,
                                                                         shippingCostPct = shippingCostPctD,
+                                                                        spikeFilter = spikeFilterSnap,
                                                                     )
                                                                 val (sorted, c, f) =
                                                                     mutex.withLock {
