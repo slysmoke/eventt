@@ -250,6 +250,20 @@ object EsiClient {
                     )
             }
 
+            // A paginated resource's total page count is a snapshot of the moment ESI answered
+            // page 1 — for volatile data (e.g. market orders) it can shrink while we're still
+            // working through later pages, so a page number that was valid a moment ago 404s with
+            // this specific body. That's end-of-data, not a failure — treat it like an empty page.
+            if (response.code == 404 && page != null && page > 1) {
+                val overrun = response.body.string()
+                if (overrun.contains("Requested page does not exist")) {
+                    RequestQueueManager.completeRequest(queuedRequest.id)
+                    return "[]" to EsiResponseMetadata(totalPages = page - 1)
+                }
+                RequestQueueManager.completeRequest(queuedRequest.id, error = "HTTP 404")
+                throw IOException("ESI request failed: 404 $overrun")
+            }
+
             if (!response.isSuccessful) {
                 RequestQueueManager.completeRequest(queuedRequest.id, error = "HTTP ${response.code}")
                 throw IOException("ESI request failed: ${response.code} ${response.body.string()}")
