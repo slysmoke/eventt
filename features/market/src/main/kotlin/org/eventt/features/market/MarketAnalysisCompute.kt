@@ -683,20 +683,14 @@ private fun fetchHistory(
     if (historySource != "esi") {
         return MarketDao.getHistory(typeId, effectiveRegionId, days)
     }
-    val dbHistory = MarketDao.getHistoryBySource(typeId, effectiveRegionId, days, source = "esi")
-    // A cache hit here used to be trusted forever, no matter how old — a type/region pair that
-    // hadn't been re-scanned in weeks kept serving that first-ever fetch's history indefinitely.
-    // medianDailyVolume's cutoff is calendar-relative to *now*, so once the newest cached day
-    // fell far enough behind, every row was outside its window and volume silently read as 0/"—"
-    // for an item that's actually still trading fine. ESI's daily history usually lags real time
-    // by about a day, so anything newer than that in the cache is still worth trusting as-is.
-    val newestCachedDate = dbHistory.firstOrNull()?.date
-    val staleCutoffDate =
-        java.time.LocalDate
-            .now()
-            .minusDays(2)
-            .toString()
-    if (newestCachedDate != null && newestCachedDate >= staleCutoffDate) return dbHistory
+    // Always go through EsiClient rather than short-circuiting on "MarketDao already has some
+    // rows" -- getMarketRegionHistory routes through getRaw/EsiCacheManager, which already serves
+    // this from its own disk cache with no network call at all while the server's real Expires
+    // header says it's still fresh, and only re-hits ESI once that TTL actually elapses. A
+    // separate "is MarketDao's copy non-empty/recent enough" check here would just be a second,
+    // independently-timed cache on top of that one -- which is exactly how this used to go stale
+    // for weeks on some type/region pairs while looking fine on others. MarketDao is kept purely
+    // as a queryable mirror of whatever EsiCacheManager's cache currently holds.
     return try {
         val entries = EsiClient.getMarketRegionHistory(effectiveRegionId, typeId)
         entries.forEach { entry ->
@@ -717,8 +711,9 @@ private fun fetchHistory(
         }
         MarketDao.getHistoryBySource(typeId, effectiveRegionId, days, source = "esi")
     } catch (_: Exception) {
-        // Live refresh failed (ESI down/degraded) -- stale data understates volume/misses recent
-        // price moves, but it's still a better answer than treating the item as having none at all.
-        dbHistory
+        // ESI unreachable/degraded with nothing even stale left inside getRaw's own cache to fall
+        // back to -- use whatever MarketDao still has saved from an earlier session rather than
+        // treating the item as having no history at all.
+        MarketDao.getHistoryBySource(typeId, effectiveRegionId, days, source = "esi")
     }
 }
