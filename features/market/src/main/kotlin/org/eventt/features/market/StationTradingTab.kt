@@ -81,6 +81,9 @@ internal fun StationTradingTab(
     var spikeWindowDays by remember { mutableStateOf("30") }
     var histSourceIsEsi by remember { mutableStateOf(false) }
     var detailTypeId by remember { mutableStateOf<Int?>(null) }
+    // Guards the "station doesn't belong to this region, clear it" cleanup below against firing
+    // during startup hydration -- see the matching flag in InterRegionTab for the full race.
+    var settingsLoaded by remember { mutableStateOf(false) }
 
     // Load persisted settings + character tax values
     LaunchedEffect(charId) {
@@ -104,6 +107,7 @@ internal fun StationTradingTab(
                 brokerFeePct = StaticDataDao.getCharBrokersFee(charId)
                 salesTaxPct = StaticDataDao.getCharSalesTax(charId)
             }
+            settingsLoaded = true
         }
     }
 
@@ -111,8 +115,10 @@ internal fun StationTradingTab(
     LaunchedEffect(regionId) {
         val loaded = withContext(Dispatchers.IO) { StaticDataDao.getStationsByRegion(regionId) }
         stations = loaded
-        // If saved station is in the new region keep it, otherwise clear
-        if (stationId != null && loaded.none { it.stationId == stationId }) {
+        // If saved station is in the new region keep it, otherwise clear -- only once settings
+        // have actually finished loading, or a still-null stationId mid-hydration reads as "this
+        // station doesn't belong here" and wipes the real persisted value before it even arrives.
+        if (settingsLoaded && stationId != null && loaded.none { it.stationId == stationId }) {
             stationId = null
             scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_STATION, "") } }
         }

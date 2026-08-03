@@ -62,6 +62,13 @@ internal fun InterRegionTab(
     var sellRegionId by remember { mutableStateOf(10000043) }
     var sellStationId by remember { mutableStateOf<Long?>(null) }
     var sellStations by remember { mutableStateOf<List<StaticStationModel>>(emptyList()) }
+    // Guards the "station doesn't belong to this region, clear it" cleanup below against firing
+    // during startup hydration: buyRegionId flips from its hardcoded default to the persisted
+    // region as soon as settings load, which re-triggers the region-keyed effects below *before*
+    // the same settings load has had a chance to also restore buyStationId/sellStationId --
+    // without this flag that reload race saw a real, still-null station as "doesn't belong here"
+    // and wiped the persisted selection back to "All stations" on every restart.
+    var settingsLoaded by remember { mutableStateOf(false) }
     var tradeType by remember { mutableStateOf(InterRegionTradeType.SELL_TO_BUY) }
     var selectedTopGroup by remember { mutableStateOf<StaticMarketGroupModel?>(null) }
     var selectedSubGroup by remember { mutableStateOf<StaticMarketGroupModel?>(null) }
@@ -140,6 +147,7 @@ internal fun InterRegionTab(
                 brokerFeePct = StaticDataDao.getCharBrokersFee(charId)
                 salesTaxPct = StaticDataDao.getCharSalesTax(charId)
             }
+            settingsLoaded = true
         }
     }
 
@@ -147,7 +155,7 @@ internal fun InterRegionTab(
     LaunchedEffect(buyRegionId) {
         val loaded = withContext(Dispatchers.IO) { StaticDataDao.getStationsByRegion(buyRegionId) }
         buyStations = loaded
-        if (buyStationId != null && loaded.none { it.stationId == buyStationId }) {
+        if (settingsLoaded && buyStationId != null && loaded.none { it.stationId == buyStationId }) {
             buyStationId = null
             scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_BUY_STATION, "") } }
         }
@@ -157,7 +165,7 @@ internal fun InterRegionTab(
     LaunchedEffect(sellRegionId) {
         val loaded = withContext(Dispatchers.IO) { StaticDataDao.getStationsByRegion(sellRegionId) }
         sellStations = loaded
-        if (sellStationId != null && loaded.none { it.stationId == sellStationId }) {
+        if (settingsLoaded && sellStationId != null && loaded.none { it.stationId == sellStationId }) {
             sellStationId = null
             scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SELL_STATION, "") } }
         }
