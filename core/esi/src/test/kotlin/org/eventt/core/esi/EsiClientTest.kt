@@ -123,6 +123,22 @@ class EsiClientTest {
     }
 
     @Test
+    fun `resolveNames bisects a 404 batch so one unresolvable id doesn't sink the whole chunk`() {
+        // id 3 stands in for e.g. an NPC faction id — /universe/names/ 404s the entire array the
+        // moment one id in it isn't a supported category, even though ids 1, 2 and 4 are fine.
+        server.enqueue(MockResponse().setResponseCode(404)) // [1,2,3,4]
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""[{"id":1,"name":"One"},{"id":2,"name":"Two"}]""")) // [1,2]
+        server.enqueue(MockResponse().setResponseCode(404)) // [3,4]
+        server.enqueue(MockResponse().setResponseCode(404)) // [3]
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""[{"id":4,"name":"Four"}]""")) // [4]
+
+        val result = EsiClient.resolveNames(listOf(1, 2, 3, 4))
+
+        result shouldBe mapOf(1 to "One", 2 to "Two", 4 to "Four")
+        server.requestCount shouldBe 5
+    }
+
+    @Test
     fun `getRaw serves stale cache without hitting the server when ESI reports the endpoint degraded`() {
         val endpoint = "/test-degraded-stale/"
         val fullParams = mapOf("datasource" to "tranquility")

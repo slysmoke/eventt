@@ -239,6 +239,8 @@ object EsiClient {
                 val newExpiry = parseExpiry(response)
                 val newEtag = response.header("ETag") ?: cacheResult.etag
                 val newLastModified = response.header("Last-Modified") ?: cacheResult.lastModified
+                val xPages = response.header("X-Pages")?.toIntOrNull() ?: 1
+                response.close()
                 EsiCacheManager.refreshExpiry(endpoint, fullParams, newExpiry, newEtag, newLastModified)
                 RequestQueueManager.completeRequest(queuedRequest.id)
                 return cachedBody to
@@ -404,7 +406,10 @@ object EsiClient {
                 .post(requestBody)
                 .build()
         val response = EveHttpClient.getClient().newCall(request).execute()
-        if (!response.isSuccessful) throw java.io.IOException("ESI POST $endpoint: HTTP ${response.code}")
+        if (!response.isSuccessful) {
+            response.close()
+            throw java.io.IOException("ESI POST $endpoint: HTTP ${response.code}")
+        }
         return response.body.string()
     }
 
@@ -501,21 +506,44 @@ object EsiClient {
     fun resolveNames(ids: List<Int>): Map<Int, String> {
         if (ids.isEmpty()) return emptyMap()
         val result = mutableMapOf<Int, String>()
-        ids.chunked(1000).forEach { chunk ->
-            try {
-                val body = "[${chunk.joinToString(",")}]"
-                val response = postRaw("/universe/names/", body)
-                json.parseToJsonElement(response).jsonArray.forEach { elem ->
-                    val obj = elem.jsonObject
-                    val id = obj["id"]?.jsonPrimitive?.intOrNull ?: return@forEach
-                    val name = obj["name"]?.jsonPrimitive?.content ?: return@forEach
-                    result[id] = name
-                }
-            } catch (e: Exception) {
-                println("resolveNames batch failed: ${e.message}")
-            }
-        }
+        ids.chunked(1000).forEach { chunk -> resolveNamesChunk(chunk, result) }
         return result
+    }
+
+    // ESI fails the *entire* batch with 404 "Ensure all IDs are valid before resolving" the
+    // moment even one id in it belongs to a category /universe/names/ doesn't cover — notably NPC
+    // faction ids, which turn up as a wallet transaction/journal party id. Left as a flat per-chunk
+    // try/catch, one such id silently poisoned name resolution for every other (perfectly valid)
+    // id sharing its chunk, forever, since there's no per-id negative cache to skip it next time.
+    // Bisecting on 404 isolates the bad id(s) to their own single-id chunk instead, so the rest of
+    // the batch still resolves. Only 404 triggers a retry — any other failure (network, rate limit)
+    // means bisecting wouldn't help and would just multiply the same doomed request.
+    private fun resolveNamesChunk(
+        ids: List<Int>,
+        result: MutableMap<Int, String>,
+    ) {
+        if (ids.isEmpty()) return
+        try {
+            val body = "[${ids.joinToString(",")}]"
+            val response = postRaw("/universe/names/", body)
+            json.parseToJsonElement(response).jsonArray.forEach { elem ->
+                val obj = elem.jsonObject
+                val id = obj["id"]?.jsonPrimitive?.intOrNull ?: return@forEach
+                val name = obj["name"]?.jsonPrimitive?.content ?: return@forEach
+                result[id] = name
+            }
+        } catch (e: Exception) {
+            if (ids.size > 1 && e.message?.contains("HTTP 404") == true) {
+                val mid = ids.size / 2
+                resolveNamesChunk(ids.subList(0, mid), result)
+                resolveNamesChunk(ids.subList(mid, ids.size), result)
+            } else if (ids.size > 1) {
+                AppLog.warn("ESI", "resolveNames batch of ${ids.size} failed: ${e.message}")
+            }
+            // A single id that still 404s is a genuinely unresolvable id (e.g. an NPC faction) —
+            // expected often enough (every wallet sync touching NPC-party journal entries) that
+            // logging it would just be permanent noise, so it's dropped silently.
+        }
     }
 
     // ─── Universe ─────────────────────────────────────────────────────────
