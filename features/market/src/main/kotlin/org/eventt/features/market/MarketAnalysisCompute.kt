@@ -88,6 +88,8 @@ internal fun computeOpportunityForType(
     distanceFromStation: Map<Int, Int> = emptyMap(),
     locationSystemCache: java.util.concurrent.ConcurrentHashMap<Long, Int?>? = null,
     spikeFilter: SpikeFilter = SpikeFilter.ANY,
+    spikeMultiplier: Double = 1.5,
+    spikeWindowDays: Int = 30,
 ): StationOpportunity? {
     fun Map<String, Any?>.loc() = (get("location_id") as? Number)?.toLong()
 
@@ -115,11 +117,11 @@ internal fun computeOpportunityForType(
     if (netProfit < minNetProfit) return null
 
     val type = StaticDataDao.getTypeById(typeId) ?: return null
-    val history = fetchHistory(typeId, regionId, historySource)
+    val history = fetchHistory(typeId, regionId, historySource, days = maxOf(30, spikeWindowDays))
     val medianDailyVol = medianDailyVolume(history)
     if (medianDailyVol < minDailyVol && minDailyVol > 0) return null
 
-    val spikeDetected = detectPriceSpike(history)
+    val spikeDetected = detectPriceSpike(history, spikeMultiplier, spikeWindowDays)
     if (spikeFilter == SpikeFilter.EXCLUDE && spikeDetected) return null
     if (spikeFilter == SpikeFilter.ONLY && !spikeDetected) return null
 
@@ -340,6 +342,8 @@ internal fun computeRegionOpportunityForType(
     shippingByCostEnabled: Boolean = false,
     shippingCostPct: Double = 0.0,
     spikeFilter: SpikeFilter = SpikeFilter.ANY,
+    spikeMultiplier: Double = 1.5,
+    spikeWindowDays: Int = 30,
 ): RegionOpportunity? {
     fun Map<String, Any?>.price() = (get("price") as? Number)?.toDouble() ?: 0.0
 
@@ -516,14 +520,15 @@ internal fun computeRegionOpportunityForType(
     val finalNetProfit = finalGrossProfit - finalFees - shipping
     val finalMarginPct = finalNetProfit / finalSellPrice * 100.0
 
-    val sellHistory = fetchHistory(typeId, sellRegionId, historySource)
-    val buyHistory = fetchHistory(typeId, buyRegionId, historySource)
+    val sellHistory = fetchHistory(typeId, sellRegionId, historySource, days = maxOf(30, spikeWindowDays))
+    val buyHistory = fetchHistory(typeId, buyRegionId, historySource, days = maxOf(30, spikeWindowDays))
     val volSell = medianDailyVolume(sellHistory)
     val volBuy = medianDailyVolume(buyHistory)
 
     // Either leg spiking is enough to flag the route — a manipulated price on either side makes
     // the trade look better (or worse) than it durably is, whether or not it's already settled.
-    val spikeDetected = detectPriceSpike(sellHistory) || detectPriceSpike(buyHistory)
+    val spikeDetected =
+        detectPriceSpike(sellHistory, spikeMultiplier, spikeWindowDays) || detectPriceSpike(buyHistory, spikeMultiplier, spikeWindowDays)
     if (spikeFilter == SpikeFilter.EXCLUDE && spikeDetected) return null
     if (spikeFilter == SpikeFilter.ONLY && !spikeDetected) return null
 
@@ -626,40 +631,53 @@ private fun compute7dAvgDeviation(
 }
 
 /**
- * True when [history] shows a sharp price spike somewhere in the window — e.g. a one-off
- * buyout or wash-trading event, not a genuine price move. Matches whether that spike has since
- * settled back down *or* is still the most recent day (a live spike is at least as unreliable
- * to trade against as one that's already reverted). Baseline is the median of the window
- * excluding its single highest day, so the spike itself can't drag its own baseline up.
+ * True when [history] shows a sharp price *or* volume spike somewhere in the window — e.g. a
+ * one-off buyout or wash-trading event, not a genuine price move. Matches whether that spike has
+ * since settled back down *or* is still the most recent day (a live spike is at least as
+ * unreliable to trade against as one that's already reverted). Checking volume too catches a
+ * spike that a single [spikeMultiplier] threshold on price alone would miss on its own — a real
+ * one-off event usually moves both together, and either one crossing the threshold is enough.
  */
 internal fun detectPriceSpike(
     history: List<org.eventt.core.model.MarketHistoryModel>,
-    spikeMultiplier: Double = 2.0,
+    spikeMultiplier: Double = 1.5,
     windowDays: Int = 30,
 ): Boolean {
     val recent = history.take(windowDays)
     if (recent.size < 3) return false
-    val prices = recent.map { it.average }
-    val peakIdx = prices.indices.maxBy { prices[it] }
-    val peak = prices[peakIdx]
+    return hasOutlierPeak(recent.map { it.average }, spikeMultiplier) ||
+        hasOutlierPeak(recent.map { it.volume.toDouble() }, spikeMultiplier)
+}
+
+// True when the single highest value in [values] is at least [multiplier]x the median of every
+// other value — the baseline excludes the peak itself so the spike can't drag its own baseline up.
+private fun hasOutlierPeak(
+    values: List<Double>,
+    multiplier: Double,
+): Boolean {
+    val peakIdx = values.indices.maxBy { values[it] }
+    val peak = values[peakIdx]
     if (peak <= 0.0) return false
-    val baselineSample = prices.filterIndexed { i, _ -> i != peakIdx }.sorted()
+    val baselineSample = values.filterIndexed { i, _ -> i != peakIdx }.sorted()
     val mid = baselineSample.size / 2
     val baseline = if (baselineSample.size % 2 == 0) (baselineSample[mid - 1] + baselineSample[mid]) / 2.0 else baselineSample[mid]
     if (baseline <= 0.0) return false
-    return peak >= baseline * spikeMultiplier
+    return peak >= baseline * multiplier
 }
 
 private fun fetchHistory(
     typeId: Int,
     regionId: Int,
     historySource: String,
+    // The 7d-change/median-volume/spike stats below all self-limit by date once they have the
+    // rows, so raising this to accommodate a wider spike window doesn't disturb them.
+    days: Int = 30,
 ): List<org.eventt.core.model.MarketHistoryModel> {
     val effectiveRegionId = if (typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else regionId
     if (historySource != "esi") {
-        return MarketDao.getHistory(typeId, effectiveRegionId, 30)
+        return MarketDao.getHistory(typeId, effectiveRegionId, days)
     }
-    val dbHistory = MarketDao.getHistoryBySource(typeId, effectiveRegionId, 30, source = "esi")
+    val dbHistory = MarketDao.getHistoryBySource(typeId, effectiveRegionId, days, source = "esi")
     if (dbHistory.isNotEmpty()) return dbHistory
     return try {
         val entries = EsiClient.getMarketRegionHistory(effectiveRegionId, typeId)
@@ -679,7 +697,7 @@ private fun fetchHistory(
                 )
             }
         }
-        MarketDao.getHistoryBySource(typeId, effectiveRegionId, 30, source = "esi")
+        MarketDao.getHistoryBySource(typeId, effectiveRegionId, days, source = "esi")
     } catch (_: Exception) {
         emptyList()
     }

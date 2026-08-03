@@ -97,6 +97,8 @@ internal fun InterRegionTab(
     var copyVolumeEnabled by remember { mutableStateOf(true) }
     var skipExistingOrders by remember { mutableStateOf(false) }
     var spikeFilter by remember { mutableStateOf(SpikeFilter.ANY) }
+    var spikeMultiplier by remember { mutableStateOf("1.5") }
+    var spikeWindowDays by remember { mutableStateOf("30") }
     var histSourceIsEsi by remember { mutableStateOf(false) }
     var routePresets by remember { mutableStateOf<List<RoutePreset>>(emptyList()) }
     var showSavePresetDialog by remember { mutableStateOf(false) }
@@ -129,6 +131,8 @@ internal fun InterRegionTab(
             S.get(S.IR_COPY_VOLUME)?.let { copyVolumeEnabled = it == "true" }
             S.get(S.IR_SKIP_EXISTING)?.let { skipExistingOrders = it == "true" }
             S.get(S.IR_SPIKE_FILTER)?.let { name -> SpikeFilter.entries.find { it.name == name }?.let { spikeFilter = it } }
+            S.get(S.IR_SPIKE_MULTIPLIER)?.let { spikeMultiplier = it }
+            S.get(S.IR_SPIKE_WINDOW_DAYS)?.let { spikeWindowDays = it }
             routePresets = decodeRoutePresets(S.get(S.IR_PRESETS))
             if (charId != null) {
                 brokerFeePct = StaticDataDao.getCharBrokersFee(charId)
@@ -236,6 +240,8 @@ internal fun InterRegionTab(
         val marginLimitD = marginLimitPct.toDoubleOrNull() ?: 0.0
         val iskPerM3D = iskPerM3.toDoubleOrNull() ?: 1000.0
         val shippingCostPctD = shippingCostPct.toDoubleOrNull() ?: 0.0
+        val spikeMultiplierD = spikeMultiplier.toDoubleOrNull() ?: 1.5
+        val spikeWindowDaysD = spikeWindowDays.toIntOrNull() ?: 30
         scope.launch(Dispatchers.Default) {
             val locationSystemCache = java.util.concurrent.ConcurrentHashMap<Long, Int?>()
             val recomputed =
@@ -270,6 +276,8 @@ internal fun InterRegionTab(
                             shippingByCostEnabled = shippingByCostEnabled,
                             shippingCostPct = shippingCostPctD,
                             spikeFilter = spikeFilter,
+                            spikeMultiplier = spikeMultiplierD,
+                            spikeWindowDays = spikeWindowDaysD,
                         )
                     }.sortedByDescending { it.netProfit }
             withContext(Dispatchers.Main) {
@@ -293,6 +301,8 @@ internal fun InterRegionTab(
         shippingByCostEnabled,
         shippingCostPct,
         spikeFilter,
+        spikeMultiplier,
+        spikeWindowDays,
     ) {
         if (cachedAnalysis == null || isAnalyzing) return@LaunchedEffect
         delay(400)
@@ -488,6 +498,14 @@ internal fun InterRegionTab(
                         spikeFilter = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SPIKE_FILTER, it.name) } }
                     }
+                    ParamField("Spike ×", spikeMultiplier, 52.dp, enabled = spikeFilter != SpikeFilter.ANY) {
+                        spikeMultiplier = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SPIKE_MULTIPLIER, it) } }
+                    }
+                    ParamField("Spike Days", spikeWindowDays, 60.dp, enabled = spikeFilter != SpikeFilter.ANY) {
+                        spikeWindowDays = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SPIKE_WINDOW_DAYS, it) } }
+                    }
                     FilterDivider()
                     // Toggles whether the hotkey's second press copies the suggested volume, or just
                     // advances straight to the next item after copying the price.
@@ -560,6 +578,8 @@ internal fun InterRegionTab(
                                     val buyStSnap = buyStationId
                                     val sellStSnap = sellStationId
                                     val spikeFilterSnap = spikeFilter
+                                    val spikeMultiplierSnap = spikeMultiplier.toDoubleOrNull() ?: 1.5
+                                    val spikeWindowDaysSnap = spikeWindowDays.toIntOrNull() ?: 30
                                     val histSrc = withContext(Dispatchers.IO) { EveRefService.getSelectedSource() }
                                     try {
                                         // Same citadel/jump-range reachability as Station Trading, built once up
@@ -722,6 +742,8 @@ internal fun InterRegionTab(
                                                                         shippingByCostEnabled = shippingByCostEnabled,
                                                                         shippingCostPct = shippingCostPctD,
                                                                         spikeFilter = spikeFilterSnap,
+                                                                        spikeMultiplier = spikeMultiplierSnap,
+                                                                        spikeWindowDays = spikeWindowDaysSnap,
                                                                     )
                                                                 val (sorted, c, f) =
                                                                     mutex.withLock {

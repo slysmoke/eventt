@@ -76,6 +76,8 @@ internal fun StationTradingTab(
     var copyVolumeEnabled by remember { mutableStateOf(true) }
     var skipExistingOrders by remember { mutableStateOf(false) }
     var spikeFilter by remember { mutableStateOf(SpikeFilter.ANY) }
+    var spikeMultiplier by remember { mutableStateOf("1.5") }
+    var spikeWindowDays by remember { mutableStateOf("30") }
     var histSourceIsEsi by remember { mutableStateOf(false) }
     var detailTypeId by remember { mutableStateOf<Int?>(null) }
 
@@ -94,6 +96,8 @@ internal fun StationTradingTab(
             S.get(S.ST_COPY_VOLUME)?.let { copyVolumeEnabled = it == "true" }
             S.get(S.ST_SKIP_EXISTING)?.let { skipExistingOrders = it == "true" }
             S.get(S.ST_SPIKE_FILTER)?.let { name -> SpikeFilter.entries.find { it.name == name }?.let { spikeFilter = it } }
+            S.get(S.ST_SPIKE_MULTIPLIER)?.let { spikeMultiplier = it }
+            S.get(S.ST_SPIKE_WINDOW_DAYS)?.let { spikeWindowDays = it }
             if (charId != null) {
                 brokerFeePct = StaticDataDao.getCharBrokersFee(charId)
                 salesTaxPct = StaticDataDao.getCharSalesTax(charId)
@@ -243,6 +247,14 @@ internal fun StationTradingTab(
                         spikeFilter = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_SPIKE_FILTER, it.name) } }
                     }
+                    ParamField("Spike ×", spikeMultiplier, 52.dp, enabled = spikeFilter != SpikeFilter.ANY) {
+                        spikeMultiplier = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_SPIKE_MULTIPLIER, it) } }
+                    }
+                    ParamField("Spike Days", spikeWindowDays, 60.dp, enabled = spikeFilter != SpikeFilter.ANY) {
+                        spikeWindowDays = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_SPIKE_WINDOW_DAYS, it) } }
+                    }
                     FilterDivider()
                     // Toggles whether the hotkey's second press copies the suggested volume, or just
                     // advances straight to the next item after copying the price.
@@ -329,6 +341,8 @@ internal fun StationTradingTab(
                                         val salesTaxPctD = salesTaxPct
                                         val stationIdSnap = stationId
                                         val spikeFilterSnap = spikeFilter
+                                        val spikeMultiplierSnap = spikeMultiplier.toDoubleOrNull() ?: 1.5
+                                        val spikeWindowDaysSnap = spikeWindowDays.toIntOrNull() ?: 30
                                         val histSrc = withContext(Dispatchers.IO) { EveRefService.getSelectedSource() }
 
                                         // Buy orders sitting at a different station/citadel — even in a
@@ -424,6 +438,8 @@ internal fun StationTradingTab(
                                                                             },
                                                                         locationSystemCache = locationSystemCache,
                                                                         spikeFilter = spikeFilterSnap,
+                                                                        spikeMultiplier = spikeMultiplierSnap,
+                                                                        spikeWindowDays = spikeWindowDaysSnap,
                                                                     )
                                                                 // Protect shared list mutation on IO, then update Compose state on Main
                                                                 val (sorted, c, f) =

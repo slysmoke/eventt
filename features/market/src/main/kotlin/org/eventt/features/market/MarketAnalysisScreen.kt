@@ -260,6 +260,8 @@ internal object S {
     const val ST_COPY_VOLUME = "analysis.s.copyVolume"
     const val ST_SKIP_EXISTING = "analysis.s.skipExisting"
     const val ST_SPIKE_FILTER = "analysis.s.spikeFilter"
+    const val ST_SPIKE_MULTIPLIER = "analysis.s.spikeMultiplier"
+    const val ST_SPIKE_WINDOW_DAYS = "analysis.s.spikeWindowDays"
 
     // Inter-region keys
     const val IR_BUY_REGION = "analysis.r.buyRegion"
@@ -282,6 +284,8 @@ internal object S {
     const val IR_COPY_VOLUME = "analysis.r.copyVolume"
     const val IR_SKIP_EXISTING = "analysis.r.skipExisting"
     const val IR_SPIKE_FILTER = "analysis.r.spikeFilter"
+    const val IR_SPIKE_MULTIPLIER = "analysis.r.spikeMultiplier"
+    const val IR_SPIKE_WINDOW_DAYS = "analysis.r.spikeWindowDays"
     const val IR_PRESETS = "analysis.r.presets"
 
     fun get(key: String): String? = StaticDataDao.getSetting(key)
