@@ -97,7 +97,8 @@ internal fun InterRegionTab(
     var copyVolumeEnabled by remember { mutableStateOf(true) }
     var skipExistingOrders by remember { mutableStateOf(false) }
     var spikeFilter by remember { mutableStateOf(SpikeFilter.ANY) }
-    var spikeMultiplier by remember { mutableStateOf("1.5") }
+    var spikePriceMultiplier by remember { mutableStateOf("1.5") }
+    var spikeVolumeMultiplier by remember { mutableStateOf("5") }
     var spikeWindowDays by remember { mutableStateOf("30") }
     var histSourceIsEsi by remember { mutableStateOf(false) }
     var routePresets by remember { mutableStateOf<List<RoutePreset>>(emptyList()) }
@@ -131,7 +132,8 @@ internal fun InterRegionTab(
             S.get(S.IR_COPY_VOLUME)?.let { copyVolumeEnabled = it == "true" }
             S.get(S.IR_SKIP_EXISTING)?.let { skipExistingOrders = it == "true" }
             S.get(S.IR_SPIKE_FILTER)?.let { name -> SpikeFilter.entries.find { it.name == name }?.let { spikeFilter = it } }
-            S.get(S.IR_SPIKE_MULTIPLIER)?.let { spikeMultiplier = it }
+            S.get(S.IR_SPIKE_PRICE_MULTIPLIER)?.let { spikePriceMultiplier = it }
+            S.get(S.IR_SPIKE_VOLUME_MULTIPLIER)?.let { spikeVolumeMultiplier = it }
             S.get(S.IR_SPIKE_WINDOW_DAYS)?.let { spikeWindowDays = it }
             routePresets = decodeRoutePresets(S.get(S.IR_PRESETS))
             if (charId != null) {
@@ -240,7 +242,8 @@ internal fun InterRegionTab(
         val marginLimitD = marginLimitPct.toDoubleOrNull() ?: 0.0
         val iskPerM3D = iskPerM3.toDoubleOrNull() ?: 1000.0
         val shippingCostPctD = shippingCostPct.toDoubleOrNull() ?: 0.0
-        val spikeMultiplierD = spikeMultiplier.toDoubleOrNull() ?: 1.5
+        val spikePriceMultiplierD = spikePriceMultiplier.toDoubleOrNull() ?: 1.5
+        val spikeVolumeMultiplierD = spikeVolumeMultiplier.toDoubleOrNull() ?: 5.0
         val spikeWindowDaysD = spikeWindowDays.toIntOrNull() ?: 30
         scope.launch(Dispatchers.Default) {
             val locationSystemCache = java.util.concurrent.ConcurrentHashMap<Long, Int?>()
@@ -276,7 +279,8 @@ internal fun InterRegionTab(
                             shippingByCostEnabled = shippingByCostEnabled,
                             shippingCostPct = shippingCostPctD,
                             spikeFilter = spikeFilter,
-                            spikeMultiplier = spikeMultiplierD,
+                            spikePriceMultiplier = spikePriceMultiplierD,
+                            spikeVolumeMultiplier = spikeVolumeMultiplierD,
                             spikeWindowDays = spikeWindowDaysD,
                         )
                     }.sortedByDescending { it.netProfit }
@@ -301,7 +305,8 @@ internal fun InterRegionTab(
         shippingByCostEnabled,
         shippingCostPct,
         spikeFilter,
-        spikeMultiplier,
+        spikePriceMultiplier,
+        spikeVolumeMultiplier,
         spikeWindowDays,
     ) {
         if (cachedAnalysis == null || isAnalyzing) return@LaunchedEffect
@@ -498,9 +503,13 @@ internal fun InterRegionTab(
                         spikeFilter = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SPIKE_FILTER, it.name) } }
                     }
-                    ParamField("Spike ×", spikeMultiplier, 52.dp, enabled = spikeFilter != SpikeFilter.ANY) {
-                        spikeMultiplier = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SPIKE_MULTIPLIER, it) } }
+                    ParamField("Price ×", spikePriceMultiplier, 50.dp, enabled = spikeFilter != SpikeFilter.ANY) {
+                        spikePriceMultiplier = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SPIKE_PRICE_MULTIPLIER, it) } }
+                    }
+                    ParamField("Volume ×", spikeVolumeMultiplier, 50.dp, enabled = spikeFilter != SpikeFilter.ANY) {
+                        spikeVolumeMultiplier = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SPIKE_VOLUME_MULTIPLIER, it) } }
                     }
                     ParamField("Spike Days", spikeWindowDays, 60.dp, enabled = spikeFilter != SpikeFilter.ANY) {
                         spikeWindowDays = it
@@ -578,7 +587,8 @@ internal fun InterRegionTab(
                                     val buyStSnap = buyStationId
                                     val sellStSnap = sellStationId
                                     val spikeFilterSnap = spikeFilter
-                                    val spikeMultiplierSnap = spikeMultiplier.toDoubleOrNull() ?: 1.5
+                                    val spikePriceMultiplierSnap = spikePriceMultiplier.toDoubleOrNull() ?: 1.5
+                                    val spikeVolumeMultiplierSnap = spikeVolumeMultiplier.toDoubleOrNull() ?: 5.0
                                     val spikeWindowDaysSnap = spikeWindowDays.toIntOrNull() ?: 30
                                     val histSrc = withContext(Dispatchers.IO) { EveRefService.getSelectedSource() }
                                     try {
@@ -742,7 +752,8 @@ internal fun InterRegionTab(
                                                                         shippingByCostEnabled = shippingByCostEnabled,
                                                                         shippingCostPct = shippingCostPctD,
                                                                         spikeFilter = spikeFilterSnap,
-                                                                        spikeMultiplier = spikeMultiplierSnap,
+                                                                        spikePriceMultiplier = spikePriceMultiplierSnap,
+                                                                        spikeVolumeMultiplier = spikeVolumeMultiplierSnap,
                                                                         spikeWindowDays = spikeWindowDaysSnap,
                                                                     )
                                                                 val (sorted, c, f) =

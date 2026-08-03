@@ -88,7 +88,8 @@ internal fun computeOpportunityForType(
     distanceFromStation: Map<Int, Int> = emptyMap(),
     locationSystemCache: java.util.concurrent.ConcurrentHashMap<Long, Int?>? = null,
     spikeFilter: SpikeFilter = SpikeFilter.ANY,
-    spikeMultiplier: Double = 1.5,
+    spikePriceMultiplier: Double = 1.5,
+    spikeVolumeMultiplier: Double = 5.0,
     spikeWindowDays: Int = 30,
 ): StationOpportunity? {
     fun Map<String, Any?>.loc() = (get("location_id") as? Number)?.toLong()
@@ -121,7 +122,7 @@ internal fun computeOpportunityForType(
     val medianDailyVol = medianDailyVolume(history)
     if (medianDailyVol < minDailyVol && minDailyVol > 0) return null
 
-    val spikeDetected = detectPriceSpike(history, spikeMultiplier, spikeWindowDays)
+    val spikeDetected = detectPriceSpike(history, spikePriceMultiplier, spikeVolumeMultiplier, spikeWindowDays)
     if (spikeFilter == SpikeFilter.EXCLUDE && spikeDetected) return null
     if (spikeFilter == SpikeFilter.ONLY && !spikeDetected) return null
 
@@ -342,7 +343,8 @@ internal fun computeRegionOpportunityForType(
     shippingByCostEnabled: Boolean = false,
     shippingCostPct: Double = 0.0,
     spikeFilter: SpikeFilter = SpikeFilter.ANY,
-    spikeMultiplier: Double = 1.5,
+    spikePriceMultiplier: Double = 1.5,
+    spikeVolumeMultiplier: Double = 5.0,
     spikeWindowDays: Int = 30,
 ): RegionOpportunity? {
     fun Map<String, Any?>.price() = (get("price") as? Number)?.toDouble() ?: 0.0
@@ -528,7 +530,8 @@ internal fun computeRegionOpportunityForType(
     // Either leg spiking is enough to flag the route — a manipulated price on either side makes
     // the trade look better (or worse) than it durably is, whether or not it's already settled.
     val spikeDetected =
-        detectPriceSpike(sellHistory, spikeMultiplier, spikeWindowDays) || detectPriceSpike(buyHistory, spikeMultiplier, spikeWindowDays)
+        detectPriceSpike(sellHistory, spikePriceMultiplier, spikeVolumeMultiplier, spikeWindowDays) ||
+            detectPriceSpike(buyHistory, spikePriceMultiplier, spikeVolumeMultiplier, spikeWindowDays)
     if (spikeFilter == SpikeFilter.EXCLUDE && spikeDetected) return null
     if (spikeFilter == SpikeFilter.ONLY && !spikeDetected) return null
 
@@ -634,19 +637,22 @@ private fun compute7dAvgDeviation(
  * True when [history] shows a sharp price *or* volume spike somewhere in the window — e.g. a
  * one-off buyout or wash-trading event, not a genuine price move. Matches whether that spike has
  * since settled back down *or* is still the most recent day (a live spike is at least as
- * unreliable to trade against as one that's already reverted). Checking volume too catches a
- * spike that a single [spikeMultiplier] threshold on price alone would miss on its own — a real
- * one-off event usually moves both together, and either one crossing the threshold is enough.
+ * unreliable to trade against as one that's already reverted). Price and volume get their own
+ * threshold rather than sharing one -- volume's day-to-day swing is naturally far wider than
+ * price's even on an ordinary day (one buyer clearing a stack is common and not a price signal),
+ * so the same multiplier for both either misses real price spikes or flags every liquid item on
+ * volume noise alone. Either threshold crossing on its own is enough to flag the item.
  */
 internal fun detectPriceSpike(
     history: List<org.eventt.core.model.MarketHistoryModel>,
-    spikeMultiplier: Double = 1.5,
+    priceMultiplier: Double = 1.5,
+    volumeMultiplier: Double = 5.0,
     windowDays: Int = 30,
 ): Boolean {
     val recent = history.take(windowDays)
     if (recent.size < 3) return false
-    return hasOutlierPeak(recent.map { it.average }, spikeMultiplier) ||
-        hasOutlierPeak(recent.map { it.volume.toDouble() }, spikeMultiplier)
+    return hasOutlierPeak(recent.map { it.average }, priceMultiplier) ||
+        hasOutlierPeak(recent.map { it.volume.toDouble() }, volumeMultiplier)
 }
 
 // True when the single highest value in [values] is at least [multiplier]x the median of every

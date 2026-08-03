@@ -100,4 +100,18 @@ class DetectPriceSpikeTest {
 
         detectPriceSpike(history) shouldBe true
     }
+
+    @Test
+    fun `an extreme price multiplier with a lax volume multiplier still catches an ordinary bulk-sell day`() {
+        // Same fixture as the regression above: price stays under even a very strict 30x bar, but
+        // volume's natural day-to-day swing (one buyer clearing a stack is unremarkable) clears a
+        // much looser 5x bar easily -- price and volume need independent thresholds precisely
+        // because their natural scales don't match.
+        val history =
+            (1..29).map { historyRow(it.toLong(), average = 11_500_000.0, volume = 50) } +
+                historyRow(0, average = 16_260_000.0, volume = 2307)
+
+        detectPriceSpike(history, priceMultiplier = 30.0, volumeMultiplier = 5.0) shouldBe true
+        detectPriceSpike(history, priceMultiplier = 30.0, volumeMultiplier = 100.0) shouldBe false
+    }
 }
