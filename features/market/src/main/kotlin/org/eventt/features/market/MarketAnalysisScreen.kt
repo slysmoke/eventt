@@ -38,8 +38,8 @@ data class StationOpportunity(
     val buyOrderCount: Int,
     val estimatedDailyProfit: Double,
     val priceChange7d: Double = Double.NaN,
-    // True when the item's price history shows a sharp spike (e.g. a one-off buyout) that has
-    // since reverted back near its prior baseline — see detectPriceSpikeReverted.
+    // True when the item's price history shows a sharp spike (e.g. a one-off buyout), settled
+    // or still ongoing — see detectPriceSpike.
     val spikeDetected: Boolean = false,
 )
 
@@ -78,8 +78,8 @@ data class RegionOpportunity(
     // not just the best ask). See compute7dAvgDeviation.
     val buyVsAvg7dPct: Double = Double.NaN,
     val sellVsAvg7dPct: Double = Double.NaN,
-    // True when either region's price history shows a sharp spike that has since reverted back
-    // near its prior baseline — see detectPriceSpikeReverted.
+    // True when either region's price history shows a sharp spike, settled or still ongoing —
+    // see detectPriceSpike.
     val spikeDetected: Boolean = false,
 )
 
@@ -120,8 +120,8 @@ internal enum class InterRegionTradeType(
     SAFE_BUY_TO_SELL("Safe Buy → Sell (orders)"),
 }
 
-// Tri-state: don't care either way, cut items that look like a spike-and-reverted event, or
-// show only those — see detectPriceSpikeReverted for what qualifies.
+// Tri-state: don't care either way, cut items whose recent price history shows a spike, or
+// show only those — see detectPriceSpike for what qualifies.
 internal enum class SpikeFilter(
     val label: String,
 ) {

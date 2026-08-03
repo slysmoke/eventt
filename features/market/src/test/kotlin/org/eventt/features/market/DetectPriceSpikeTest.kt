@@ -19,35 +19,35 @@ private fun historyRow(
     lowest = average,
 )
 
-class DetectPriceSpikeRevertedTest {
+class DetectPriceSpikeTest {
     @Test
-    fun `a spike day surrounded by stable pricing before and after is detected`() {
+    fun `a spike on the most recent day is detected even though it hasn't reverted yet`() {
         val stable = (1..20).map { historyRow(daysAgo = it.toLong(), average = 1_000_000.0) }
         val spike = historyRow(daysAgo = 0, average = 3_000_000.0)
 
-        detectPriceSpikeReverted(stable + spike) shouldBe false // spike is the most recent day — not reverted yet
+        detectPriceSpike(stable + spike) shouldBe true
     }
 
     @Test
-    fun `a spike that has since come back down to baseline is detected`() {
+    fun `a spike that has since come back down to baseline is also detected`() {
         val before = (10..20).map { historyRow(daysAgo = it.toLong(), average = 1_000_000.0) }
         val spike = historyRow(daysAgo = 5, average = 3_000_000.0)
         val after = (1..4).map { historyRow(daysAgo = it.toLong(), average = 1_050_000.0) }
 
-        detectPriceSpikeReverted(before + spike + after) shouldBe true
+        detectPriceSpike(before + spike + after) shouldBe true
     }
 
     @Test
     fun `steady gradual drift with no spike is not flagged`() {
         val history = (0..20).map { historyRow(daysAgo = it.toLong(), average = 1_000_000.0 + it * 10_000.0) }
 
-        detectPriceSpikeReverted(history) shouldBe false
+        detectPriceSpike(history) shouldBe false
     }
 
     @Test
     fun `too little history to judge a baseline is not flagged`() {
         val history = listOf(historyRow(daysAgo = 1, average = 1_000_000.0), historyRow(daysAgo = 0, average = 3_000_000.0))
 
-        detectPriceSpikeReverted(history) shouldBe false
+        detectPriceSpike(history) shouldBe false
     }
 }

@@ -119,7 +119,7 @@ internal fun computeOpportunityForType(
     val medianDailyVol = medianDailyVolume(history)
     if (medianDailyVol < minDailyVol && minDailyVol > 0) return null
 
-    val spikeDetected = detectPriceSpikeReverted(history)
+    val spikeDetected = detectPriceSpike(history)
     if (spikeFilter == SpikeFilter.EXCLUDE && spikeDetected) return null
     if (spikeFilter == SpikeFilter.ONLY && !spikeDetected) return null
 
@@ -521,9 +521,9 @@ internal fun computeRegionOpportunityForType(
     val volSell = medianDailyVolume(sellHistory)
     val volBuy = medianDailyVolume(buyHistory)
 
-    // Either leg spiking-and-reverting is enough to flag the route — a manipulated price on
-    // either side makes the trade look better (or worse) than it durably is.
-    val spikeDetected = detectPriceSpikeReverted(sellHistory) || detectPriceSpikeReverted(buyHistory)
+    // Either leg spiking is enough to flag the route — a manipulated price on either side makes
+    // the trade look better (or worse) than it durably is, whether or not it's already settled.
+    val spikeDetected = detectPriceSpike(sellHistory) || detectPriceSpike(buyHistory)
     if (spikeFilter == SpikeFilter.EXCLUDE && spikeDetected) return null
     if (spikeFilter == SpikeFilter.ONLY && !spikeDetected) return null
 
@@ -626,20 +626,18 @@ private fun compute7dAvgDeviation(
 }
 
 /**
- * True when [history] shows a sharp price spike that has since reverted back near its prior
- * baseline — e.g. a one-off buyout or wash-trading event, not a genuine price move (see the
- * EVE price-history chart pattern this matches: a tall single-day/short spike followed by a
- * return to the pre-spike range). Baseline is the median of the window excluding its single
- * highest day, so the spike itself can't drag its own baseline up; "reverted" means the most
- * recent day is back within [revertTolerancePct] of that baseline.
+ * True when [history] shows a sharp price spike somewhere in the window — e.g. a one-off
+ * buyout or wash-trading event, not a genuine price move. Matches whether that spike has since
+ * settled back down *or* is still the most recent day (a live spike is at least as unreliable
+ * to trade against as one that's already reverted). Baseline is the median of the window
+ * excluding its single highest day, so the spike itself can't drag its own baseline up.
  */
-internal fun detectPriceSpikeReverted(
+internal fun detectPriceSpike(
     history: List<org.eventt.core.model.MarketHistoryModel>,
     spikeMultiplier: Double = 2.0,
-    revertTolerancePct: Double = 25.0,
     windowDays: Int = 30,
 ): Boolean {
-    val recent = history.take(windowDays).sortedBy { it.date } // oldest -> newest
+    val recent = history.take(windowDays)
     if (recent.size < 3) return false
     val prices = recent.map { it.average }
     val peakIdx = prices.indices.maxBy { prices[it] }
@@ -649,10 +647,7 @@ internal fun detectPriceSpikeReverted(
     val mid = baselineSample.size / 2
     val baseline = if (baselineSample.size % 2 == 0) (baselineSample[mid - 1] + baselineSample[mid]) / 2.0 else baselineSample[mid]
     if (baseline <= 0.0) return false
-    val current = prices.last()
-    val spiked = peak >= baseline * spikeMultiplier
-    val reverted = kotlin.math.abs(current - baseline) / baseline * 100.0 <= revertTolerancePct
-    return spiked && reverted
+    return peak >= baseline * spikeMultiplier
 }
 
 private fun fetchHistory(
