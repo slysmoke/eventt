@@ -76,9 +76,9 @@ internal fun StationTradingTab(
     var copyVolumeEnabled by remember { mutableStateOf(true) }
     var skipExistingOrders by remember { mutableStateOf(false) }
     var spikeFilter by remember { mutableStateOf(SpikeFilter.ANY) }
-    var spikePriceMultiplier by remember { mutableStateOf("1.5") }
+    var spikePriceMultiplier by remember { mutableStateOf("1.8") }
     var spikeVolumeMultiplier by remember { mutableStateOf("5") }
-    var spikeWindowDays by remember { mutableStateOf("30") }
+    var spikeWindowDays by remember { mutableStateOf("7") }
     var histSourceIsEsi by remember { mutableStateOf(false) }
     var detailTypeId by remember { mutableStateOf<Int?>(null) }
     // Guards the "station doesn't belong to this region, clear it" cleanup below against firing
@@ -353,9 +353,9 @@ internal fun StationTradingTab(
                                         val salesTaxPctD = salesTaxPct
                                         val stationIdSnap = stationId
                                         val spikeFilterSnap = spikeFilter
-                                        val spikePriceMultiplierSnap = spikePriceMultiplier.toDoubleOrNull() ?: 1.5
+                                        val spikePriceMultiplierSnap = spikePriceMultiplier.toDoubleOrNull() ?: 1.8
                                         val spikeVolumeMultiplierSnap = spikeVolumeMultiplier.toDoubleOrNull() ?: 5.0
-                                        val spikeWindowDaysSnap = spikeWindowDays.toIntOrNull() ?: 30
+                                        val spikeWindowDaysSnap = spikeWindowDays.toIntOrNull() ?: 7
                                         val histSrc = withContext(Dispatchers.IO) { EveRefService.getSelectedSource() }
 
                                         // Buy orders sitting at a different station/citadel — even in a

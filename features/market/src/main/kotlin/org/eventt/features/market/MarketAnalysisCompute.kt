@@ -88,9 +88,9 @@ internal fun computeOpportunityForType(
     distanceFromStation: Map<Int, Int> = emptyMap(),
     locationSystemCache: java.util.concurrent.ConcurrentHashMap<Long, Int?>? = null,
     spikeFilter: SpikeFilter = SpikeFilter.ANY,
-    spikePriceMultiplier: Double = 1.5,
+    spikePriceMultiplier: Double = 1.8,
     spikeVolumeMultiplier: Double = 5.0,
-    spikeWindowDays: Int = 30,
+    spikeWindowDays: Int = 7,
 ): StationOpportunity? {
     fun Map<String, Any?>.loc() = (get("location_id") as? Number)?.toLong()
 
@@ -345,9 +345,9 @@ internal fun computeRegionOpportunityForType(
     shippingByCostEnabled: Boolean = false,
     shippingCostPct: Double = 0.0,
     spikeFilter: SpikeFilter = SpikeFilter.ANY,
-    spikePriceMultiplier: Double = 1.5,
+    spikePriceMultiplier: Double = 1.8,
     spikeVolumeMultiplier: Double = 5.0,
-    spikeWindowDays: Int = 30,
+    spikeWindowDays: Int = 7,
 ): RegionOpportunity? {
     fun Map<String, Any?>.price() = (get("price") as? Number)?.toDouble() ?: 0.0
 

@@ -104,9 +104,9 @@ internal fun InterRegionTab(
     var copyVolumeEnabled by remember { mutableStateOf(true) }
     var skipExistingOrders by remember { mutableStateOf(false) }
     var spikeFilter by remember { mutableStateOf(SpikeFilter.ANY) }
-    var spikePriceMultiplier by remember { mutableStateOf("1.5") }
+    var spikePriceMultiplier by remember { mutableStateOf("1.8") }
     var spikeVolumeMultiplier by remember { mutableStateOf("5") }
-    var spikeWindowDays by remember { mutableStateOf("30") }
+    var spikeWindowDays by remember { mutableStateOf("7") }
     var histSourceIsEsi by remember { mutableStateOf(false) }
     var routePresets by remember { mutableStateOf<List<RoutePreset>>(emptyList()) }
     var showSavePresetDialog by remember { mutableStateOf(false) }
@@ -250,9 +250,9 @@ internal fun InterRegionTab(
         val marginLimitD = marginLimitPct.toDoubleOrNull() ?: 0.0
         val iskPerM3D = iskPerM3.toDoubleOrNull() ?: 1000.0
         val shippingCostPctD = shippingCostPct.toDoubleOrNull() ?: 0.0
-        val spikePriceMultiplierD = spikePriceMultiplier.toDoubleOrNull() ?: 1.5
+        val spikePriceMultiplierD = spikePriceMultiplier.toDoubleOrNull() ?: 1.8
         val spikeVolumeMultiplierD = spikeVolumeMultiplier.toDoubleOrNull() ?: 5.0
-        val spikeWindowDaysD = spikeWindowDays.toIntOrNull() ?: 30
+        val spikeWindowDaysD = spikeWindowDays.toIntOrNull() ?: 7
         scope.launch(Dispatchers.Default) {
             val locationSystemCache = java.util.concurrent.ConcurrentHashMap<Long, Int?>()
             val recomputed =
@@ -595,9 +595,9 @@ internal fun InterRegionTab(
                                     val buyStSnap = buyStationId
                                     val sellStSnap = sellStationId
                                     val spikeFilterSnap = spikeFilter
-                                    val spikePriceMultiplierSnap = spikePriceMultiplier.toDoubleOrNull() ?: 1.5
+                                    val spikePriceMultiplierSnap = spikePriceMultiplier.toDoubleOrNull() ?: 1.8
                                     val spikeVolumeMultiplierSnap = spikeVolumeMultiplier.toDoubleOrNull() ?: 5.0
-                                    val spikeWindowDaysSnap = spikeWindowDays.toIntOrNull() ?: 30
+                                    val spikeWindowDaysSnap = spikeWindowDays.toIntOrNull() ?: 7
                                     val histSrc = withContext(Dispatchers.IO) { EveRefService.getSelectedSource() }
                                     try {
                                         // Same citadel/jump-range reachability as Station Trading, built once up
