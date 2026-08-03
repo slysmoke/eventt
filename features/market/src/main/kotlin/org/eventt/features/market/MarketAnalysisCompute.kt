@@ -684,7 +684,19 @@ private fun fetchHistory(
         return MarketDao.getHistory(typeId, effectiveRegionId, days)
     }
     val dbHistory = MarketDao.getHistoryBySource(typeId, effectiveRegionId, days, source = "esi")
-    if (dbHistory.isNotEmpty()) return dbHistory
+    // A cache hit here used to be trusted forever, no matter how old — a type/region pair that
+    // hadn't been re-scanned in weeks kept serving that first-ever fetch's history indefinitely.
+    // medianDailyVolume's cutoff is calendar-relative to *now*, so once the newest cached day
+    // fell far enough behind, every row was outside its window and volume silently read as 0/"—"
+    // for an item that's actually still trading fine. ESI's daily history usually lags real time
+    // by about a day, so anything newer than that in the cache is still worth trusting as-is.
+    val newestCachedDate = dbHistory.firstOrNull()?.date
+    val staleCutoffDate =
+        java.time.LocalDate
+            .now()
+            .minusDays(2)
+            .toString()
+    if (newestCachedDate != null && newestCachedDate >= staleCutoffDate) return dbHistory
     return try {
         val entries = EsiClient.getMarketRegionHistory(effectiveRegionId, typeId)
         entries.forEach { entry ->
@@ -705,6 +717,8 @@ private fun fetchHistory(
         }
         MarketDao.getHistoryBySource(typeId, effectiveRegionId, days, source = "esi")
     } catch (_: Exception) {
-        emptyList()
+        // Live refresh failed (ESI down/degraded) -- stale data understates volume/misses recent
+        // price moves, but it's still a better answer than treating the item as having none at all.
+        dbHistory
     }
 }
