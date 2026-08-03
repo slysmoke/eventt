@@ -904,7 +904,7 @@ fun OrdersScreen(context: ViewContext?) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    if (corpId != null && actingCharId != null) {
+                    if (corpId != null) {
                         AllCharactersCheckbox(
                             checked = issuerFilter == null,
                             onCheckedChange = { allChars -> issuerFilter = if (allChars) null else actingCharId },
