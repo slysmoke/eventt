@@ -960,7 +960,7 @@ private fun SidebarFeedbackButton(eveColors: EveColors) {
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                "Report Bug / Request Feature",
+                "Feedback",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 modifier = Modifier.weight(1f),
