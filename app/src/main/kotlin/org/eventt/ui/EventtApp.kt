@@ -924,7 +924,53 @@ private fun Sidebar(
 
             Spacer(modifier = Modifier.weight(1f))
             HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+            SidebarFeedbackButton(eveColors = eveColors)
             SidebarVersionFooter(eveColors = eveColors)
+        }
+    }
+}
+
+// Opens a new GitHub issue against the running repo — one click for "something's wrong" or
+// "it'd be nice if" instead of hunting down the repo URL yourself.
+@Composable
+private fun SidebarFeedbackButton(eveColors: EveColors) {
+    val issueUrl =
+        AppVersion.GITHUB_REPO
+            .takeIf { it.isNotBlank() }
+            ?.let { "https://github.com/$it/issues/new" }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
+        shape = MaterialTheme.shapes.small,
+        color = Color.Transparent,
+        onClick = {
+            issueUrl ?: return@Surface
+            runCatching { Desktop.getDesktop().browse(URI(issueUrl)) }
+        },
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Default.BugReport,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                "Report Bug / Request Feature",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                Icons.AutoMirrored.Filled.OpenInNew,
+                contentDescription = "Open GitHub issues",
+                tint = eveColors.accentColor.copy(alpha = 0.6f),
+                modifier = Modifier.size(12.dp),
+            )
         }
     }
 }
