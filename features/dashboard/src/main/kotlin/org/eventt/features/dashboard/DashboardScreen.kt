@@ -27,10 +27,12 @@ import kotlinx.coroutines.withContext
 import org.eventt.core.database.*
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.AppLog
+import org.eventt.core.model.CorpFeature
 import org.eventt.core.model.toPnlWindow
 import org.eventt.features.orders.CostBasisService
 import org.eventt.features.orders.WalletSyncService
 import org.eventt.features.orders.realizedPnlWindow
+import org.eventt.ui.common.CorpAccessNotice
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import java.time.LocalDate
@@ -66,8 +68,13 @@ fun DashboardScreen(
     var topSellers by remember { mutableStateOf<List<CounterpartyStat>>(emptyList()) }
     var topBuyers by remember { mutableStateOf<List<CounterpartyStat>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
+    var deniedCorpFeatures by remember { mutableStateOf<Set<CorpFeature>>(emptySet()) }
+    // Bumped by the "Retry" button on CorpAccessNotice after clearing the denied flags, so the
+    // sync effect below re-runs and gives ESI another try — otherwise corpGuarded would just
+    // keep skipping the call it already knows is denied.
+    var retryNonce by remember { mutableStateOf(0) }
 
-    LaunchedEffect(context, refreshTrigger, combined) {
+    LaunchedEffect(context, refreshTrigger, combined, retryNonce) {
         isLoading = true
         withContext(Dispatchers.IO) {
             val isCorp = corpId != null
@@ -124,6 +131,7 @@ fun DashboardScreen(
                 topSellers = sellers
                 topBuyers = buyers
             }
+            deniedCorpFeatures = if (acting != null && isCorp) CharacterDao.getDeniedCorpFeatures(acting) else emptySet()
 
             try {
                 val taxConfig =
@@ -234,6 +242,23 @@ fun DashboardScreen(
                         modifier = Modifier.height(24.dp),
                     )
                 }
+            }
+        }
+
+        if (deniedCorpFeatures.isNotEmpty()) {
+            item {
+                CorpAccessNotice(
+                    deniedCorpFeatures,
+                    onRetry = {
+                        val acting = actingCharId
+                        if (acting != null) {
+                            scope.launch(Dispatchers.IO) {
+                                deniedCorpFeatures.forEach { CharacterDao.setCorpFeatureDenied(acting, it, denied = false) }
+                                withContext(Dispatchers.Main) { retryNonce++ }
+                            }
+                        }
+                    },
+                )
             }
         }
 

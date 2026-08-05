@@ -1,6 +1,7 @@
 package org.eventt.core.database
 
 import org.eventt.core.model.CharacterModel
+import org.eventt.core.model.CorpFeature
 
 object CharacterDao {
     fun insert(character: CharacterModel) {
@@ -114,6 +115,33 @@ object CharacterDao {
                 }
             }
         }
+
+    fun getDeniedCorpFeatures(characterId: Int): Set<CorpFeature> =
+        DatabaseManager
+            .transaction {
+                prepareStatement("SELECT corp_access_denied FROM characters WHERE id = ?").use { stmt ->
+                    stmt.setInt(1, characterId)
+                    stmt.executeQuery().use { rs -> if (rs.next()) rs.getString("corp_access_denied") else null }
+                }
+            }?.split(",")
+            ?.mapNotNull { runCatching { CorpFeature.valueOf(it) }.getOrNull() }
+            ?.toSet()
+            ?: emptySet()
+
+    fun setCorpFeatureDenied(
+        characterId: Int,
+        feature: CorpFeature,
+        denied: Boolean,
+    ) {
+        val updated = getDeniedCorpFeatures(characterId).let { if (denied) it + feature else it - feature }
+        DatabaseManager.transaction {
+            prepareStatement("UPDATE characters SET corp_access_denied = ? WHERE id = ?").use { stmt ->
+                stmt.setString(1, updated.joinToString(",") { it.name })
+                stmt.setInt(2, characterId)
+                stmt.executeUpdate()
+            }
+        }
+    }
 
     fun getAccessToken(id: Int): String? =
         DatabaseManager.transaction {

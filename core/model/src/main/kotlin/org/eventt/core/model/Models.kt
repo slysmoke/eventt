@@ -20,6 +20,15 @@ data class CharacterModel(
     var corporationName: String? = null,
 )
 
+// A character can hold some corp roles but not others (e.g. Trader without Accountant), so
+// access is tracked per feature rather than as one corp-wide yes/no.
+enum class CorpFeature {
+    WALLET,
+    ASSETS,
+    ORDERS,
+    CONTRACTS,
+}
+
 // ─── ESI Cache ──────────────────────────────────────────────────────────────
 
 @Serializable

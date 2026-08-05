@@ -18,12 +18,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.ContractDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.ViewContext
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.ContractItemModel
 import org.eventt.core.model.ContractModel
+import org.eventt.core.model.CorpFeature
 import org.eventt.ui.common.*
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
@@ -56,6 +58,7 @@ fun ContractTrackerScreen(context: ViewContext?) {
     // opt-in rather than always-on).
     var autoRefresh by remember { mutableStateOf(false) }
     var refreshAvailableAt by remember { mutableStateOf<Long?>(null) }
+    var deniedFeatures by remember { mutableStateOf<Set<CorpFeature>>(emptySet()) }
 
     fun contractsEndpoint(): String? =
         when {
@@ -74,16 +77,21 @@ fun ContractTrackerScreen(context: ViewContext?) {
             }
     }
 
-    fun refresh() {
+    fun refresh(clearDenied: Boolean = false) {
         val acting = actingCharId ?: return
         isLoading = true
         scope.launch(Dispatchers.IO) {
             try {
+                if (clearDenied) {
+                    CorpFeature.entries.forEach { CharacterDao.setCorpFeatureDenied(acting, it, denied = false) }
+                }
                 ContractSyncService.refresh(characterId = charId, corporationId = corpId, actingCharId = acting)
                 val expiry = contractsEndpoint()?.let { EsiClient.getEndpointExpiry(it) }
+                val denied = if (corpId != null) CharacterDao.getDeniedCorpFeatures(acting) else emptySet()
                 withContext(Dispatchers.Main) {
                     reload()
                     refreshAvailableAt = expiry
+                    deniedFeatures = denied
                     isLoading = false
                 }
             } catch (e: Exception) {
@@ -106,6 +114,12 @@ fun ContractTrackerScreen(context: ViewContext?) {
                 null
             } else {
                 withContext(Dispatchers.IO) { contractsEndpoint()?.let { EsiClient.getEndpointExpiry(it) } }
+            }
+        deniedFeatures =
+            if (corpId != null && actingCharId != null) {
+                withContext(Dispatchers.IO) { CharacterDao.getDeniedCorpFeatures(actingCharId) }
+            } else {
+                emptySet()
             }
     }
 
@@ -171,11 +185,16 @@ fun ContractTrackerScreen(context: ViewContext?) {
                     EsiRefreshButton(
                         isLoading = isLoading,
                         expiresAtMs = refreshAvailableAt,
-                        onClick = ::refresh,
+                        onClick = { refresh() },
                         label = "Refresh",
                     )
                 }
             }
+        }
+
+        if (corpId != null && deniedFeatures.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            CorpAccessNotice(deniedFeatures, onRetry = { refresh(clearDenied = true) })
         }
 
         Spacer(modifier = Modifier.height(8.dp))

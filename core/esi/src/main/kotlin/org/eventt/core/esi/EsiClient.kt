@@ -12,8 +12,10 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.eventt.core.auth.SsoAuthManager
 import org.eventt.core.cache.CacheState
 import org.eventt.core.cache.EsiCacheManager
+import org.eventt.core.database.CharacterDao
 import org.eventt.core.http.EveHttpClient
 import org.eventt.core.model.AppLog
+import org.eventt.core.model.CorpFeature
 import org.eventt.core.model.EsiResponseMetadata
 import org.eventt.core.model.QueuedRequest
 import org.eventt.core.model.RequestSource
@@ -268,6 +270,10 @@ object EsiClient {
 
             if (!response.isSuccessful) {
                 RequestQueueManager.completeRequest(queuedRequest.id, error = "HTTP ${response.code}")
+                if (response.code == 403) {
+                    response.close()
+                    throw EsiForbiddenException(endpoint)
+                }
                 throw IOException("ESI request failed: ${response.code} ${response.body.string()}")
             }
 
@@ -719,21 +725,71 @@ object EsiClient {
     // --- Corporation Endpoints ---
     // All corp-scope calls act as a specific member character (there is no "corp token") — the
     // acting characterId must hold the relevant corp role (accountant/director/etc.) or ESI 403s.
+    // [corpGuarded] catches that 403, records it on the acting character, and — once recorded —
+    // skips the network call entirely on every later attempt (screen refreshes, background syncs
+    // like WalletSyncService.syncAll/ContractWatchService alike) instead of re-hitting ESI and
+    // re-logging the same 403 forever. Only a user-initiated retry (UI clears the flag first, see
+    // CharacterDao.setCorpFeatureDenied) makes it try again.
+
+    // Visited screens stay mounted after their first visit (EventtApp keeps them collapsed rather
+    // than disposing them) so switching the sidebar's selected character/corp re-fires every one
+    // of their LaunchedEffect blocks at once — several concurrently calling the same corp
+    // endpoint for the same characterId+feature before any of them has recorded the first 403.
+    // One lock object per key serializes those racing attempts: the first one through actually
+    // hits ESI, everyone else queued behind it re-checks the (by then updated) denied flag instead
+    // of firing its own redundant request.
+    private val corpGuardLocks = java.util.concurrent.ConcurrentHashMap<String, Any>()
+
+    private fun corpGuardLock(
+        characterId: Int,
+        feature: CorpFeature,
+    ): Any = corpGuardLocks.computeIfAbsent("$characterId:${feature.name}") { Any() }
+
+    /** Runs [block] to fetch corp data the acting character may not have [feature] access to.
+     * Skips the call (and returns [empty]) if a prior attempt already got a 403 for this
+     * character+feature; otherwise runs it, recording a fresh 403 or clearing a stale denial. */
+    private fun <T> corpGuarded(
+        characterId: Int,
+        feature: CorpFeature,
+        empty: T,
+        block: () -> T,
+    ): T =
+        synchronized(corpGuardLock(characterId, feature)) {
+            if (feature in CharacterDao.getDeniedCorpFeatures(characterId)) {
+                empty
+            } else {
+                try {
+                    block()
+                } catch (e: EsiForbiddenException) {
+                    CharacterDao.setCorpFeatureDenied(characterId, feature, denied = true)
+                    empty
+                }
+            }
+        }
 
     fun getCorporationAssets(
         corporationId: Int,
         characterId: Int,
-    ): List<Map<String, Any?>> = getAllMaps(characterId = characterId, endpoint = "/corporations/$corporationId/assets/")
+    ): List<Map<String, Any?>> =
+        corpGuarded(characterId, CorpFeature.ASSETS, emptyList()) {
+            getAllMaps(characterId = characterId, endpoint = "/corporations/$corporationId/assets/")
+        }
 
     fun getCorporationOrders(
         corporationId: Int,
         characterId: Int,
-    ): List<Map<String, Any?>> = getAllMaps(characterId = characterId, endpoint = "/corporations/$corporationId/orders/")
+    ): List<Map<String, Any?>> =
+        corpGuarded(characterId, CorpFeature.ORDERS, emptyList()) {
+            getAllMaps(characterId = characterId, endpoint = "/corporations/$corporationId/orders/")
+        }
 
     fun getCorporationOrdersHistory(
         corporationId: Int,
         characterId: Int,
-    ): List<Map<String, Any?>> = getAllMaps(characterId = characterId, endpoint = "/corporations/$corporationId/orders/history/")
+    ): List<Map<String, Any?>> =
+        corpGuarded(characterId, CorpFeature.ORDERS, emptyList()) {
+            getAllMaps(characterId = characterId, endpoint = "/corporations/$corporationId/orders/history/")
+        }
 
     // Unlike the character wallet endpoint (one balance), ESI returns all of a corp's wallet
     // divisions in a single call: [{"division": 1, "balance": ...}, ...] — there is no
@@ -742,43 +798,57 @@ object EsiClient {
         corporationId: Int,
         characterId: Int,
     ): Map<Int, Double> =
-        try {
+        corpGuarded(characterId, CorpFeature.WALLET, emptyMap()) {
             getAllMaps(characterId = characterId, endpoint = "/corporations/$corporationId/wallets/")
                 .mapNotNull { entry ->
                     val division = (entry["division"] as? Number)?.toInt() ?: return@mapNotNull null
                     val balance = (entry["balance"] as? Number)?.toDouble() ?: return@mapNotNull null
                     division to balance
                 }.toMap()
-        } catch (_: Exception) {
-            emptyMap()
         }
 
     // Each entry is tagged with its source division (ESI's payload itself carries no division
     // field — you only know it from which division endpoint you queried) so callers can persist
-    // per-division records.
+    // per-division records. Divisions are fetched independently (a Junior Accountant role often
+    // only grants division 1) — WALLET is only marked denied when every division 403s; a partial
+    // read means the character does have some legitimate wallet access.
     fun getCorporationJournal(
         corporationId: Int,
         characterId: Int,
-    ): List<Map<String, Any?>> =
-        (1..7).flatMap { division ->
-            try {
-                getAllMaps(characterId = characterId, endpoint = "/corporations/$corporationId/wallets/$division/journal/")
-                    .map { it + ("division" to division) }
-            } catch (_: Exception) {
-                emptyList()
-            }
-        }
+    ): List<Map<String, Any?>> = corpGuardedPerDivision(corporationId, characterId, "journal")
 
     fun getCorporationTransactions(
         corporationId: Int,
         characterId: Int,
+    ): List<Map<String, Any?>> = corpGuardedPerDivision(corporationId, characterId, "transactions")
+
+    private fun corpGuardedPerDivision(
+        corporationId: Int,
+        characterId: Int,
+        segment: String,
     ): List<Map<String, Any?>> =
-        (1..7).flatMap { division ->
-            try {
-                getAllMaps(characterId = characterId, endpoint = "/corporations/$corporationId/wallets/$division/transactions/")
-                    .map { it + ("division" to division) }
-            } catch (_: Exception) {
+        synchronized(corpGuardLock(characterId, CorpFeature.WALLET)) {
+            if (CorpFeature.WALLET in CharacterDao.getDeniedCorpFeatures(characterId)) {
                 emptyList()
+            } else {
+                var anySuccess = false
+                var anyForbidden = false
+                val result =
+                    (1..7).flatMap { division ->
+                        try {
+                            getAllMaps(characterId = characterId, endpoint = "/corporations/$corporationId/wallets/$division/$segment/")
+                                .map { it + ("division" to division) }
+                                .also { anySuccess = true }
+                        } catch (e: EsiForbiddenException) {
+                            anyForbidden = true
+                            emptyList()
+                        } catch (_: Exception) {
+                            emptyList()
+                        }
+                    }
+                val nowDenied = anyForbidden && !anySuccess
+                if (nowDenied) CharacterDao.setCorpFeatureDenied(characterId, CorpFeature.WALLET, denied = true)
+                result
             }
         }
 
@@ -794,7 +864,10 @@ object EsiClient {
     fun getCorporationContracts(
         corporationId: Int,
         characterId: Int,
-    ): List<Map<String, Any?>> = getAllMaps(characterId = characterId, endpoint = "/corporations/$corporationId/contracts/")
+    ): List<Map<String, Any?>> =
+        corpGuarded(characterId, CorpFeature.CONTRACTS, emptyList()) {
+            getAllMaps(characterId = characterId, endpoint = "/corporations/$corporationId/contracts/")
+        }
 
     // ESI has no bare "/contracts/{id}/items/" route -- items only exist under the
     // character-or-corporation-scoped contract endpoints, same as the contract list itself.

@@ -143,6 +143,10 @@ object DatabaseManager {
                 // order's own side lets ReceiptService combine the two correctly instead of
                 // recording every P2P purchase against a BUY order backwards (as a sale).
                 "ALTER TABLE nostr_reservations ADD COLUMN order_side TEXT NOT NULL DEFAULT ''",
+                // CSV of CorpFeature names the acting character got a 403 for on their last
+                // attempt (e.g. "WALLET,ASSETS") — cleared automatically the next time that
+                // feature's ESI call succeeds. See CharacterDao.getDeniedCorpFeatures.
+                "ALTER TABLE characters ADD COLUMN corp_access_denied TEXT NOT NULL DEFAULT ''",
             )
         conn.createStatement().use { stmt ->
             migrations.forEach { sql ->

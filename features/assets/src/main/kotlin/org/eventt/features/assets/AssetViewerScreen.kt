@@ -17,10 +17,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.AssetDao
+import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.ViewContext
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.AssetModel
+import org.eventt.core.model.CorpFeature
 import org.eventt.core.model.StaticStationModel
 import org.eventt.ui.common.*
 
@@ -33,9 +35,36 @@ fun AssetViewerScreen(context: ViewContext?) {
     var assets by remember { mutableStateOf<List<AssetModel>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+    var deniedFeatures by remember { mutableStateOf<Set<CorpFeature>>(emptySet()) }
 
     LaunchedEffect(context) {
         loadAssets(charId, corpId) { list -> assets = list }
+        deniedFeatures = actingCharId?.let { CharacterDao.getDeniedCorpFeatures(it) } ?: emptySet()
+    }
+
+    fun refreshFromEsi(clearDenied: Boolean) {
+        val acting = actingCharId ?: return
+        scope.launch(Dispatchers.IO) {
+            isLoading = true
+            try {
+                if (clearDenied) {
+                    CorpFeature.entries.forEach { CharacterDao.setCorpFeatureDenied(acting, it, denied = false) }
+                }
+                if (corpId != null) {
+                    fetchCorporationAssets(corpId, acting)
+                } else if (charId != null) {
+                    fetchCharacterAssets(charId)
+                }
+                withContext(Dispatchers.Main) {
+                    loadAssets(charId, corpId) { list -> assets = list }
+                    deniedFeatures = CharacterDao.getDeniedCorpFeatures(acting)
+                }
+            } catch (e: Exception) {
+                println("[Assets] Error fetching assets: ${e.message}")
+            } finally {
+                withContext(Dispatchers.Main) { isLoading = false }
+            }
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -51,26 +80,7 @@ fun AssetViewerScreen(context: ViewContext?) {
                 // no per-click choice needed, unlike the old dual-button dialog.
                 IconButton(
                     enabled = actingCharId != null && !isLoading,
-                    onClick = {
-                        val acting = actingCharId ?: return@IconButton
-                        scope.launch(Dispatchers.IO) {
-                            isLoading = true
-                            try {
-                                if (corpId != null) {
-                                    fetchCorporationAssets(corpId, acting)
-                                } else if (charId != null) {
-                                    fetchCharacterAssets(charId)
-                                }
-                                withContext(Dispatchers.Main) {
-                                    loadAssets(charId, corpId) { list -> assets = list }
-                                }
-                            } catch (e: Exception) {
-                                println("[Assets] Error fetching assets: ${e.message}")
-                            } finally {
-                                withContext(Dispatchers.Main) { isLoading = false }
-                            }
-                        }
-                    },
+                    onClick = { refreshFromEsi(clearDenied = false) },
                 ) {
                     Icon(Icons.Default.Refresh, contentDescription = "Refresh from ESI")
                 }
@@ -92,6 +102,11 @@ fun AssetViewerScreen(context: ViewContext?) {
                 placeholder = "Search assets...",
                 modifier = Modifier.weight(1f),
             )
+        }
+
+        if (corpId != null && deniedFeatures.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            CorpAccessNotice(deniedFeatures, onRetry = { refreshFromEsi(clearDenied = true) })
         }
 
         Spacer(modifier = Modifier.height(8.dp))

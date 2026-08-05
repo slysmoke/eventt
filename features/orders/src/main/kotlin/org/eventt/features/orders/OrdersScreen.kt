@@ -23,15 +23,18 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.ActiveOrderDao
+import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.MarketTopSnapshotDao
 import org.eventt.core.database.OrderHistoryDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.ViewContext
 import org.eventt.core.database.WalletDao
 import org.eventt.core.esi.EsiClient
+import org.eventt.core.model.CorpFeature
 import org.eventt.core.model.HotkeyBindings
 import org.eventt.core.model.eveSigFigStep
 import org.eventt.core.model.formatEveSigFigPrice
+import org.eventt.ui.common.CorpAccessNotice
 import org.eventt.ui.common.EmptyState
 import org.eventt.ui.common.EsiRefreshButton
 import org.eventt.ui.common.LoadingOverlay
@@ -286,6 +289,7 @@ fun OrdersScreen(context: ViewContext?) {
     var fifoResult by remember { mutableStateOf<CostBasisService.FifoResult?>(null) }
     var relistDiscountPct by remember { mutableStateOf(OrderFeeService.relistDiscountPct(0)) }
     var isLoading by remember { mutableStateOf(false) }
+    var deniedFeatures by remember { mutableStateOf<Set<CorpFeature>>(emptySet()) }
     // Superseded on every new loadOrders()/fetchMarketComparisons() call so switching characters
     // (or clicking refresh again) cancels a still-running fetch instead of letting it complete
     // later against a snapshot from a character the user has since switched away from — which
@@ -514,7 +518,7 @@ fun OrdersScreen(context: ViewContext?) {
         }
     }
 
-    fun loadOrders() {
+    fun loadOrders(clearDenied: Boolean = false) {
         val cid = charId
         val corp = corpId
         val acting = actingCharId ?: return
@@ -524,6 +528,9 @@ fun OrdersScreen(context: ViewContext?) {
             scope.launch(Dispatchers.IO) {
                 withContext(Dispatchers.Main) { isLoading = true }
                 try {
+                    if (clearDenied) {
+                        CorpFeature.entries.forEach { CharacterDao.setCorpFeatureDenied(acting, it, denied = false) }
+                    }
                     val taxConfig =
                         CostBasisService.TaxConfig(
                             salesTaxPct = StaticDataDao.getCharSalesTax(acting),
@@ -663,7 +670,10 @@ fun OrdersScreen(context: ViewContext?) {
                     throw e
                 } catch (_: Exception) {
                 } finally {
-                    withContext(Dispatchers.Main) { isLoading = false }
+                    withContext(Dispatchers.Main) {
+                        isLoading = false
+                        deniedFeatures = if (corp != null) CharacterDao.getDeniedCorpFeatures(acting) else emptySet()
+                    }
                 }
             }
     }
@@ -940,6 +950,11 @@ fun OrdersScreen(context: ViewContext?) {
                     )
                 }
             }
+        }
+
+        if (corpId != null && deniedFeatures.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            CorpAccessNotice(deniedFeatures, onRetry = { loadOrders(clearDenied = true) })
         }
 
         val sellOrders = applyIssuerFilter(orders.filter { !it.isBuyOrder })

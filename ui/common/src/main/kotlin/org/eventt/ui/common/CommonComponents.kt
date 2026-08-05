@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import org.eventt.core.model.CorpFeature
 
 /**
  * Reusable search field with icon.
@@ -72,6 +73,43 @@ fun ContentCard(
             }
             Spacer(modifier = Modifier.height(8.dp))
             content()
+        }
+    }
+}
+
+/**
+ * Banner shown on a corp-context screen when the acting character's ESI token got a 403 on one
+ * or more of [features] — explains a blank/stale corp section instead of leaving it unexplained.
+ * Once denied, [EsiClient][org.eventt.core.esi.EsiClient] stops calling ESI for that feature on
+ * its own, so [onRetry] (clear the denial + re-sync) is the only way it tries again.
+ * No-ops when [features] is empty.
+ */
+@Composable
+fun CorpAccessNotice(
+    features: Set<CorpFeature>,
+    onRetry: () -> Unit,
+) {
+    if (features.isEmpty()) return
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                "No corp access to ${features.joinToString(", ") { it.name.lowercase() }} — " +
+                    "this character is missing the required corp role.",
+                modifier = Modifier.weight(1f),
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            TextButton(onClick = onRetry) {
+                Text("Retry", color = MaterialTheme.colorScheme.onErrorContainer)
+            }
         }
     }
 }

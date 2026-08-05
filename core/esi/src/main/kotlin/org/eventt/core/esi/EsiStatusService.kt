@@ -15,6 +15,14 @@ class EsiDegradedException(
     endpoint: String,
 ) : IOException("ESI reports $endpoint degraded — request skipped until it recovers")
 
+/** Thrown by [EsiClient.getRaw] on HTTP 403 — the acting character's token doesn't carry the
+ * corp role (Accountant, Director, ...) the endpoint requires. An ordinary [IOException] so
+ * existing catch blocks still handle it, but callers that fetch corp data can catch this
+ * specifically to record "no access" rather than treat it as a transient failure. */
+class EsiForbiddenException(
+    endpoint: String,
+) : IOException("ESI request forbidden (403): $endpoint")
+
 /**
  * Tracks ESI's own self-reported route health (GET /meta/status) so a route already known to be
  * degraded can be skipped before spending a real request on it. The status page itself is only
