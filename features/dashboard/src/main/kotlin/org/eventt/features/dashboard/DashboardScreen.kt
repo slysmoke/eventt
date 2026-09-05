@@ -95,9 +95,11 @@ fun DashboardScreen(
                     }
                 txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = qCharId, corporationId = qCorpId, since = since90)
                 assetValue = if (context != null) AssetDao.getTotalValue(characterId = qCharId, corporationId = qCorpId) else 0.0
+                // limit = -1 is SQLite for "no limit" — top buyers/sellers rank over the character's
+                // entire trading history, not just a recent window.
                 val txWindow =
                     WalletSyncService.resolveMissingClientNames(
-                        WalletDao.getTransactions(characterId = qCharId, corporationId = qCorpId, limit = 2000),
+                        WalletDao.getTransactions(characterId = qCharId, corporationId = qCorpId, limit = -1),
                     )
                 recentTx = txWindow.take(12)
                 val (sellers, buyers) = computeCounterpartyStats(txWindow)
@@ -124,7 +126,7 @@ fun DashboardScreen(
                 txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = charId, corporationId = corpId, since = since90)
                 val txWindow =
                     WalletSyncService.resolveMissingClientNames(
-                        WalletDao.getTransactions(characterId = charId, corporationId = corpId, limit = 2000),
+                        WalletDao.getTransactions(characterId = charId, corporationId = corpId, limit = -1),
                     )
                 recentTx = txWindow.take(12)
                 val (sellers, buyers) = computeCounterpartyStats(txWindow)
