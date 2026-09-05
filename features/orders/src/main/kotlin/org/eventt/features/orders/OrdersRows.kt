@@ -518,6 +518,7 @@ internal fun InventoryRow(
     isOwnListing: Boolean,
     realizedPnl: Double?,
     taxConfig: CostBasisService.TaxConfig,
+    onWriteOff: () -> Unit,
 ) {
     val netSellPrice = sellPrice?.let { it * taxConfig.sellMultiplier }
     val profitPerUnit = netSellPrice?.let { it - item.avgCostBasis }
@@ -578,5 +579,13 @@ internal fun InventoryRow(
             color = realizedColor,
             fontWeight = if (realizedPnl != null) FontWeight.SemiBold else FontWeight.Normal,
         )
+        IconButton(modifier = Modifier.size(28.dp), onClick = onWriteOff) {
+            Icon(
+                Icons.Default.RemoveShoppingCart,
+                contentDescription = "Write off",
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }

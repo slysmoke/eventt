@@ -1,5 +1,6 @@
 package org.eventt.features.orders
 
+import org.eventt.core.database.InventoryAdjustmentDao
 import org.eventt.core.database.OrderHistoryDao
 import org.eventt.core.database.WalletDao
 import org.eventt.core.model.utcToLocalDateTime
@@ -45,6 +46,21 @@ object CostBasisService {
         val date: String,
     )
 
+    // Wallet transactions and manual write-offs both consume/create lots and must be applied in
+    // one true chronological order — a write-off dated before a later real purchase must not
+    // consume that purchase's lot early.
+    private sealed class LedgerEvent(
+        val date: String,
+    ) {
+        class Tx(
+            val tx: WalletDao.RawTxRecord,
+        ) : LedgerEvent(tx.date)
+
+        class WriteOff(
+            val adjustment: InventoryAdjustmentDao.Adjustment,
+        ) : LedgerEvent(adjustment.date)
+    }
+
     data class RealizedSellTx(
         val date: String,
         val typeId: Int,
@@ -63,6 +79,10 @@ object CostBasisService {
         // exposed so a caller re-deriving a single order's own P&L (historyPnl) applies the same
         // adjustment instead of subtracting that order's exact relistFeesPaid a second time.
         val sellRelistPerUnit: Map<Int, Double> = emptyMap(),
+        // Cost basis of manually written-off lots (see InventoryAdjustmentDao) — removed from
+        // inventory but deliberately NOT in realizedSells/totalRealizedPnl, since a write-off has
+        // no sale revenue behind it and shouldn't fabricate a profit/loss figure.
+        val writtenOffCost: Double = 0.0,
     ) {
         val totalRealizedPnl: Double = realizedSells.sumOf { it.profit }
         val realizedByType: Map<Int, List<RealizedSellTx>> = realizedSells.groupBy { it.typeId }
@@ -102,48 +122,77 @@ object CostBasisService {
         taxConfig: TaxConfig = TaxConfig(),
     ): FifoResult {
         val transactions = WalletDao.getAllTransactions(characterId, corporationId)
+        val adjustments = InventoryAdjustmentDao.getAll(characterId, corporationId)
         val buyRelistPerUnit = relistPerUnitByType(characterId, corporationId, isBuyOrder = true)
         val sellRelistPerUnit = relistPerUnitByType(characterId, corporationId, isBuyOrder = false)
 
         val lots = mutableMapOf<Int, ArrayDeque<Lot>>()
         val typeNames = mutableMapOf<Int, String>()
         val realized = mutableListOf<RealizedSellTx>()
+        var writtenOffCost = 0.0
 
-        for (tx in transactions) { // already sorted ASC by WalletDao
-            typeNames[tx.typeId] = tx.typeName
-            if (tx.isBuy) {
-                // Store adjusted cost: price + broker fee paid to place the buy order, plus this
-                // type's average buy-side relist fee per unit (see relistPerUnitByType). Neither
-                // applies to a P2P trade — it's a direct exchange outside the market, with no
-                // order (and so no broker fee/relists) behind it at all.
-                val adjustedCost =
-                    if (tx.isP2p) tx.unitPrice else tx.unitPrice * taxConfig.buyMultiplier + (buyRelistPerUnit[tx.typeId] ?: 0.0)
-                lots.getOrPut(tx.typeId) { ArrayDeque() }.addLast(Lot(tx.quantity, adjustedCost, tx.date))
-            } else {
-                val queue = lots.getOrPut(tx.typeId) { ArrayDeque() }
-                var remaining = tx.quantity
-                var costConsumed = 0.0
-                var qtyMatched = 0
+        val events =
+            (transactions.map { LedgerEvent.Tx(it) } + adjustments.map { LedgerEvent.WriteOff(it) })
+                .sortedBy { it.date }
 
-                while (remaining > 0 && queue.isNotEmpty()) {
-                    val lot = queue.removeFirst()
-                    val consume = minOf(remaining, lot.qty)
-                    costConsumed += consume * lot.cost
-                    qtyMatched += consume
-                    if (consume < lot.qty) queue.addFirst(lot.copy(qty = lot.qty - consume))
-                    remaining -= consume
+        for (event in events) {
+            when (event) {
+                is LedgerEvent.Tx -> {
+                    val tx = event.tx
+                    typeNames[tx.typeId] = tx.typeName
+                    if (tx.isBuy) {
+                        // Store adjusted cost: price + broker fee paid to place the buy order, plus this
+                        // type's average buy-side relist fee per unit (see relistPerUnitByType). Neither
+                        // applies to a P2P trade — it's a direct exchange outside the market, with no
+                        // order (and so no broker fee/relists) behind it at all.
+                        val adjustedCost =
+                            if (tx.isP2p) tx.unitPrice else tx.unitPrice * taxConfig.buyMultiplier + (buyRelistPerUnit[tx.typeId] ?: 0.0)
+                        lots.getOrPut(tx.typeId) { ArrayDeque() }.addLast(Lot(tx.quantity, adjustedCost, tx.date))
+                    } else {
+                        val queue = lots.getOrPut(tx.typeId) { ArrayDeque() }
+                        var remaining = tx.quantity
+                        var costConsumed = 0.0
+                        var qtyMatched = 0
+
+                        while (remaining > 0 && queue.isNotEmpty()) {
+                            val lot = queue.removeFirst()
+                            val consume = minOf(remaining, lot.qty)
+                            costConsumed += consume * lot.cost
+                            qtyMatched += consume
+                            if (consume < lot.qty) queue.addFirst(lot.copy(qty = lot.qty - consume))
+                            remaining -= consume
+                        }
+
+                        if (qtyMatched > 0) {
+                            val cb = costConsumed / qtyMatched
+                            // Net of tax/broker fee (sellMultiplier) and this type's average sell-side
+                            // relist fee per unit (see relistPerUnitByType) — again, neither applies to a
+                            // P2P disposal.
+                            val netSellPrice =
+                                if (tx.isP2p) {
+                                    tx.unitPrice
+                                } else {
+                                    tx.unitPrice * taxConfig.sellMultiplier - (sellRelistPerUnit[tx.typeId] ?: 0.0)
+                                }
+                            val profit = qtyMatched * (netSellPrice - cb)
+                            val margin = if (cb > 0) (netSellPrice - cb) / cb * 100.0 else 0.0
+                            realized.add(RealizedSellTx(tx.date, tx.typeId, qtyMatched, tx.unitPrice, cb, profit, margin))
+                        }
+                    }
                 }
 
-                if (qtyMatched > 0) {
-                    val cb = costConsumed / qtyMatched
-                    // Net of tax/broker fee (sellMultiplier) and this type's average sell-side
-                    // relist fee per unit (see relistPerUnitByType) — again, neither applies to a
-                    // P2P disposal.
-                    val netSellPrice =
-                        if (tx.isP2p) tx.unitPrice else tx.unitPrice * taxConfig.sellMultiplier - (sellRelistPerUnit[tx.typeId] ?: 0.0)
-                    val profit = qtyMatched * (netSellPrice - cb)
-                    val margin = if (cb > 0) (netSellPrice - cb) / cb * 100.0 else 0.0
-                    realized.add(RealizedSellTx(tx.date, tx.typeId, qtyMatched, tx.unitPrice, cb, profit, margin))
+                is LedgerEvent.WriteOff -> {
+                    val adj = event.adjustment
+                    typeNames[adj.typeId] = adj.typeName
+                    val queue = lots.getOrPut(adj.typeId) { ArrayDeque() }
+                    var remaining = adj.quantity
+                    while (remaining > 0 && queue.isNotEmpty()) {
+                        val lot = queue.removeFirst()
+                        val consume = minOf(remaining, lot.qty)
+                        writtenOffCost += consume * lot.cost
+                        if (consume < lot.qty) queue.addFirst(lot.copy(qty = lot.qty - consume))
+                        remaining -= consume
+                    }
                 }
             }
         }
@@ -163,7 +212,7 @@ object CostBasisService {
                     )
                 }.filter { it.value.remainingQty > 0 }
 
-        return FifoResult(inventory, realized, taxConfig, sellRelistPerUnit)
+        return FifoResult(inventory, realized, taxConfig, sellRelistPerUnit, writtenOffCost)
     }
 
     // Returns realized profit and cost-weighted margin % for a specific fulfilled sell order,

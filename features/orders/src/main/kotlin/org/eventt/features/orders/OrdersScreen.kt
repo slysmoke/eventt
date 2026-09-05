@@ -1026,7 +1026,16 @@ fun OrdersScreen(context: ViewContext?) {
                             description = if (context == null) "Add a character to view inventory." else "No items in FIFO inventory.",
                         )
                     } else {
-                        InventoryTable(inventory, sellOrders, fifoResult, inventoryMarketPrices)
+                        InventoryTable(
+                            inventory,
+                            sellOrders,
+                            fifoResult,
+                            inventoryMarketPrices,
+                            characterId = charId,
+                            corporationId = corpId,
+                            actingCharId = actingCharId,
+                            onAdjusted = ::recalculateFifo,
+                        )
                     }
                 }
 

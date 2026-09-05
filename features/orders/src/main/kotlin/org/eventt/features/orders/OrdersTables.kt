@@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -12,8 +15,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.eventt.core.database.InventoryAdjustmentDao
 import org.eventt.core.database.OrderHistoryDao
+import org.eventt.core.model.utcToLocalDateTime
 import org.eventt.ui.common.ensureVisible
+import org.eventt.ui.common.formatIsk
+import java.time.Instant
 
 // ── Sorting ───────────────────────────────────────────────────────────────
 
@@ -490,9 +500,18 @@ internal fun InventoryTable(
     sellOrders: List<CharacterOrder>,
     fifoResult: CostBasisService.FifoResult?,
     marketPrices: Map<Int, Double>,
+    characterId: Int?,
+    corporationId: Int?,
+    actingCharId: Int?,
+    onAdjusted: () -> Unit,
 ) {
     var sortCol by remember { mutableStateOf(InventorySortCol.NAME) }
     var sortDir by remember { mutableStateOf(SortDir.ASC) }
+    var writeOffTarget by remember { mutableStateOf<CostBasisService.InventoryItem?>(null) }
+    var writeOffDefaultQty by remember { mutableStateOf(0) }
+    var showHistory by remember { mutableStateOf(false) }
+    var showReconcile by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     fun toggleSort(col: InventorySortCol) {
         if (sortCol == col) {
@@ -521,7 +540,42 @@ internal fun InventoryTable(
         }
     val sorted = sortInventoryMetrics(metrics, sortCol, sortDir)
 
+    fun writeOff(
+        item: CostBasisService.InventoryItem,
+        quantity: Int,
+        reason: String,
+    ) {
+        scope.launch(Dispatchers.IO) {
+            InventoryAdjustmentDao.insert(
+                typeId = item.typeId,
+                typeName = item.typeName,
+                quantity = quantity,
+                date = Instant.now().toString().utcToLocalDateTime(),
+                reason = reason,
+                characterId = characterId,
+                corporationId = corporationId,
+            )
+            withContext(Dispatchers.Main) { onAdjusted() }
+        }
+    }
+
     Column {
+        val writtenOff = fifoResult?.writtenOffCost ?: 0.0
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                if (writtenOff > 0) "Written off: ${formatIsk(writtenOff)}" else "",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row {
+                TextButton(enabled = actingCharId != null, onClick = { showReconcile = true }) { Text("Check assets") }
+                TextButton(onClick = { showHistory = true }) { Text("Write-off history") }
+            }
+        }
         Row(
             modifier =
                 Modifier
@@ -540,13 +594,268 @@ internal fun InventoryTable(
             SortHeader("Profit/unit", InventorySortCol.PROFIT, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
             SortHeader("Margin", InventorySortCol.MARGIN, sortCol, sortDir, ::toggleSort, Modifier.weight(1.2f))
             SortHeader("Realized P&L", InventorySortCol.REALIZED_PNL, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
+            Spacer(Modifier.width(28.dp))
         }
         HorizontalDivider()
         LazyColumn {
             items(sorted, key = { it.item.typeId }) { m ->
-                InventoryRow(m.item, m.sellPrice, m.isOwnListing, m.realizedPnl, tax)
+                InventoryRow(
+                    m.item,
+                    m.sellPrice,
+                    m.isOwnListing,
+                    m.realizedPnl,
+                    tax,
+                    onWriteOff = {
+                        writeOffTarget = m.item
+                        writeOffDefaultQty = m.item.remainingQty
+                    },
+                )
                 HorizontalDivider(thickness = 0.5.dp)
             }
         }
     }
+
+    writeOffTarget?.let { item ->
+        WriteOffDialog(
+            item = item,
+            defaultQuantity = writeOffDefaultQty,
+            onDismiss = { writeOffTarget = null },
+            onConfirm = { qty, reason ->
+                writeOff(item, qty, reason)
+                writeOffTarget = null
+            },
+        )
+    }
+
+    if (showHistory) {
+        WriteOffHistoryDialog(
+            characterId = characterId,
+            corporationId = corporationId,
+            onDismiss = { showHistory = false },
+            onUndone = onAdjusted,
+        )
+    }
+
+    if (showReconcile) {
+        val acting = actingCharId
+        if (acting != null) {
+            ReconcileDialog(
+                inventory = inventory,
+                characterId = characterId,
+                corporationId = corporationId,
+                actingCharId = acting,
+                onDismiss = { showReconcile = false },
+                onWriteOff = { item, shortfall ->
+                    showReconcile = false
+                    writeOffTarget = item
+                    writeOffDefaultQty = shortfall
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun WriteOffDialog(
+    item: CostBasisService.InventoryItem,
+    defaultQuantity: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (quantity: Int, reason: String) -> Unit,
+) {
+    var qtyText by remember { mutableStateOf(defaultQuantity.coerceIn(1, item.remainingQty).toString()) }
+    var reason by remember { mutableStateOf("") }
+    val qty = qtyText.toIntOrNull()
+    val valid = qty != null && qty in 1..item.remainingQty
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Write off ${item.typeName}") },
+        text = {
+            Column {
+                Text(
+                    "Removes this quantity from FIFO inventory with no matching sale — use for lost cargo or " +
+                        "a purchase that was actually sold under a different character/corp. Doesn't touch realized P&L.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = qtyText,
+                    onValueChange = { qtyText = it },
+                    label = { Text("Quantity (max ${item.remainingQty})") },
+                    isError = !valid,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = reason,
+                    onValueChange = { reason = it },
+                    label = { Text("Reason (optional)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = valid, onClick = { onConfirm(qty!!, reason) }) { Text("Write off") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
+}
+
+@Composable
+private fun WriteOffHistoryDialog(
+    characterId: Int?,
+    corporationId: Int?,
+    onDismiss: () -> Unit,
+    onUndone: () -> Unit,
+) {
+    var adjustments by remember { mutableStateOf<List<InventoryAdjustmentDao.Adjustment>>(emptyList()) }
+    val scope = rememberCoroutineScope()
+
+    fun reload() {
+        scope.launch(Dispatchers.IO) {
+            val loaded = InventoryAdjustmentDao.getAll(characterId, corporationId)
+            withContext(Dispatchers.Main) { adjustments = loaded }
+        }
+    }
+    LaunchedEffect(characterId, corporationId) { reload() }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Write-off history") },
+        text = {
+            if (adjustments.isEmpty()) {
+                Text("No write-offs recorded.", style = MaterialTheme.typography.bodySmall)
+            } else {
+                Column(modifier = Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
+                    adjustments.reversed().forEach { adj ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("${adj.typeName} × ${adj.quantity}", style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    listOf(adj.date.take(16), adj.reason).filter { it.isNotBlank() }.joinToString(" — "),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            IconButton(onClick = {
+                                scope.launch(Dispatchers.IO) {
+                                    InventoryAdjustmentDao.delete(adj.id)
+                                    withContext(Dispatchers.Main) {
+                                        reload()
+                                        onUndone()
+                                    }
+                                }
+                            }) {
+                                Icon(Icons.Default.Undo, contentDescription = "Undo write-off", modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        },
+    )
+}
+
+private sealed class ReconcileState {
+    data object Loading : ReconcileState()
+
+    data class Error(
+        val message: String,
+    ) : ReconcileState()
+
+    data class Done(
+        val discrepancies: List<AssetReconciliationService.Discrepancy>,
+    ) : ReconcileState()
+}
+
+// Refreshes the ESI asset snapshot then compares it against FIFO inventory (see
+// AssetReconciliationService) -- surfaces exactly the drift a write-off is meant to correct,
+// with a one-click shortcut into WriteOffDialog pre-filled with the missing quantity.
+@Composable
+private fun ReconcileDialog(
+    inventory: Map<Int, CostBasisService.InventoryItem>,
+    characterId: Int?,
+    corporationId: Int?,
+    actingCharId: Int,
+    onDismiss: () -> Unit,
+    onWriteOff: (CostBasisService.InventoryItem, shortfall: Int) -> Unit,
+) {
+    var state by remember { mutableStateOf<ReconcileState>(ReconcileState.Loading) }
+
+    LaunchedEffect(characterId, corporationId, actingCharId) {
+        state =
+            try {
+                val discrepancies =
+                    withContext(Dispatchers.IO) {
+                        AssetReconciliationService.reconcile(inventory, characterId, corporationId, actingCharId)
+                    }
+                ReconcileState.Done(discrepancies)
+            } catch (e: Exception) {
+                ReconcileState.Error(e.message ?: "Failed to refresh assets from ESI")
+            }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Check assets") },
+        text = {
+            when (val s = state) {
+                is ReconcileState.Loading -> {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Text("Refreshing assets from ESI and comparing against FIFO inventory…", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+
+                is ReconcileState.Error -> {
+                    Text(s.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+
+                is ReconcileState.Done -> {
+                    if (s.discrepancies.isEmpty()) {
+                        Text(
+                            "No discrepancies — every item FIFO says you should hold is actually in your assets.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    } else {
+                        Column(modifier = Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
+                            s.discrepancies.forEach { d ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(d.typeName, style = MaterialTheme.typography.bodyMedium)
+                                        Text(
+                                            "FIFO: ${d.fifoQty}   Assets: ${d.actualQty}   Missing: ${d.shortfall}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    TextButton(onClick = {
+                                        inventory[d.typeId]?.let { onWriteOff(it, d.shortfall) }
+                                    }) { Text("Write off") }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        },
+    )
 }

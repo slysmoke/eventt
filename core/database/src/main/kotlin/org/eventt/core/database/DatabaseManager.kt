@@ -237,6 +237,22 @@ object DatabaseManager {
                     corporation_id INTEGER
                 )
                 """.trimIndent(),
+                // Manual FIFO write-offs — an open buy lot with no offsetting sell (lost cargo,
+                // bought under the wrong character/corp, etc.). CostBasisService consumes these
+                // like a sell but books no revenue, so the lot stops showing as still-held
+                // inventory without fabricating a profit/loss figure. See InventoryAdjustmentDao.
+                """
+                CREATE TABLE IF NOT EXISTS inventory_adjustments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    type_id INTEGER NOT NULL,
+                    type_name TEXT DEFAULT '',
+                    quantity INTEGER NOT NULL,
+                    date TEXT NOT NULL,
+                    reason TEXT DEFAULT '',
+                    character_id INTEGER,
+                    corporation_id INTEGER
+                )
+                """.trimIndent(),
                 // Journal
                 """
                 CREATE TABLE IF NOT EXISTS journal (

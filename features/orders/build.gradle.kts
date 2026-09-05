@@ -14,6 +14,7 @@ dependencies {
     implementation(project(":core:esi"))
     implementation(project(":core:marketlogs"))
     implementation(project(":core:nostr")) // LeaderboardService, for the opt-in trader leaderboard publisher
+    implementation(project(":features:assets")) // fetchCharacterAssets/fetchCorporationAssets, for FIFO-vs-assets reconciliation
     implementation(project(":ui:theme"))
     implementation(project(":ui:common"))
     implementation(compose.desktop.currentOs)

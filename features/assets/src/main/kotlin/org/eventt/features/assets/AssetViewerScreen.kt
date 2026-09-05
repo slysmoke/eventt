@@ -371,7 +371,9 @@ private fun resolveLocation(
     }
 }
 
-private suspend fun fetchCharacterAssets(characterId: Int) {
+// Not private -- reused by features:orders' InventoryTable to refresh the assets snapshot before
+// reconciling it against FIFO inventory (see AssetReconciliationService).
+suspend fun fetchCharacterAssets(characterId: Int) {
     val rawAssets = EsiClient.getCharacterAssets(characterId)
     val prices = EsiClient.getMarketPrices()
     val byItemId = rawAssets.mapNotNull { d -> (d["item_id"] as? Number)?.toLong()?.let { it to d } }.toMap()
@@ -417,7 +419,7 @@ private suspend fun fetchCharacterAssets(characterId: Int) {
     AssetDao.replaceFor(characterId = characterId, assets = models)
 }
 
-private suspend fun fetchCorporationAssets(
+suspend fun fetchCorporationAssets(
     corporationId: Int,
     actingCharacterId: Int,
 ) {
