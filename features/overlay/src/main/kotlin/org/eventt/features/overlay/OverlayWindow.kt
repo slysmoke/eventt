@@ -161,8 +161,8 @@ private fun OverlayContent(
     var sellBook by remember { mutableStateOf<List<Pair<Double, Long>>>(emptyList()) }
     var buyBook by remember { mutableStateOf<List<Pair<Double, Long>>>(emptyList()) }
 
-    // Pasted inventory/cargo list (name+quantity per line) → total liquidation value, priced off
-    // each item's best Jita buy order (what you'd actually get selling into the book right now).
+    // Pasted inventory/cargo list (name+quantity per line) → total value, priced off each item's
+    // best Jita sell order (PLEX: global market) — what it'd cost to buy the list right now.
     var manifestTotal by remember { mutableStateOf<Double?>(null) }
     var manifestResolved by remember { mutableStateOf(0) }
     var manifestUnresolved by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -208,14 +208,14 @@ private fun OverlayContent(
                                 runCatching { StaticDataDao.searchMarketTypes(line.name, limit = 1).firstOrNull() }
                                     .getOrNull()
                                     ?.takeIf { it.name.equals(line.name, ignoreCase = true) }
-                            val bestBuy =
+                            val bestSell =
                                 type
                                     ?.let { fetchTypeBook(it.typeId) }
-                                    ?.second
-                                    ?.maxByOrNull { it.first }
                                     ?.first
-                            if (bestBuy != null) {
-                                total += bestBuy * line.quantity
+                                    ?.minByOrNull { it.first }
+                                    ?.first
+                            if (bestSell != null) {
+                                total += bestSell * line.quantity
                                 resolved++
                             } else {
                                 unresolved += line.name
@@ -573,7 +573,7 @@ private fun OverlayContent(
                                     )
                                 }
                             }
-                            CalcRow("Total ($manifestResolved items)", fmtIsk(manifestTotal!!), buyColor, bold = true)
+                            CalcRow("Total ($manifestResolved items)", fmtIsk(manifestTotal!!), sellColor, bold = true)
                             if (manifestUnresolved.isNotEmpty()) {
                                 Text(
                                     "Unresolved: ${manifestUnresolved.joinToString(", ")}",

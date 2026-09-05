@@ -2,6 +2,8 @@ package org.eventt.features.tools.pricing
 
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.esi.EsiClient
+import org.eventt.core.model.PLEX_MARKET_REGION_ID
+import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.eveSigFigStep
 import org.eventt.features.orders.CostBasisService
 import org.eventt.features.tools.ResolvedItem
@@ -66,30 +68,38 @@ object PricingService {
                 null
             }
 
+        // PLEX only trades in its own global market region, with no station scoping — it's priced
+        // there even when the character's docked station couldn't be resolved.
         val marketBestSellByType: Map<Int, Double?> =
-            if (location == null) {
-                emptyMap()
-            } else {
-                items.associate { item ->
-                    item.typeId to
+            items.associate { item ->
+                val isPlex = item.typeId == PLEX_TYPE_ID
+                val regionId = if (isPlex) PLEX_MARKET_REGION_ID else location?.regionId
+                item.typeId to
+                    if (regionId == null) {
+                        null
+                    } else {
                         try {
                             EsiClient
-                                .getMarketRegionOrders(location.regionId, orderType = "sell", typeId = item.typeId)
-                                .filter { (it["location_id"] as? Number)?.toLong() == location.locationId }
+                                .getMarketRegionOrders(regionId, orderType = "sell", typeId = item.typeId)
+                                .filter { isPlex || (it["location_id"] as? Number)?.toLong() == location?.locationId }
                                 .mapNotNull { (it["price"] as? Number)?.toDouble() }
                                 .minOrNull()
                         } catch (e: Exception) {
                             null
                         }
-                }
+                    }
             }
 
         val results =
             items.map { item ->
                 val marketLow = marketBestSellByType[item.typeId]
                 val marketUndercut = marketLow?.let { undercutPrice(it) }
-                if (location != null && marketLow == null) {
-                    warnings += PricingWarning(item.name, "no sell orders found at ${location.locationName}")
+                if (marketLow == null) {
+                    if (item.typeId == PLEX_TYPE_ID) {
+                        warnings += PricingWarning(item.name, "no sell orders found on the PLEX market")
+                    } else if (location != null) {
+                        warnings += PricingWarning(item.name, "no sell orders found at ${location.locationName}")
+                    }
                 }
 
                 val cb = fifo?.avgCostBasisForType(item.typeId)

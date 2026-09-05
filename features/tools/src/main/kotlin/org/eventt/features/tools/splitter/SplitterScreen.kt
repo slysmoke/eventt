@@ -22,6 +22,8 @@ import kotlinx.coroutines.withContext
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.ViewContext
 import org.eventt.core.esi.EsiClient
+import org.eventt.core.model.PLEX_MARKET_REGION_ID
+import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.features.tools.ParseWarning
 import org.eventt.features.tools.ToolsInputParser
 import org.eventt.features.tools.pricing.PricingService
@@ -112,28 +114,28 @@ fun SplitterScreen(context: ViewContext?) {
                     )
             }
             val globalPrices = EsiClient.getMarketPrices()
+            // PLEX only trades in its own global market region, never the character's home region —
+            // resolve it there regardless of whether the character's own region was found.
             val regionSellByType: Map<Int, Double?> =
-                if (regionId == null) {
-                    emptyMap()
-                } else {
-                    coroutineScope {
-                        val semaphore = Semaphore(8)
-                        resolved
-                            .map { item ->
-                                async {
-                                    semaphore.withPermit {
-                                        item.typeId to
-                                            runCatching {
-                                                EsiClient
-                                                    .getMarketRegionOrders(regionId, orderType = "sell", typeId = item.typeId)
-                                                    .mapNotNull { (it["price"] as? Number)?.toDouble() }
-                                                    .minOrNull()
-                                            }.getOrNull()
-                                    }
+                coroutineScope {
+                    val semaphore = Semaphore(8)
+                    resolved
+                        .mapNotNull { item ->
+                            val itemRegionId = if (item.typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else regionId
+                            itemRegionId ?: return@mapNotNull null
+                            async {
+                                semaphore.withPermit {
+                                    item.typeId to
+                                        runCatching {
+                                            EsiClient
+                                                .getMarketRegionOrders(itemRegionId, orderType = "sell", typeId = item.typeId)
+                                                .mapNotNull { (it["price"] as? Number)?.toDouble() }
+                                                .minOrNull()
+                                        }.getOrNull()
                                 }
-                            }.awaitAll()
-                            .toMap()
-                    }
+                            }
+                        }.awaitAll()
+                        .toMap()
                 }
 
             val lineItems =
