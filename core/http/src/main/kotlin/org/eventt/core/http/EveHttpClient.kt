@@ -7,7 +7,14 @@ import okhttp3.logging.HttpLoggingInterceptor
 import java.util.concurrent.TimeUnit
 
 object EveHttpClient {
+    // Non-atomic check-then-build-then-assign is a real race: several concurrent callers at
+    // startup (SSO token verify, static-data import, ESI status check) could each observe null,
+    // each build and briefly hold their own client/connection pool, with all but the last
+    // assignment silently discarded. @Volatile plus double-checked locking (getClient/configure/
+    // close all take lockObj) makes this correct.
+    @Volatile
     private var instance: OkHttpClient? = null
+    private val lockObj = Any()
 
     // ESI best practices require a User-Agent identifying the app (see
     // https://developers.eveonline.com/docs/services/esi/best-practices/). The real app
@@ -19,40 +26,46 @@ object EveHttpClient {
     /** Call once at app startup, before any ESI request. Rebuilds the client if already created. */
     fun configure(userAgent: String) {
         this.userAgent = userAgent
-        instance = null
+        synchronized(lockObj) { instance = null }
     }
 
     fun getClient(enableLogging: Boolean = false): OkHttpClient {
-        if (instance != null) return instance!!
+        instance?.let { return it }
+        synchronized(lockObj) {
+            instance?.let { return it }
 
-        val clientBuilder =
-            OkHttpClient
-                .Builder()
-                .protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
-                .connectTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
-                .writeTimeout(30, TimeUnit.SECONDS)
-                .callTimeout(60, TimeUnit.SECONDS)
-                .connectionSpecs(listOf(ConnectionSpec.MODERN_TLS, ConnectionSpec.CLEARTEXT))
-                .retryOnConnectionFailure(true)
-                .addInterceptor(UserAgentInterceptor { userAgent })
-                .addInterceptor(EsiThrottleInterceptor())
+            val clientBuilder =
+                OkHttpClient
+                    .Builder()
+                    .protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
+                    .connectTimeout(30, TimeUnit.SECONDS)
+                    .readTimeout(30, TimeUnit.SECONDS)
+                    .writeTimeout(30, TimeUnit.SECONDS)
+                    .callTimeout(60, TimeUnit.SECONDS)
+                    .connectionSpecs(listOf(ConnectionSpec.MODERN_TLS, ConnectionSpec.CLEARTEXT))
+                    .retryOnConnectionFailure(true)
+                    .addInterceptor(UserAgentInterceptor { userAgent })
+                    .addInterceptor(EsiThrottleInterceptor())
 
-        if (enableLogging) {
-            val logging =
-                HttpLoggingInterceptor().apply {
-                    level = HttpLoggingInterceptor.Level.BODY
-                }
-            clientBuilder.addInterceptor(logging)
+            if (enableLogging) {
+                val logging =
+                    HttpLoggingInterceptor().apply {
+                        level = HttpLoggingInterceptor.Level.BODY
+                    }
+                clientBuilder.addInterceptor(logging)
+            }
+
+            val built = clientBuilder.build()
+            instance = built
+            return built
         }
-
-        instance = clientBuilder.build()
-        return instance!!
     }
 
     fun close() {
-        instance?.dispatcher?.executorService?.shutdown()
-        instance?.connectionPool?.evictAll()
-        instance = null
+        synchronized(lockObj) {
+            instance?.dispatcher?.executorService?.shutdown()
+            instance?.connectionPool?.evictAll()
+            instance = null
+        }
     }
 }
