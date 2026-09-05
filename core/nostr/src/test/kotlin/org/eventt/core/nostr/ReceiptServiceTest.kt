@@ -85,4 +85,44 @@ class ReceiptServiceTest {
 
         isBuyRecorded() shouldBe true
     }
+
+    @Test
+    fun `a legitimate 0 ISK trade is still booked, not treated as a missing price`() {
+        val gift = reservation("t5", role = "buyer", orderSide = "sell").copy(price = 0.0)
+
+        val booked = ReceiptService.bookCostBasisEntry(gift, TransactionAttribution.Character(1))
+
+        booked shouldBe true
+        WalletDao.getAllTransactions(characterId = 1).single().unitPrice shouldBe 0.0
+    }
+
+    @Test
+    fun `a legacy row with no snapshot falls back to the order's price`() {
+        val legacy = reservation("t6", role = "buyer", orderSide = "sell").copy(typeId = 0, price = 0.0, orderSide = "")
+        val fallback =
+            org.eventt.core.database.NostrOrderModel(
+                orderUuid = "order-1",
+                pubkey = "seller-pk",
+                eventId = "event-1",
+                createdAt = 0,
+                side = "sell",
+                typeId = 34,
+                regionId = 0,
+                price = 250.0,
+                qtyTotal = 10,
+                qtyRemaining = 10,
+                minLot = 1,
+                minLotUnit = "unit",
+                traderChar = "Seller Char",
+                traderCharId = 2,
+                expiration = 0,
+                rawEventJson = "{}",
+                isMine = true,
+            )
+
+        val booked = ReceiptService.bookCostBasisEntry(legacy, TransactionAttribution.Character(1), fallbackOrder = fallback)
+
+        booked shouldBe true
+        WalletDao.getAllTransactions(characterId = 1).single().unitPrice shouldBe 250.0
+    }
 }

@@ -106,7 +106,13 @@ object ReceiptService {
         dateIfNew: String = Instant.now().toString(),
     ): Boolean {
         val typeId = reservation.typeId.takeIf { it > 0 } ?: fallbackOrder?.typeId ?: return false
-        val price = reservation.price.takeIf { it > 0 } ?: fallbackOrder?.price ?: return false
+        // A reservation with a real typeId was fully snapshotted at completion time (typeId,
+        // price, and side are all written together -- see this function's own doc comment above),
+        // so its price is trustworthy even when it's a legitimate 0 ISK trade (a gift). Only a
+        // legacy pre-snapshot row (typeId == 0, the migration's default) actually needs the
+        // fallback price -- treating "price <= 0" alone as "missing" silently dropped every real
+        // free trade instead of booking it.
+        val price = if (reservation.typeId > 0) reservation.price else fallbackOrder?.price ?: return false
         val orderSide = reservation.orderSide.takeIf { it.isNotBlank() } ?: fallbackOrder?.side ?: return false
         val counterpartyChar = if (reservation.role == "buyer") reservation.contactChar else reservation.buyerChar
         val transactionId = p2pTransactionId(reservation.tradeId, reservation.role)
