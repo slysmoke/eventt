@@ -1,5 +1,9 @@
 package org.eventt.features.tools.pricing
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
@@ -438,7 +442,18 @@ fun PricingScreen(context: ViewContext?) {
                         }
                         HorizontalDivider(Modifier.padding(vertical = 4.dp))
                         results.forEach { r ->
-                            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            val interactionSource = remember(r) { MutableInteractionSource() }
+                            val isHovered by interactionSource.collectIsHoveredAsState()
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .hoverable(interactionSource)
+                                        .background(
+                                            if (isHovered) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f) else Color.Transparent,
+                                        ),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
                                 Text(r.name, modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodySmall)
                                 Text("${r.quantity}", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                                 Text(
