@@ -14,7 +14,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.AssetDao
 import org.eventt.core.database.CharacterDao
@@ -23,8 +28,40 @@ import org.eventt.core.database.ViewContext
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.AssetModel
 import org.eventt.core.model.CorpFeature
+import org.eventt.core.model.PLEX_MARKET_REGION_ID
+import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.StaticStationModel
 import org.eventt.ui.common.*
+
+private const val THE_FORGE_REGION_ID = 10000002
+private const val JITA_44_STATION_ID = 60003760L
+
+// Live Jita sell price (PLEX: its own global market) for every unique type in one batch, instead
+// of pricing off ESI's /markets/prices/ adjusted/average price -- a 30-day rolling insurance-style
+// number that's often nowhere close to what these items would actually fetch right now. Falls
+// back to that average only for a type with no live Jita sell orders at all.
+private suspend fun jitaSellPricesByType(typeIds: Set<Int>): Map<Int, Double> =
+    coroutineScope {
+        val semaphore = Semaphore(8)
+        typeIds
+            .map { typeId ->
+                async {
+                    semaphore.withPermit {
+                        val regionId = if (typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else THE_FORGE_REGION_ID
+                        typeId to
+                            runCatching {
+                                EsiClient
+                                    .getMarketRegionOrders(regionId, orderType = "sell", typeId = typeId)
+                                    .filter { typeId == PLEX_TYPE_ID || (it["location_id"] as? Number)?.toLong() == JITA_44_STATION_ID }
+                                    .mapNotNull { (it["price"] as? Number)?.toDouble() }
+                                    .minOrNull()
+                            }.getOrNull()
+                    }
+                }
+            }.awaitAll()
+            .mapNotNull { (typeId, price) -> price?.let { typeId to it } }
+            .toMap()
+    }
 
 @Composable
 fun AssetViewerScreen(context: ViewContext?) {
@@ -375,7 +412,8 @@ private fun resolveLocation(
 // reconciling it against FIFO inventory (see AssetReconciliationService).
 suspend fun fetchCharacterAssets(characterId: Int) {
     val rawAssets = EsiClient.getCharacterAssets(characterId)
-    val prices = EsiClient.getMarketPrices()
+    val averagePrices = EsiClient.getMarketPrices()
+    val jitaSellPrices = jitaSellPricesByType(rawAssets.mapNotNull { (it["type_id"] as? Number)?.toInt() }.toSet())
     val byItemId = rawAssets.mapNotNull { d -> (d["item_id"] as? Number)?.toLong()?.let { it to d } }.toMap()
     // Memoize per resolved root location_id within this fetch — many items typically share the
     // same handful of stations/citadels, so this avoids repeating the DB (or ESI) lookup per item.
@@ -410,7 +448,7 @@ suspend fun fetchCharacterAssets(characterId: Int) {
                 stationName = location?.name ?: "",
                 locationFlag = locationFlag,
                 isSingleton = isSingleton,
-                estimatedPrice = prices[typeId] ?: 0.0,
+                estimatedPrice = jitaSellPrices[typeId] ?: averagePrices[typeId] ?: 0.0,
                 isCorpAsset = false,
                 characterId = characterId,
             )
@@ -427,7 +465,8 @@ suspend fun fetchCorporationAssets(
     // (citadel) name lookups, which need docking access — ESI's structure endpoint doesn't
     // require them to be a director, just a member present in the structure.
     val rawAssets = EsiClient.getCorporationAssets(corporationId, actingCharacterId)
-    val prices = EsiClient.getMarketPrices()
+    val averagePrices = EsiClient.getMarketPrices()
+    val jitaSellPrices = jitaSellPricesByType(rawAssets.mapNotNull { (it["type_id"] as? Number)?.toInt() }.toSet())
     val byItemId = rawAssets.mapNotNull { d -> (d["item_id"] as? Number)?.toLong()?.let { it to d } }.toMap()
     val locationCache = mutableMapOf<Long, StaticStationModel?>()
 
@@ -460,7 +499,7 @@ suspend fun fetchCorporationAssets(
                 stationName = location?.name ?: "",
                 locationFlag = locationFlag,
                 isSingleton = isSingleton,
-                estimatedPrice = prices[typeId] ?: 0.0,
+                estimatedPrice = jitaSellPrices[typeId] ?: averagePrices[typeId] ?: 0.0,
                 isCorpAsset = true,
                 corporationId = corporationId,
             )
