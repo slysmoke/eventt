@@ -225,4 +225,51 @@ object CorporationDao {
             }
         }
     }
+
+    // ─── Tracking ─────────────────────────────────────────────────────────
+    // A corp is only a selectable context / swept by background sync (wallet, orders, contracts)
+    // once explicitly tracked here -- see tracked_corporations in DatabaseManager. Being a member's
+    // employer (characters.corporation_id) merely makes a corp *eligible* to track.
+
+    fun track(corporationId: Int) {
+        DatabaseManager.transaction {
+            prepareStatement("INSERT OR IGNORE INTO tracked_corporations (corporation_id) VALUES (?)").use { stmt ->
+                stmt.setInt(1, corporationId)
+                stmt.executeUpdate()
+            }
+        }
+    }
+
+    fun untrack(corporationId: Int) {
+        DatabaseManager.transaction {
+            prepareStatement("DELETE FROM tracked_corporations WHERE corporation_id = ?").use { stmt ->
+                stmt.setInt(1, corporationId)
+                stmt.executeUpdate()
+            }
+        }
+    }
+
+    fun getTrackedIds(): Set<Int> =
+        DatabaseManager.transaction {
+            prepareStatement("SELECT corporation_id FROM tracked_corporations").use { stmt ->
+                stmt.executeQuery().use { rs ->
+                    val result = mutableSetOf<Int>()
+                    while (rs.next()) result += rs.getInt("corporation_id")
+                    result
+                }
+            }
+        }
+
+    // Every tracked corp a given character list can act for, one arbitrary member each -- the
+    // shared "which corps does background sync need to sweep" query for
+    // WalletSyncService/ActiveOrdersSyncService/ContractWatchService, all three of which used to
+    // derive this from character membership alone (see #21/#22).
+    fun actingPairsForTracked(characters: List<CharacterModel>): List<Pair<Int, Int>> {
+        val tracked = getTrackedIds()
+        return characters
+            .mapNotNull { it.corporationId }
+            .distinct()
+            .filter { it in tracked }
+            .map { corpId -> corpId to characters.first { it.corporationId == corpId }.id }
+    }
 }

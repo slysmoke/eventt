@@ -30,14 +30,23 @@ fun CharacterManagementScreen() {
     val scope = rememberCoroutineScope()
     var characters by remember { mutableStateOf<List<org.eventt.core.model.CharacterModel>>(emptyList()) }
     var corporations by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
+    var trackedCorpIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var isLoading by remember { mutableStateOf(false) }
     var showAuthDialog by remember { mutableStateOf(false) }
     var characterToRemove by remember { mutableStateOf<org.eventt.core.model.CharacterModel?>(null) }
     var authError by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
-        loadCharacters(characters = { characters = it }, corps = { corporations = it })
+    fun reload() {
+        scope.launch {
+            loadCharacters(
+                characters = { characters = it },
+                corps = { corporations = it },
+                tracked = { trackedCorpIds = it },
+            )
+        }
     }
+
+    LaunchedEffect(Unit) { reload() }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -75,7 +84,7 @@ fun CharacterManagementScreen() {
                             onRefresh = {
                                 scope.launch {
                                     refreshCharacter(char.id)
-                                    loadCharacters(characters = { characters = it }, corps = { corporations = it })
+                                    reload()
                                 }
                             },
                         )
@@ -85,10 +94,30 @@ fun CharacterManagementScreen() {
                         item {
                             Spacer(modifier = Modifier.height(8.dp))
                             Text("Corporations", style = MaterialTheme.typography.titleLarge)
+                            Text(
+                                "Only tracked corporations show up in the character switcher and get synced — " +
+                                    "track a corp you actually manage trades for, leave the rest alone.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            )
                             Spacer(modifier = Modifier.height(8.dp))
                         }
                         items(corporations) { corp ->
-                            CorporationCard(corp)
+                            val corpId = corp["id"] as? Int
+                            CorporationCard(
+                                data = corp,
+                                isTracked = corpId in trackedCorpIds,
+                                onToggleTrack = {
+                                    corpId ?: return@CorporationCard
+                                    scope.launch(Dispatchers.IO) {
+                                        if (corpId in trackedCorpIds) CorporationDao.untrack(corpId) else CorporationDao.track(corpId)
+                                        withContext(Dispatchers.Main) {
+                                            reload()
+                                            AppState.refreshCharacters()
+                                        }
+                                    }
+                                },
+                            )
                         }
                     }
                 }
@@ -128,7 +157,7 @@ fun CharacterManagementScreen() {
                                     isLoading = false
                                     if (result.success) {
                                         showAuthDialog = false
-                                        loadCharacters(characters = { characters = it }, corps = { corporations = it })
+                                        reload()
                                     } else {
                                         authError = result.error
                                     }
@@ -162,9 +191,7 @@ fun CharacterManagementScreen() {
                 scope.launch(Dispatchers.IO) {
                     CharacterDao.delete(char.id)
                     AppState.refreshCharacters()
-                    withContext(Dispatchers.Main) {
-                        loadCharacters(characters = { characters = it }, corps = { corporations = it })
-                    }
+                    withContext(Dispatchers.Main) { reload() }
                 }
             },
         )
@@ -249,7 +276,11 @@ private fun CharacterCard(
 }
 
 @Composable
-private fun CorporationCard(data: Map<String, Any?>) {
+private fun CorporationCard(
+    data: Map<String, Any?>,
+    isTracked: Boolean,
+    onToggleTrack: () -> Unit,
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -289,6 +320,22 @@ private fun CorporationCard(data: Map<String, Any?>) {
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
             )
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            if (isTracked) {
+                OutlinedButton(onClick = onToggleTrack) {
+                    Icon(Icons.Default.VisibilityOff, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Untrack")
+                }
+            } else {
+                Button(onClick = onToggleTrack) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Track")
+                }
+            }
         }
     }
 }
@@ -296,6 +343,7 @@ private fun CorporationCard(data: Map<String, Any?>) {
 private suspend fun loadCharacters(
     characters: (List<org.eventt.core.model.CharacterModel>) -> Unit,
     corps: (List<Map<String, Any?>>) -> Unit,
+    tracked: (Set<Int>) -> Unit,
 ) {
     try {
         withContext(Dispatchers.IO) {
@@ -305,6 +353,7 @@ private suspend fun loadCharacters(
         }
         characters(withContext(Dispatchers.IO) { CharacterDao.getAll() })
         corps(withContext(Dispatchers.IO) { CorporationDao.getAll() })
+        tracked(withContext(Dispatchers.IO) { CorporationDao.getTrackedIds() })
     } catch (e: Exception) {
         println("Error loading characters: ${e.message}")
     }

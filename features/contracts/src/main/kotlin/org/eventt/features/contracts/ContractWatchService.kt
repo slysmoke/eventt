@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.eventt.core.database.CharacterDao
+import org.eventt.core.database.CorporationDao
 import org.eventt.core.database.StaticDataDao
 
 internal const val CONTRACTS_AUTO_REFRESH_SETTING = "contracts.auto_refresh"
@@ -68,17 +69,14 @@ object ContractWatchService {
                 }.getOrDefault(0)
         }
 
-        // One acting character per corp is enough -- corp contracts are a shared, corp-wide list,
-        // not per-member.
-        characters
-            .mapNotNull { char -> char.corporationId?.let { corpId -> corpId to char.id } }
-            .distinctBy { it.first }
-            .forEach { (corpId, actingId) ->
-                changed +=
-                    runCatching {
-                        ContractSyncService.refresh(characterId = null, corporationId = corpId, actingCharId = actingId)
-                    }.getOrDefault(0)
-            }
+        // One acting character per *tracked* corp is enough -- corp contracts are a shared,
+        // corp-wide list, not per-member (see CorporationDao.track).
+        CorporationDao.actingPairsForTracked(characters).forEach { (corpId, actingId) ->
+            changed +=
+                runCatching {
+                    ContractSyncService.refresh(characterId = null, corporationId = corpId, actingCharId = actingId)
+                }.getOrDefault(0)
+        }
 
         if (changed > 0) _changedCount.value += changed
     }

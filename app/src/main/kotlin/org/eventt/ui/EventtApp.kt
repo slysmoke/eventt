@@ -740,13 +740,17 @@ private fun Sidebar(
     // logged into the local EVE client) and made it impossible to tell corp orders apart by who
     // placed them. Listing every locally-added member lets you pick the one you're actually
     // playing, same as the plain character list above.
+    // Only *tracked* corps show up here (see CorporationDao.track) -- a corp a character merely
+    // belongs to is not, by itself, something the user asked to deal with (issue #21/#22): pick
+    // it via "Add Corporation" in Characters & Corporations first.
     val corporations =
         remember(selectedContext) {
             try {
+                val trackedIds = CorporationDao.getTrackedIds()
                 val corpNames = CorporationDao.getAll().associate { (it["id"] as? Int) to (it["name"] as? String ?: "") }
                 characters
                     .mapNotNull { char ->
-                        val corpId = char.corporationId ?: return@mapNotNull null
+                        val corpId = char.corporationId?.takeIf { it in trackedIds } ?: return@mapNotNull null
                         Triple(corpId, corpNames[corpId] ?: char.corporationName ?: "", char)
                     }.sortedBy { (_, corpName, char) -> corpName + char.name }
             } catch (_: Exception) {

@@ -9,6 +9,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.eventt.core.database.ActiveOrderDao
 import org.eventt.core.database.CharacterDao
+import org.eventt.core.database.CorporationDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.features.orders.CostBasisService
 import org.eventt.features.orders.MarketWatchService
@@ -183,13 +184,9 @@ object StreamOverlayServer {
 
         var totals = Totals()
         characters.forEach { totals += accumulate(since, characterId = it.id, corporationId = null, actingCharId = it.id) }
-        characters
-            .mapNotNull { it.corporationId }
-            .distinct()
-            .forEach { corpId ->
-                val actingId = characters.first { it.corporationId == corpId }.id
-                totals += accumulate(since, characterId = null, corporationId = corpId, actingCharId = actingId)
-            }
+        CorporationDao.actingPairsForTracked(characters).forEach { (corpId, actingId) ->
+            totals += accumulate(since, characterId = null, corporationId = corpId, actingCharId = actingId)
+        }
 
         return StreamOverlayStats(
             tradesSession = totals.trades,

@@ -87,9 +87,8 @@ fun DashboardScreen(
                         // The unfiltered journal's latest row is one wallet's balance, not a
                         // total — sum each character's and each corporation's own latest balance.
                         val chars = CharacterDao.getAll()
-                        val corpIds = chars.mapNotNull { it.corporationId }.distinct()
                         chars.sumOf { WalletDao.getWalletSummary(characterId = it.id).balance } +
-                            corpIds.sumOf { WalletDao.getWalletSummary(corporationId = it).balance }
+                            CorporationDao.getTrackedIds().sumOf { WalletDao.getWalletSummary(corporationId = it).balance }
                     } else {
                         WalletDao.getWalletSummary(characterId = charId, corporationId = corpId).balance
                     }

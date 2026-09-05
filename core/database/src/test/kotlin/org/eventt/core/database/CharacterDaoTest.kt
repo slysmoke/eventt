@@ -151,4 +151,40 @@ class CharacterDaoTest {
 
         CorporationDao.getAll().any { it["id"] == 200 } shouldBe true
     }
+
+    @Test
+    fun `track then untrack round-trips through getTrackedIds`() {
+        CorporationDao.insert(id = 200, name = "Test Corp", ticker = "TEST", allianceId = null)
+
+        CorporationDao.track(200)
+        CorporationDao.getTrackedIds() shouldBe setOf(200)
+
+        CorporationDao.untrack(200)
+        CorporationDao.getTrackedIds() shouldBe emptySet()
+    }
+
+    @Test
+    fun `pruning the last member's corporation also drops its tracked_corporations row`() {
+        CorporationDao.insert(id = 200, name = "Test Corp", ticker = "TEST", allianceId = null)
+        CharacterDao.insert(character(id = 1))
+        CorporationDao.track(200)
+
+        CharacterDao.delete(1)
+
+        CorporationDao.getTrackedIds() shouldBe emptySet()
+    }
+
+    @Test
+    fun `actingPairsForTracked only returns tracked corps, one acting character each`() {
+        CorporationDao.insert(id = 200, name = "Tracked Corp", ticker = "TRK", allianceId = null)
+        CorporationDao.insert(id = 300, name = "Untracked Corp", ticker = "UNT", allianceId = null)
+        val trackedMember = character(id = 1, corporationId = 200)
+        CharacterDao.insert(trackedMember)
+        CharacterDao.insert(character(id = 2, corporationId = 300))
+        CorporationDao.track(200)
+
+        val pairs = CorporationDao.actingPairsForTracked(CharacterDao.getAll())
+
+        pairs shouldBe listOf(200 to 1)
+    }
 }

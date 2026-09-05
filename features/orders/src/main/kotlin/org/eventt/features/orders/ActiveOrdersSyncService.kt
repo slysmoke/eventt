@@ -2,6 +2,7 @@ package org.eventt.features.orders
 
 import org.eventt.core.database.ActiveOrderDao
 import org.eventt.core.database.CharacterDao
+import org.eventt.core.database.CorporationDao
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.AppLog
 
@@ -25,17 +26,13 @@ object ActiveOrdersSyncService {
         actingCharId: Int,
     ) = sync(characterId = null, corporationId = corpId, actingCharId = actingCharId)
 
-    /** Every local character, then one acting character per corp (corp orders are shared, not per-member). */
+    /** Every local character, then one acting character per *tracked* corp (see CorporationDao.track). */
     fun syncAll() {
         val characters = CharacterDao.getAll()
         characters.forEach { char -> runCatching { syncCharacter(char.id) } }
-        characters
-            .mapNotNull { it.corporationId }
-            .distinct()
-            .forEach { corpId ->
-                val actingId = characters.first { it.corporationId == corpId }.id
-                runCatching { syncCorporation(corpId, actingId) }
-            }
+        CorporationDao.actingPairsForTracked(characters).forEach { (corpId, actingId) ->
+            runCatching { syncCorporation(corpId, actingId) }
+        }
     }
 
     private fun sync(

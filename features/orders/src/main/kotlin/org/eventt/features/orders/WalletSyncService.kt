@@ -1,6 +1,7 @@
 package org.eventt.features.orders
 
 import org.eventt.core.database.CharacterDao
+import org.eventt.core.database.CorporationDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.WalletDao
 import org.eventt.core.esi.EsiClient
@@ -23,17 +24,13 @@ object WalletSyncService {
         actingCharId: Int,
     ) = sync(characterId = null, corporationId = corpId, actingCharId = actingCharId, isCorp = true)
 
-    /** Every local character, then one acting character per corp (corp wallets are shared, not per-member). */
+    /** Every local character, then one acting character per *tracked* corp (see CorporationDao.track). */
     suspend fun syncAll() {
         val characters = CharacterDao.getAll()
         characters.forEach { char -> runCatching { syncCharacter(char.id) } }
-        characters
-            .mapNotNull { it.corporationId }
-            .distinct()
-            .forEach { corpId ->
-                val actingId = characters.first { it.corporationId == corpId }.id
-                runCatching { syncCorporation(corpId, actingId) }
-            }
+        CorporationDao.actingPairsForTracked(characters).forEach { (corpId, actingId) ->
+            runCatching { syncCorporation(corpId, actingId) }
+        }
     }
 
     private suspend fun sync(

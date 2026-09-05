@@ -34,6 +34,7 @@ class AppStateTest {
             createStatement().use {
                 it.execute("DELETE FROM characters")
                 it.execute("DELETE FROM settings")
+                it.execute("DELETE FROM corporations")
             }
         }
     }
@@ -107,6 +108,8 @@ class AppStateTest {
     fun `init restores a persisted corporation context when the acting character still belongs to it`() {
         val char1 = character(1).copy(corporationId = 100, corporationName = "Test Corp")
         CharacterDao.insert(char1)
+        CorporationDao.insert(id = 100, name = "Test Corp", ticker = "", allianceId = null)
+        CorporationDao.track(100)
         StaticDataDao.setSetting("app.selected_context", "corp:100:1")
 
         AppState.init()
@@ -116,11 +119,42 @@ class AppStateTest {
     }
 
     @Test
+    fun `init does not restore a persisted corporation context once it's untracked`() {
+        val char1 = character(1).copy(corporationId = 100, corporationName = "Test Corp")
+        CharacterDao.insert(char1)
+        StaticDataDao.setSetting("app.selected_context", "corp:100:1")
+        // Deliberately not tracking corp 100 -- simulates a corp that's since been untracked.
+
+        AppState.init()
+
+        AppState.selectedContext.value shouldBe ViewContext.Character(1)
+    }
+
+    @Test
+    fun `refreshCharacters drops the current corp selection once it's untracked`() {
+        val char1 = character(1).copy(corporationId = 100, corporationName = "Test Corp")
+        val char2 = character(2)
+        CharacterDao.insert(char1)
+        CharacterDao.insert(char2)
+        CorporationDao.insert(id = 100, name = "Test Corp", ticker = "", allianceId = null)
+        CorporationDao.track(100)
+        AppState.init()
+        AppState.selectCorporation(100, "Test Corp", 1)
+
+        CorporationDao.untrack(100)
+        AppState.refreshCharacters()
+
+        AppState.selectedContext.value shouldBe ViewContext.Character(1)
+    }
+
+    @Test
     fun `refreshCharacters falls back when the acting character behind a corp selection is removed`() {
         val char1 = character(1).copy(corporationId = 100, corporationName = "Test Corp")
         val char2 = character(2)
         CharacterDao.insert(char1)
         CharacterDao.insert(char2)
+        CorporationDao.insert(id = 100, name = "Test Corp", ticker = "", allianceId = null)
+        CorporationDao.track(100)
         AppState.init()
         AppState.selectCorporation(100, "Test Corp", 1)
         CharacterDao.delete(1)

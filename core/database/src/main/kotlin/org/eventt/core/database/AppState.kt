@@ -93,7 +93,10 @@ object AppState {
                 emptyList()
             }
         val current = _selectedContext.value
-        val stillValid = current != null && chars.any { it.id == current.actingCharId }
+        val stillValid =
+            current != null &&
+                chars.any { it.id == current.actingCharId } &&
+                (current !is ViewContext.Corporation || current.corporationId in CorporationDao.getTrackedIds())
         when {
             stillValid -> {}
 
@@ -139,6 +142,9 @@ object AppState {
                 val corpId = parts.getOrNull(1)?.toIntOrNull() ?: return null
                 val actingId = parts.getOrNull(2)?.toIntOrNull() ?: return null
                 if (chars.none { it.id == actingId && it.corporationId == corpId }) return null
+                // A corp that's since been untracked (see CorporationDao.untrack) shouldn't come
+                // back as the restored context just because settings still points at it.
+                if (corpId !in CorporationDao.getTrackedIds()) return null
                 val corpName =
                     try {
                         CorporationDao.getAll().firstOrNull { (it["id"] as? Int) == corpId }?.get("name") as? String

@@ -63,7 +63,23 @@ object DatabaseManager {
             migrateSchema(conn)
             createIndexes(conn)
             isInitialized = true
+            backfillTrackedCorporationsOnce(conn)
         }
+    }
+
+    // One-time: every corp already in the DB before tracked_corporations existed got there
+    // because some locally-added character belonged to it, and was already being shown/synced
+    // under the old implicit-membership behavior -- mark them all tracked so upgrading doesn't
+    // silently drop a corp someone was already using. Gated by a settings flag (not just
+    // "table is empty") since a corp discovered after upgrading starts untracked on purpose
+    // (the actual point of #21/#22: opt-in, not automatic) and must never get swept in here.
+    private fun backfillTrackedCorporationsOnce(conn: Connection) {
+        val key = "migration.tracked_corporations_backfilled"
+        if (StaticDataDao.getSetting(key) != null) return
+        conn.createStatement().use { stmt ->
+            stmt.execute("INSERT OR IGNORE INTO tracked_corporations (corporation_id) SELECT id FROM corporations")
+        }
+        StaticDataDao.setSetting(key, "1")
     }
 
     fun getConnection(): Connection {
@@ -184,6 +200,20 @@ object DatabaseManager {
                     name TEXT NOT NULL,
                     ticker TEXT DEFAULT '',
                     alliance_id INTEGER
+                )
+                """.trimIndent(),
+                // A corp only shows up as a selectable context / gets swept by background sync
+                // (wallet, orders, contracts) if it's explicitly tracked here -- being a member's
+                // employer alone (characters.corporation_id) is no longer enough. Keeps an alt
+                // sitting in a corp with no useful roles from being forced into the context
+                // switcher and 403-spamming every corp-scoped ESI call forever (issue #21/#22).
+                // Cascades on corp deletion, which already only happens once no local character
+                // belongs to it any more (see CharacterDao.delete) -- so a tracked corp can never
+                // outlive every character that could act for it.
+                """
+                CREATE TABLE IF NOT EXISTS tracked_corporations (
+                    corporation_id INTEGER PRIMARY KEY,
+                    FOREIGN KEY (corporation_id) REFERENCES corporations(id) ON DELETE CASCADE
                 )
                 """.trimIndent(),
                 // ESI Cache
