@@ -1,6 +1,8 @@
 package org.eventt.core.nostr
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -64,6 +66,16 @@ object ReservationService {
             encodeDefaults = true
         }
 
+    // Serializes concurrent respond() calls for the same order coordinate -- see respond() for
+    // why the whole read-check-decrement sequence has to be a single critical section, not just
+    // the final write.
+    private val orderLocks = java.util.concurrent.ConcurrentHashMap<String, Mutex>()
+
+    private fun orderLock(
+        orderUuid: String,
+        sellerPubkey: String,
+    ): Mutex = orderLocks.computeIfAbsent("$orderUuid:$sellerPubkey") { Mutex() }
+
     /** Null if there's no active identity to send from. */
     suspend fun sendRequest(
         order: NostrOrderModel,
@@ -122,40 +134,47 @@ object ReservationService {
         holdHours: Long = 24,
     ): Boolean {
         val identity = NostrIdentityService.getIdentityByPubkey(reservation.sellerPubkey) ?: return false
-        val order =
-            withContext(Dispatchers.IO) {
-                NostrOrderDao.getByCoordinate(reservation.orderUuid, reservation.sellerPubkey)
-            } ?: return false
 
         // Oversell guard: two pending requests can both individually fit the order, but accepting
         // the second after the first already decremented qty_remaining would promise stock that no
-        // longer exists — both buyers would get an "accepted" DM for the same units.
-        if (accept && order.qtyRemaining < reservation.qty) return false
+        // longer exists — both buyers would get an "accepted" DM for the same units. The order is
+        // re-fetched *inside* this lock (not before it) and the whole read-check-decrement sequence
+        // held under it, so a second respond() for the same order (e.g. two near-simultaneous
+        // Accept clicks on different requests) always sees the first one's already-applied
+        // decrement instead of racing it on a stale snapshot.
+        return orderLock(reservation.orderUuid, reservation.sellerPubkey).withLock {
+            val order =
+                withContext(Dispatchers.IO) {
+                    NostrOrderDao.getByCoordinate(reservation.orderUuid, reservation.sellerPubkey)
+                } ?: return@withLock false
 
-        val nowSec = System.currentTimeMillis() / 1000
-        val reservedQty = if (accept) reservation.qty else null
-        val holdUntil = if (accept) nowSec + holdHours * 3600 else null
-        val contactChar = if (accept) order.traderChar else ""
-        val contactCharId = if (accept) order.traderCharId else null
-        val payload =
-            ReservationResponse(
-                tradeId = reservation.tradeId,
-                accepted = accept,
-                reservedQty = reservedQty,
-                holdUntil = holdUntil,
-                contactChar = contactChar,
-                contactCharId = contactCharId,
-            )
-        if (!sendDm(identity, reservation.buyerPubkey, json.encodeToString(payload))) return false
+            if (accept && order.qtyRemaining < reservation.qty) return@withLock false
 
-        withContext(Dispatchers.IO) {
-            NostrReservationDao.updateResponse(reservation.tradeId, accept, reservedQty, holdUntil, contactChar, contactCharId, nowSec)
+            val nowSec = System.currentTimeMillis() / 1000
+            val reservedQty = if (accept) reservation.qty else null
+            val holdUntil = if (accept) nowSec + holdHours * 3600 else null
+            val contactChar = if (accept) order.traderChar else ""
+            val contactCharId = if (accept) order.traderCharId else null
+            val payload =
+                ReservationResponse(
+                    tradeId = reservation.tradeId,
+                    accepted = accept,
+                    reservedQty = reservedQty,
+                    holdUntil = holdUntil,
+                    contactChar = contactChar,
+                    contactCharId = contactCharId,
+                )
+            if (!sendDm(identity, reservation.buyerPubkey, json.encodeToString(payload))) return@withLock false
+
+            withContext(Dispatchers.IO) {
+                NostrReservationDao.updateResponse(reservation.tradeId, accept, reservedQty, holdUntil, contactChar, contactCharId, nowSec)
+            }
+            if (accept) {
+                OrderRepository.setRemainingQty(order, (order.qtyRemaining - reservation.qty).coerceAtLeast(0))
+            }
+            NostrRelayManager.notifyReservationActivity()
+            true
         }
-        if (accept) {
-            OrderRepository.setRemainingQty(order, (order.qtyRemaining - reservation.qty).coerceAtLeast(0))
-        }
-        NostrRelayManager.notifyReservationActivity()
-        return true
     }
 
     /**
