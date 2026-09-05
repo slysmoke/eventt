@@ -88,8 +88,11 @@ fun ContractTrackerScreen(context: ViewContext?) {
                 ContractSyncService.refresh(characterId = charId, corporationId = corpId, actingCharId = acting)
                 val expiry = contractsEndpoint()?.let { EsiClient.getEndpointExpiry(it) }
                 val denied = if (corpId != null) CharacterDao.getDeniedCorpFeatures(acting) else emptySet()
+                // Still on IO here — reload() runs its own ContractDao queries, which are blocking
+                // JDBC calls and shouldn't run on Main (Compose state writes are thread-safe, so
+                // there's no need to hop over first just to set `contracts`).
+                reload()
                 withContext(Dispatchers.Main) {
-                    reload()
                     refreshAvailableAt = expiry
                     deniedFeatures = denied
                     isLoading = false
