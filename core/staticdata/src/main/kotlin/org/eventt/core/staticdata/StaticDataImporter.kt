@@ -92,6 +92,12 @@ object StaticDataImporter {
     }
 
     private suspend fun downloadAndParse(zipUrl: String) {
+        // These accumulator lists are only otherwise cleared at the end of a successful saveAll()
+        // -- a failure partway through parsing (network drop mid-ZIP, one malformed entry) used to
+        // leave them populated, so a retry appended fresh results on top of the stale leftovers
+        // instead of starting clean.
+        resetParseState()
+
         val request = Request.Builder().url(zipUrl).build()
         val response = EveHttpClient.getClient().newCall(request).execute()
         if (!response.isSuccessful) {
@@ -372,7 +378,12 @@ object StaticDataImporter {
         }
 
         // Clear memory
+        resetParseState()
+    }
+
+    private fun resetParseState() {
         types.clear()
+        typeCount = 0
         groups.clear()
         categories.clear()
         marketGroups.clear()
