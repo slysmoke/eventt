@@ -71,16 +71,22 @@ object EveImageServer {
             memoryCache[cacheKey]?.let { return it }
         }
 
-        // Check disk cache
+        // Check disk cache -- a null/failed decode means the cached bytes are bad (e.g. EVE's
+        // image server once returned a non-image body that got cached verbatim), so the file is
+        // dropped and treated as a cache miss instead of poisoning this icon forever.
         val diskFile = getDiskCacheFile(cacheKey)
         if (diskFile?.exists() == true) {
-            return try {
-                ImageIO.read(diskFile).also { img ->
-                    synchronized(memoryCache) { memoryCache[cacheKey] = img }
+            val decoded =
+                try {
+                    ImageIO.read(diskFile)
+                } catch (e: Exception) {
+                    null
                 }
-            } catch (e: Exception) {
-                null
+            if (decoded != null) {
+                synchronized(memoryCache) { memoryCache[cacheKey] = decoded }
+                return decoded
             }
+            diskFile.delete()
         }
 
         // Fetch from server
@@ -135,11 +141,11 @@ object EveImageServer {
 
                 val bytes = response.body.bytes()
 
-                // Save to disk cache
+                // Decode first -- only bytes that actually are an image get persisted, so a 200
+                // response with a non-image body (error page, truncated transfer) doesn't get
+                // cached forever and permanently break this icon.
+                val img = ImageIO.read(ByteArrayInputStream(bytes)) ?: return null
                 saveToDiskCache(cacheKey, bytes)
-
-                // Decode and save to memory
-                val img = ImageIO.read(ByteArrayInputStream(bytes))
                 synchronized(memoryCache) { memoryCache[cacheKey] = img }
                 img
             }
