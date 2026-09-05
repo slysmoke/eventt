@@ -1184,7 +1184,7 @@ private suspend fun loadWalletData(
         dailyCallback(summary.dailyBreakdown)
         pnlCallback(WalletDao.getTradingPnlBreakdown(characterId = characterId, corporationId = corporationId))
         transactionsCallback(
-            resolveAllNames(WalletDao.getTransactions(characterId = characterId, corporationId = corporationId, limit = 5000)),
+            resolveAllNames(WalletDao.getTransactions(characterId = characterId, corporationId = corporationId, limit = -1)),
         )
         journalCallback(WalletDao.getJournalEntries(characterId = characterId, corporationId = corporationId))
 
@@ -1281,7 +1281,7 @@ private suspend fun loadWalletData(
                 }
             }
             transactionsCallback(
-                resolveAllNames(WalletDao.getTransactions(characterId = characterId, corporationId = corporationId, limit = 5000)),
+                resolveAllNames(WalletDao.getTransactions(characterId = characterId, corporationId = corporationId, limit = -1)),
             )
         } catch (e: Exception) {
             println("Error fetching transactions: ${e.message}")
