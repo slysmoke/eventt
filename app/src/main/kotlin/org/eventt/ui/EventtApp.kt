@@ -725,14 +725,19 @@ private fun Sidebar(
 ) {
     // Re-fetched whenever the selection changes (e.g. after adding a character via
     // CharacterManagementScreen, which calls AppState.refreshCharacters()) so newly-added
-    // characters/corps show up without an app restart.
-    val characters =
-        remember(selectedContext) {
-            try {
-                CharacterDao.getAll()
-            } catch (_: Exception) {
-                emptyList<CharacterModel>()
-            }
+    // characters/corps show up without an app restart. Dispatched to IO instead of a plain
+    // remember{} -- these are blocking JDBC calls, and Sidebar stays composed the whole time the
+    // app is open, so running them on the UI thread stuttered every single character/corp switch.
+    val characters by
+        produceState(initialValue = emptyList<CharacterModel>(), selectedContext) {
+            value =
+                withContext(Dispatchers.IO) {
+                    try {
+                        CharacterDao.getAll()
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                }
         }
     // One entry per (corp, member character) pair rather than one per corp — picking an
     // arbitrary "acting character" for a corp broke opening items in the game client (ESI's
@@ -743,19 +748,22 @@ private fun Sidebar(
     // Only *tracked* corps show up here (see CorporationDao.track) -- a corp a character merely
     // belongs to is not, by itself, something the user asked to deal with (issue #21/#22): pick
     // it via "Add Corporation" in Characters & Corporations first.
-    val corporations =
-        remember(selectedContext) {
-            try {
-                val trackedIds = CorporationDao.getTrackedIds()
-                val corpNames = CorporationDao.getAll().associate { (it["id"] as? Int) to (it["name"] as? String ?: "") }
-                characters
-                    .mapNotNull { char ->
-                        val corpId = char.corporationId?.takeIf { it in trackedIds } ?: return@mapNotNull null
-                        Triple(corpId, corpNames[corpId] ?: char.corporationName ?: "", char)
-                    }.sortedBy { (_, corpName, char) -> corpName + char.name }
-            } catch (_: Exception) {
-                emptyList()
-            }
+    val corporations by
+        produceState(initialValue = emptyList<Triple<Int, String, CharacterModel>>(), selectedContext, characters) {
+            value =
+                withContext(Dispatchers.IO) {
+                    try {
+                        val trackedIds = CorporationDao.getTrackedIds()
+                        val corpNames = CorporationDao.getAll().associate { (it["id"] as? Int) to (it["name"] as? String ?: "") }
+                        characters
+                            .mapNotNull { char ->
+                                val corpId = char.corporationId?.takeIf { it in trackedIds } ?: return@mapNotNull null
+                                Triple(corpId, corpNames[corpId] ?: char.corporationName ?: "", char)
+                            }.sortedBy { (_, corpName, char) -> corpName + char.name }
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                }
         }
     var charMenuExpanded by remember { mutableStateOf(false) }
     val selectedChar = (selectedContext as? ViewContext.Character)?.let { ctx -> characters.find { it.id == ctx.charId } }
