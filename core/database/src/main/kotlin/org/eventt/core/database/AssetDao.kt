@@ -7,8 +7,8 @@ object AssetDao {
         """
         INSERT OR REPLACE INTO assets (item_id, type_id, type_name, quantity, location_id, location_name,
             region_id, region_name, system_id, system_name, station_id, station_name,
-            is_singleton, location_flag, estimated_price, is_corp_asset, character_id, corporation_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            is_singleton, location_flag, estimated_price, is_corp_asset, is_bpc, character_id, corporation_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """.trimIndent()
 
     private fun java.sql.PreparedStatement.bindAsset(asset: AssetModel) {
@@ -28,8 +28,9 @@ object AssetDao {
         setString(14, asset.locationFlag)
         setDouble(15, asset.estimatedPrice)
         setInt(16, if (asset.isCorpAsset) 1 else 0)
-        asset.characterId?.let { setInt(17, it) } ?: setNull(17, java.sql.Types.INTEGER)
-        asset.corporationId?.let { setInt(18, it) } ?: setNull(18, java.sql.Types.INTEGER)
+        setInt(17, if (asset.isBlueprintCopy) 1 else 0)
+        asset.characterId?.let { setInt(18, it) } ?: setNull(18, java.sql.Types.INTEGER)
+        asset.corporationId?.let { setInt(19, it) } ?: setNull(19, java.sql.Types.INTEGER)
     }
 
     fun upsert(asset: AssetModel) {
@@ -160,6 +161,7 @@ object AssetDao {
                     locationFlag = getString("location_flag") ?: "",
                     estimatedPrice = getDouble("estimated_price"),
                     isCorpAsset = getInt("is_corp_asset") == 1,
+                    isBlueprintCopy = getInt("is_bpc") == 1,
                     characterId = getInt("character_id").takeIf { it != 0 },
                     corporationId = getInt("corporation_id").takeIf { it != 0 },
                 ),

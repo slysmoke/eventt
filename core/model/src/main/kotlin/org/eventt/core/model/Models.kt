@@ -77,6 +77,12 @@ data class AssetModel(
     val locationFlag: String = "",
     val estimatedPrice: Double = 0.0,
     val isCorpAsset: Boolean = false,
+    // ESI overloads a blueprint's own `quantity` field to say which kind it is instead of how many
+    // there are (-1 = original, -2 = copy — see https://forums.eveonline.com/t/202261) rather than
+    // exposing that in the actual asset payload. Callers normalize `quantity` back to a real count
+    // (always 1: blueprints never stack) and capture the distinction here instead, since a BPC
+    // trades for nothing regardless of what its BPO sells for on the market.
+    val isBlueprintCopy: Boolean = false,
     val characterId: Int? = null,
     val corporationId: Int? = null,
 )

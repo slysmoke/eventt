@@ -36,6 +36,16 @@ import org.eventt.ui.common.*
 private const val THE_FORGE_REGION_ID = 10000002
 private const val JITA_44_STATION_ID = 60003760L
 
+// ESI signals a blueprint's kind by overloading its own `quantity` field instead of exposing a
+// real flag: -1 = original, -2 = copy (https://forums.eveonline.com/t/202261). Every other asset
+// (blueprints never stack) reports a real positive count.
+private fun blueprintAwareQuantity(rawQuantity: Int): Pair<Int, Boolean> =
+    when (rawQuantity) {
+        -1 -> 1 to false
+        -2 -> 1 to true
+        else -> rawQuantity to false
+    }
+
 // Live Jita sell price (PLEX: its own global market) for every unique type in one batch, instead
 // of pricing off ESI's /markets/prices/ adjusted/average price -- a 30-day rolling insurance-style
 // number that's often nowhere close to what these items would actually fetch right now. Falls
@@ -293,7 +303,16 @@ private fun AssetRow(asset: AssetModel) {
             TypeIcon(asset.typeId, size = 24.dp)
 
             Column {
-                Text(asset.typeName, style = MaterialTheme.typography.bodyMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(asset.typeName, style = MaterialTheme.typography.bodyMedium)
+                    if (asset.isBlueprintCopy) {
+                        Text(
+                            "(Copy)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        )
+                    }
+                }
                 if (asset.locationName.isNotEmpty() && asset.stationName.isEmpty()) {
                     Text(asset.locationName, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                 }
@@ -423,7 +442,7 @@ suspend fun fetchCharacterAssets(characterId: Int) {
         rawAssets.mapNotNull { data ->
             val typeId = (data["type_id"] as? Number)?.toInt() ?: return@mapNotNull null
             val itemId = (data["item_id"] as? Number)?.toLong() ?: return@mapNotNull null
-            val quantity = (data["quantity"] as? Number)?.toInt() ?: 0
+            val (quantity, isBlueprintCopy) = blueprintAwareQuantity((data["quantity"] as? Number)?.toInt() ?: 0)
             val locationId = (data["location_id"] as? Number)?.toLong() ?: 0L
             val locationFlag = (data["location_flag"] as? String) ?: ""
             val isSingleton = (data["is_singleton"] as? Boolean) ?: true
@@ -448,8 +467,10 @@ suspend fun fetchCharacterAssets(characterId: Int) {
                 stationName = location?.name ?: "",
                 locationFlag = locationFlag,
                 isSingleton = isSingleton,
-                estimatedPrice = jitaSellPrices[typeId] ?: averagePrices[typeId] ?: 0.0,
+                // A blueprint copy trades for nothing regardless of what its original sells for.
+                estimatedPrice = if (isBlueprintCopy) 0.0 else jitaSellPrices[typeId] ?: averagePrices[typeId] ?: 0.0,
                 isCorpAsset = false,
+                isBlueprintCopy = isBlueprintCopy,
                 characterId = characterId,
             )
         }
@@ -474,7 +495,7 @@ suspend fun fetchCorporationAssets(
         rawAssets.mapNotNull { data ->
             val typeId = (data["type_id"] as? Number)?.toInt() ?: return@mapNotNull null
             val itemId = (data["item_id"] as? Number)?.toLong() ?: return@mapNotNull null
-            val quantity = (data["quantity"] as? Number)?.toInt() ?: 0
+            val (quantity, isBlueprintCopy) = blueprintAwareQuantity((data["quantity"] as? Number)?.toInt() ?: 0)
             val locationId = (data["location_id"] as? Number)?.toLong() ?: 0L
             val locationFlag = (data["location_flag"] as? String) ?: ""
             val isSingleton = (data["is_singleton"] as? Boolean) ?: true
@@ -499,8 +520,10 @@ suspend fun fetchCorporationAssets(
                 stationName = location?.name ?: "",
                 locationFlag = locationFlag,
                 isSingleton = isSingleton,
-                estimatedPrice = jitaSellPrices[typeId] ?: averagePrices[typeId] ?: 0.0,
+                // A blueprint copy trades for nothing regardless of what its original sells for.
+                estimatedPrice = if (isBlueprintCopy) 0.0 else jitaSellPrices[typeId] ?: averagePrices[typeId] ?: 0.0,
                 isCorpAsset = true,
+                isBlueprintCopy = isBlueprintCopy,
                 corporationId = corporationId,
             )
         }

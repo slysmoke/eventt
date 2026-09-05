@@ -33,6 +33,7 @@ class AssetDaoTest {
         corporationId: Int? = null,
         quantity: Int = 10,
         estimatedPrice: Double = 100.0,
+        isBlueprintCopy: Boolean = false,
     ) = AssetModel(
         itemId = itemId,
         typeId = 34,
@@ -41,6 +42,7 @@ class AssetDaoTest {
         locationId = 60003760L,
         locationName = "Jita IV - Moon 4",
         estimatedPrice = estimatedPrice,
+        isBlueprintCopy = isBlueprintCopy,
         characterId = characterId,
         corporationId = corporationId,
     )
@@ -52,6 +54,13 @@ class AssetDaoTest {
         val assets = AssetDao.getByCharacter(1)
 
         assets.single().typeName shouldBe "Tritanium"
+    }
+
+    @Test
+    fun `upsert then getByCharacter round-trips isBlueprintCopy`() {
+        AssetDao.upsert(asset(itemId = 1, isBlueprintCopy = true))
+
+        AssetDao.getByCharacter(1).single().isBlueprintCopy shouldBe true
     }
 
     @Test

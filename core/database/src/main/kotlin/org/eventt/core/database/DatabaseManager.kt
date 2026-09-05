@@ -163,6 +163,10 @@ object DatabaseManager {
                 // attempt (e.g. "WALLET,ASSETS") — cleared automatically the next time that
                 // feature's ESI call succeeds. See CharacterDao.getDeniedCorpFeatures.
                 "ALTER TABLE characters ADD COLUMN corp_access_denied TEXT NOT NULL DEFAULT ''",
+                // Distinguishes a blueprint original from a copy -- ESI signals this by overloading
+                // `quantity` (-1/-2) instead of a real field, so it's captured here once and for all
+                // when the asset is fetched. See AssetModel.isBlueprintCopy.
+                "ALTER TABLE assets ADD COLUMN is_bpc INTEGER DEFAULT 0",
             )
         conn.createStatement().use { stmt ->
             migrations.forEach { sql ->
