@@ -641,6 +641,7 @@ internal fun InventoryTable(
         if (acting != null) {
             ReconcileDialog(
                 inventory = inventory,
+                sellOrders = sellOrders,
                 characterId = characterId,
                 corporationId = corporationId,
                 actingCharId = acting,
@@ -785,6 +786,7 @@ private sealed class ReconcileState {
 @Composable
 private fun ReconcileDialog(
     inventory: Map<Int, CostBasisService.InventoryItem>,
+    sellOrders: List<CharacterOrder>,
     characterId: Int?,
     corporationId: Int?,
     actingCharId: Int,
@@ -798,7 +800,7 @@ private fun ReconcileDialog(
             try {
                 val discrepancies =
                     withContext(Dispatchers.IO) {
-                        AssetReconciliationService.reconcile(inventory, characterId, corporationId, actingCharId)
+                        AssetReconciliationService.reconcile(inventory, sellOrders, characterId, corporationId, actingCharId)
                     }
                 ReconcileState.Done(discrepancies)
             } catch (e: Exception) {
