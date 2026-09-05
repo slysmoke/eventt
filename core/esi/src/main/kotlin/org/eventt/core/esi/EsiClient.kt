@@ -303,6 +303,13 @@ object EsiClient {
                     lastModified = lastModified,
                     totalPages = xPages,
                 )
+        } catch (e: EsiForbiddenException) {
+            // A 403 is a definitive "no access" answer, not a transient failure to ride out on
+            // stale data -- masking it behind a stale-cache fallback would stop corpGuarded from
+            // ever seeing it and recording the denial, defeating the whole point of this type.
+            RequestQueueManager.completeRequest(queuedRequest.id, error = e.message)
+            AppLog.warn("ESI", "$endpoint: ${e.message}")
+            throw e
         } catch (e: IOException) {
             RequestQueueManager.completeRequest(queuedRequest.id, error = e.message)
             AppLog.warn("ESI", "$endpoint: ${e.message}")
