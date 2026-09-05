@@ -35,26 +35,24 @@ import org.eventt.ui.common.*
 
 private const val THE_FORGE_REGION_ID = 10000002
 private const val JITA_44_STATION_ID = 60003760L
-private const val BLUEPRINT_CATEGORY_ID = 9
 
 // ESI signals a blueprint's kind by overloading its own `quantity` field instead of exposing a
 // real flag: -1 = a single original (already assigned/used, so it's its own distinct item), -2 =
 // a copy (https://forums.eveonline.com/t/202261). A *packaged* original (still boxed, never
 // assigned) isn't singled out that way at all -- it reports a real positive count instead, same
 // as any other stackable tradeable item, since packaged BPOs really do stack and really do trade
-// on the market. Gated on the type's own category (Blueprint = 9), not just the quantity's sign,
-// so this can never misfire on a non-blueprint type.
-private fun blueprintAwareQuantity(
-    rawQuantity: Int,
-    categoryId: Int,
-): Pair<Int, Boolean> {
-    if (categoryId != BLUEPRINT_CATEGORY_ID) return rawQuantity to false
-    return when (rawQuantity) {
+// on the market.
+//
+// Deliberately NOT gated on the type's SDE category: no non-blueprint item ever reports a
+// negative quantity from ESI, so the sign alone is already a fully reliable signal, and gating on
+// local static-data (which might not have every type's category resolved, e.g. before/without a
+// full SDE import) would only add a way for a real BPC to silently go undetected.
+private fun blueprintAwareQuantity(rawQuantity: Int): Pair<Int, Boolean> =
+    when (rawQuantity) {
         -1 -> 1 to false
         -2 -> 1 to true
         else -> rawQuantity to false // packaged original stack -- real count, prices like any item
     }
-}
 
 // Live Jita sell price (PLEX: its own global market) for every unique type in one batch, instead
 // of pricing off ESI's /markets/prices/ adjusted/average price -- a 30-day rolling insurance-style
@@ -458,8 +456,7 @@ suspend fun fetchCharacterAssets(characterId: Int) {
 
             val staticType = StaticDataDao.getTypeById(typeId)
             val typeName = staticType?.name ?: ""
-            val (quantity, isBlueprintCopy) =
-                blueprintAwareQuantity((data["quantity"] as? Number)?.toInt() ?: 0, staticType?.categoryId ?: -1)
+            val (quantity, isBlueprintCopy) = blueprintAwareQuantity((data["quantity"] as? Number)?.toInt() ?: 0)
             val (rootLocationId, rootLocationType) = resolveRootLocation(data, byItemId)
             val location = locationCache.getOrPut(rootLocationId) { resolveLocation(rootLocationId, rootLocationType, characterId) }
 
@@ -512,8 +509,7 @@ suspend fun fetchCorporationAssets(
 
             val staticType = StaticDataDao.getTypeById(typeId)
             val typeName = staticType?.name ?: ""
-            val (quantity, isBlueprintCopy) =
-                blueprintAwareQuantity((data["quantity"] as? Number)?.toInt() ?: 0, staticType?.categoryId ?: -1)
+            val (quantity, isBlueprintCopy) = blueprintAwareQuantity((data["quantity"] as? Number)?.toInt() ?: 0)
             val (rootLocationId, rootLocationType) = resolveRootLocation(data, byItemId)
             val location = locationCache.getOrPut(rootLocationId) { resolveLocation(rootLocationId, rootLocationType, actingCharacterId) }
 
