@@ -61,6 +61,14 @@ object SsoAuthManager {
 
     @Volatile
     private var codeVerifier: String? = null
+
+    // The CSRF nonce sent in the authorize request — a callback whose state doesn't match this
+    // (wrong value, or none at all) is rejected before the code is ever exchanged. The callback
+    // server listens on localhost:8000 for the whole auth window, so without this check any local
+    // process (or a stale/duplicate callback from an abandoned prior attempt) hitting that port
+    // with a code param would get it exchanged and bound to the app.
+    @Volatile
+    private var expectedState: String? = null
     private val lock = Any()
 
     data class AuthResult(
@@ -76,6 +84,7 @@ object SsoAuthManager {
                 .toString()
         val verifier = generateCodeVerifier()
         codeVerifier = verifier
+        expectedState = state
         authResult = null
 
         // Properly encode for OAuth2: scope uses space-separated, redirect uses percent-encoding
@@ -232,6 +241,15 @@ object SsoAuthManager {
             val state = params["state"]
 
             val responseHeaders = mapOf("Content-Type" to "text/html; charset=utf-8")
+
+            if (state == null || state != expectedState) {
+                val html =
+                    "<html><body><h1>Authentication failed</h1><p>Invalid or missing state.</p>" +
+                        "<p>You can close this window.</p></body></html>"
+                sendResponse(exchange, 400, html, responseHeaders)
+                println("[Auth] State mismatch — got ${state?.take(8)}, expected ${expectedState?.take(8)} — rejecting callback")
+                return@createContext
+            }
 
             if (error != null) {
                 val html = "<html><body><h1>Authentication failed</h1><p>$error</p><p>You can close this window.</p></body></html>"
