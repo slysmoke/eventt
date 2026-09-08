@@ -634,7 +634,7 @@ private fun MaterialsHeader(
                     "buys (average-cost, not FIFO -- and won't cover stock that arrived via mining/reprocessing/manufacturing " +
                     "rather than a market buy). Used to anchor the buy ladder to your real entry instead of the live price.",
             ) {
-                MCol("Held", MaterialSortCol.HELD, sort, asc, onSort, Modifier.width(95.dp))
+                MCol("Held", MaterialSortCol.HELD, sort, asc, onSort, Modifier.width(140.dp))
             }
             Tip("How far below the Lookback-window's highest price the current price sits.") {
                 MCol("Drawdown", MaterialSortCol.DRAWDOWN, sort, asc, onSort, Modifier.width(75.dp))
@@ -762,7 +762,7 @@ private fun MaterialRow(
                 color = Color.Gray,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.width(95.dp),
+                modifier = Modifier.width(140.dp),
             )
             Text(
                 "${String.format(Locale.US, "%.1f", c.drawdownFromHighPct)}%",
