@@ -308,6 +308,7 @@ internal object S {
     const val MI_LIQUIDITY_DAYS = "analysis.m.liquidityDays"
     const val MI_LADDER_LEVELS = "analysis.m.ladderLevels"
     const val MI_LADDER_STEP_PCT = "analysis.m.ladderStepPct"
+    const val MI_EXCLUDE_STRUCTURAL_BREAK = "analysis.m.excludeStructuralBreak"
 
     fun get(key: String): String? = StaticDataDao.getSetting(key)
 
@@ -362,7 +363,7 @@ fun MarketAnalysisScreen() {
                 InterRegionTab(allRegions, topGroups, selectedCharId)
             }
             Box(modifier = if (selectedTab == 2) Modifier.fillMaxSize() else Modifier.requiredSize(0.dp).clipToBounds()) {
-                MaterialsInvestmentTab(allRegions, topGroups)
+                MaterialsInvestmentTab(allRegions, topGroups, selectedCharId)
             }
         }
     }

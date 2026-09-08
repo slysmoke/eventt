@@ -26,9 +26,12 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import org.eventt.core.database.AlertDao
 import org.eventt.core.database.StaticDataDao
+import org.eventt.core.database.WalletDao
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.everef.EveRefService
+import org.eventt.core.model.PriceAlertModel
 import org.eventt.core.model.StaticMarketGroupModel
 import org.eventt.core.model.StaticRegionModel
 import org.eventt.ui.common.formatPriceAbbr
@@ -52,6 +55,7 @@ import java.util.Locale
 internal fun MaterialsInvestmentTab(
     allRegions: List<StaticRegionModel>,
     topGroups: List<StaticMarketGroupModel>,
+    charId: Int?,
 ) {
     val scope = rememberCoroutineScope()
 
@@ -72,6 +76,7 @@ internal fun MaterialsInvestmentTab(
     var liquidityDays by remember { mutableStateOf("3") }
     var ladderLevels by remember { mutableStateOf("4") }
     var ladderStepPct by remember { mutableStateOf("5") }
+    var excludeStructuralBreak by remember { mutableStateOf(true) }
     var isAnalyzing by remember { mutableStateOf(false) }
     var analyzeJob by remember { mutableStateOf<Job?>(null) }
     var statusMsg by remember { mutableStateOf("") }
@@ -97,6 +102,7 @@ internal fun MaterialsInvestmentTab(
             S.get(S.MI_LIQUIDITY_DAYS)?.let { liquidityDays = it }
             S.get(S.MI_LADDER_LEVELS)?.let { ladderLevels = it }
             S.get(S.MI_LADDER_STEP_PCT)?.let { ladderStepPct = it }
+            S.get(S.MI_EXCLUDE_STRUCTURAL_BREAK)?.let { excludeStructuralBreak = it == "true" }
             settingsLoaded = true
         }
     }
@@ -197,6 +203,16 @@ internal fun MaterialsInvestmentTab(
                     maxVolatilityPct = it
                     scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MAX_VOLATILITY, it) } }
                 }
+                FilterControl("Exclude 1y Lows") {
+                    Checkbox(
+                        checked = excludeStructuralBreak,
+                        onCheckedChange = {
+                            excludeStructuralBreak = it
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_EXCLUDE_STRUCTURAL_BREAK, it.toString()) } }
+                        },
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
                 SpikeFilterChip(spikeFilter) {
                     spikeFilter = it
                     scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_SPIKE_FILTER, it.name) } }
@@ -290,12 +306,21 @@ internal fun MaterialsInvestmentTab(
                                         val spikeFilterSnap = spikeFilter
                                         val spikePriceMultiplierSnap = spikePriceMultiplier.toDoubleOrNull() ?: 1.8
                                         val spikeVolumeMultiplierSnap = spikeVolumeMultiplier.toDoubleOrNull() ?: 5.0
+                                        val excludeStructuralBreakSnap = excludeStructuralBreak
                                         val histSrc = withContext(Dispatchers.IO) { EveRefService.getSelectedSource() }
 
                                         statusMsg = "Fetching region orders…"
                                         val ordersByType =
                                             withContext(Dispatchers.IO) { EsiClient.getMarketRegionOrders(regionId) }
                                                 .groupBy { (it["type_id"] as? Number)?.toInt() ?: 0 }
+
+                                        // One wallet-transactions read for the whole scan (not per item) -- see
+                                        // computeMaterialPosition/computeMaterialCandidate in MaterialsInvestmentCompute.kt.
+                                        val myTransactionsByType =
+                                            charId?.let { id ->
+                                                withContext(Dispatchers.IO) { WalletDao.getAllTransactions(characterId = id) }
+                                                    .groupBy { it.typeId }
+                                            }
 
                                         statusMsg = "0/${typeIds.size} types checked…"
                                         val semaphore = Semaphore(10)
@@ -321,6 +346,8 @@ internal fun MaterialsInvestmentTab(
                                                                     spikeFilter = spikeFilterSnap,
                                                                     spikePriceMultiplier = spikePriceMultiplierSnap,
                                                                     spikeVolumeMultiplier = spikeVolumeMultiplierSnap,
+                                                                    excludeStructuralBreak = excludeStructuralBreakSnap,
+                                                                    myTransactionsByType = myTransactionsByType,
                                                                 )
                                                             }.getOrNull()?.let { found.add(it) }
                                                             mutex.withLock {
@@ -380,7 +407,16 @@ internal fun MaterialsInvestmentTab(
             }
             LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 items(sorted, key = { it.candidate.typeId }) { alloc ->
-                    MaterialRow(alloc, onShowDetails = { detailTypeId = it })
+                    MaterialRow(
+                        alloc,
+                        onShowDetails = { detailTypeId = it },
+                        onCreateAlerts = {
+                            scope.launch {
+                                withContext(Dispatchers.IO) { createLadderAlerts(alloc, regionId, charId) }
+                                statusMsg = "Alerts set for ${alloc.candidate.typeName}"
+                            }
+                        },
+                    )
                 }
             }
         }
@@ -394,7 +430,7 @@ internal fun MaterialsInvestmentTab(
             primaryRegionId = regionId,
             primaryRegionName = allRegions.find { it.regionId == regionId }?.name ?: "",
             primaryStationId = null,
-            charId = null,
+            charId = charId,
             onDismiss = { detailTypeId = null },
         )
     }
@@ -417,20 +453,17 @@ private fun MaterialsHeader(
                 modifier = Modifier.width(28.dp),
             )
             MCol("Item", MaterialSortCol.NAME, sort, asc, onSort, Modifier.weight(1f))
-            MCol("Current", MaterialSortCol.CURRENT, sort, asc, onSort, Modifier.width(85.dp))
-            MCol("Avg", MaterialSortCol.AVG, sort, asc, onSort, Modifier.width(85.dp))
-            MCol("Drawdown", MaterialSortCol.DRAWDOWN, sort, asc, onSort, Modifier.width(80.dp))
-            MCol("vs Avg", MaterialSortCol.VS_AVG, sort, asc, onSort, Modifier.width(70.dp))
-            MCol("7d", MaterialSortCol.TREND, sort, asc, onSort, Modifier.width(65.dp))
-            MCol("Volatility", MaterialSortCol.VOLATILITY, sort, asc, onSort, Modifier.width(75.dp))
-            MCol("Vol/day", MaterialSortCol.VOLUME, sort, asc, onSort, Modifier.width(75.dp))
-            MCol("Allocated", MaterialSortCol.ALLOCATED, sort, asc, onSort, Modifier.width(90.dp))
-            Text(
-                "Buy ladder (trigger → ISK)",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                modifier = Modifier.width(260.dp),
-            )
+            MCol("Current", MaterialSortCol.CURRENT, sort, asc, onSort, Modifier.width(80.dp))
+            MCol("Avg", MaterialSortCol.AVG, sort, asc, onSort, Modifier.width(80.dp))
+            MCol("Held", MaterialSortCol.HELD, sort, asc, onSort, Modifier.width(95.dp))
+            MCol("Drawdown", MaterialSortCol.DRAWDOWN, sort, asc, onSort, Modifier.width(75.dp))
+            MCol("vs Avg", MaterialSortCol.VS_AVG, sort, asc, onSort, Modifier.width(65.dp))
+            MCol("7d", MaterialSortCol.TREND, sort, asc, onSort, Modifier.width(55.dp))
+            MCol("Backtest", MaterialSortCol.BACKTEST, sort, asc, onSort, Modifier.width(105.dp))
+            MCol("Volatility", MaterialSortCol.VOLATILITY, sort, asc, onSort, Modifier.width(70.dp))
+            MCol("Vol/day", MaterialSortCol.VOLUME, sort, asc, onSort, Modifier.width(65.dp))
+            MCol("Allocated", MaterialSortCol.ALLOCATED, sort, asc, onSort, Modifier.width(80.dp))
+            Spacer(Modifier.width(28.dp))
         }
     }
 }
@@ -472,93 +505,170 @@ private fun <T> MCol(
 private fun MaterialRow(
     alloc: AllocatedMaterial,
     onShowDetails: (Int) -> Unit,
+    onCreateAlerts: () -> Unit,
 ) {
     val c = alloc.candidate
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Spacer(Modifier.width(28.dp))
-        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Spacer(Modifier.width(28.dp))
+            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    c.typeName,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (c.spikeDetected) {
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = "Recent price spike detected",
+                        modifier = Modifier.size(13.dp),
+                        tint = warningColor,
+                    )
+                }
+                IconButton(onClick = { onShowDetails(c.typeId) }, modifier = Modifier.size(20.dp)) {
+                    Icon(Icons.Default.Info, contentDescription = "Item details", modifier = Modifier.size(14.dp))
+                }
+            }
+            Text(formatPriceAbbr(c.currentPrice), style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(80.dp))
             Text(
-                c.typeName,
+                formatPriceAbbr(c.avgPrice),
                 style = MaterialTheme.typography.bodySmall,
+                color = Color.Gray,
+                modifier = Modifier.width(80.dp),
+            )
+            Text(
+                c.position?.takeIf { it.qtyHeld != 0L }?.let { p ->
+                    "${formatVolume(p.qtyHeld)}${p.avgBuyPrice?.let { " @ ${formatPriceAbbr(it)}" } ?: ""}"
+                } ?: "—",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.Gray,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
+                modifier = Modifier.width(95.dp),
             )
-            if (c.spikeDetected) {
+            Text(
+                "${String.format(Locale.US, "%.1f", c.drawdownFromHighPct)}%",
+                style = MaterialTheme.typography.bodySmall,
+                color = negativeColor,
+                modifier = Modifier.width(75.dp),
+            )
+            Text(
+                "${String.format(Locale.US, "%.1f", c.vsAvgPct)}%",
+                style = MaterialTheme.typography.bodySmall,
+                color = positiveColor,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.width(65.dp),
+            )
+            val trendColor =
+                when {
+                    c.trendPct.isNaN() -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                    c.trendPct >= 0 -> positiveColor
+                    else -> negativeColor
+                }
+            Text(
+                if (c.trendPct.isNaN()) "—" else "${String.format(Locale.US, "%.1f", c.trendPct)}%",
+                style = MaterialTheme.typography.bodySmall,
+                color = trendColor,
+                modifier = Modifier.width(55.dp),
+            )
+            Text(
+                c.backtest?.let { bt ->
+                    "${signedPct(bt.unrealizedPnlPct)} (${signedPct(bt.worstDrawdownPct)})"
+                } ?: "—",
+                style = MaterialTheme.typography.labelSmall,
+                color = c.backtest?.let { if (it.unrealizedPnlPct >= 0) positiveColor else negativeColor } ?: Color.Gray,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.width(105.dp),
+            )
+            Text(
+                "${String.format(Locale.US, "%.1f", c.volatilityPct)}%",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.Gray,
+                modifier = Modifier.width(70.dp),
+            )
+            Text(
+                formatVolume(c.dailyVolume),
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.Gray,
+                modifier = Modifier.width(65.dp),
+            )
+            Text(
+                formatPriceAbbr(alloc.allocatedIsk),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.width(80.dp),
+            )
+            IconButton(onClick = onCreateAlerts, modifier = Modifier.size(28.dp)) {
                 Icon(
-                    Icons.Default.Warning,
-                    contentDescription = "Recent price spike detected",
-                    modifier = Modifier.size(13.dp),
-                    tint = warningColor,
+                    Icons.Default.NotificationsActive,
+                    contentDescription = "Create alerts for this item's buy ladder",
+                    modifier = Modifier.size(15.dp),
                 )
             }
-            IconButton(onClick = { onShowDetails(c.typeId) }, modifier = Modifier.size(20.dp)) {
-                Icon(Icons.Default.Info, contentDescription = "Item details", modifier = Modifier.size(14.dp))
-            }
         }
-        Text(formatPriceAbbr(c.currentPrice), style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(85.dp))
-        Text(
-            formatPriceAbbr(c.avgPrice),
-            style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray,
-            modifier = Modifier.width(85.dp),
-        )
-        Text(
-            "${String.format(Locale.US, "%.1f", c.drawdownFromHighPct)}%",
-            style = MaterialTheme.typography.bodySmall,
-            color = negativeColor,
-            modifier = Modifier.width(80.dp),
-        )
-        Text(
-            "${String.format(Locale.US, "%.1f", c.vsAvgPct)}%",
-            style = MaterialTheme.typography.bodySmall,
-            color = positiveColor,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.width(70.dp),
-        )
-        val trendColor =
-            when {
-                c.trendPct.isNaN() -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                c.trendPct >= 0 -> positiveColor
-                else -> negativeColor
+        val ladderLine =
+            buildString {
+                if (alloc.ladder.isNotEmpty()) {
+                    append("Buy: ")
+                    append(
+                        alloc.ladder.joinToString("  ·  ") {
+                            "${formatPriceAbbr(it.triggerPrice)}→${formatPriceAbbr(it.iskAmount)}" + if (it.alreadyTriggered) "*" else ""
+                        },
+                    )
+                }
+                if (alloc.sellLadder.isNotEmpty()) {
+                    if (isNotEmpty()) append("   ")
+                    append("Sell: ")
+                    append(alloc.sellLadder.joinToString("  ·  ") { "${formatPriceAbbr(it.targetPrice)}→${formatVolume(it.qty)}u" })
+                }
             }
-        Text(
-            if (c.trendPct.isNaN()) "—" else "${String.format(Locale.US, "%.1f", c.trendPct)}%",
-            style = MaterialTheme.typography.bodySmall,
-            color = trendColor,
-            modifier = Modifier.width(65.dp),
-        )
-        Text(
-            "${String.format(Locale.US, "%.1f", c.volatilityPct)}%",
-            style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray,
-            modifier = Modifier.width(75.dp),
-        )
-        Text(
-            formatVolume(c.dailyVolume),
-            style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray,
-            modifier = Modifier.width(75.dp),
-        )
-        Text(
-            formatPriceAbbr(alloc.allocatedIsk),
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.width(90.dp),
-        )
-        Text(
-            alloc.ladder
-                .joinToString("  ·  ") { "${formatPriceAbbr(it.triggerPrice)}→${formatPriceAbbr(it.iskAmount)}" }
-                .ifEmpty { "—" },
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.width(260.dp),
-        )
+        if (ladderLine.isNotEmpty()) {
+            Text(
+                ladderLine,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 28.dp, top = 1.dp),
+            )
+        }
     }
     HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+}
+
+private fun signedPct(pct: Double): String = "${if (pct >= 0) "+" else ""}${String.format(Locale.US, "%.0f", pct)}%"
+
+// Creates a below-current-price alert (AlertMonitor compares against best sell, matching what
+// `currentPrice` means throughout this tab) for each buy-ladder level not already crossed, skipping
+// any that already have a live, un-triggered alert at essentially the same price -- so clicking the
+// bell again after a re-scan doesn't pile up duplicate alerts for the same trigger.
+private fun createLadderAlerts(
+    alloc: AllocatedMaterial,
+    regionId: Int,
+    charId: Int?,
+) {
+    val existing = runCatching { AlertDao.getAll() }.getOrDefault(emptyList())
+    alloc.ladder.filterNot { it.alreadyTriggered }.forEach { level ->
+        val duplicate =
+            existing.any {
+                !it.triggered && it.typeId == alloc.candidate.typeId && it.regionId == regionId && it.condition == "below" &&
+                    kotlin.math.abs(it.targetPrice - level.triggerPrice) < 0.01
+            }
+        if (!duplicate) {
+            AlertDao.insert(
+                PriceAlertModel(
+                    typeId = alloc.candidate.typeId,
+                    typeName = alloc.candidate.typeName,
+                    targetPrice = level.triggerPrice,
+                    condition = "below",
+                    regionId = regionId,
+                    orderType = "sell",
+                    characterId = charId,
+                ),
+            )
+        }
+    }
 }
