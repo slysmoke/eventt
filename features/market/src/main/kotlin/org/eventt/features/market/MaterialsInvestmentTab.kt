@@ -36,6 +36,8 @@ import org.eventt.core.database.WalletDao
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.everef.EveRefService
 import org.eventt.core.model.HotkeyBindings
+import org.eventt.core.model.PLEX_MARKET_REGION_ID
+import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.PriceAlertModel
 import org.eventt.core.model.StaticMarketGroupModel
 import org.eventt.core.model.StaticRegionModel
@@ -457,10 +459,29 @@ internal fun MaterialsInvestmentTab(
                                                     async(Dispatchers.IO) {
                                                         semaphore.withPermit {
                                                             runCatching {
+                                                                // PLEX only ever trades in its own dedicated region, never in
+                                                                // whichever region is selected here -- the bulk fetch above
+                                                                // (scoped to `regionId`) always comes back empty for it, so it
+                                                                // needs its own per-type call against PLEX_MARKET_REGION_ID
+                                                                // instead, same as Station Trading/Inter-Region already do.
+                                                                val effRegion =
+                                                                    if (typeId ==
+                                                                        PLEX_TYPE_ID
+                                                                    ) {
+                                                                        PLEX_MARKET_REGION_ID
+                                                                    } else {
+                                                                        regionId
+                                                                    }
+                                                                val orders =
+                                                                    if (effRegion == regionId) {
+                                                                        ordersByType[typeId].orEmpty()
+                                                                    } else {
+                                                                        EsiClient.getMarketRegionOrders(effRegion, typeId = typeId)
+                                                                    }
                                                                 computeMaterialCandidate(
                                                                     typeId = typeId,
-                                                                    orders = ordersByType[typeId].orEmpty(),
-                                                                    regionId = regionId,
+                                                                    orders = orders,
+                                                                    regionId = effRegion,
                                                                     lookbackDays = lookbackDaysSnap,
                                                                     minDailyVol = minDailyVolSnap,
                                                                     minDiscountPct = minDiscountSnap,
