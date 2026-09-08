@@ -150,8 +150,15 @@ internal fun allocateBudget(
 ): List<AllocatedMaterial> {
     if (totalBudget <= 0.0 || candidates.isEmpty() || maxItems <= 0) return emptyList()
 
-    val picked = candidates.sortedBy { it.vsAvgPct }.take(maxItems)
-    val weights = picked.map { (-it.vsAvgPct).coerceAtLeast(0.0) }
+    // Rank by total ISK opportunity -- discount depth times how much of the item actually trades
+    // per day -- not by discount % alone. A thin item down 40% on 2 units/day is a smaller real
+    // opportunity than a liquid material down 8% that moves billions/day in volume, but ranking on
+    // vsAvgPct alone put the thin one first and let maxItems cut the liquid, actually-profitable
+    // one before it ever got a share of the budget.
+    fun opportunity(c: MaterialCandidate) = (-c.vsAvgPct).coerceAtLeast(0.0) * c.dailyVolume * c.currentPrice
+
+    val picked = candidates.sortedByDescending { opportunity(it) }.take(maxItems)
+    val weights = picked.map { opportunity(it) }
     if (weights.sum() <= 0.0) return emptyList()
 
     val caps =

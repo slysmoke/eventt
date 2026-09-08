@@ -76,8 +76,8 @@ internal fun MaterialsInvestmentTab(
     var analyzeJob by remember { mutableStateOf<Job?>(null) }
     var statusMsg by remember { mutableStateOf("") }
     var candidates by remember { mutableStateOf<List<MaterialCandidate>>(emptyList()) }
-    var sortCol by remember { mutableStateOf(MaterialSortCol.VS_AVG) }
-    var sortAsc by remember { mutableStateOf(true) }
+    var sortCol by remember { mutableStateOf(MaterialSortCol.ALLOCATED) }
+    var sortAsc by remember { mutableStateOf(false) }
     var detailTypeId by remember { mutableStateOf<Int?>(null) }
     var settingsLoaded by remember { mutableStateOf(false) }
 
