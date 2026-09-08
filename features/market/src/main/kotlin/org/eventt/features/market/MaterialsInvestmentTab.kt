@@ -890,11 +890,16 @@ private fun createLadderAlerts(
     regionId: Int,
     charId: Int?,
 ) {
+    // AlertMonitor trusts whatever region is stored on the alert rather than re-deriving it per
+    // typeId (see effectiveRegion in AlertMonitor.kt) -- PLEX only trades in its own global region,
+    // so an alert stored with the UI's selected region (e.g. The Forge) would silently watch the
+    // wrong market forever and never reflect PLEX's real price.
+    val effRegion = if (alloc.candidate.typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else regionId
     val existing = runCatching { AlertDao.getAll() }.getOrDefault(emptyList())
     alloc.ladder.filterNot { it.alreadyTriggered }.forEach { level ->
         val duplicate =
             existing.any {
-                !it.triggered && it.typeId == alloc.candidate.typeId && it.regionId == regionId &&
+                !it.triggered && it.typeId == alloc.candidate.typeId && it.regionId == effRegion &&
                     it.condition == "below" && it.orderType == "buy" &&
                     kotlin.math.abs(it.targetPrice - level.triggerPrice) < 0.01
             }
@@ -905,7 +910,7 @@ private fun createLadderAlerts(
                     typeName = alloc.candidate.typeName,
                     targetPrice = level.triggerPrice,
                     condition = "below",
-                    regionId = regionId,
+                    regionId = effRegion,
                     // Tracks the top buy order price, matching currentPrice throughout this tab --
                     // fires once the market's own best bid has fallen to this rung, telling you
                     // it's a realistic level to place (or that your own standing order there is now

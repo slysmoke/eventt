@@ -105,11 +105,17 @@ internal fun ItemDetailDialog(
     LaunchedEffect(typeId, primaryRegionId, secondaryRegionId) {
         isLoading = true
         withContext(Dispatchers.IO) {
-            primaryOrders = runCatching { EsiClient.getMarketRegionOrders(primaryRegionId, typeId = typeId) }.getOrDefault(emptyList())
+            // fetchLiveHistory already redirects PLEX to its own global market region internally --
+            // the live order-book fetch needs the same redirect (it didn't have one), or PLEX's
+            // dialog shows whatever region was passed in (e.g. The Forge) instead of its real book.
+            val effectivePrimaryRegionId = if (typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else primaryRegionId
+            primaryOrders =
+                runCatching { EsiClient.getMarketRegionOrders(effectivePrimaryRegionId, typeId = typeId) }.getOrDefault(emptyList())
             primaryHistory = fetchLiveHistory(typeId, primaryRegionId)
             if (secondaryRegionId != null) {
+                val effectiveSecondaryRegionId = if (typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else secondaryRegionId
                 secondaryOrders =
-                    runCatching { EsiClient.getMarketRegionOrders(secondaryRegionId, typeId = typeId) }.getOrDefault(emptyList())
+                    runCatching { EsiClient.getMarketRegionOrders(effectiveSecondaryRegionId, typeId = typeId) }.getOrDefault(emptyList())
                 secondaryHistory = fetchLiveHistory(typeId, secondaryRegionId)
             } else {
                 secondaryOrders = emptyList()
@@ -142,30 +148,40 @@ internal fun ItemDetailDialog(
                         CircularProgressIndicator()
                     }
                 } else {
+                    // The order-book/history fetches above already redirect PLEX to its own global
+                    // market region -- the labels shown alongside that data need to match, or the
+                    // card would say e.g. "The Forge" while actually showing PLEX's real book.
+                    val primaryLabel = if (typeId == PLEX_TYPE_ID) "Global Market (PLEX)" else primaryRegionName
+                    val secondaryLabel = if (typeId == PLEX_TYPE_ID) "Global Market (PLEX)" else secondaryRegionName
+                    // Station/system scoping is meaningless for PLEX (see the comment on
+                    // PLEX_TYPE_ID) -- filtering its global order book down to some other item's
+                    // station would just show an empty book.
+                    val effectivePrimaryStationId = if (typeId == PLEX_TYPE_ID) null else primaryStationId
+                    val effectiveSecondaryStationId = if (typeId == PLEX_TYPE_ID) null else secondaryStationId
                     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                         ContentCard("Price — ${CHART_DAYS}d") {
                             DualRegionPriceChart(
                                 primaryHistory,
-                                primaryRegionName,
+                                primaryLabel,
                                 secondaryHistory,
-                                secondaryRegionName,
+                                secondaryLabel,
                                 modifier = Modifier.fillMaxWidth().height(220.dp),
                             )
                         }
                         Spacer(Modifier.height(12.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             OrderBookCard(
-                                primaryRegionName,
+                                primaryLabel,
                                 primaryOrders,
-                                primaryStationId,
+                                effectivePrimaryStationId,
                                 primaryHistory,
                                 modifier = Modifier.weight(1f),
                             )
                             if (secondaryRegionId != null) {
                                 OrderBookCard(
-                                    secondaryRegionName ?: "",
+                                    secondaryLabel ?: "",
                                     secondaryOrders,
-                                    secondaryStationId,
+                                    effectiveSecondaryStationId,
                                     secondaryHistory,
                                     modifier = Modifier.weight(1f),
                                 )
