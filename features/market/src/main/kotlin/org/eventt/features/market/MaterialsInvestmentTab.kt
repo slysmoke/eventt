@@ -31,6 +31,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.AlertDao
+import org.eventt.core.database.AssetDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.WalletDao
 import org.eventt.core.esi.EsiClient
@@ -446,6 +447,15 @@ internal fun MaterialsInvestmentTab(
                                                 withContext(Dispatchers.IO) { WalletDao.getAllTransactions(characterId = id) }
                                                     .groupBy { it.typeId }
                                             }
+                                        // Real physical stock, not net(buys - sells) -- materials routinely arrive via mining
+                                        // + reprocessing without ever creating a wallet transaction, so Held needs this to
+                                        // reflect what's actually sitting in the hangar, not just what was market-bought.
+                                        val myAssetQtyByType =
+                                            charId?.let { id ->
+                                                withContext(Dispatchers.IO) { AssetDao.getByCharacter(id) }
+                                                    .groupBy { it.typeId }
+                                                    .mapValues { (_, assets) -> assets.sumOf { it.quantity }.toLong() }
+                                            }
 
                                         statusMsg = "0/${typeIds.size} types checked…"
                                         val semaphore = Semaphore(10)
@@ -492,6 +502,7 @@ internal fun MaterialsInvestmentTab(
                                                                     spikeVolumeMultiplier = spikeVolumeMultiplierSnap,
                                                                     excludeStructuralBreak = excludeStructuralBreakSnap,
                                                                     myTransactionsByType = myTransactionsByType,
+                                                                    myAssetQtyByType = myAssetQtyByType,
                                                                 )
                                                             }.getOrNull()?.let { found.add(it) }
                                                             mutex.withLock {
@@ -619,8 +630,9 @@ private fun MaterialsHeader(
                 MCol("Avg", MaterialSortCol.AVG, sort, asc, onSort, Modifier.width(80.dp))
             }
             Tip(
-                "Your current holding: quantity @ average buy price, from your wallet transaction history " +
-                    "(average-cost, not FIFO). Used to anchor the buy ladder to your real entry instead of the live price.",
+                "Your current holding: real quantity from your assets (all locations) @ average cost of your tracked market " +
+                    "buys (average-cost, not FIFO -- and won't cover stock that arrived via mining/reprocessing/manufacturing " +
+                    "rather than a market buy). Used to anchor the buy ladder to your real entry instead of the live price.",
             ) {
                 MCol("Held", MaterialSortCol.HELD, sort, asc, onSort, Modifier.width(95.dp))
             }

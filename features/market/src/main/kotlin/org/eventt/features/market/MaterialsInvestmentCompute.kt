@@ -56,17 +56,25 @@ internal data class MaterialCandidate(
 // average-cost of every buy transaction on record (not FIFO -- a quick reference, not the exact
 // cost basis the Orders tab's FIFO ledger computes).
 internal data class MaterialPosition(
+    // Actual physical quantity in your assets right now (all locations), not net(buys - sells) --
+    // materials commonly arrive without ever going through a wallet transaction at all (mining +
+    // reprocessing being the obvious one for this exact market group), so a transaction-only count
+    // silently reads as "not held" for stock you can see sitting in your hangar.
     val qtyHeld: Long,
+    // Average cost of tracked market buys only -- reprocessed/manufactured/contracted stock has no
+    // real purchase price to average in, so when none of the held quantity came from a tracked buy
+    // this is null (the ladder then anchors to the live price instead, same as not holding at all).
     val avgBuyPrice: Double?,
 )
 
-internal fun computeMaterialPosition(transactions: List<WalletDao.RawTxRecord>): MaterialPosition {
+internal fun computeMaterialPosition(
+    transactions: List<WalletDao.RawTxRecord>,
+    assetQty: Long,
+): MaterialPosition {
     val bought = transactions.filter { it.isBuy }
-    val sold = transactions.filter { !it.isBuy }
     val boughtQty = bought.sumOf { it.quantity }
-    val soldQty = sold.sumOf { it.quantity }
     val avgBuy = if (boughtQty > 0) bought.sumOf { it.unitPrice * it.quantity } / boughtQty else null
-    return MaterialPosition(qtyHeld = (boughtQty - soldQty).toLong(), avgBuyPrice = avgBuy)
+    return MaterialPosition(qtyHeld = assetQty, avgBuyPrice = avgBuy)
 }
 
 internal enum class MaterialSortCol { NAME, CURRENT, AVG, DRAWDOWN, VS_AVG, TREND, VOLATILITY, VOLUME, HELD, BACKTEST, ALLOCATED }
@@ -147,6 +155,10 @@ internal fun computeMaterialCandidate(
     // Pre-fetched and grouped by typeId once per Analyze run (one wallet-transactions read for the
     // whole scan), not looked up per-item -- see the Analyze coroutine in MaterialsInvestmentTab.
     myTransactionsByType: Map<Int, List<WalletDao.RawTxRecord>>? = null,
+    // Same one-read-per-scan deal, keyed by typeId -> total quantity currently held across every
+    // location -- the real "am I holding this" signal, since materials routinely arrive via mining
+    // + reprocessing without ever creating a wallet transaction at all.
+    myAssetQtyByType: Map<Int, Long>? = null,
 ): MaterialCandidate? {
     // Buy-order-oriented, not instant-buy: this tab's whole point is placing standing buy orders
     // at the ladder's target prices rather than paying the ask, so `currentPrice` is the top
@@ -205,7 +217,12 @@ internal fun computeMaterialCandidate(
         volatilityPct = volatilityPct,
         dailyVolume = dailyVolume,
         spikeDetected = spikeDetected,
-        position = myTransactionsByType?.let { computeMaterialPosition(it[typeId].orEmpty()) },
+        position =
+            if (myTransactionsByType != null || myAssetQtyByType != null) {
+                computeMaterialPosition(myTransactionsByType?.get(typeId).orEmpty(), myAssetQtyByType?.get(typeId) ?: 0L)
+            } else {
+                null
+            },
         backtest = backtestDipStrategy(fullHistory, lookbackDays, minDiscountPct),
     )
 }
