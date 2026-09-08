@@ -9,6 +9,15 @@ import kotlin.math.sqrt
 // history, so this is close to the practical ceiling.
 private const val LONG_HISTORY_DAYS = 365
 
+// backtestDipStrategy needs at least this many days *beyond* the lookback window to actually
+// simulate anything (the window itself has no day left to compare a price against). Fetching only
+// ever up to a flat LONG_HISTORY_DAYS left zero such runway once lookbackDays approached it --
+// e.g. lookbackDays = 360 needs 365 days of data just to run one simulated day, which real trading
+// history (ESI omits no-trade days entirely) almost never fully has -- so the backtest silently
+// went blank for any lookback set anywhere near the fetch ceiling. Shared with the check below so
+// the two can't drift apart again.
+internal const val BACKTEST_MIN_RUNWAY_DAYS = 5
+
 // ─── Materials Investment (long-term dip-buying / DCA analysis) ───────────
 //
 // Idea: minerals, ice products, moon materials and PI materials (the "Materials" group under
@@ -146,7 +155,8 @@ internal fun computeMaterialCandidate(
     // Fetched once at whichever is longer -- the live discount window still only looks at its own
     // `lookbackDays` prefix of this, while the structural-break check and the backtest use the
     // full thing.
-    val fullHistory = fetchHistory(typeId, regionId, historySource, days = maxOf(lookbackDays, LONG_HISTORY_DAYS))
+    val fullHistory =
+        fetchHistory(typeId, regionId, historySource, days = maxOf(lookbackDays + BACKTEST_MIN_RUNWAY_DAYS, LONG_HISTORY_DAYS))
     val window = fullHistory.take(lookbackDays)
     // Require most of the window to actually have trades -- a couple of stale rows scattered over
     // months isn't enough to call today's price "cheap" or "expensive" relative to.
@@ -221,7 +231,7 @@ internal fun backtestDipStrategy(
     minDiscountPct: Double,
 ): BacktestResult? {
     val asc = history.sortedBy { it.date }
-    if (asc.size < lookbackDays + 5) return null // not enough history to replay the rule meaningfully
+    if (asc.size < lookbackDays + BACKTEST_MIN_RUNWAY_DAYS) return null // not enough history to replay the rule meaningfully
 
     var qty = 0.0
     var invested = 0.0
