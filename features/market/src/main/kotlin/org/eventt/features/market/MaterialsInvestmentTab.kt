@@ -1,7 +1,9 @@
 package org.eventt.features.market
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,9 +35,11 @@ import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.WalletDao
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.everef.EveRefService
+import org.eventt.core.model.HotkeyBindings
 import org.eventt.core.model.PriceAlertModel
 import org.eventt.core.model.StaticMarketGroupModel
 import org.eventt.core.model.StaticRegionModel
+import org.eventt.core.model.eveSigFigStep
 import org.eventt.ui.common.formatPriceAbbr
 import org.eventt.ui.common.formatVolume
 import org.eventt.ui.theme.negativeColor
@@ -79,6 +83,8 @@ internal fun MaterialsInvestmentTab(
     var ladderLevels by remember { mutableStateOf("4") }
     var ladderStepPct by remember { mutableStateOf("5") }
     var excludeStructuralBreak by remember { mutableStateOf(true) }
+    var copyVolumeEnabled by remember { mutableStateOf(true) }
+    var selectedTypeIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var isAnalyzing by remember { mutableStateOf(false) }
     var analyzeJob by remember { mutableStateOf<Job?>(null) }
     var statusMsg by remember { mutableStateOf("") }
@@ -105,6 +111,7 @@ internal fun MaterialsInvestmentTab(
             S.get(S.MI_LADDER_LEVELS)?.let { ladderLevels = it }
             S.get(S.MI_LADDER_STEP_PCT)?.let { ladderStepPct = it }
             S.get(S.MI_EXCLUDE_STRUCTURAL_BREAK)?.let { excludeStructuralBreak = it == "true" }
+            S.get(S.MI_COPY_VOLUME)?.let { copyVolumeEnabled = it == "true" }
             settingsLoaded = true
         }
     }
@@ -159,6 +166,35 @@ internal fun MaterialsInvestmentTab(
             )
         }
     val sorted = remember(allocated, sortCol, sortAsc) { sortMaterials(allocated, sortCol, sortAsc) }
+
+    // Drop stale picks after a re-scan or budget/ladder change drops an item out of `allocated`
+    // entirely -- otherwise a checked-but-vanished row would silently keep feeding stale rungs
+    // into the hotkey queue below.
+    LaunchedEffect(allocated) {
+        val stillPresent = allocated.map { it.candidate.typeId }.toSet()
+        if (selectedTypeIds.any { it !in stillPresent }) selectedTypeIds = selectedTypeIds intersect stillPresent
+    }
+
+    // The hotkey queue: every buy-ladder rung of every checked row, snapped to EVE's price grid --
+    // see MaterialsInvestmentQueue. Rebuilt live so toggling a checkbox or Copy Vol takes effect on
+    // the very next hotkey press, the same way StationTradingQueue/InterRegionQueue stay in sync.
+    val queueItems =
+        remember(allocated, selectedTypeIds, charId) {
+            allocated
+                .filter { it.candidate.typeId in selectedTypeIds }
+                .flatMap { alloc ->
+                    alloc.ladder.map { level ->
+                        val step = eveSigFigStep(level.triggerPrice)
+                        val snappedPrice = kotlin.math.round(level.triggerPrice / step) * step
+                        PendingMaterialItem(charId, alloc.candidate.typeId, alloc.candidate.typeName, snappedPrice, level.qty)
+                    }
+                }
+        }
+    LaunchedEffect(queueItems, copyVolumeEnabled) {
+        MaterialsInvestmentQueue.copyVolume = copyVolumeEnabled
+        MaterialsInvestmentQueue.update(queueItems)
+    }
+    val activeQueueTypeId by MaterialsInvestmentQueue.currentTypeId.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize()) {
         FilterBar {
@@ -313,6 +349,37 @@ internal fun MaterialsInvestmentTab(
                             scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_LADDER_STEP_PCT, it) } }
                         }
                     }
+                    FilterDivider()
+                    val hotkeyLabel by HotkeyBindings.queueLabel.collectAsState()
+                    Tip(
+                        "Check rows below, then press $hotkeyLabel to step through every checked item's buy-ladder rungs: " +
+                            "opens the item's market window and copies the target price, then on the next press copies the " +
+                            "quantity -- paste each into EVE's buy-order dialog.",
+                    ) {
+                        FilterControl("Hotkey Queue ($hotkeyLabel)") {
+                            Text(
+                                if (queueItems.isEmpty()) {
+                                    if (selectedTypeIds.isEmpty()) "check rows →" else "no rungs"
+                                } else {
+                                    "${MaterialsInvestmentQueue.currentPosition}/${queueItems.size}"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            )
+                        }
+                    }
+                    Tip("Whether the second hotkey press (per rung) also copies the suggested quantity, or just advances.") {
+                        FilterControl("Copy Vol") {
+                            Switch(
+                                checked = copyVolumeEnabled,
+                                onCheckedChange = {
+                                    copyVolumeEnabled = it
+                                    scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_COPY_VOLUME, it.toString()) } }
+                                },
+                                modifier = Modifier.height(FilterFieldHeight),
+                            )
+                        }
+                    }
                 }
                 if (statusMsg.isNotEmpty()) {
                     FilterActionSlot {
@@ -453,18 +520,32 @@ internal fun MaterialsInvestmentTab(
                     },
             )
         } else {
-            MaterialsHeader(sortCol, sortAsc) { col ->
-                if (sortCol == col) {
-                    sortAsc = !sortAsc
-                } else {
-                    sortCol = col
-                    sortAsc = true
-                }
-            }
+            MaterialsHeader(
+                sort = sortCol,
+                asc = sortAsc,
+                allChecked = sorted.isNotEmpty() && sorted.all { it.candidate.typeId in selectedTypeIds },
+                onCheckAll = { checked ->
+                    selectedTypeIds = if (checked) sorted.map { it.candidate.typeId }.toSet() else emptySet()
+                },
+                onSort = { col ->
+                    if (sortCol == col) {
+                        sortAsc = !sortAsc
+                    } else {
+                        sortCol = col
+                        sortAsc = true
+                    }
+                },
+            )
             LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 items(sorted, key = { it.candidate.typeId }) { alloc ->
                     MaterialRow(
                         alloc,
+                        checked = alloc.candidate.typeId in selectedTypeIds,
+                        onCheckedChange = { checked ->
+                            selectedTypeIds =
+                                if (checked) selectedTypeIds + alloc.candidate.typeId else selectedTypeIds - alloc.candidate.typeId
+                        },
+                        isActiveInQueue = alloc.candidate.typeId == activeQueueTypeId,
                         onShowDetails = { detailTypeId = it },
                         onCreateAlerts = {
                             scope.launch {
@@ -498,18 +579,19 @@ internal fun MaterialsInvestmentTab(
 private fun MaterialsHeader(
     sort: MaterialSortCol,
     asc: Boolean,
+    allChecked: Boolean,
+    onCheckAll: (Boolean) -> Unit,
     onSort: (MaterialSortCol) -> Unit,
 ) {
     Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "#",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
-                modifier = Modifier.width(28.dp),
-            )
+            Tip("Select all / none -- checked rows feed the hotkey queue.") {
+                Checkbox(checked = allChecked, onCheckedChange = onCheckAll, modifier = Modifier.size(28.dp))
+            }
             MCol("Item", MaterialSortCol.NAME, sort, asc, onSort, Modifier.weight(1f))
-            Tip("Live best sell price -- what you'd actually pay to buy in right now.") {
+            Tip(
+                "Live top buy order price -- the current best bid. This tab is built around placing your own buy orders, not instant-buying, so ladder prices are targets for standing orders, not asks to pay.",
+            ) {
                 MCol("Current", MaterialSortCol.CURRENT, sort, asc, onSort, Modifier.width(80.dp))
             }
             Tip("Average price over the Lookback-day window.") {
@@ -590,13 +672,22 @@ private fun <T> MCol(
 @Composable
 private fun MaterialRow(
     alloc: AllocatedMaterial,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    isActiveInQueue: Boolean,
     onShowDetails: (Int) -> Unit,
     onCreateAlerts: () -> Unit,
 ) {
     val c = alloc.candidate
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp)) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .then(if (isActiveInQueue) Modifier.border(BorderStroke(1.dp, MaterialTheme.colorScheme.primary)) else Modifier)
+                .padding(horizontal = 10.dp, vertical = 3.dp),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Spacer(Modifier.width(28.dp))
+            Checkbox(checked = checked, onCheckedChange = onCheckedChange, modifier = Modifier.size(28.dp))
             Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     c.typeName,
@@ -693,7 +784,11 @@ private fun MaterialRow(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.width(80.dp),
             )
-            Tip("Create price alerts (Alerts tab) for this item's remaining buy-ladder trigger prices -- skips levels already crossed.") {
+            Tip(
+                "Create price alerts (Alerts tab) for this item's remaining buy-ladder rungs -- fires when the market's own " +
+                    "top buy order falls to that price, telling you it's a realistic level to place your order at. Skips " +
+                    "levels already crossed.",
+            ) {
                 IconButton(onClick = onCreateAlerts, modifier = Modifier.size(28.dp)) {
                     Icon(
                         Icons.Default.NotificationsActive,
@@ -721,7 +816,8 @@ private fun MaterialRow(
             }
         if (ladderLine.isNotEmpty()) {
             Tip(
-                "Buy: trigger price → ISK to spend at that level (* = already at/below the live price). " +
+                "Buy: target price for a standing buy order → ISK to spend at that rung (* = already at/above the current " +
+                    "top bid, so it's actionable right now rather than a future target). " +
                     "Sell: your take-profit target price → quantity to sell, only shown while you hold a position.",
             ) {
                 Text(
@@ -777,7 +873,8 @@ private fun createLadderAlerts(
     alloc.ladder.filterNot { it.alreadyTriggered }.forEach { level ->
         val duplicate =
             existing.any {
-                !it.triggered && it.typeId == alloc.candidate.typeId && it.regionId == regionId && it.condition == "below" &&
+                !it.triggered && it.typeId == alloc.candidate.typeId && it.regionId == regionId &&
+                    it.condition == "below" && it.orderType == "buy" &&
                     kotlin.math.abs(it.targetPrice - level.triggerPrice) < 0.01
             }
         if (!duplicate) {
@@ -788,7 +885,11 @@ private fun createLadderAlerts(
                     targetPrice = level.triggerPrice,
                     condition = "below",
                     regionId = regionId,
-                    orderType = "sell",
+                    // Tracks the top buy order price, matching currentPrice throughout this tab --
+                    // fires once the market's own best bid has fallen to this rung, telling you
+                    // it's a realistic level to place (or that your own standing order there is now
+                    // competitive), not that you could instant-sell into a buyer at that price.
+                    orderType = "buy",
                     characterId = charId,
                 ),
             )

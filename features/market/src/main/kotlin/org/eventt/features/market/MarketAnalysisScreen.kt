@@ -309,6 +309,7 @@ internal object S {
     const val MI_LADDER_LEVELS = "analysis.m.ladderLevels"
     const val MI_LADDER_STEP_PCT = "analysis.m.ladderStepPct"
     const val MI_EXCLUDE_STRUCTURAL_BREAK = "analysis.m.excludeStructuralBreak"
+    const val MI_COPY_VOLUME = "analysis.m.copyVolume"
 
     fun get(key: String): String? = StaticDataDao.getSetting(key)
 

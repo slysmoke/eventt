@@ -5,6 +5,7 @@ import org.eventt.core.model.HotkeyBindings
 import org.eventt.core.model.HotkeyCombo
 import org.eventt.features.market.InterRegionQueue
 import org.eventt.features.market.MarketAnalysisRouter
+import org.eventt.features.market.MaterialsInvestmentQueue
 import org.eventt.features.market.StationTradingQueue
 import org.eventt.features.orders.PendingOrdersQueue
 import org.eventt.features.overlay.OverlayController
@@ -43,12 +44,10 @@ object GlobalHotkeyService {
         val onQueueTrigger: () -> Unit = {
             when (activeScreen) {
                 AppScreen.ANALYSIS -> {
-                    if (MarketAnalysisRouter.activeTab ==
-                        0
-                    ) {
-                        StationTradingQueue.processNext()
-                    } else {
-                        InterRegionQueue.processNext()
+                    when (MarketAnalysisRouter.activeTab) {
+                        0 -> StationTradingQueue.processNext()
+                        1 -> InterRegionQueue.processNext()
+                        else -> MaterialsInvestmentQueue.processNext()
                     }
                 }
 

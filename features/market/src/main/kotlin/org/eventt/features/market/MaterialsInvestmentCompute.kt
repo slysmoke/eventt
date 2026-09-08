@@ -127,8 +127,9 @@ internal fun sortMaterials(
 
 /**
  * Builds a dip-buying candidate for one type, or null if it fails a filter or lacks enough
- * history to judge. `currentPrice` is the live best sell (what you'd actually pay to buy in now),
- * not a historical row -- history alone always lags real time by about a day.
+ * history to judge. `currentPrice` is the live top buy order (the price to match/beat with your
+ * own standing buy order), not a historical row -- history alone always lags real time by about a
+ * day, and not the ask -- this tab is built around placing buy orders, not instant-buying.
  */
 internal fun computeMaterialCandidate(
     typeId: Int,
@@ -147,10 +148,13 @@ internal fun computeMaterialCandidate(
     // whole scan), not looked up per-item -- see the Analyze coroutine in MaterialsInvestmentTab.
     myTransactionsByType: Map<Int, List<WalletDao.RawTxRecord>>? = null,
 ): MaterialCandidate? {
-    val sells = orders.filter { (it["is_buy_order"] as? Boolean) == false }
-    if (sells.isEmpty()) return null
-    val currentPrice = sells.minOf { (it["price"] as? Number)?.toDouble() ?: Double.MAX_VALUE }
-    if (currentPrice <= 0.0 || currentPrice == Double.MAX_VALUE) return null
+    // Buy-order-oriented, not instant-buy: this tab's whole point is placing standing buy orders
+    // at the ladder's target prices rather than paying the ask, so `currentPrice` is the top
+    // competing bid -- what you'd need to match/beat -- not the best sell price.
+    val buys = orders.filter { (it["is_buy_order"] as? Boolean) == true }
+    if (buys.isEmpty()) return null
+    val currentPrice = buys.maxOf { (it["price"] as? Number)?.toDouble() ?: 0.0 }
+    if (currentPrice <= 0.0) return null
 
     // Fetched once at whichever is longer -- the live discount window still only looks at its own
     // `lookbackDays` prefix of this, while the structural-break check and the backtest use the
