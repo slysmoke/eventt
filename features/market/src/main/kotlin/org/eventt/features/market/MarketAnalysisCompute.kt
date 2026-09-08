@@ -577,7 +577,7 @@ internal fun computeRegionOpportunityForType(
 
 // ─── History helpers ──────────────────────────────────────────────────────
 
-private fun compute7dChange(history: List<org.eventt.core.model.MarketHistoryModel>): Double {
+internal fun compute7dChange(history: List<org.eventt.core.model.MarketHistoryModel>): Double {
     // history is sorted DESC (newest first)
     val recent = history.take(7)
     if (recent.size < 2) return Double.NaN
@@ -690,7 +690,7 @@ private fun hasOutlierPeak(
     return peak >= baseline * multiplier
 }
 
-private fun fetchHistory(
+internal fun fetchHistory(
     typeId: Int,
     regionId: Int,
     historySource: String,

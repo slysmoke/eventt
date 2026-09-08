@@ -3,6 +3,7 @@ package org.eventt.features.market
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -290,6 +291,24 @@ internal object S {
     const val IR_SPIKE_WINDOW_DAYS = "analysis.r.spikeWindowDays"
     const val IR_PRESETS = "analysis.r.presets"
 
+    // Materials investment (DCA) keys
+    const val MI_REGION = "analysis.m.region"
+    const val MI_CAT_TOP = "analysis.m.catTop"
+    const val MI_CAT_SUB = "analysis.m.catSub"
+    const val MI_LOOKBACK_DAYS = "analysis.m.lookbackDays"
+    const val MI_MIN_VOL = "analysis.m.minVol"
+    const val MI_MIN_DISCOUNT = "analysis.m.minDiscount"
+    const val MI_MAX_VOLATILITY = "analysis.m.maxVolatility"
+    const val MI_SPIKE_FILTER = "analysis.m.spikeFilter"
+    const val MI_SPIKE_PRICE_MULTIPLIER = "analysis.m.spikePriceMultiplier"
+    const val MI_SPIKE_VOLUME_MULTIPLIER = "analysis.m.spikeVolumeMultiplier"
+    const val MI_TOTAL_BUDGET = "analysis.m.totalBudget"
+    const val MI_MAX_ITEMS = "analysis.m.maxItems"
+    const val MI_MAX_PER_ITEM_PCT = "analysis.m.maxPerItemPct"
+    const val MI_LIQUIDITY_DAYS = "analysis.m.liquidityDays"
+    const val MI_LADDER_LEVELS = "analysis.m.ladderLevels"
+    const val MI_LADDER_STEP_PCT = "analysis.m.ladderStepPct"
+
     fun get(key: String): String? = StaticDataDao.getSetting(key)
 
     fun set(
@@ -328,6 +347,12 @@ fun MarketAnalysisScreen() {
                 text = { Text("Inter-Region") },
                 icon = { Icon(Icons.AutoMirrored.Filled.CompareArrows, null, Modifier.size(16.dp)) },
             )
+            Tab(
+                selected = selectedTab == 2,
+                onClick = { selectedTab = 2 },
+                text = { Text("Materials Investment") },
+                icon = { Icon(Icons.AutoMirrored.Filled.TrendingDown, null, Modifier.size(16.dp)) },
+            )
         }
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             Box(modifier = if (selectedTab == 0) Modifier.fillMaxSize() else Modifier.requiredSize(0.dp).clipToBounds()) {
@@ -335,6 +360,9 @@ fun MarketAnalysisScreen() {
             }
             Box(modifier = if (selectedTab == 1) Modifier.fillMaxSize() else Modifier.requiredSize(0.dp).clipToBounds()) {
                 InterRegionTab(allRegions, topGroups, selectedCharId)
+            }
+            Box(modifier = if (selectedTab == 2) Modifier.fillMaxSize() else Modifier.requiredSize(0.dp).clipToBounds()) {
+                MaterialsInvestmentTab(allRegions, topGroups)
             }
         }
     }

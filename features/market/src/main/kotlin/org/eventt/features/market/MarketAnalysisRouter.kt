@@ -9,6 +9,6 @@ package org.eventt.features.market
  * than the other way around (this module can't depend on app).
  */
 object MarketAnalysisRouter {
-    /** 0 = Station Trading, 1 = Inter-Region. */
+    /** 0 = Station Trading, 1 = Inter-Region, 2 = Materials Investment. */
     @Volatile var activeTab: Int = 0
 }
