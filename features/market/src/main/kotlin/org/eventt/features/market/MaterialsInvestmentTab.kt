@@ -1,5 +1,7 @@
 package org.eventt.features.market
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -187,43 +189,70 @@ internal fun MaterialsInvestmentTab(
                     }
                 }
                 FilterDivider()
-                ParamField("Lookback d", lookbackDays, 65.dp) {
-                    lookbackDays = it
-                    scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_LOOKBACK_DAYS, it) } }
+                Tip(
+                    "How many days of price history define \"normal\" for this item -- Avg/High/Low/Volatility and the vs Avg " +
+                        "discount are all computed over this window. It's not a wait time: ESI already has up to ~13 months of " +
+                        "history, so results appear immediately. It's also the window the Backtest column re-checks on every " +
+                        "single simulated day across all available history, not just once.",
+                ) {
+                    ParamField("Lookback d", lookbackDays, 65.dp) {
+                        lookbackDays = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_LOOKBACK_DAYS, it) } }
+                    }
                 }
-                ParamField("Min Vol", minDailyVol, 65.dp) {
-                    minDailyVol = it
-                    scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MIN_VOL, it) } }
+                Tip("Skip items whose median daily trade volume (over the lookback window) is below this -- too thin to reliably trade.") {
+                    ParamField("Min Vol", minDailyVol, 65.dp) {
+                        minDailyVol = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MIN_VOL, it) } }
+                    }
                 }
-                ParamField("Min Discount %", minDiscountPct, 90.dp) {
-                    minDiscountPct = it
-                    scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MIN_DISCOUNT, it) } }
+                Tip(
+                    "Only include items currently at least this % below their own Lookback-day average price -- the core \"is it cheap\" filter.",
+                ) {
+                    ParamField("Min Discount %", minDiscountPct, 90.dp) {
+                        minDiscountPct = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MIN_DISCOUNT, it) } }
+                    }
                 }
-                ParamField("Max Volatility %", maxVolatilityPct, 95.dp) {
-                    maxVolatilityPct = it
-                    scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MAX_VOLATILITY, it) } }
+                Tip("Skip items whose price swings more than this % (std-dev ÷ average) over the lookback window. 0 = no limit.") {
+                    ParamField("Max Volatility %", maxVolatilityPct, 95.dp) {
+                        maxVolatilityPct = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MAX_VOLATILITY, it) } }
+                    }
                 }
-                FilterControl("Exclude 1y Lows") {
-                    Checkbox(
-                        checked = excludeStructuralBreak,
-                        onCheckedChange = {
-                            excludeStructuralBreak = it
-                            scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_EXCLUDE_STRUCTURAL_BREAK, it.toString()) } }
-                        },
-                        modifier = Modifier.size(24.dp),
-                    )
+                Tip(
+                    "Skip items whose current price is at or below their own lowest recorded price in roughly the last year. " +
+                        "A break to a new multi-month low looks like structural decline (e.g. made obsolete by a balance patch), " +
+                        "not a routine dip worth feeding the buy ladder.",
+                ) {
+                    FilterControl("Exclude 1y Lows") {
+                        Checkbox(
+                            checked = excludeStructuralBreak,
+                            onCheckedChange = {
+                                excludeStructuralBreak = it
+                                scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_EXCLUDE_STRUCTURAL_BREAK, it.toString()) } }
+                            },
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
                 }
-                SpikeFilterChip(spikeFilter) {
-                    spikeFilter = it
-                    scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_SPIKE_FILTER, it.name) } }
+                Tip("Filters out items whose recent price/volume history shows a sharp one-off spike (e.g. a buyout or wash trading).") {
+                    SpikeFilterChip(spikeFilter) {
+                        spikeFilter = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_SPIKE_FILTER, it.name) } }
+                    }
                 }
-                ParamField("Price ×", spikePriceMultiplier, 50.dp, enabled = spikeFilter != SpikeFilter.ANY) {
-                    spikePriceMultiplier = it
-                    scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_SPIKE_PRICE_MULTIPLIER, it) } }
+                Tip("A day's price counts as a spike if it's at least this many times the surrounding baseline.") {
+                    ParamField("Price ×", spikePriceMultiplier, 50.dp, enabled = spikeFilter != SpikeFilter.ANY) {
+                        spikePriceMultiplier = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_SPIKE_PRICE_MULTIPLIER, it) } }
+                    }
                 }
-                ParamField("Volume ×", spikeVolumeMultiplier, 50.dp, enabled = spikeFilter != SpikeFilter.ANY) {
-                    spikeVolumeMultiplier = it
-                    scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_SPIKE_VOLUME_MULTIPLIER, it) } }
+                Tip("A day's trade volume counts as a spike if it's at least this many times the surrounding baseline.") {
+                    ParamField("Volume ×", spikeVolumeMultiplier, 50.dp, enabled = spikeFilter != SpikeFilter.ANY) {
+                        spikeVolumeMultiplier = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_SPIKE_VOLUME_MULTIPLIER, it) } }
+                    }
                 }
             }
             Row(verticalAlignment = Alignment.Top) {
@@ -232,30 +261,57 @@ internal fun MaterialsInvestmentTab(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.weight(1f),
                 ) {
-                    ParamField("Budget (ISK)", totalBudget, 120.dp) {
-                        totalBudget = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_TOTAL_BUDGET, it) } }
+                    Tip(
+                        "Total ISK you're willing to invest. Split across the picked candidates below, weighted by discount depth × daily traded ISK value.",
+                    ) {
+                        ParamField("Budget (ISK)", totalBudget, 120.dp) {
+                            totalBudget = it
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_TOTAL_BUDGET, it) } }
+                        }
                     }
-                    ParamField("Max Items", maxItems, 65.dp) {
-                        maxItems = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MAX_ITEMS, it) } }
+                    Tip(
+                        "How many of the top-ranked candidates get a share of the budget -- ranked by real ISK opportunity " +
+                            "(discount % × daily traded value), not by raw discount % alone, so a deep discount on a thin/illiquid " +
+                            "item doesn't crowd out a shallower discount on a liquid, high-value one.",
+                    ) {
+                        ParamField("Max Items", maxItems, 65.dp) {
+                            maxItems = it
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MAX_ITEMS, it) } }
+                        }
                     }
-                    ParamField("Max %/Item", maxPerItemPct, 75.dp) {
-                        maxPerItemPct = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MAX_PER_ITEM_PCT, it) } }
+                    Tip("Caps any single item at this % of the total budget, regardless of how deep its discount is.") {
+                        ParamField("Max %/Item", maxPerItemPct, 75.dp) {
+                            maxPerItemPct = it
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MAX_PER_ITEM_PCT, it) } }
+                        }
                     }
-                    ParamField("Liquidity d", liquidityDays, 75.dp) {
-                        liquidityDays = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_LIQUIDITY_DAYS, it) } }
+                    Tip(
+                        "Second cap: never allocate more than this many days' worth of the item's own median daily trading " +
+                            "value -- avoids parking more ISK in one material than the market could plausibly absorb.",
+                    ) {
+                        ParamField("Liquidity d", liquidityDays, 75.dp) {
+                            liquidityDays = it
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_LIQUIDITY_DAYS, it) } }
+                        }
                     }
                     FilterDivider()
-                    ParamField("Ladder Levels", ladderLevels, 80.dp) {
-                        ladderLevels = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_LADDER_LEVELS, it) } }
+                    Tip(
+                        "How many price rungs to split each item's allocation into. Anchored to your real average cost when " +
+                            "you're already holding and underwater, otherwise to the current live price.",
+                    ) {
+                        ParamField("Ladder Levels", ladderLevels, 80.dp) {
+                            ladderLevels = it
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_LADDER_LEVELS, it) } }
+                        }
                     }
-                    ParamField("Ladder Step %", ladderStepPct, 85.dp) {
-                        ladderStepPct = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_LADDER_STEP_PCT, it) } }
+                    Tip(
+                        "Price gap between each ladder rung. Later rungs (further price drops) get a bigger share of the " +
+                            "item's allocation -- buy more the further it falls.",
+                    ) {
+                        ParamField("Ladder Step %", ladderStepPct, 85.dp) {
+                            ladderStepPct = it
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_LADDER_STEP_PCT, it) } }
+                        }
                     }
                 }
                 if (statusMsg.isNotEmpty()) {
@@ -453,16 +509,46 @@ private fun MaterialsHeader(
                 modifier = Modifier.width(28.dp),
             )
             MCol("Item", MaterialSortCol.NAME, sort, asc, onSort, Modifier.weight(1f))
-            MCol("Current", MaterialSortCol.CURRENT, sort, asc, onSort, Modifier.width(80.dp))
-            MCol("Avg", MaterialSortCol.AVG, sort, asc, onSort, Modifier.width(80.dp))
-            MCol("Held", MaterialSortCol.HELD, sort, asc, onSort, Modifier.width(95.dp))
-            MCol("Drawdown", MaterialSortCol.DRAWDOWN, sort, asc, onSort, Modifier.width(75.dp))
-            MCol("vs Avg", MaterialSortCol.VS_AVG, sort, asc, onSort, Modifier.width(65.dp))
-            MCol("7d", MaterialSortCol.TREND, sort, asc, onSort, Modifier.width(55.dp))
-            MCol("Backtest", MaterialSortCol.BACKTEST, sort, asc, onSort, Modifier.width(105.dp))
-            MCol("Volatility", MaterialSortCol.VOLATILITY, sort, asc, onSort, Modifier.width(70.dp))
-            MCol("Vol/day", MaterialSortCol.VOLUME, sort, asc, onSort, Modifier.width(65.dp))
-            MCol("Allocated", MaterialSortCol.ALLOCATED, sort, asc, onSort, Modifier.width(80.dp))
+            Tip("Live best sell price -- what you'd actually pay to buy in right now.") {
+                MCol("Current", MaterialSortCol.CURRENT, sort, asc, onSort, Modifier.width(80.dp))
+            }
+            Tip("Average price over the Lookback-day window.") {
+                MCol("Avg", MaterialSortCol.AVG, sort, asc, onSort, Modifier.width(80.dp))
+            }
+            Tip(
+                "Your current holding: quantity @ average buy price, from your wallet transaction history " +
+                    "(average-cost, not FIFO). Used to anchor the buy ladder to your real entry instead of the live price.",
+            ) {
+                MCol("Held", MaterialSortCol.HELD, sort, asc, onSort, Modifier.width(95.dp))
+            }
+            Tip("How far below the Lookback-window's highest price the current price sits.") {
+                MCol("Drawdown", MaterialSortCol.DRAWDOWN, sort, asc, onSort, Modifier.width(75.dp))
+            }
+            Tip(
+                "How far below the Lookback-window average the current price sits -- the core \"is it cheap\" number this " +
+                    "tab ranks candidates by.",
+            ) {
+                MCol("vs Avg", MaterialSortCol.VS_AVG, sort, asc, onSort, Modifier.width(65.dp))
+            }
+            Tip("Price change over the last 7 days.") {
+                MCol("7d", MaterialSortCol.TREND, sort, asc, onSort, Modifier.width(55.dp))
+            }
+            Tip(
+                "Replays this same \"buy when below the trailing Lookback-day average by Min Discount %\" rule over up to " +
+                    "a year of this item's own history. Format: final P&L% (worst paper drawdown% along the way). A negative " +
+                    "first number is a warning sign -- the dip-buying pattern hasn't historically paid off for this item.",
+            ) {
+                MCol("Backtest", MaterialSortCol.BACKTEST, sort, asc, onSort, Modifier.width(105.dp))
+            }
+            Tip("Price swinginess over the lookback window (std-dev ÷ average). Higher = choppier.") {
+                MCol("Volatility", MaterialSortCol.VOLATILITY, sort, asc, onSort, Modifier.width(70.dp))
+            }
+            Tip("Median daily trade volume over the lookback window.") {
+                MCol("Vol/day", MaterialSortCol.VOLUME, sort, asc, onSort, Modifier.width(65.dp))
+            }
+            Tip("ISK allocated to this item from your total budget, after ranking, the per-item cap, and the liquidity cap.") {
+                MCol("Allocated", MaterialSortCol.ALLOCATED, sort, asc, onSort, Modifier.width(80.dp))
+            }
             Spacer(Modifier.width(28.dp))
         }
     }
@@ -601,12 +687,14 @@ private fun MaterialRow(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.width(80.dp),
             )
-            IconButton(onClick = onCreateAlerts, modifier = Modifier.size(28.dp)) {
-                Icon(
-                    Icons.Default.NotificationsActive,
-                    contentDescription = "Create alerts for this item's buy ladder",
-                    modifier = Modifier.size(15.dp),
-                )
+            Tip("Create price alerts (Alerts tab) for this item's remaining buy-ladder trigger prices -- skips levels already crossed.") {
+                IconButton(onClick = onCreateAlerts, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        Icons.Default.NotificationsActive,
+                        contentDescription = "Create alerts for this item's buy ladder",
+                        modifier = Modifier.size(15.dp),
+                    )
+                }
             }
         }
         val ladderLine =
@@ -626,20 +714,49 @@ private fun MaterialRow(
                 }
             }
         if (ladderLine.isNotEmpty()) {
-            Text(
-                ladderLine,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 28.dp, top = 1.dp),
-            )
+            Tip(
+                "Buy: trigger price → ISK to spend at that level (* = already at/below the live price). " +
+                    "Sell: your take-profit target price → quantity to sell, only shown while you hold a position.",
+            ) {
+                Text(
+                    ladderLine,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = 28.dp, top = 1.dp),
+                )
+            }
         }
     }
     HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
 }
 
 private fun signedPct(pct: Double): String = "${if (pct >= 0) "+" else ""}${String.format(Locale.US, "%.0f", pct)}%"
+
+// Hover-to-explain wrapper for a filter field or column header -- this tab has several numbers
+// (Lookback d, the Backtest column, the ladder anchor logic) that read as self-explanatory but
+// aren't, so every non-obvious control gets one rather than relying on remembering an explanation
+// from outside the app.
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun Tip(
+    text: String,
+    content: @Composable () -> Unit,
+) {
+    TooltipArea(
+        tooltip = {
+            Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surfaceVariant, shadowElevation = 4.dp) {
+                Text(
+                    text,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(8.dp).widthIn(max = 280.dp),
+                )
+            }
+        },
+        content = content,
+    )
+}
 
 // Creates a below-current-price alert (AlertMonitor compares against best sell, matching what
 // `currentPrice` means throughout this tab) for each buy-ladder level not already crossed, skipping
