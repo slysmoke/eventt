@@ -606,12 +606,18 @@ private fun MaterialRow(
                     modifier = Modifier.weight(1f, fill = false),
                 )
                 if (c.spikeDetected) {
-                    Icon(
-                        Icons.Default.Warning,
-                        contentDescription = "Recent price spike detected",
-                        modifier = Modifier.size(13.dp),
-                        tint = warningColor,
-                    )
+                    Tip(
+                        "Recent price or volume spike detected -- a sharp one-off jump (e.g. a single large buyout, or wash " +
+                            "trading) rather than an organic move. Doesn't exclude the item by itself (Spike Filter is set to " +
+                            "\"Any\"); check the price chart (ⓘ) before trusting the ladder on this one.",
+                    ) {
+                        Icon(
+                            Icons.Default.Warning,
+                            contentDescription = "Recent price spike detected",
+                            modifier = Modifier.size(13.dp),
+                            tint = warningColor,
+                        )
+                    }
                 }
                 IconButton(onClick = { onShowDetails(c.typeId) }, modifier = Modifier.size(20.dp)) {
                     Icon(Icons.Default.Info, contentDescription = "Item details", modifier = Modifier.size(14.dp))
