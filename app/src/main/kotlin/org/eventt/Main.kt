@@ -18,6 +18,7 @@ import org.eventt.core.model.AppPaths
 import org.eventt.core.model.HotkeyBindings
 import org.eventt.core.nostr.NostrIdentityService
 import org.eventt.core.nostr.NostrRelayManager
+import org.eventt.features.assets.AssetWatchService
 import org.eventt.features.contracts.ContractWatchService
 import org.eventt.features.orders.LeaderboardPublisher
 import org.eventt.features.orders.MarketWatchService
@@ -101,6 +102,8 @@ fun main() {
     MarketWatchService.start()
     // Opt-in background contract refresh + status-change badge — see ContractWatchService.
     ContractWatchService.start()
+    // Opt-in background asset refresh — see AssetWatchService.
+    AssetWatchService.start()
     NostrRelayManager.start()
     // Opt-in trader leaderboard republish sweep — see LeaderboardPublisher.
     LeaderboardPublisher.start()
@@ -121,6 +124,7 @@ fun main() {
                 MarketLogWatcher.stop()
                 MarketWatchService.stop()
                 ContractWatchService.stop()
+                AssetWatchService.stop()
                 LeaderboardPublisher.stop()
                 StreamOverlayServer.stop()
                 NostrRelayManager.stop()
