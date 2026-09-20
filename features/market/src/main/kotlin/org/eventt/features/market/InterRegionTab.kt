@@ -90,7 +90,6 @@ internal fun InterRegionTab(
     // Excludes an item entirely if a single unit alone exceeds this (too bulky to haul at all) —
     // not a total-cargo-hold cap on suggested quantity, see regionFinalVol's own doc comment.
     var maxCargoM3 by remember { mutableStateOf("50000") }
-    var minNetProfit by remember { mutableStateOf("5000000") }
     var isAnalyzing by remember { mutableStateOf(false) }
     var analyzeJob by remember { mutableStateOf<Job?>(null) }
     var statusMsg by remember { mutableStateOf("") }
@@ -107,6 +106,7 @@ internal fun InterRegionTab(
     var spikePriceMultiplier by remember { mutableStateOf("1.8") }
     var spikeVolumeMultiplier by remember { mutableStateOf("5") }
     var spikeWindowDays by remember { mutableStateOf("7") }
+    var useAdam4Eve by remember { mutableStateOf(false) }
     var histSourceIsEsi by remember { mutableStateOf(false) }
     var routePresets by remember { mutableStateOf<List<RoutePreset>>(emptyList()) }
     var showSavePresetDialog by remember { mutableStateOf(false) }
@@ -133,7 +133,6 @@ internal fun InterRegionTab(
             S.get(S.IR_SHIP_BY_COST_ENABLED)?.let { shippingByCostEnabled = it == "true" }
             S.get(S.IR_SHIP_COST_PCT)?.let { shippingCostPct = it }
             S.get(S.IR_MAX_CARGO)?.let { maxCargoM3 = it }
-            S.get(S.IR_MIN_PROFIT)?.let { minNetProfit = it }
             S.get(S.IR_VOL_CAP_ENABLED)?.let { volCapEnabled = it == "true" }
             S.get(S.IR_VOL_CAP_PCT)?.let { volCapPct = it }
             S.get(S.IR_COPY_VOLUME)?.let { copyVolumeEnabled = it == "true" }
@@ -142,6 +141,7 @@ internal fun InterRegionTab(
             S.get(S.IR_SPIKE_PRICE_MULTIPLIER)?.let { spikePriceMultiplier = it }
             S.get(S.IR_SPIKE_VOLUME_MULTIPLIER)?.let { spikeVolumeMultiplier = it }
             S.get(S.IR_SPIKE_WINDOW_DAYS)?.let { spikeWindowDays = it }
+            S.get(S.IR_USE_ADAM4EVE)?.let { useAdam4Eve = it == "true" }
             routePresets = decodeRoutePresets(S.get(S.IR_PRESETS))
             if (charId != null) {
                 brokerFeePct = StaticDataDao.getCharBrokersFee(charId)
@@ -246,7 +246,6 @@ internal fun InterRegionTab(
         val cache = cachedAnalysis ?: return
         val maxCargoM3D = maxCargoM3.toDoubleOrNull() ?: Double.MAX_VALUE
         val minMarginD = minMargin.toDoubleOrNull() ?: 0.0
-        val minNetD = minNetProfit.toDoubleOrNull() ?: 0.0
         val marginLimitD = marginLimitPct.toDoubleOrNull() ?: 0.0
         val iskPerM3D = iskPerM3.toDoubleOrNull() ?: 1000.0
         val shippingCostPctD = shippingCostPct.toDoubleOrNull() ?: 0.0
@@ -271,7 +270,6 @@ internal fun InterRegionTab(
                             iskPerM3D,
                             maxCargoM3D,
                             minMarginD,
-                            minNetD,
                             cache.brokerFeePct,
                             cache.salesTaxPct,
                             cache.buyStationId,
@@ -290,6 +288,8 @@ internal fun InterRegionTab(
                             spikePriceMultiplier = spikePriceMultiplierD,
                             spikeVolumeMultiplier = spikeVolumeMultiplierD,
                             spikeWindowDays = spikeWindowDaysD,
+                            buyStationFlow = cache.buyStationFlow[typeId],
+                            sellStationFlow = cache.sellStationFlow[typeId],
                         )
                     }.sortedByDescending { it.netProfit }
             withContext(Dispatchers.Main) {
@@ -305,7 +305,6 @@ internal fun InterRegionTab(
     // field doesn't recompute on every keystroke.
     LaunchedEffect(
         minMargin,
-        minNetProfit,
         marginLimitEnabled,
         marginLimitPct,
         iskPerM3,
@@ -472,12 +471,6 @@ internal fun InterRegionTab(
                         maxCargoM3 = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MAX_CARGO, it) } }
                     }
-                    // Filters by total profit potential (net/unit x achievable volume), not the
-                    // per-unit figure -- see the totalProfit comment in computeRegionOpportunityForType.
-                    ParamField("Min Total Profit", minNetProfit, 108.dp) {
-                        minNetProfit = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MIN_PROFIT, it) } }
-                    }
                     FilterDivider()
                     // The % always scales whichever side is currently selected as the volume basis:
                     // the source/buy region's daily volume when checked, the destination/sell
@@ -503,6 +496,19 @@ internal fun InterRegionTab(
                             onCheckedChange = {
                                 skipExistingOrders = it
                                 scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SKIP_EXISTING, it.toString()) } }
+                            },
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                    // Caps the leg(s) that are our own placed order (waiting for a counterparty) by
+                    // real Adam4EVE per-side flow at that station -- see regionFinalVol. Off by
+                    // default: a third-party dependency, opt-in.
+                    FilterControl("Adam4EVE Flow") {
+                        Checkbox(
+                            checked = useAdam4Eve,
+                            onCheckedChange = {
+                                useAdam4Eve = it
+                                scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_USE_ADAM4EVE, it.toString()) } }
                             },
                             modifier = Modifier.size(24.dp),
                         )
@@ -588,7 +594,6 @@ internal fun InterRegionTab(
                                     // Trading), not a silent revert to a nonzero 50000 m³ cap.
                                     val maxCargoM3D = maxCargoM3.toDoubleOrNull() ?: Double.MAX_VALUE
                                     val minMarginD = minMargin.toDoubleOrNull() ?: 0.0
-                                    val minNetD = minNetProfit.toDoubleOrNull() ?: 0.0
                                     val marginLimitD = marginLimitPct.toDoubleOrNull() ?: 0.0
                                     val brokerFeeD = brokerFeePct
                                     val salesTaxD = salesTaxPct
@@ -598,6 +603,7 @@ internal fun InterRegionTab(
                                     val spikePriceMultiplierSnap = spikePriceMultiplier.toDoubleOrNull() ?: 1.8
                                     val spikeVolumeMultiplierSnap = spikeVolumeMultiplier.toDoubleOrNull() ?: 5.0
                                     val spikeWindowDaysSnap = spikeWindowDays.toIntOrNull() ?: 7
+                                    val useAdam4EveSnap = useAdam4Eve
                                     val histSrc = withContext(Dispatchers.IO) { EveRefService.getSelectedSource() }
                                     try {
                                         // Same citadel/jump-range reachability as Station Trading, built once up
@@ -658,6 +664,23 @@ internal fun InterRegionTab(
                                                 allTypeIds.filter { it !in excluded }
                                             } else {
                                                 allTypeIds
+                                            }
+
+                                        // One CSV download (cached process-wide) covers both stations --
+                                        // fetched once up front, same as Station Trading.
+                                        val buyStationFlow: Map<Int, StationFlow> =
+                                            if (useAdam4EveSnap && buyStSnap != null) {
+                                                statusMsg = "Fetching Adam4EVE flow…"
+                                                Adam4EveFlowService.fetchStationFlow(buyStSnap, typeIds)
+                                            } else {
+                                                emptyMap()
+                                            }
+                                        val sellStationFlow: Map<Int, StationFlow> =
+                                            if (useAdam4EveSnap && sellStSnap != null) {
+                                                statusMsg = "Fetching Adam4EVE flow…"
+                                                Adam4EveFlowService.fetchStationFlow(sellStSnap, typeIds)
+                                            } else {
+                                                emptyMap()
                                             }
                                         // Order books behind whichever path fetches them below,
                                         // retained after this run completes so a later filter-only
@@ -744,7 +767,6 @@ internal fun InterRegionTab(
                                                                         iskPerM3D,
                                                                         maxCargoM3D,
                                                                         minMarginD,
-                                                                        minNetD,
                                                                         brokerFeeD,
                                                                         salesTaxD,
                                                                         buyStSnap,
@@ -763,6 +785,8 @@ internal fun InterRegionTab(
                                                                         spikePriceMultiplier = spikePriceMultiplierSnap,
                                                                         spikeVolumeMultiplier = spikeVolumeMultiplierSnap,
                                                                         spikeWindowDays = spikeWindowDaysSnap,
+                                                                        buyStationFlow = buyStationFlow[typeId],
+                                                                        sellStationFlow = sellStationFlow[typeId],
                                                                     )
                                                                 val (sorted, c, f) =
                                                                     mutex.withLock {
@@ -810,6 +834,8 @@ internal fun InterRegionTab(
                                                 buyDistanceFromStation = buyDistances,
                                                 sellStationSystemId = sellSystemId,
                                                 sellDistanceFromStation = sellDistances,
+                                                buyStationFlow = buyStationFlow,
+                                                sellStationFlow = sellStationFlow,
                                             )
                                     } catch (e: CancellationException) {
                                         statusMsg = "Stopped — ${results.size} opportunities found so far"
@@ -1036,6 +1062,8 @@ private data class CachedAnalysisInput(
     val buyDistanceFromStation: Map<Int, Int>,
     val sellStationSystemId: Int?,
     val sellDistanceFromStation: Map<Int, Int>,
+    val buyStationFlow: Map<Int, StationFlow> = emptyMap(),
+    val sellStationFlow: Map<Int, StationFlow> = emptyMap(),
 )
 
 // ─── Saved routes (buy region/station + sell region/station), for repeat trade lanes ──────

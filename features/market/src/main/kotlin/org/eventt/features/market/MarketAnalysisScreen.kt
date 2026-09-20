@@ -35,6 +35,11 @@ data class StationOpportunity(
     // The same net profit relative to the buy price — return on the capital tied up.
     val roiPct: Double,
     val dailyVolume: Long,
+    // dailyVolume, further capped by real per-side Adam4EVE flow when available (see
+    // Adam4EveFlowService) -- what "Est. Daily" and suggested order sizing should actually use;
+    // dailyVolume itself stays the raw ESI number so filters/other displays keep meaning it as
+    // "region history volume" unchanged.
+    val effectiveDailyVol: Long,
     val sellOrderCount: Int,
     val buyOrderCount: Int,
     val estimatedDailyProfit: Double,
@@ -70,6 +75,11 @@ data class RegionOpportunity(
     // not netProfit * profitableVolume — later lots in the walk have thinner margins than the best
     // one, so that shortcut would overstate total profit.
     val profitableTotalProfit: Double = 0.0,
+    // Real per-side Adam4EVE flow at the relevant station for whichever leg is *our own placed
+    // order* (waiting for a counterparty), not an existing order the walk above already accounts
+    // for. Null = no Adam4EVE data / not applicable to this trade type -- see regionFinalVol.
+    val adam4EveBuyLegVol: Long? = null,
+    val adam4EveSellLegVol: Long? = null,
     val priceChange7d: Double = Double.NaN,
     // How today's price compares to a typical day this week — different question from
     // priceChange7d (which is "is the price trending up/down"), this is "is today's price
@@ -133,15 +143,17 @@ internal enum class SpikeFilter(
 
 // The effective daily volume for a station opportunity once the volume modifier is applied —
 // shared by sorting, row display, clipboard copy, and the hotkey queue so they never disagree.
+// Starts from effectiveDailyVol (already Adam4EVE-capped), not the raw dailyVolume, or the manual
+// "Vol %" knob would silently discard that cap the moment it's enabled.
 fun stationEffVol(
     opp: StationOpportunity,
     volCapEnabled: Boolean,
     volCapPct: Double,
 ): Long =
-    if (volCapEnabled && opp.dailyVolume > 0) {
-        (opp.dailyVolume * volCapPct / 100.0).toLong().coerceAtLeast(1)
+    if (volCapEnabled && opp.effectiveDailyVol > 0) {
+        (opp.effectiveDailyVol * volCapPct / 100.0).toLong().coerceAtLeast(1)
     } else {
-        opp.dailyVolume
+        opp.effectiveDailyVol
     }
 
 internal fun sortStation(
@@ -187,17 +199,43 @@ fun regionEffVol(
 // capped by vol/day — can't sell faster than the destination market actually absorbs, however much
 // profitable stock is sitting at the source. BUY_TO_BUY/SELL_TO_BUY's destination leg is an
 // instant fill into an existing buy order, so the order-book walk alone is already the true limit.
+//
+// Beyond that, any leg that's *our own placed order* (waiting for a counterparty, not consuming an
+// existing order like the walk above) gets an extra ceiling from real Adam4EVE per-side flow at
+// that station when available — an existing buy/sell order sitting in the book doesn't mean it
+// ever actually fills (see issue #32's station-trading fix, same idea applied per leg here).
 internal fun regionFinalVol(
     opp: RegionOpportunity,
     tradeType: InterRegionTradeType,
     volCapEnabled: Boolean,
     volCapPct: Double,
-): Long =
-    when (tradeType) {
-        InterRegionTradeType.BUY_TO_SELL, InterRegionTradeType.SAFE_BUY_TO_SELL -> regionEffVol(opp, volCapEnabled, volCapPct)
-        InterRegionTradeType.SELL_TO_SELL -> minOf(opp.profitableVolume, regionEffVol(opp, volCapEnabled, volCapPct))
-        InterRegionTradeType.BUY_TO_BUY, InterRegionTradeType.SELL_TO_BUY -> opp.profitableVolume
-    }
+): Long {
+    val base =
+        when (tradeType) {
+            InterRegionTradeType.BUY_TO_SELL, InterRegionTradeType.SAFE_BUY_TO_SELL -> regionEffVol(opp, volCapEnabled, volCapPct)
+            InterRegionTradeType.SELL_TO_SELL -> minOf(opp.profitableVolume, regionEffVol(opp, volCapEnabled, volCapPct))
+            InterRegionTradeType.BUY_TO_BUY, InterRegionTradeType.SELL_TO_BUY -> opp.profitableVolume
+        }
+    val adam4EveCap =
+        when (tradeType) {
+            InterRegionTradeType.BUY_TO_SELL, InterRegionTradeType.SAFE_BUY_TO_SELL -> {
+                listOfNotNull(opp.adam4EveBuyLegVol, opp.adam4EveSellLegVol).minOrNull()
+            }
+
+            InterRegionTradeType.SELL_TO_SELL -> {
+                opp.adam4EveSellLegVol
+            }
+
+            InterRegionTradeType.BUY_TO_BUY -> {
+                opp.adam4EveBuyLegVol
+            }
+
+            InterRegionTradeType.SELL_TO_BUY -> {
+                null
+            }
+        }
+    return adam4EveCap?.let { minOf(base, it) } ?: base
+}
 
 // Estimated total profit at regionFinalVol — the exact walked total when the vol/day cap didn't
 // bind, otherwise profitableTotalProfit scaled proportionally (a fair approximation: we don't know
@@ -264,6 +302,7 @@ internal object S {
     const val ST_SPIKE_PRICE_MULTIPLIER = "analysis.s.spikePriceMultiplier"
     const val ST_SPIKE_VOLUME_MULTIPLIER = "analysis.s.spikeVolumeMultiplier"
     const val ST_SPIKE_WINDOW_DAYS = "analysis.s.spikeWindowDays"
+    const val ST_USE_ADAM4EVE = "analysis.s.useAdam4Eve"
 
     // Inter-region keys
     const val IR_BUY_REGION = "analysis.r.buyRegion"
@@ -280,7 +319,6 @@ internal object S {
     const val IR_SHIP_BY_COST_ENABLED = "analysis.r.shipByCostEnabled"
     const val IR_SHIP_COST_PCT = "analysis.r.shipCostPct"
     const val IR_MAX_CARGO = "analysis.r.maxCargo"
-    const val IR_MIN_PROFIT = "analysis.r.minProfit"
     const val IR_VOL_CAP_ENABLED = "analysis.r.volCapEnabled"
     const val IR_VOL_CAP_PCT = "analysis.r.volCapPct"
     const val IR_COPY_VOLUME = "analysis.r.copyVolume"
@@ -290,6 +328,7 @@ internal object S {
     const val IR_SPIKE_VOLUME_MULTIPLIER = "analysis.r.spikeVolumeMultiplier"
     const val IR_SPIKE_WINDOW_DAYS = "analysis.r.spikeWindowDays"
     const val IR_PRESETS = "analysis.r.presets"
+    const val IR_USE_ADAM4EVE = "analysis.r.useAdam4Eve"
 
     // Materials investment (DCA) keys
     const val MI_REGION = "analysis.m.region"
@@ -352,7 +391,7 @@ fun MarketAnalysisScreen() {
             Tab(
                 selected = selectedTab == 2,
                 onClick = { selectedTab = 2 },
-                text = { Text("Materials Investment") },
+                text = { Text("Long-Term Investment (WIP)") },
                 icon = { Icon(Icons.AutoMirrored.Filled.TrendingDown, null, Modifier.size(16.dp)) },
             )
         }

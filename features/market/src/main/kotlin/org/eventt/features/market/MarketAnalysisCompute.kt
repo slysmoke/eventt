@@ -10,6 +10,7 @@ import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.PLEX_MARKET_REGION_ID
 import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.eveSigFigStep
+import kotlin.math.ceil
 import kotlin.math.round
 
 // ─── Analysis helpers (run on Dispatchers.IO) ─────────────────────────────
@@ -91,6 +92,10 @@ internal fun computeOpportunityForType(
     spikePriceMultiplier: Double = 1.8,
     spikeVolumeMultiplier: Double = 5.0,
     spikeWindowDays: Int = 7,
+    // Real per-side fill data for this station/type (see Adam4EveFlowService) -- when present,
+    // caps estimatedDailyProfit at the slower of the two sides instead of trusting ESI's
+    // region-wide, both-sides-combined history alone (issue #32).
+    adam4EveFlow: StationFlow? = null,
 ): StationOpportunity? {
     fun Map<String, Any?>.loc() = (get("location_id") as? Number)?.toLong()
 
@@ -128,6 +133,21 @@ internal fun computeOpportunityForType(
     if (spikeFilter == SpikeFilter.EXCLUDE && spikeDetected) return null
     if (spikeFilter == SpikeFilter.ONLY && !spikeDetected) return null
 
+    // A resting buy order can sit unfilled indefinitely regardless of price, so per-side flow is
+    // only ever used to shrink the estimate, never to grow it past what region history already
+    // implies -- it's a real-world floor's counterpart: a ceiling on an otherwise-unbounded guess.
+    // Kept fractional (e.g. 0.2/day for "1 unit every 5 days") rather than floored to a whole
+    // unit: capital-tier items genuinely trade below 1/day, and flooring that to 0 makes real,
+    // in-game-verifiable activity look like "no data" instead of "thin but real."
+    val effectiveDailyVolD: Double =
+        adam4EveFlow?.let {
+            minOf(medianDailyVol.toDouble(), it.buyAmount, it.sellAmount)
+        } ?: medianDailyVol.toDouble()
+    // Whole-unit rounding only for display/order-sizing (stationEffVol, "Vol/day") -- you can't
+    // actually list half a ship, but ceil (not floor) so "some real activity" still reads as ≥1
+    // rather than collapsing back to the same misleading 0 this fix exists to avoid.
+    val effectiveDailyVol = ceil(effectiveDailyVolD).toLong()
+
     return StationOpportunity(
         typeId = typeId,
         typeName = type.name,
@@ -138,9 +158,10 @@ internal fun computeOpportunityForType(
         marginPct = marginPct,
         roiPct = netProfit / bestBuy * 100.0,
         dailyVolume = medianDailyVol,
+        effectiveDailyVol = effectiveDailyVol,
         sellOrderCount = sells.size,
         buyOrderCount = buys.size,
-        estimatedDailyProfit = netProfit * medianDailyVol.coerceAtLeast(1),
+        estimatedDailyProfit = netProfit * effectiveDailyVol,
         priceChange7d = compute7dChange(history),
         spikeDetected = spikeDetected,
     )
@@ -318,7 +339,6 @@ internal fun computeRegionOpportunityForType(
     iskPerM3: Double,
     maxCargoM3: Double,
     minMarginPct: Double,
-    minNetProfit: Double,
     brokerFeePct: Double,
     salesTaxPct: Double,
     buyStationId: Long? = null,
@@ -348,6 +368,12 @@ internal fun computeRegionOpportunityForType(
     spikePriceMultiplier: Double = 1.8,
     spikeVolumeMultiplier: Double = 5.0,
     spikeWindowDays: Int = 7,
+    // Real per-side fill data (see Adam4EveFlowService) for whichever station holds *our own
+    // placed order* for this trade type -- e.g. BUY_TO_SELL places a buy order at buyStationId and
+    // a sell order at sellStationId, so both are relevant; SELL_TO_SELL only places a sell order at
+    // sellStationId, so only that one matters (regionFinalVol picks the right one(s) per type).
+    buyStationFlow: StationFlow? = null,
+    sellStationFlow: StationFlow? = null,
 ): RegionOpportunity? {
     fun Map<String, Any?>.price() = (get("price") as? Number)?.toDouble() ?: 0.0
 
@@ -537,19 +563,6 @@ internal fun computeRegionOpportunityForType(
     if (spikeFilter == SpikeFilter.EXCLUDE && spikeDetected) return null
     if (spikeFilter == SpikeFilter.ONLY && !spikeDetected) return null
 
-    // Total profit potential (net per unit x achievable volume), not just the per-unit figure --
-    // 100k/unit x 100 units/day beats 6M on a single unit, but the old per-unit-only check let the
-    // single unit through and rejected the real opportunity. BUY_TO_SELL/SAFE_BUY_TO_SELL have no
-    // real order book to walk (both legs are our own placed orders, so profitableTotalProfit is
-    // always 0 for them) -- they use the destination's estimated daily volume instead.
-    val totalProfit =
-        if (tradeType == InterRegionTradeType.BUY_TO_SELL || tradeType == InterRegionTradeType.SAFE_BUY_TO_SELL) {
-            finalNetProfit * volSell
-        } else {
-            profitableTotalProfit
-        }
-    if (totalProfit < minNetProfit) return null
-
     return RegionOpportunity(
         typeId = typeId,
         typeName = type.name,
@@ -561,6 +574,8 @@ internal fun computeRegionOpportunityForType(
         netProfit = finalNetProfit,
         profitableVolume = profitableVolume,
         profitableTotalProfit = profitableTotalProfit,
+        adam4EveBuyLegVol = buyStationFlow?.let { ceil(it.buyAmount).toLong() },
+        adam4EveSellLegVol = sellStationFlow?.let { ceil(it.sellAmount).toLong() },
         marginPct = finalMarginPct,
         // Return on the capital actually outlaid per unit: the item plus its hauling cost.
         roiPct = finalNetProfit / (finalBuyPrice + shipping) * 100.0,
