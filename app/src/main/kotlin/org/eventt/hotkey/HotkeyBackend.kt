@@ -3,8 +3,8 @@ package org.eventt.hotkey
 import org.eventt.core.model.HotkeyCombo
 
 /**
- * One physical global hotkey combo (any mix of Ctrl/Alt/Shift + a letter), expressed in whatever
- * form each native backend needs to register it.
+ * One physical global hotkey combo (any mix of Ctrl/Alt/Shift + a letter or F1-F12), expressed in
+ * whatever form each native backend needs to register it.
  */
 data class HotkeyKey(
     val label: String,
@@ -50,12 +50,33 @@ data class HotkeyKey(
                 'Z' to 0x06,
             )
 
+        // macOS virtual keycodes for F1..F12 (kVK_F1..kVK_F12, Carbon HIToolbox Events.h), index 0 = F1.
+        private val MAC_VK_F = listOf(0x7A, 0x78, 0x63, 0x76, 0x60, 0x61, 0x62, 0x64, 0x65, 0x6D, 0x67, 0x6F)
+
+        // Win32 VK_F1 = 0x70, consecutive through VK_F12 = 0x7B.
+        private const val WIN32_VK_F1 = 0x70
+
         fun fromCombo(
             combo: HotkeyCombo,
             id: Int,
         ): HotkeyKey {
-            val u = combo.letter.uppercaseChar()
-            require(u in 'A'..'Z') { "hotkey letter must be A-Z, got '${combo.letter}'" }
+            // HotkeyCombo only admits "A".."Z" and "F1".."F12", so any multi-char key is an F-key.
+            if (combo.key.length > 1) {
+                val fKey = combo.key.drop(1).toInt()
+                require(fKey in 1..12) { "hotkey key must be A-Z or F1-F12, got '${combo.key}'" }
+                return HotkeyKey(
+                    label = combo.label,
+                    ctrl = combo.ctrl,
+                    alt = combo.alt,
+                    shift = combo.shift,
+                    win32VkCode = WIN32_VK_F1 + (fKey - 1),
+                    x11KeyString = "F$fKey",
+                    macVkCode = MAC_VK_F[fKey - 1],
+                    id = id,
+                )
+            }
+            val u = combo.key.singleOrNull()?.uppercaseChar()
+            require(u != null && u in 'A'..'Z') { "hotkey key must be A-Z or F1-F12, got '${combo.key}'" }
             return HotkeyKey(
                 label = combo.label,
                 ctrl = combo.ctrl,
