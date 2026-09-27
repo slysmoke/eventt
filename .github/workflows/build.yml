@@ -15,9 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # Empty for push events, which checkout treats as "default ref" (the pushed commit) —
-          # only pull_request needs this, to get the actual PR branch instead of the ephemeral
-          # merge commit checkout defaults to (which has nowhere to push a fix commit back to).
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.head_ref }}
 
       - uses: actions/setup-java@v6.0.0
