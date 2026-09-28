@@ -28,6 +28,10 @@ object CostBasisService {
         // Purchase date of the oldest remaining FIFO lot — how long the capital in this
         // item has been sitting unsold. Null only for legacy/synthetic results.
         val oldestLotDate: String? = null,
+        // When this position last went from zero to held — the start of the current holding
+        // cycle. Realized P&L shown against the current stack counts only sells since then, so a
+        // bought-sold-rebought item doesn't carry an earlier, closed cycle's profit.
+        val cycleStartDate: String? = null,
     ) {
         val daysHeld: Long?
             get() =
@@ -127,6 +131,7 @@ object CostBasisService {
         val sellRelistPerUnit = relistPerUnitByType(characterId, corporationId, isBuyOrder = false)
 
         val lots = mutableMapOf<Int, ArrayDeque<Lot>>()
+        val cycleStart = mutableMapOf<Int, String>()
         val typeNames = mutableMapOf<Int, String>()
         val realized = mutableListOf<RealizedSellTx>()
         var writtenOffCost = 0.0
@@ -147,7 +152,9 @@ object CostBasisService {
                         // order (and so no broker fee/relists) behind it at all.
                         val adjustedCost =
                             if (tx.isP2p) tx.unitPrice else tx.unitPrice * taxConfig.buyMultiplier + (buyRelistPerUnit[tx.typeId] ?: 0.0)
-                        lots.getOrPut(tx.typeId) { ArrayDeque() }.addLast(Lot(tx.quantity, adjustedCost, tx.date))
+                        val queue = lots.getOrPut(tx.typeId) { ArrayDeque() }
+                        if (queue.isEmpty()) cycleStart[tx.typeId] = tx.date
+                        queue.addLast(Lot(tx.quantity, adjustedCost, tx.date))
                     } else {
                         val queue = lots.getOrPut(tx.typeId) { ArrayDeque() }
                         var remaining = tx.quantity
@@ -209,6 +216,7 @@ object CostBasisService {
                         if (qty > 0) cost / qty else 0.0,
                         cost,
                         oldestLotDate = queue.firstOrNull()?.date,
+                        cycleStartDate = cycleStart[typeId],
                     )
                 }.filter { it.value.remainingQty > 0 }
 

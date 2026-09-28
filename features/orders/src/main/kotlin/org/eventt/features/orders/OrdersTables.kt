@@ -530,7 +530,13 @@ internal fun InventoryTable(
         remember(inventory, sellByType, realizedByType, marketPrices, tax) {
             inventory.values.map { item ->
                 val activeOrder = sellByType[item.typeId]?.maxByOrNull { it.price }
-                val realized = realizedByType[item.typeId]?.sumOf { it.profit }
+                // Current holding cycle only — see InventoryItem.cycleStartDate. Earlier closed
+                // cycles' profit lives in History, not against the stack being held now.
+                val realized =
+                    realizedByType[item.typeId]
+                        ?.filter { sell -> item.cycleStartDate == null || sell.date >= item.cycleStartDate }
+                        ?.takeIf { it.isNotEmpty() }
+                        ?.sumOf { it.profit }
                 val sellPrice = activeOrder?.price ?: marketPrices[item.typeId]
                 val netSellPrice = sellPrice?.let { it * tax.sellMultiplier }
                 val profitPerUnit = netSellPrice?.let { it - item.avgCostBasis }

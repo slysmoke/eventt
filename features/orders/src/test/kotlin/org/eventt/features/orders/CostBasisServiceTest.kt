@@ -66,6 +66,23 @@ class CostBasisServiceTest {
     ) = WalletDao.RawTxRecord(date, typeId, "Tritanium", qty, price, isBuy = false, isP2p = true)
 
     @Test
+    fun `holding cycle restarts when a position is rebought after being fully sold`() {
+        stubTransactions(
+            buy("2026-07-17", 5, 241.0),
+            sell("2026-07-18", 5, 276.0),
+            buy("2026-09-08", 3, 186.0),
+            sell("2026-09-10", 1, 200.0),
+            buy("2026-09-14", 2, 177.0),
+        )
+
+        val item = CostBasisService.compute(characterId = 1).inventory.getValue(TYPE_ID)
+
+        item.remainingQty shouldBe 4
+        // The September rebuy starts a new cycle; a partial sell inside it doesn't.
+        item.cycleStartDate shouldBe "2026-09-08"
+    }
+
+    @Test
     fun `a full sell of a single buy lot computes cost basis net of tax and broker fee`() {
         stubTransactions(
             buy("2024-01-01", 10, 100.0),
