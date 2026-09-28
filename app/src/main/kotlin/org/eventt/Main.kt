@@ -18,7 +18,9 @@ import org.eventt.core.model.AppPaths
 import org.eventt.core.model.HotkeyBindings
 import org.eventt.core.nostr.NostrIdentityService
 import org.eventt.core.nostr.NostrRelayManager
+import org.eventt.features.assets.AssetWatchService
 import org.eventt.features.contracts.ContractWatchService
+import org.eventt.features.market.A4eHistorySync
 import org.eventt.features.orders.LeaderboardPublisher
 import org.eventt.features.orders.MarketWatchService
 import org.eventt.features.orders.PendingOrdersQueue
@@ -101,12 +103,17 @@ fun main() {
     MarketWatchService.start()
     // Opt-in background contract refresh + status-change badge — see ContractWatchService.
     ContractWatchService.start()
+    // Opt-in background asset refresh — see AssetWatchService.
+    AssetWatchService.start()
     NostrRelayManager.start()
     // Opt-in trader leaderboard republish sweep — see LeaderboardPublisher.
     LeaderboardPublisher.start()
     // Opt-in OBS overlay server — see StreamOverlaySettingsCard's autostart checkbox.
     StreamOverlayServer.startIfAutostartEnabled()
     P2pRequestNotifier.start()
+    // ~A year of Adam4EVE per-side fill history for the item chart — weekly files backfill once,
+    // then the current week's daily files top it up. See A4eHistorySync.
+    A4eHistorySync.start()
     // Keeps the P2P Market active identity following whichever character (or corp's acting
     // character) is selected in the main nav — there's no separate manual picker for it anymore.
     CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { NostrIdentityService.followAppCharacterSelection() }
@@ -120,7 +127,9 @@ fun main() {
                 GlobalHotkeyService.stop()
                 MarketLogWatcher.stop()
                 MarketWatchService.stop()
+                A4eHistorySync.stop()
                 ContractWatchService.stop()
+                AssetWatchService.stop()
                 LeaderboardPublisher.stop()
                 StreamOverlayServer.stop()
                 NostrRelayManager.stop()

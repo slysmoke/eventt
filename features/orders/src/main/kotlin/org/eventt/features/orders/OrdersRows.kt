@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import org.eventt.core.database.AppState
 import org.eventt.core.database.OrderHistoryDao
 import org.eventt.ui.common.formatIsk
+import org.eventt.ui.common.onRightClick
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.eventt.ui.theme.warningColor
@@ -59,7 +61,10 @@ internal fun SellOrderRow(
                 .fillMaxWidth()
                 .background(rowBg)
                 .clickable { onSelect() }
-                .padding(horizontal = 8.dp, vertical = 3.dp),
+                .onRightClick {
+                    ItemDetailRequest.target =
+                        ItemDetailTarget(order.typeId, order.typeName, order.regionId, order.locationId.takeIf { !order.isBuyOrder })
+                }.padding(horizontal = 8.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Name + status dot
@@ -78,6 +83,15 @@ internal fun SellOrderRow(
                 overflow = TextOverflow.Ellipsis,
                 maxLines = 1,
                 modifier = Modifier.weight(1f),
+            )
+            ItemDetailButton(
+                ItemDetailTarget(
+                    order.typeId,
+                    order.typeName,
+                    order.regionId,
+                    // Sell competition is per-station; buy orders compete region-wide.
+                    order.locationId.takeIf { !order.isBuyOrder },
+                ),
             )
             ViewInMarketButton(order.typeId)
         }
@@ -210,6 +224,33 @@ private fun CompetitionCell(
 
 // Jumps to the Market tab pre-loaded with this item — AppState.pendingMarketTypeId is the
 // cross-tab signal EventtApp/MarketBrowserScreen watch for this.
+// Which item's detail dialog OrdersScreen should show. Module-level state rather than an onClick
+// threaded through every table and row signature -- ponytail: one dialog at a time is all the UI
+// ever needs.
+internal data class ItemDetailTarget(
+    val typeId: Int,
+    val typeName: String,
+    // 0 = unknown (history/inventory rows carry no region) -- OrdersScreen falls back to Jita.
+    val regionId: Int = 0,
+    val stationId: Long? = null,
+)
+
+internal object ItemDetailRequest {
+    var target by mutableStateOf<ItemDetailTarget?>(null)
+}
+
+@Composable
+internal fun ItemDetailButton(target: ItemDetailTarget) {
+    IconButton(modifier = Modifier.size(20.dp), onClick = { ItemDetailRequest.target = target }) {
+        Icon(
+            Icons.AutoMirrored.Filled.ShowChart,
+            contentDescription = "Open chart",
+            modifier = Modifier.size(14.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+    }
+}
+
 @Composable
 private fun ViewInMarketButton(typeId: Int) {
     IconButton(modifier = Modifier.size(20.dp), onClick = { AppState.openInMarket(typeId) }) {
@@ -351,7 +392,10 @@ internal fun BuyOrderRow(
                 .fillMaxWidth()
                 .background(rowBg)
                 .clickable { onSelect() }
-                .padding(horizontal = 8.dp, vertical = 3.dp),
+                .onRightClick {
+                    ItemDetailRequest.target =
+                        ItemDetailTarget(order.typeId, order.typeName, order.regionId, order.locationId.takeIf { !order.isBuyOrder })
+                }.padding(horizontal = 8.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
@@ -369,6 +413,15 @@ internal fun BuyOrderRow(
                 overflow = TextOverflow.Ellipsis,
                 maxLines = 1,
                 modifier = Modifier.weight(1f),
+            )
+            ItemDetailButton(
+                ItemDetailTarget(
+                    order.typeId,
+                    order.typeName,
+                    order.regionId,
+                    // Sell competition is per-station; buy orders compete region-wide.
+                    order.locationId.takeIf { !order.isBuyOrder },
+                ),
             )
             ViewInMarketButton(order.typeId)
         }
@@ -452,16 +505,23 @@ internal fun OrderHistoryRow(
     val profitColor = pnl?.let { if (it >= 0) PROFIT_COLOR else LOSS_COLOR }
 
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .onRightClick { ItemDetailRequest.target = ItemDetailTarget(order.typeId, order.typeName) }
+                .padding(horizontal = 8.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            order.typeName,
-            modifier = Modifier.weight(3f),
-            style = MaterialTheme.typography.bodyMedium,
-            overflow = TextOverflow.Ellipsis,
-            maxLines = 1,
-        )
+        Row(modifier = Modifier.weight(3f), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                order.typeName,
+                style = MaterialTheme.typography.bodyMedium,
+                overflow = TextOverflow.Ellipsis,
+                maxLines = 1,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            ItemDetailButton(ItemDetailTarget(order.typeId, order.typeName))
+        }
         Text(
             if (order.isBuyOrder) "Buy" else "Sell",
             modifier = Modifier.weight(1f),
@@ -527,16 +587,23 @@ internal fun InventoryRow(
     val realizedColor = realizedPnl?.let { if (it >= 0) PROFIT_COLOR else LOSS_COLOR } ?: MaterialTheme.colorScheme.onSurfaceVariant
 
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .onRightClick { ItemDetailRequest.target = ItemDetailTarget(item.typeId, item.typeName) }
+                .padding(horizontal = 8.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            item.typeName,
-            modifier = Modifier.weight(3f),
-            style = MaterialTheme.typography.bodyMedium,
-            overflow = TextOverflow.Ellipsis,
-            maxLines = 1,
-        )
+        Row(modifier = Modifier.weight(3f), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                item.typeName,
+                style = MaterialTheme.typography.bodyMedium,
+                overflow = TextOverflow.Ellipsis,
+                maxLines = 1,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            ItemDetailButton(ItemDetailTarget(item.typeId, item.typeName))
+        }
         Text(formatNumber(item.remainingQty), modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.bodyMedium)
         val daysHeld = item.daysHeld
         Text(
@@ -560,7 +627,8 @@ internal fun InventoryRow(
             color = if (isOwnListing) SELL_COLOR else MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-            profitPerUnit?.let { formatIsk(it) } ?: "—",
+            // Whole stack at this sell price, net of tax/broker fee.
+            profitPerUnit?.let { formatIsk(it * item.remainingQty) } ?: "—",
             modifier = Modifier.weight(2f),
             style = MaterialTheme.typography.bodySmall,
             color = profitColor,

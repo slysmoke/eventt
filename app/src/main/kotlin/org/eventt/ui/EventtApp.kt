@@ -58,6 +58,7 @@ import org.eventt.core.nostr.PresenceService
 import org.eventt.core.queue.RequestQueueManager
 import org.eventt.core.staticdata.CitadelService
 import org.eventt.core.staticdata.StaticDataImporter
+import org.eventt.features.alerts.AlertCenterButton
 import org.eventt.features.alerts.AlertMonitor
 import org.eventt.features.alerts.PriceAlertsScreen
 import org.eventt.features.assets.AssetViewerScreen
@@ -174,8 +175,7 @@ fun EventtApp() {
         }
     }
 
-    // Alert monitor — starts polling loop and collects triggered alerts
-    val triggeredAlerts by AlertMonitor.triggered.collectAsState()
+    // Alert monitor — starts polling loop; fired alerts surface in the top bar's AlertCenterButton.
     LaunchedEffect(Unit) {
         AlertMonitor.start(coroutineScope)
     }
@@ -287,14 +287,6 @@ fun EventtApp() {
                         // EveRef sync progress banner
                         if (everefState.isRunning) {
                             EveRefSyncBanner(everefState)
-                        }
-
-                        // Alert notification banners
-                        triggeredAlerts.forEach { alert ->
-                            AlertNotificationBanner(
-                                alert = alert,
-                                onDismiss = { AlertMonitor.dismiss(alert) },
-                            )
                         }
 
                         // P2P Market incoming-request notification banners
@@ -495,6 +487,7 @@ private fun TopBar(
                         }
                     }
                 }
+                AlertCenterButton()
                 IconButton(onClick = onShowProgress) {
                     Icon(
                         imageVector = Icons.Default.Sync,
@@ -1070,49 +1063,6 @@ private fun SdeImportOverlay(state: StaticDataImporter.ImportState) {
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AlertNotificationBanner(
-    alert: PriceAlertModel,
-    onDismiss: () -> Unit,
-) {
-    val isAbove = alert.condition == "above"
-    Surface(
-        color = if (isAbove) Color(0xFF1B4332) else Color(0xFF3B1212),
-        tonalElevation = 4.dp,
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Icon(
-                if (isAbove) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-                tint = if (isAbove) positiveColor else negativeColor,
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    alert.typeName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White,
-                )
-                Text(
-                    "${alert.orderType.replaceFirstChar { it.uppercase() }} price " +
-                        "${if (isAbove) "rose above" else "dropped below"} " +
-                        formatIsk(alert.targetPrice) + " ISK",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.75f),
-                )
-            }
-            IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
-                Icon(Icons.Default.Close, null, Modifier.size(14.dp), tint = Color.White.copy(alpha = 0.6f))
             }
         }
     }

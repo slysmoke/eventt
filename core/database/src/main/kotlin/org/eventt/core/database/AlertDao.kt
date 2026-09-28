@@ -1,14 +1,38 @@
 package org.eventt.core.database
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import org.eventt.core.model.ALERT_CATEGORY_GENERAL
 import org.eventt.core.model.PriceAlertModel
 
 object AlertDao {
-    fun insert(alert: PriceAlertModel): Int =
+    // Bumped after every write — screens stay mounted after their first visit, so the Alerts list
+    // watches this instead of only loading once (an alert created from Market Analysis or fired by
+    // AlertMonitor otherwise never showed up there until a restart).
+    private val _revision = MutableStateFlow(0L)
+    val revision: StateFlow<Long> = _revision.asStateFlow()
+
+    private fun changed() {
+        _revision.value++
+    }
+
+    fun insert(alert: PriceAlertModel): Int = insertRow(alert).also { changed() }
+
+    /** Several inserts, one revision bump — a bulk alert run shouldn't reload the list per row. */
+    fun insertAll(alerts: List<PriceAlertModel>) {
+        if (alerts.isEmpty()) return
+        alerts.forEach { insertRow(it) }
+        changed()
+    }
+
+    private fun insertRow(alert: PriceAlertModel): Int =
         DatabaseManager.transaction {
             prepareStatement(
                 """
-                INSERT INTO price_alerts (type_id, type_name, target_price, condition_type, station_id, region_id, order_type, enabled, triggered, triggered_at, character_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO price_alerts (type_id, type_name, target_price, condition_type, station_id, region_id, order_type, enabled, triggered,
+                    triggered_at, character_id, category)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent(),
                 java.sql.Statement.RETURN_GENERATED_KEYS,
             ).use { stmt ->
@@ -23,6 +47,7 @@ object AlertDao {
                 stmt.setInt(9, if (alert.triggered) 1 else 0)
                 alert.triggeredAt?.let { stmt.setLong(10, it) } ?: stmt.setNull(10, java.sql.Types.INTEGER)
                 alert.characterId?.let { stmt.setInt(11, it) } ?: stmt.setNull(11, java.sql.Types.INTEGER)
+                stmt.setString(12, alert.category)
                 stmt.executeUpdate()
                 stmt.generatedKeys.use { keys ->
                     if (keys.next()) keys.getInt(1) else 0
@@ -53,6 +78,7 @@ object AlertDao {
                 stmt.executeUpdate()
             }
         }
+        changed()
     }
 
     fun getAll(): List<PriceAlertModel> =
@@ -69,6 +95,21 @@ object AlertDao {
             }
         }
 
+    /** Deletes several alerts in one transaction, one revision bump (e.g. a whole item group). */
+    fun deleteAll(ids: Collection<Int>) {
+        if (ids.isEmpty()) return
+        DatabaseManager.transaction {
+            prepareStatement("DELETE FROM price_alerts WHERE id = ?").use { stmt ->
+                ids.forEach {
+                    stmt.setInt(1, it)
+                    stmt.addBatch()
+                }
+                stmt.executeBatch()
+            }
+        }
+        changed()
+    }
+
     fun delete(id: Int) {
         DatabaseManager.transaction {
             prepareStatement("DELETE FROM price_alerts WHERE id = ?").use { stmt ->
@@ -76,6 +117,7 @@ object AlertDao {
                 stmt.executeUpdate()
             }
         }
+        changed()
     }
 
     fun setEnabled(
@@ -89,6 +131,7 @@ object AlertDao {
                 stmt.executeUpdate()
             }
         }
+        changed()
     }
 
     fun markTriggered(id: Int) {
@@ -99,6 +142,7 @@ object AlertDao {
                 stmt.executeUpdate()
             }
         }
+        changed()
     }
 
     private fun java.sql.ResultSet.mapResultSetToAlerts(): List<PriceAlertModel> {
@@ -119,6 +163,7 @@ object AlertDao {
                     triggeredAt = getLong("triggered_at").takeIf { it != 0L },
                     createdAt = getLong("created_at"),
                     characterId = getInt("character_id").takeIf { it != 0 },
+                    category = getString("category") ?: ALERT_CATEGORY_GENERAL,
                 ),
             )
         }

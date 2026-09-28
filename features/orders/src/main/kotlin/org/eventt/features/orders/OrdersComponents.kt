@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.eventt.core.database.OrderHistoryDao
 import org.eventt.ui.common.formatIsk
+import org.eventt.ui.common.formatVolume
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.eventt.ui.theme.warningColor
@@ -336,4 +337,4 @@ internal fun timeLeftColor(seconds: Long): Color =
         else -> Color.Unspecified
     }
 
-internal fun formatNumber(value: Int): String = "%,d".format(value)
+internal fun formatNumber(value: Int): String = formatVolume(value.toLong())

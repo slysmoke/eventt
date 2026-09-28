@@ -98,4 +98,23 @@ class RequestQueueManagerTest {
     fun `overallProgress is zero for an empty queue`() {
         RequestQueueManager.overallProgress shouldBe 0f
     }
+
+    @Test
+    fun `cache hits are completed and capped without dropping failures`() {
+        val failed = QueuedRequest(endpoint = "/f/", description = "f")
+        RequestQueueManager.enqueue(failed)
+        RequestQueueManager.completeRequest(failed.id, error = "HTTP 500", httpCode = 500, responseBody = "{\"error\":\"boom\"}")
+        // Second completion (the thrown exception's message) must keep the HTTP details.
+        RequestQueueManager.completeRequest(failed.id, error = "ESI request failed: 500")
+
+        repeat(600) { RequestQueueManager.recordCacheHit("/c/$it", "c$it") }
+
+        val list = RequestQueueManager.requests.value
+        list.count { it.status == RequestStatus.COMPLETED } shouldBe 500
+        list.last().description shouldBe "c599"
+        val f = list.single { it.id == failed.id }
+        f.httpCode shouldBe 500
+        f.responseBody shouldBe "{\"error\":\"boom\"}"
+        f.error shouldBe "ESI request failed: 500"
+    }
 }

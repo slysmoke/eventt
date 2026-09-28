@@ -42,6 +42,7 @@ import org.eventt.core.database.AlertDao
 import org.eventt.core.database.AppState
 import org.eventt.core.database.MarketDao
 import org.eventt.core.database.StaticDataDao
+import org.eventt.core.database.ViewContext
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.MarketHistoryModel
 import org.eventt.core.model.PLEX_MARKET_REGION_ID
@@ -276,7 +277,7 @@ fun MarketBrowserScreen() {
                         if (showOrderBook) {
                             OrderBookView(orderBook, onCreateAlert = { order -> contextMenuOrder = order })
                         } else {
-                            HistoryChartView(history, selectedType!!)
+                            HistoryChartView(history, selectedType!!, selectedRegionId, orderBook)
                         }
                     } else {
                         EmptyState(
@@ -915,9 +916,9 @@ private fun OrderRow(
 private fun HistoryChartView(
     history: List<MarketHistoryModel>,
     type: StaticTypeModel,
+    regionId: Int,
+    orderBook: Pair<List<MarketOrder>, List<MarketOrder>>,
 ) {
-    var historyDays by remember { mutableStateOf(90) }
-
     if (history.isEmpty()) {
         EmptyState(
             icon = Icons.AutoMirrored.Filled.ShowChart,
@@ -926,336 +927,49 @@ private fun HistoryChartView(
         )
         return
     }
-
-    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        // Days selector
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf(30, 90, 180, 365).forEach { days ->
-                FilterChip(
-                    selected = historyDays == days,
-                    onClick = { historyDays = days },
-                    label = { Text("${days}d") },
-                )
+    val effRegion = if (type.typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else regionId
+    // Your fills/orders for whichever character or corp is selected in the sidebar.
+    val context by AppState.selectedContext.collectAsState()
+    val trades by produceState<MyTrades?>(null, type.typeId, effRegion, context) {
+        value =
+            withContext(Dispatchers.IO) {
+                context?.let { ctx ->
+                    runCatching {
+                        loadMyTrades(ctx.actingCharId, (ctx as? ViewContext.Corporation)?.corporationId, type.typeId, effRegion)
+                    }.getOrNull()
+                }
             }
-        }
+    }
+    val sorted = remember(history) { history.sortedBy { it.date } }
 
+    Column(modifier = Modifier.fillMaxSize()) {
+        ItemPriceChart(
+            typeId = type.typeId,
+            regionId = effRegion,
+            stationId = null,
+            history = sorted,
+            trades = trades,
+            bestBid = orderBook.second.maxOfOrNull { it.price },
+            bestAsk = orderBook.first.minOfOrNull { it.price },
+            modifier = Modifier.fillMaxWidth().weight(1f),
+        )
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Filter by actual calendar date range (not by data-point count)
-        val cutoffDate =
+        // Last-30-day summary — vol/day uses calendar days as denominator, not trading-day count.
+        val cutoff =
             java.time.LocalDate
                 .now()
-                .minusDays(historyDays.toLong())
+                .minusDays(30)
                 .toString()
-        val filteredHistory = history.sortedBy { it.date }.filter { it.date.take(10) >= cutoffDate }
-
-        // Full calendar grid: every date in [cutoff, today], zero-filled for missing days.
-        // Used for volume chart so gaps are shown as 0 bars, not omitted.
-        val (paddedVolumes, paddedDates) =
-            run {
-                val dataMap = filteredHistory.associate { it.date.take(10) to it.volume.toDouble() }
-                val today = java.time.LocalDate.now()
-                val allDates =
-                    (0 until historyDays).map {
-                        today.minusDays((historyDays - 1 - it).toLong()).toString()
-                    }
-                allDates.map { dataMap[it] ?: 0.0 } to allDates
-            }
-
-        // Price chart — only trading days (zero price on no-trade day would distort the line)
-        ContentCard("Average Price — ${type.name}") {
-            PriceLineChart(
-                data = filteredHistory.map { it.average },
-                dates = filteredHistory.map { it.date.take(10) },
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.fillMaxWidth().height(220.dp),
-            )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Volume chart — full calendar range with 0 for no-trade days
-        ContentCard("Volume (${filteredHistory.size} trading days / $historyDays calendar days)") {
-            VolumeBarChart(
-                data = paddedVolumes,
-                dates = paddedDates,
-                color = MaterialTheme.colorScheme.tertiary,
-                modifier = Modifier.fillMaxWidth().height(160.dp),
-            )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Stats — vol/day uses calendar days as denominator, not trading-day count
-        val avgPrice = filteredHistory.averageOf { it.average }
-        val highestPrice = filteredHistory.maxOfOrNull { it.highest } ?: 0.0
-        val lowestPrice = filteredHistory.minOfOrNull { it.lowest } ?: 0.0
-        val totalVolume = filteredHistory.sumOf { it.volume }
-        val orderCount = filteredHistory.sumOf { it.orderCount }
-
+        val recent = sorted.filter { it.date.take(10) >= cutoff }
+        val totalVolume = recent.sumOf { it.volume }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard("Avg Price", formatPriceAbbr(avgPrice), Modifier.weight(1f))
-            StatCard("Highest", formatPriceAbbr(highestPrice), Modifier.weight(1f))
-            StatCard("Lowest", formatPriceAbbr(lowestPrice), Modifier.weight(1f))
-            StatCard("Total Vol", formatVolume(totalVolume), Modifier.weight(1f))
-            StatCard("Vol/Day", formatVolPerDay(totalVolume, historyDays), Modifier.weight(1f))
-            StatCard("Orders", formatVolume(orderCount), Modifier.weight(1f))
-        }
-    }
-}
-
-// ─── Charts ───────────────────────────────────────────────────────────────
-
-private fun niceYTicks(
-    minVal: Double,
-    maxVal: Double,
-    count: Int = 5,
-): List<Double> {
-    if (minVal >= maxVal) return listOf(minVal)
-    val rough = (maxVal - minVal) / count
-    val mag = 10.0.pow(Math.floor(Math.log10(rough)))
-    val step =
-        when {
-            rough / mag < 1.5 -> mag
-            rough / mag < 3.5 -> 2.0 * mag
-            rough / mag < 7.5 -> 5.0 * mag
-            else -> 10.0 * mag
-        }
-    val start = Math.floor(minVal / step) * step
-    return generateSequence(start) { it + step }
-        .takeWhile { it <= maxVal + step * 0.01 }
-        .toList()
-}
-
-@Composable
-private fun PriceLineChart(
-    data: List<Double>,
-    dates: List<String>,
-    color: Color,
-    modifier: Modifier = Modifier,
-) {
-    if (data.isEmpty()) return
-
-    val textMeasurer = rememberTextMeasurer()
-    val gridColor = Color(0x14FFFFFF)
-    val labelColor = Color(0xFF777777)
-    val ticks = remember(data) { niceYTicks(data.minOrNull()!!, data.maxOrNull()!!, 5) }
-    var hoverIdx by remember { mutableStateOf<Int?>(null) }
-
-    Canvas(
-        modifier =
-            modifier.pointerInput(data) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        if (event.type == PointerEventType.Exit) {
-                            hoverIdx = null
-                            continue
-                        }
-                        if (event.type != PointerEventType.Move) continue
-                        val posX =
-                            event.changes
-                                .firstOrNull()
-                                ?.position
-                                ?.x ?: continue
-                        val lPad = 68.dp.toPx()
-                        val chartW = size.width - lPad - 8.dp.toPx()
-                        hoverIdx =
-                            if (posX >= lPad && data.size > 1) {
-                                ((posX - lPad) / chartW * (data.size - 1)).roundToInt().coerceIn(0, data.size - 1)
-                            } else {
-                                null
-                            }
-                    }
-                }
-            },
-    ) {
-        val lPad = 68.dp.toPx()
-        val rPad = 8.dp.toPx()
-        val tPad = 8.dp.toPx()
-        val bPad = 22.dp.toPx()
-        val chartW = size.width - lPad - rPad
-        val chartH = size.height - tPad - bPad
-        if (chartW <= 0 || chartH <= 0) return@Canvas
-        val minVal = data.minOrNull()!!
-        val maxVal = data.maxOrNull()!!
-        val valRange = (maxVal - minVal).coerceAtLeast(1e-10)
-
-        fun valY(v: Double) = (tPad + (1.0 - (v - minVal) / valRange) * chartH).toFloat()
-
-        fun idxX(i: Int) = lPad + i.toFloat() / (data.size - 1).coerceAtLeast(1) * chartW
-
-        // ── Grid + Y labels ──
-        ticks.forEach { tick ->
-            val y = valY(tick)
-            if (y < tPad - 2 || y > tPad + chartH + 2) return@forEach
-            drawLine(gridColor, Offset(lPad, y), Offset(lPad + chartW, y), 0.5f)
-            val lm = textMeasurer.measure(formatPriceAbbr(tick), TextStyle(fontSize = 10.sp, color = labelColor))
-            drawText(lm, topLeft = Offset(lPad - lm.size.width - 5.dp.toPx(), y - lm.size.height / 2f))
-        }
-
-        // ── Line + fill ──
-        val path = Path()
-        data.forEachIndexed { i, v ->
-            val x = idxX(i)
-            val y = valY(v)
-            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
-        }
-        drawPath(path, color, style = Stroke(2f, cap = StrokeCap.Round))
-        drawPath(
-            Path().apply {
-                addPath(path)
-                lineTo(idxX(data.size - 1), tPad + chartH)
-                lineTo(lPad, tPad + chartH)
-                close()
-            },
-            color.copy(alpha = 0.12f),
-        )
-
-        // ── X-axis date labels (up to 6) ──
-        val xN = minOf(6, data.size)
-        repeat(xN) { t ->
-            val i = if (xN == 1) 0 else (t.toFloat() / (xN - 1) * (data.size - 1)).roundToInt().coerceIn(0, data.size - 1)
-            val x = idxX(i)
-            val lm = textMeasurer.measure(dates.getOrElse(i) { "" }, TextStyle(fontSize = 9.sp, color = labelColor))
-            drawText(
-                lm,
-                topLeft =
-                    Offset(
-                        (x - lm.size.width / 2f).coerceIn(lPad, maxOf(lPad, lPad + chartW - lm.size.width)),
-                        size.height - bPad + 4.dp.toPx(),
-                    ),
-            )
-        }
-
-        // ── Hover ──
-        hoverIdx?.let { idx ->
-            val x = idxX(idx)
-            val v = data[idx]
-            val y = valY(v)
-
-            drawLine(Color(0x44FFFFFF), Offset(x, tPad), Offset(x, tPad + chartH), 1f)
-            drawCircle(color, 5f, Offset(x, y))
-            drawCircle(Color.White, 2.5f, Offset(x, y))
-
-            val lm1 = textMeasurer.measure(dates.getOrElse(idx) { "" }, TextStyle(fontSize = 10.sp, color = Color(0xFF999999)))
-            val lm2 = textMeasurer.measure(formatPriceAbbr(v), TextStyle(fontSize = 12.sp, color = color, fontWeight = FontWeight.SemiBold))
-            val pad = 7.dp.toPx()
-            val gap2 = 2.dp.toPx()
-            val ttW = maxOf(lm1.size.width, lm2.size.width) + pad * 2
-            val ttH = lm1.size.height + lm2.size.height + pad * 2 + gap2
-
-            var ttX = x + 12.dp.toPx()
-            if (ttX + ttW > lPad + chartW) ttX = x - ttW - 12.dp.toPx()
-            val ttY = (y - ttH - 8.dp.toPx()).coerceIn(tPad, maxOf(tPad, tPad + chartH - ttH))
-
-            drawRoundRect(Color(0xEE0D1117), Offset(ttX, ttY), Size(ttW, ttH), CornerRadius(4.dp.toPx()))
-            drawText(lm1, topLeft = Offset(ttX + pad, ttY + pad))
-            drawText(lm2, topLeft = Offset(ttX + pad, ttY + pad + lm1.size.height + gap2))
-        }
-    }
-}
-
-@Composable
-private fun VolumeBarChart(
-    data: List<Double>,
-    dates: List<String>,
-    color: Color,
-    modifier: Modifier = Modifier,
-) {
-    if (data.isEmpty()) return
-
-    val textMeasurer = rememberTextMeasurer()
-    val gridColor = Color(0x14FFFFFF)
-    val labelColor = Color(0xFF777777)
-    val maxVal = remember(data) { data.maxOrNull()!!.coerceAtLeast(1.0) }
-    val ticks = remember(data) { niceYTicks(0.0, maxVal, 4).filter { it > 0 } }
-    var hoverIdx by remember { mutableStateOf<Int?>(null) }
-
-    Canvas(
-        modifier =
-            modifier.pointerInput(data) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        if (event.type == PointerEventType.Exit) {
-                            hoverIdx = null
-                            continue
-                        }
-                        if (event.type != PointerEventType.Move) continue
-                        val posX =
-                            event.changes
-                                .firstOrNull()
-                                ?.position
-                                ?.x ?: continue
-                        val lPad = 56.dp.toPx()
-                        val chartW = size.width - lPad - 8.dp.toPx()
-                        hoverIdx =
-                            if (posX >= lPad && data.isNotEmpty()) {
-                                ((posX - lPad) / chartW * data.size).toInt().coerceIn(0, data.size - 1)
-                            } else {
-                                null
-                            }
-                    }
-                }
-            },
-    ) {
-        val lPad = 56.dp.toPx()
-        val rPad = 8.dp.toPx()
-        val tPad = 8.dp.toPx()
-        val bPad = 4.dp.toPx()
-        val chartW = size.width - lPad - rPad
-        val chartH = size.height - tPad - bPad
-        if (chartW <= 0 || chartH <= 0) return@Canvas
-        val barW = (chartW / data.size - 1f).coerceAtLeast(1f)
-
-        fun barX(i: Int) = lPad + i.toFloat() / data.size * chartW
-
-        fun valY(v: Double) = (tPad + (1.0 - v / maxVal) * chartH).toFloat()
-
-        // ── Grid + Y labels ──
-        ticks.forEach { tick ->
-            val y = valY(tick)
-            if (y < tPad - 2 || y > tPad + chartH + 2) return@forEach
-            drawLine(gridColor, Offset(lPad, y), Offset(lPad + chartW, y), 0.5f)
-            val lm = textMeasurer.measure(formatVolume(tick.toLong()), TextStyle(fontSize = 10.sp, color = labelColor))
-            drawText(lm, topLeft = Offset(lPad - lm.size.width - 5.dp.toPx(), y - lm.size.height / 2f))
-        }
-
-        // ── Bars ──
-        data.forEachIndexed { i, v ->
-            val barH = ((v / maxVal) * chartH).toFloat().coerceAtLeast(1f)
-            drawRect(
-                if (i == hoverIdx) color else color.copy(alpha = 0.65f),
-                Offset(barX(i) + 0.5f, tPad + chartH - barH),
-                Size(barW, barH),
-            )
-        }
-
-        // ── Hover tooltip ──
-        hoverIdx?.let { idx ->
-            val cx = barX(idx) + barW / 2
-            val v = data[idx]
-            val y = valY(v)
-
-            val lm1 = textMeasurer.measure(dates.getOrElse(idx) { "" }, TextStyle(fontSize = 10.sp, color = Color(0xFF999999)))
-            val lm2 =
-                textMeasurer.measure(
-                    formatVolume(v.toLong()),
-                    TextStyle(fontSize = 12.sp, color = color, fontWeight = FontWeight.SemiBold),
-                )
-            val pad = 7.dp.toPx()
-            val gap2 = 2.dp.toPx()
-            val ttW = maxOf(lm1.size.width, lm2.size.width) + pad * 2
-            val ttH = lm1.size.height + lm2.size.height + pad * 2 + gap2
-
-            var ttX = cx + 8.dp.toPx()
-            if (ttX + ttW > lPad + chartW) ttX = cx - ttW - 8.dp.toPx()
-            val ttY = (y - ttH - 4.dp.toPx()).coerceIn(tPad, maxOf(tPad, tPad + chartH - ttH))
-
-            drawRoundRect(Color(0xEE0D1117), Offset(ttX, ttY), Size(ttW, ttH), CornerRadius(4.dp.toPx()))
-            drawText(lm1, topLeft = Offset(ttX + pad, ttY + pad))
-            drawText(lm2, topLeft = Offset(ttX + pad, ttY + pad + lm1.size.height + gap2))
+            StatCard("Avg Price 30d", formatPriceAbbr(recent.averageOf { it.average }), Modifier.weight(1f))
+            StatCard("Highest 30d", formatPriceAbbr(recent.maxOfOrNull { it.highest } ?: 0.0), Modifier.weight(1f))
+            StatCard("Lowest 30d", formatPriceAbbr(recent.minOfOrNull { it.lowest } ?: 0.0), Modifier.weight(1f))
+            StatCard("Total Vol 30d", formatVolume(totalVolume), Modifier.weight(1f))
+            StatCard("Vol/Day", formatVolPerDay(totalVolume, 30), Modifier.weight(1f))
+            StatCard("Orders 30d", formatVolume(recent.sumOf { it.orderCount }), Modifier.weight(1f))
         }
     }
 }

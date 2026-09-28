@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,6 +19,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.eventt.ui.common.formatPriceAbbr
 import org.eventt.ui.common.formatVolume
+import org.eventt.ui.common.onRightClick
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.eventt.ui.theme.warningColor
@@ -116,6 +118,7 @@ internal fun StationRow(
             Modifier
                 .fillMaxWidth()
                 .background(bg)
+                .onRightClick { onShowDetails(opp.typeId) }
                 .then(if (isActiveInGame) Modifier.border(BorderStroke(1.dp, STATION_ACTIVE_IN_GAME)) else Modifier)
                 .padding(horizontal = 10.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -137,7 +140,12 @@ internal fun StationRow(
                 fontWeight = if (isActiveInGame) FontWeight.Bold else FontWeight.Normal,
             )
             IconButton(onClick = { onShowDetails(opp.typeId) }, modifier = Modifier.size(20.dp)) {
-                Icon(Icons.Default.Info, contentDescription = "Item details", modifier = Modifier.size(14.dp))
+                Icon(
+                    Icons.AutoMirrored.Filled.ShowChart,
+                    contentDescription = "Open chart",
+                    modifier = Modifier.size(15.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
             }
         }
         PriceText(opp.bestBuy, negativeColor, Modifier.width(95.dp))
@@ -192,6 +200,7 @@ internal fun RegionRow(
             Modifier
                 .fillMaxWidth()
                 .background(bg)
+                .onRightClick { onShowDetails(opp.typeId) }
                 .then(if (isActiveInGame) Modifier.border(BorderStroke(1.dp, STATION_ACTIVE_IN_GAME)) else Modifier)
                 .padding(horizontal = 10.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -213,7 +222,12 @@ internal fun RegionRow(
                 fontWeight = if (isActiveInGame) FontWeight.Bold else FontWeight.Normal,
             )
             IconButton(onClick = { onShowDetails(opp.typeId) }, modifier = Modifier.size(20.dp)) {
-                Icon(Icons.Default.Info, contentDescription = "Item details", modifier = Modifier.size(14.dp))
+                Icon(
+                    Icons.AutoMirrored.Filled.ShowChart,
+                    contentDescription = "Open chart",
+                    modifier = Modifier.size(15.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
             }
         }
         Column(Modifier.width(95.dp)) {

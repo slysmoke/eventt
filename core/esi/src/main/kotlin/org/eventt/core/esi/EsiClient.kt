@@ -79,6 +79,7 @@ object EsiClient {
         val baseParams = params.toMutableMap().apply { put("datasource", ESI_DATASOURCE) }
         val mergedCache = EsiCacheManager.get(endpoint, baseParams)
         if (mergedCache.state == CacheState.FRESH && mergedCache.data != null) {
+            RequestQueueManager.recordCacheHit(endpoint, endpoint)
             return mergedCache.data!!.parseToListOfMaps()
         }
 
@@ -183,6 +184,7 @@ object EsiClient {
         val cacheResult = EsiCacheManager.get(endpoint, fullParams)
 
         if (cacheResult.state == CacheState.FRESH && cacheResult.data != null) {
+            RequestQueueManager.recordCacheHit(endpoint, endpoint)
             return cacheResult.data!! to EsiResponseMetadata()
         }
 
@@ -190,6 +192,7 @@ object EsiClient {
         // request that's likely to fail, or fail fast rather than hang the caller on a doomed call.
         if (!EsiStatusService.isHealthy("GET", endpoint)) {
             if (cacheResult.state == CacheState.STALE && cacheResult.data != null) {
+                RequestQueueManager.recordCacheHit(endpoint, "$endpoint (stale, ESI degraded)")
                 return cacheResult.data!! to EsiResponseMetadata()
             }
             throw EsiDegradedException(endpoint)
@@ -264,17 +267,20 @@ object EsiClient {
                     RequestQueueManager.completeRequest(queuedRequest.id)
                     return "[]" to EsiResponseMetadata(totalPages = page - 1)
                 }
-                RequestQueueManager.completeRequest(queuedRequest.id, error = "HTTP 404")
+                RequestQueueManager.completeRequest(queuedRequest.id, error = "HTTP 404", httpCode = 404, responseBody = overrun)
                 throw IOException("ESI request failed: 404 $overrun")
             }
 
             if (!response.isSuccessful) {
-                RequestQueueManager.completeRequest(queuedRequest.id, error = "HTTP ${response.code}")
-                if (response.code == 403) {
-                    response.close()
-                    throw EsiForbiddenException(endpoint)
-                }
-                throw IOException("ESI request failed: ${response.code} ${response.body.string()}")
+                val errorBody = response.body.string()
+                RequestQueueManager.completeRequest(
+                    queuedRequest.id,
+                    error = "HTTP ${response.code}",
+                    httpCode = response.code,
+                    responseBody = errorBody,
+                )
+                if (response.code == 403) throw EsiForbiddenException(endpoint)
+                throw IOException("ESI request failed: ${response.code} $errorBody")
             }
 
             val body = response.body.string()
@@ -311,7 +317,7 @@ object EsiClient {
             AppLog.warn("ESI", "$endpoint: ${e.message}")
             throw e
         } catch (e: IOException) {
-            RequestQueueManager.completeRequest(queuedRequest.id, error = e.message)
+            RequestQueueManager.completeRequest(queuedRequest.id, error = e.message ?: e.javaClass.simpleName)
             AppLog.warn("ESI", "$endpoint: ${e.message}")
             if (cacheResult.state == CacheState.STALE && cacheResult.data != null) {
                 return cacheResult.data!! to EsiResponseMetadata()

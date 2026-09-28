@@ -232,7 +232,12 @@ data class PriceAlertModel(
     val triggeredAt: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val characterId: Int? = null,
+    // Which tool created it — the Alerts screen groups by this. See ALERT_CATEGORY_*.
+    val category: String = ALERT_CATEGORY_GENERAL,
 )
+
+const val ALERT_CATEGORY_GENERAL = "general"
+const val ALERT_CATEGORY_INVESTMENT = "investment"
 
 // ─── ESI Response Metadata ─────────────────────────────────────────────────
 
@@ -274,6 +279,10 @@ data class QueuedRequest(
     val startTime: Long? = null,
     val endTime: Long? = null,
     val error: String? = null,
+    // Failure details for the request dialog — HTTP status (null for network errors) and the
+    // response body ESI sent back with it, truncated.
+    val httpCode: Int? = null,
+    val responseBody: String? = null,
 )
 
 // ─── Wallet Summary ────────────────────────────────────────────────────────

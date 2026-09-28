@@ -17,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -91,10 +92,26 @@ fun AssetViewerScreen(context: ViewContext?) {
     var isLoading by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var deniedFeatures by remember { mutableStateOf<Set<CorpFeature>>(emptySet()) }
+    var autoRefresh by remember { mutableStateOf(false) }
+    var refreshAvailableAt by remember { mutableStateOf<Long?>(null) }
+
+    fun assetsEndpoint(): String? =
+        when {
+            corpId != null -> "/corporations/$corpId/assets/"
+            charId != null -> "/characters/$charId/assets/"
+            else -> null
+        }
+
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            autoRefresh = StaticDataDao.getSetting(ASSETS_AUTO_REFRESH_SETTING) == "true"
+        }
+    }
 
     LaunchedEffect(context) {
         loadAssets(charId, corpId) { list -> assets = list }
         deniedFeatures = actingCharId?.let { CharacterDao.getDeniedCorpFeatures(it) } ?: emptySet()
+        refreshAvailableAt = withContext(Dispatchers.IO) { assetsEndpoint()?.let { EsiClient.getEndpointExpiry(it) } }
     }
 
     fun refreshFromEsi(clearDenied: Boolean) {
@@ -110,15 +127,27 @@ fun AssetViewerScreen(context: ViewContext?) {
                 } else if (charId != null) {
                     fetchCharacterAssets(charId)
                 }
+                val expiry = assetsEndpoint()?.let { EsiClient.getEndpointExpiry(it) }
                 withContext(Dispatchers.Main) {
                     loadAssets(charId, corpId) { list -> assets = list }
                     deniedFeatures = CharacterDao.getDeniedCorpFeatures(acting)
+                    refreshAvailableAt = expiry
                 }
             } catch (e: Exception) {
                 println("[Assets] Error fetching assets: ${e.message}")
             } finally {
                 withContext(Dispatchers.Main) { isLoading = false }
             }
+        }
+    }
+
+    // Keeps refreshing this context's assets on an interval while the toggle is on and this
+    // screen is open — AssetWatchService's own sweep covers the "screen not open" case.
+    LaunchedEffect(autoRefresh, context) {
+        if (!autoRefresh || actingCharId == null) return@LaunchedEffect
+        while (true) {
+            delay(ASSETS_REFRESH_INTERVAL_MILLIS)
+            refreshFromEsi(clearDenied = false)
         }
     }
 
@@ -130,15 +159,23 @@ fun AssetViewerScreen(context: ViewContext?) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Asset Viewer", style = MaterialTheme.typography.headlineMedium)
-            Row {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = autoRefresh,
+                    onClick = {
+                        autoRefresh = !autoRefresh
+                        scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(ASSETS_AUTO_REFRESH_SETTING, autoRefresh.toString()) }
+                    },
+                    label = { Text("Auto-refresh", style = MaterialTheme.typography.bodySmall) },
+                )
                 // The character/corp switcher already decided which of the two to fetch —
                 // no per-click choice needed, unlike the old dual-button dialog.
-                IconButton(
-                    enabled = actingCharId != null && !isLoading,
+                EsiRefreshButton(
+                    isLoading = isLoading,
+                    expiresAtMs = refreshAvailableAt,
+                    enabled = actingCharId != null,
                     onClick = { refreshFromEsi(clearDenied = false) },
-                ) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Refresh from ESI")
-                }
+                )
             }
         }
 

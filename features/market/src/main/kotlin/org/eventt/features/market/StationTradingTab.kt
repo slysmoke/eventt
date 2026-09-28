@@ -13,6 +13,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
@@ -79,6 +80,7 @@ internal fun StationTradingTab(
     var spikePriceMultiplier by remember { mutableStateOf("1.8") }
     var spikeVolumeMultiplier by remember { mutableStateOf("5") }
     var spikeWindowDays by remember { mutableStateOf("7") }
+    var useAdam4Eve by remember { mutableStateOf(false) }
     var histSourceIsEsi by remember { mutableStateOf(false) }
     var detailTypeId by remember { mutableStateOf<Int?>(null) }
     // Guards the "station doesn't belong to this region, clear it" cleanup below against firing
@@ -103,6 +105,7 @@ internal fun StationTradingTab(
             S.get(S.ST_SPIKE_PRICE_MULTIPLIER)?.let { spikePriceMultiplier = it }
             S.get(S.ST_SPIKE_VOLUME_MULTIPLIER)?.let { spikeVolumeMultiplier = it }
             S.get(S.ST_SPIKE_WINDOW_DAYS)?.let { spikeWindowDays = it }
+            S.get(S.ST_USE_ADAM4EVE)?.let { useAdam4Eve = it == "true" }
             if (charId != null) {
                 brokerFeePct = StaticDataDao.getCharBrokersFee(charId)
                 salesTaxPct = StaticDataDao.getCharSalesTax(charId)
@@ -251,6 +254,19 @@ internal fun StationTradingTab(
                             modifier = Modifier.size(24.dp),
                         )
                     }
+                    // Est. Daily otherwise trusts ESI's region-wide, both-sides-combined history --
+                    // this caps it at Adam4EVE's real per-station buy/sell fill data instead (see
+                    // Adam4EveFlowService). Off by default: a third-party dependency, opt-in.
+                    FilterControl("Adam4EVE Flow") {
+                        Checkbox(
+                            checked = useAdam4Eve,
+                            onCheckedChange = {
+                                useAdam4Eve = it
+                                scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_USE_ADAM4EVE, it.toString()) } }
+                            },
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
                     SpikeFilterChip(spikeFilter) {
                         spikeFilter = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_SPIKE_FILTER, it.name) } }
@@ -357,6 +373,7 @@ internal fun StationTradingTab(
                                         val spikeVolumeMultiplierSnap = spikeVolumeMultiplier.toDoubleOrNull() ?: 5.0
                                         val spikeWindowDaysSnap = spikeWindowDays.toIntOrNull() ?: 7
                                         val histSrc = withContext(Dispatchers.IO) { EveRefService.getSelectedSource() }
+                                        val useAdam4EveSnap = useAdam4Eve
 
                                         // Buy orders sitting at a different station/citadel — even in a
                                         // neighboring system — still compete if their order range reaches
@@ -391,6 +408,17 @@ internal fun StationTradingTab(
                                                     .groupBy { (it["type_id"] as? Number)?.toInt() ?: 0 }
                                             } else {
                                                 null
+                                            }
+
+                                        // One CSV download covers every station/type for the day --
+                                        // fetched once up front rather than per-type, since the
+                                        // per-type loop below runs 10-way parallel.
+                                        val adam4EveFlow: Map<Int, StationFlow> =
+                                            if (useAdam4EveSnap && stationIdSnap != null) {
+                                                statusMsg = "Fetching Adam4EVE flow…"
+                                                Adam4EveFlowService.fetchStationFlow(stationIdSnap, typeIds)
+                                            } else {
+                                                emptyMap()
                                             }
 
                                         statusMsg = "0/${typeIds.size} types checked…"
@@ -454,6 +482,7 @@ internal fun StationTradingTab(
                                                                         spikePriceMultiplier = spikePriceMultiplierSnap,
                                                                         spikeVolumeMultiplier = spikeVolumeMultiplierSnap,
                                                                         spikeWindowDays = spikeWindowDaysSnap,
+                                                                        adam4EveFlow = adam4EveFlow[typeId],
                                                                     )
                                                                 // Protect shared list mutation on IO, then update Compose state on Main
                                                                 val (sorted, c, f) =
@@ -603,6 +632,8 @@ internal fun StationTradingTab(
                     Modifier
                         .fillMaxSize()
                         .onPointerEvent(PointerEventType.Press) { e ->
+                            // Left button only — right-click on a row opens its chart instead.
+                            if (!e.buttons.isPrimaryPressed) return@onPointerEvent
                             dragStartIdx =
                                 itemIndexAt(
                                     e.changes
