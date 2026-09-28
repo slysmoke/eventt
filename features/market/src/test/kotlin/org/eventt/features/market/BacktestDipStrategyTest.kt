@@ -1,5 +1,6 @@
 package org.eventt.features.market
 
+import io.kotest.matchers.doubles.plusOrMinus
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.eventt.core.model.MarketHistoryModel
@@ -46,5 +47,17 @@ class BacktestDipStrategyTest {
         (result.unrealizedPnlPct > 50.0) shouldBe true
         // But the lots bought at 7 were genuinely underwater once price fell further to 5.
         (result.worstDrawdownPct < -5.0) shouldBe true
+    }
+
+    @Test
+    fun `round-trip fees come off the backtest result`() {
+        // Buy once at 5 (a 50% dip under a flat 10 baseline), mark at 10 on the last day.
+        val history = (40 downTo 11).map { row(it.toLong(), 10.0) } + listOf(row(10, 5.0)) + (9 downTo 0).map { row(it.toLong(), 10.0) }
+        val noFees = backtestDipStrategy(history, lookbackDays = 30, minDiscountPct = 40.0)!!
+        val withFees = backtestDipStrategy(history, 30, 40.0, MaterialFees(8.0, 3.0))!!
+
+        noFees.unrealizedPnlPct shouldBe (100.0 plusOrMinus 1e-9)
+        // 1/1.03 units per ISK, marked at 10 * 0.89: 0.89 * 2 / 1.03 - 1
+        withFees.unrealizedPnlPct shouldBe ((0.89 * 2 / 1.03 - 1) * 100 plusOrMinus 1e-9)
     }
 }

@@ -100,7 +100,17 @@ class AllocateBudgetTest {
         // Still 5% under its average, so it also has a budget share -- SELL must win and hide it.
         val c = candidate(typeId = 1, currentPrice = 11.0, vsAvgPct = -5.0, dailyVolume = 1000, position = held).copy(bestAsk = 11.2)
 
-        val r = allocateBudget(listOf(c), totalBudget = 1_000_000.0, maxItems = 1, 100.0, 30.0, 3, 5.0, sellFeePct = 4.0).single()
+        val r =
+            allocateBudget(
+                listOf(c),
+                totalBudget = 1_000_000.0,
+                maxItems = 1,
+                100.0,
+                30.0,
+                3,
+                5.0,
+                fees = MaterialFees(salesTaxPct = 4.0, brokerFeePct = 0.0),
+            ).single()
 
         // 10 * 1.05 / 0.96 = 10.9375
         r.sellTarget!!.targetPrice shouldBe (10.0 * 1.05 / 0.96)
@@ -177,5 +187,33 @@ class AllocateBudgetTest {
         val p = computeMaterialPosition(emptyList(), assetQty = 70, orders = listOf(order))
         p.qtyHeld shouldBe 100
         p.listedQty shouldBe 30
+    }
+
+    @Test
+    fun `fees raise the held cost, shrink ladder quantities and lift the sell target`() {
+        val fees = MaterialFees(salesTaxPct = 8.0, brokerFeePct = 3.0)
+        val held = MaterialPosition(qtyHeld = 100, avgBuyPrice = 10.0)
+        val c = candidate(typeId = 1, currentPrice = 10.0, vsAvgPct = -20.0, dailyVolume = 1000, position = held).copy(bestAsk = 11.0)
+
+        val r =
+            allocateBudget(
+                listOf(c),
+                totalBudget = 2_000.0,
+                maxItems = 1,
+                100.0,
+                30.0,
+                ladderLevels = 1,
+                ladderStepPct = 5.0,
+                fees = fees,
+            ).single()
+
+        // Held stack cost 100 * 10 * 1.03 = 1030, so 970 left to buy.
+        r.toBuyIsk shouldBe (970.0 plusOrMinus 1e-9)
+        // 970 ISK at 10 ISK + 3% broker = 94 units, not 97.
+        r.ladder.single().qty shouldBe 94
+        // cost 10.3, +5% take-profit, netted of 11% sell fees: 10.3 * 1.05 / 0.89
+        r.sellTarget!!.targetPrice shouldBe (10.3 * 1.05 / 0.89 plusOrMinus 1e-9)
+        // (11 * 0.89 - 10.3) * 100 = -51 — below break-even despite an 11 ask over a 10 buy.
+        r.sellTarget!!.profitNow!! shouldBe (-51.0 plusOrMinus 1e-9)
     }
 }

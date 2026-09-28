@@ -82,6 +82,23 @@ internal data class MaterialPosition(
     val hasOrders get() = listedQty > 0 || buyOrderQty > 0
 }
 
+/**
+ * Market fees, same model as the Orders tab's TaxConfig: a buy costs price + broker fee, a sell
+ * nets price - sales tax - broker fee. Defaults (8% / 3%) match StaticDataDao's for a character
+ * with no saved skills; the zero-fee instance keeps pure-math tests readable.
+ */
+internal data class MaterialFees(
+    val salesTaxPct: Double = 8.0,
+    val brokerFeePct: Double = 3.0,
+) {
+    val buyMultiplier get() = 1.0 + brokerFeePct / 100.0
+    val sellMultiplier get() = (1.0 - (salesTaxPct + brokerFeePct) / 100.0).coerceAtLeast(0.01)
+
+    companion object {
+        val NONE = MaterialFees(0.0, 0.0)
+    }
+}
+
 internal data class TxCostBasis(
     // Moving-average cost of what's still held from tracked buys; null when that's nothing.
     val avgCost: Double?,
@@ -239,6 +256,7 @@ internal fun computeMaterialCandidate(
     myAssetQtyByType: Map<Int, Long>? = null,
     // Your active orders, grouped by typeId -- same one-read-per-scan deal.
     myOrdersByType: Map<Int, List<ActiveOrderDao.ActiveOrderRecord>>? = null,
+    fees: MaterialFees = MaterialFees(),
 ): MaterialCandidate? {
     // Buy-order-oriented, not instant-buy: this tab's whole point is placing standing buy orders
     // at the ladder's target prices rather than paying the ask, so `currentPrice` is the top
@@ -319,7 +337,7 @@ internal fun computeMaterialCandidate(
         dailyVolume = dailyVolume,
         spikeDetected = spikeDetected,
         position = position,
-        backtest = backtestDipStrategy(fullHistory, lookbackDays, minDiscountPct),
+        backtest = backtestDipStrategy(fullHistory, lookbackDays, minDiscountPct, fees),
     )
 }
 
@@ -346,6 +364,8 @@ internal fun backtestDipStrategy(
     history: List<org.eventt.core.model.MarketHistoryModel>,
     lookbackDays: Int,
     minDiscountPct: Double,
+    // Each simulated buy pays the broker fee; the position is marked at what selling would net.
+    fees: MaterialFees = MaterialFees.NONE,
 ): BacktestResult? {
     val asc = history.sortedBy { it.date }
     if (asc.size < lookbackDays + BACKTEST_MIN_RUNWAY_DAYS) return null // not enough history to replay the rule meaningfully
@@ -359,19 +379,19 @@ internal fun backtestDipStrategy(
         if (price <= 0.0) continue
         val windowAvg = asc.subList(i - lookbackDays, i).map { it.average }.average()
         if (windowAvg > 0.0 && price <= windowAvg * (1.0 - minDiscountPct / 100.0)) {
-            qty += BACKTEST_ISK_PER_SIGNAL / price
+            qty += BACKTEST_ISK_PER_SIGNAL / (price * fees.buyMultiplier)
             invested += BACKTEST_ISK_PER_SIGNAL
             signals++
         }
         if (invested > 0.0) {
-            val pnlPct = (qty * price - invested) / invested * 100.0
+            val pnlPct = (qty * price * fees.sellMultiplier - invested) / invested * 100.0
             if (pnlPct < worstPnlPct) worstPnlPct = pnlPct
         }
     }
     if (invested <= 0.0) return null
 
     val lastPrice = asc.last().average
-    val currentValue = qty * lastPrice
+    val currentValue = qty * lastPrice * fees.sellMultiplier
     return BacktestResult(
         buySignals = signals,
         totalInvested = invested,
@@ -440,8 +460,7 @@ internal fun allocateBudget(
     liquidityDays: Double,
     ladderLevels: Int,
     ladderStepPct: Double,
-    // Sales tax + broker fee, % of sale value, for the take-profit math.
-    sellFeePct: Double = 0.0,
+    fees: MaterialFees = MaterialFees.NONE,
     takeProfitPct: Double = ladderStepPct,
 ): List<AllocatedMaterial> {
     if (candidates.isEmpty()) return emptyList()
@@ -496,11 +515,17 @@ internal fun allocateBudget(
     return (picked + held).mapNotNull { c ->
         val allocated = allocById[c.typeId] ?: 0.0
         val position = c.position
-        val heldCost = if (position != null && position.qtyHeld > 0) position.qtyHeld * (position.avgBuyPrice ?: c.currentPrice) else 0.0
+        // What the held stack cost including the broker fee paid to buy it.
+        val heldCost =
+            if (position != null && position.qtyHeld > 0) {
+                position.qtyHeld * (position.avgBuyPrice ?: c.currentPrice) * fees.buyMultiplier
+            } else {
+                0.0
+            }
         val inBuyOrders = position?.buyOrderIsk ?: 0.0
         val toBuy = (allocated - heldCost - inBuyOrders).coerceAtLeast(0.0)
         val unlisted = position?.let { it.qtyHeld - it.listedQty } ?: 0L
-        val sell = buildSellTarget(c, sellFeePct, takeProfitPct)
+        val sell = buildSellTarget(c, fees, takeProfitPct)
         val action =
             when {
                 // Only stock not already on the market is actionable for SELL.
@@ -522,7 +547,7 @@ internal fun allocateBudget(
             allocatedIsk = allocated,
             // SELL outranks a remaining budget share -- showing both read as "sell it and buy more".
             toBuyIsk = if (action == MaterialAction.BUY) toBuy else 0.0,
-            ladder = if (action == MaterialAction.BUY) buildLadder(c, toBuy, ladderLevels, ladderStepPct) else emptyList(),
+            ladder = if (action == MaterialAction.BUY) buildLadder(c, toBuy, ladderLevels, ladderStepPct, fees) else emptyList(),
             sellTarget = sell,
             action = action,
         )
@@ -534,6 +559,7 @@ private fun buildLadder(
     isk: Double,
     levels: Int,
     stepPct: Double,
+    fees: MaterialFees,
 ): List<LadderLevel> {
     if (isk <= 0.0 || levels <= 0) return emptyList()
     // Anchor to your real average cost when you're already holding a position underwater (below
@@ -556,7 +582,8 @@ private fun buildLadder(
             level = level,
             triggerPrice = trigger,
             iskAmount = share,
-            qty = if (trigger > 0) (share / trigger).toLong() else 0L,
+            // The rung's ISK covers the broker fee too, so fewer units than share / price.
+            qty = if (trigger > 0) (share / (trigger * fees.buyMultiplier)).toLong() else 0L,
             alreadyTriggered = trigger >= candidate.currentPrice,
         )
     }
@@ -564,15 +591,17 @@ private fun buildLadder(
 
 internal fun buildSellTarget(
     candidate: MaterialCandidate,
-    sellFeePct: Double,
+    fees: MaterialFees,
     takeProfitPct: Double,
 ): SellTarget? {
     val position = candidate.position ?: return null
-    val avgCost = position.avgBuyPrice
-    if (position.qtyHeld <= 0 || avgCost == null || avgCost <= 0.0) return null
-    val keep = (1.0 - sellFeePct / 100.0).coerceAtLeast(0.01)
-    val target = avgCost * (1.0 + takeProfitPct / 100.0) / keep
-    val profitNow = candidate.bestAsk?.let { ask -> (ask * keep - avgCost) * position.qtyHeld }
+    val price = position.avgBuyPrice
+    if (position.qtyHeld <= 0 || price == null || price <= 0.0) return null
+    // Cost per unit including the buy-side broker fee; the target nets cost + take-profit after
+    // sales tax and the sell-side broker fee.
+    val avgCost = price * fees.buyMultiplier
+    val target = avgCost * (1.0 + takeProfitPct / 100.0) / fees.sellMultiplier
+    val profitNow = candidate.bestAsk?.let { ask -> (ask * fees.sellMultiplier - avgCost) * position.qtyHeld }
     return SellTarget(
         qty = position.qtyHeld,
         targetPrice = target,

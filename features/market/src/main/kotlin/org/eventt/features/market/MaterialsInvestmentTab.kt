@@ -93,8 +93,8 @@ internal fun MaterialsInvestmentTab(
     var analyzeJob by remember { mutableStateOf<Job?>(null) }
     var statusMsg by remember { mutableStateOf("") }
     var candidates by remember { mutableStateOf<List<MaterialCandidate>>(emptyList()) }
-    // Sales tax + broker fee for the selected character, read at Analyze time.
-    var sellFeePct by remember { mutableStateOf(0.0) }
+    // Selected character's sales tax / broker fee (defaults without one), read at Analyze time.
+    var fees by remember { mutableStateOf(MaterialFees()) }
     var sortCol by remember { mutableStateOf(MaterialSortCol.ALLOCATED) }
     var sortAsc by remember { mutableStateOf(false) }
     var detailTypeId by remember { mutableStateOf<Int?>(null) }
@@ -160,7 +160,7 @@ internal fun MaterialsInvestmentTab(
     }
 
     val allocated =
-        remember(candidates, totalBudget, maxItems, maxPerItemPct, liquidityDays, ladderLevels, ladderStepPct, sellFeePct) {
+        remember(candidates, totalBudget, maxItems, maxPerItemPct, liquidityDays, ladderLevels, ladderStepPct, fees) {
             allocateBudget(
                 candidates = candidates,
                 totalBudget = totalBudget.toDoubleOrNull() ?: 0.0,
@@ -169,7 +169,7 @@ internal fun MaterialsInvestmentTab(
                 liquidityDays = liquidityDays.toDoubleOrNull() ?: 3.0,
                 ladderLevels = ladderLevels.toIntOrNull() ?: 4,
                 ladderStepPct = ladderStepPct.toDoubleOrNull() ?: 5.0,
-                sellFeePct = sellFeePct,
+                fees = fees,
             )
         }
     val sorted = remember(allocated, sortCol, sortAsc) { sortMaterials(allocated, sortCol, sortAsc) }
@@ -492,12 +492,13 @@ internal fun MaterialsInvestmentTab(
                                                     .filter { it.state == "active" }
                                                     .groupBy { it.typeId }
                                             }
-                                        sellFeePct =
+                                        fees =
                                             charId?.let { id ->
                                                 withContext(Dispatchers.IO) {
-                                                    StaticDataDao.getCharSalesTax(id) + StaticDataDao.getCharBrokersFee(id)
+                                                    MaterialFees(StaticDataDao.getCharSalesTax(id), StaticDataDao.getCharBrokersFee(id))
                                                 }
-                                            } ?: 0.0
+                                            } ?: MaterialFees()
+                                        val feesSnap = fees
 
                                         statusMsg = "0/${typeIds.size} types checked…"
                                         val semaphore = Semaphore(10)
@@ -546,6 +547,7 @@ internal fun MaterialsInvestmentTab(
                                                                     myTransactionsByType = myTransactionsByType,
                                                                     myAssetQtyByType = myAssetQtyByType,
                                                                     myOrdersByType = myOrdersByType,
+                                                                    fees = feesSnap,
                                                                 )
                                                             }.getOrNull()?.let { found.add(it) }
                                                             mutex.withLock {
@@ -694,7 +696,8 @@ private fun MaterialsHeader(
             }
             Tip(
                 "Replays this same \"buy when below the trailing Lookback-day average by Min Discount %\" rule over up to " +
-                    "a year of this item's own history. Format: final P&L% (worst paper drawdown% along the way). A negative " +
+                    "a year of this item's own history, paying broker fee on each buy and netting sales tax + broker fee on the " +
+                    "exit. Format: final P&L% (worst paper drawdown% along the way). A negative " +
                     "first number is a warning sign -- the dip-buying pattern hasn't historically paid off for this item.",
             ) {
                 MCol("Backtest", MaterialSortCol.BACKTEST, sort, asc, onSort, Modifier.width(105.dp))
@@ -707,7 +710,7 @@ private fun MaterialsHeader(
             }
             Tip(
                 "Held positions only: net profit selling the whole stack at the current lowest ask, after sales tax " +
-                    "and broker fee, against your average cost.",
+                    "and broker fee, against your average cost including the broker fee you paid to buy.",
             ) {
                 MCol("Total Profit", MaterialSortCol.PROFIT, sort, asc, onSort, Modifier.width(85.dp))
             }
@@ -716,7 +719,8 @@ private fun MaterialsHeader(
             }
             Tip(
                 "ISK left to buy: this item's share of the budget (after ranking, the per-item cap and the liquidity cap) " +
-                    "minus what you already hold at cost. 0 once the position is full.",
+                    "minus what you already hold at cost (incl. buy broker fee) and ISK in your open buy orders. Ladder " +
+                    "quantities leave room for the broker fee. 0 once the position is full.",
             ) {
                 MCol("To Buy", MaterialSortCol.ALLOCATED, sort, asc, onSort, Modifier.width(80.dp))
             }
