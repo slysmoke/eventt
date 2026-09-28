@@ -48,6 +48,7 @@ import org.eventt.core.database.NostrOrderDao
 import org.eventt.core.database.NostrReservationModel
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.ViewContext
+import org.eventt.core.esi.EsiStatusService
 import org.eventt.core.everef.EveRefService
 import org.eventt.core.model.AppLog
 import org.eventt.core.model.CharacterModel
@@ -287,6 +288,11 @@ fun EventtApp() {
                                 },
                             )
                         }
+
+                        // Whole EVE server unreachable (downtime/outage) -- one explanation instead of a
+                        // wall of identical failed requests.
+                        val serverOffline by EsiStatusService.serverOffline.collectAsState()
+                        if (serverOffline) ServerOfflineBanner()
 
                         // EveRef sync progress banner
                         if (everefState.isRunning) {
@@ -1234,6 +1240,32 @@ private fun IncomingRequestBanner(
             TextButton(onClick = onView) { Text(stringResource(Res.string.view)) }
             IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
                 Icon(Icons.Default.Close, null, Modifier.size(14.dp), tint = Color.White.copy(alpha = 0.6f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ServerOfflineBanner() {
+    Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(Icons.Default.CloudOff, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onErrorContainer)
+            Column {
+                Text(
+                    stringResource(Res.string.server_offline_title),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+                Text(
+                    stringResource(Res.string.server_offline_desc),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f),
+                )
             }
         }
     }

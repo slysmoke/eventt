@@ -66,7 +66,7 @@ object ActiveOrdersSyncService {
                 ActiveOrderDao.replaceAll(actingCharId, parsed.map { it.toActiveOrderRecord(actingCharId, null) })
             }
         } catch (e: Exception) {
-            AppLog.warn("ActiveOrdersSync", "orders ESI: ${e.message}")
+            AppLog.warn("ActiveOrdersSync", "orders ESI", e)
         }
     }
 }

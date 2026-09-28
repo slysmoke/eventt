@@ -39,9 +39,23 @@ object AppLog {
     fun warn(
         tag: String,
         e: Throwable,
-    ) = warn(tag, e.message ?: (e::class.simpleName ?: "error"))
+    ) {
+        if (e !is QuietFailure) warn(tag, e.message ?: (e::class.simpleName ?: "error"))
+    }
+
+    /** "[context]: [e]'s message" -- skipped for [QuietFailure]s, like the overload above. */
+    fun warn(
+        tag: String,
+        context: String,
+        e: Throwable,
+    ) {
+        if (e !is QuietFailure) warn(tag, "$context: ${e.message}")
+    }
 
     fun clear() {
         _entries.value = emptyList()
     }
 }
+
+/** A failure the UI already explains elsewhere (e.g. the server-offline banner) -- not logged. */
+interface QuietFailure

@@ -119,7 +119,7 @@ fun DashboardScreen(
                     walletBalance =
                         if (isCorp) EsiClient.getCorporationWallet(corpId, acting).values.sum() else EsiClient.getCharacterWallet(acting)
                 } catch (e: Exception) {
-                    AppLog.warn("Dashboard", "wallet ESI: ${e.message}")
+                    AppLog.warn("Dashboard", "wallet ESI", e)
                 }
 
                 // Journal + transactions fetch-and-insert is shared with WalletSyncService.syncAll()

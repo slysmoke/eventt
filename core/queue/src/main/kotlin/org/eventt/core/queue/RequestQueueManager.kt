@@ -114,6 +114,12 @@ object RequestQueueManager {
             }
     }
 
+    /** Drops a request entirely -- for failures explained elsewhere (e.g. the server-offline banner). */
+    @Synchronized
+    fun remove(requestId: String) {
+        _requests.value = _requests.value.filter { it.id != requestId }
+    }
+
     // Only drops successful requests — failed ones stay visible (and counted) until the user
     // reviews them and clears everything explicitly via clearAll().
     @Synchronized

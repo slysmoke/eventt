@@ -66,6 +66,16 @@ class EsiThrottleInterceptorTest {
     }
 
     @Test
+    fun `504 is returned as-is, since ESI already waited out the game server`() {
+        server.enqueue(MockResponse().setResponseCode(504))
+
+        val response = call()
+
+        response.code shouldBe 504
+        server.requestCount shouldBe 1
+    }
+
+    @Test
     fun `a real client error is returned as-is, not retried`() {
         server.enqueue(MockResponse().setResponseCode(404))
 

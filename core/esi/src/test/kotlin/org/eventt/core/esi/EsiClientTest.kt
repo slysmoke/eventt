@@ -46,6 +46,7 @@ class EsiClientTest {
         // /meta/status before hitting the MockWebServer.
         mockkObject(EsiStatusService)
         every { EsiStatusService.isHealthy(any(), any()) } returns true
+        EsiStatusService.resetForTest()
     }
 
     @AfterEach
@@ -158,6 +159,51 @@ class EsiClientTest {
         org.junit.jupiter.api.Assertions.assertThrows(EsiDegradedException::class.java) {
             EsiClient.getRaw("/test-degraded-miss/")
         }
+    }
+
+    @Test
+    fun `a 504 from the game server pauses ESI calls and serves cache instead of failing`() {
+        val endpoint = "/test-offline-stale/"
+        EsiCacheManager.save(
+            endpoint,
+            mapOf("datasource" to "tranquility"),
+            data = """{"stale":true}""",
+            expiresAtMs =
+                System.currentTimeMillis() - 1_000,
+        )
+        server.enqueue(MockResponse().setResponseCode(504).setBody("""{"error":"Timeout contacting tranquility"}"""))
+
+        val (first, _) = EsiClient.getRaw(endpoint)
+        val (second, _) = EsiClient.getRaw(endpoint)
+
+        first shouldBe """{"stale":true}"""
+        second shouldBe first
+        // The second call never left the app, and the 504 isn't left behind as a failed request.
+        server.requestCount shouldBe 1
+        EsiStatusService.serverOffline.value shouldBe true
+        RequestQueueManager.requests.value.none { it.status == org.eventt.core.model.RequestStatus.FAILED } shouldBe true
+    }
+
+    @Test
+    fun `while the server is offline an uncached call fails fast with EsiOfflineException`() {
+        server.enqueue(MockResponse().setResponseCode(504))
+        org.junit.jupiter.api.Assertions
+            .assertThrows(EsiOfflineException::class.java) { EsiClient.getRaw("/test-offline-a/") }
+
+        org.junit.jupiter.api.Assertions
+            .assertThrows(EsiOfflineException::class.java) { EsiClient.getRaw("/test-offline-b/") }
+        server.requestCount shouldBe 1
+    }
+
+    @Test
+    fun `a successful answer clears the offline state`() {
+        EsiStatusService.reportServerUnavailable()
+        EsiStatusService.resetOfflinePauseForTest()
+        server.enqueue(MockResponse().setResponseCode(200).setBody("[]"))
+
+        EsiClient.getRaw("/test-offline-recovered/")
+
+        EsiStatusService.serverOffline.value shouldBe false
     }
 
     @Test

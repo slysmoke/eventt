@@ -71,7 +71,7 @@ object WalletSyncService {
                 }
             }
         } catch (e: Exception) {
-            AppLog.warn("WalletSync", "journal ESI: ${e.message}")
+            AppLog.warn("WalletSync", "journal ESI", e)
         }
 
         try {
@@ -121,7 +121,7 @@ object WalletSyncService {
                 }
             }
         } catch (e: Exception) {
-            AppLog.warn("WalletSync", "transactions ESI: ${e.message}")
+            AppLog.warn("WalletSync", "transactions ESI", e)
         }
     }
 

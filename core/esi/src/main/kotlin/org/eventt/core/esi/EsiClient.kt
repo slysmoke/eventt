@@ -188,6 +188,15 @@ object EsiClient {
             return cacheResult.data!! to EsiResponseMetadata()
         }
 
+        // The whole server is down -- same deal, without spending (or logging) a request on it.
+        if (EsiStatusService.isServerOffline()) {
+            if (cacheResult.data != null) {
+                RequestQueueManager.recordCacheHit(endpoint, "$endpoint (cached, server offline)")
+                return cacheResult.data!! to EsiResponseMetadata()
+            }
+            throw EsiOfflineException(endpoint)
+        }
+
         // ESI itself reports this route degraded — ride out a stale snapshot rather than spend a
         // request that's likely to fail, or fail fast rather than hang the caller on a doomed call.
         if (!EsiStatusService.isHealthy("GET", endpoint)) {
@@ -235,6 +244,16 @@ object EsiClient {
                     response = client.newCall(buildRequest(includeConditional = false)).execute()
                 }
             }
+
+            if (EsiStatusService.isServerUnavailableCode(response.code)) {
+                response.close()
+                // The offline banner explains this; a list of identical 504s adds nothing.
+                RequestQueueManager.remove(queuedRequest.id)
+                EsiStatusService.reportServerUnavailable()
+                if (cacheResult.data != null) return cacheResult.data!! to EsiResponseMetadata()
+                throw EsiOfflineException(endpoint)
+            }
+            EsiStatusService.reportServerOk()
 
             // 304 Not Modified — ESI confirmed our cached copy is still current.
             if (response.code == 304) {
@@ -309,6 +328,8 @@ object EsiClient {
                     lastModified = lastModified,
                     totalPages = xPages,
                 )
+        } catch (e: EsiOfflineException) {
+            throw e
         } catch (e: EsiForbiddenException) {
             // A 403 is a definitive "no access" answer, not a transient failure to ride out on
             // stale data -- masking it behind a stale-cache fallback would stop corpGuarded from

@@ -15,6 +15,13 @@ class EsiDegradedException(
     endpoint: String,
 ) : IOException("ESI reports $endpoint degraded — request skipped until it recovers")
 
+/** Thrown by [EsiClient.getRaw] while the EVE server itself is unreachable (daily downtime, an
+ * outage) and there's no stale cache to fall back on -- see [EsiStatusService.isServerOffline]. */
+class EsiOfflineException(
+    endpoint: String,
+) : IOException("EVE server offline — $endpoint skipped"),
+    org.eventt.core.model.QuietFailure
+
 /** Thrown by [EsiClient.getRaw] on HTTP 403 — the acting character's token doesn't carry the
  * corp role (Accountant, Director, ...) the endpoint requires. An ordinary [IOException] so
  * existing catch blocks still handle it, but callers that fetch corp data can catch this
@@ -47,6 +54,8 @@ object EsiStatusService {
 
     /** Test-only: forces the next [isHealthy] call to re-fetch, and clears any cached routes. */
     internal fun resetForTest() {
+        offlineUntil = 0L
+        _serverOffline.value = false
         lastFetchAt = 0L
         routes = emptyList()
         previouslyDegraded = emptySet()
@@ -101,6 +110,51 @@ object EsiStatusService {
                 // fails open (see below) when there's no usable status data.
             }
         }
+    }
+
+    // ── Whole-server outage (Tranquility down: daily downtime, incidents) ─────────────────────
+    // /meta/status can't be trusted for this -- during downtime it may itself be unreachable (and
+    // isHealthy fails open) -- so the signal is ESI's own 502/503/504 answers. The first one trips
+    // the breaker; while it's open no request leaves the app, and once the pause lapses exactly one
+    // caller is let through as a probe instead of the whole backlog stampeding a dead server.
+    private const val OFFLINE_PAUSE_MS = 60_000L
+
+    @Volatile private var offlineUntil = 0L
+    private val _serverOffline = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val serverOffline: kotlinx.coroutines.flow.StateFlow<Boolean> = _serverOffline
+
+    fun isServerUnavailableCode(code: Int): Boolean = code in 502..504
+
+    /** True while requests should be skipped; hands the one post-pause probe to its caller. */
+    @Synchronized
+    fun isServerOffline(): Boolean {
+        if (!_serverOffline.value) return false
+        val now = System.currentTimeMillis()
+        if (now < offlineUntil) return true
+        offlineUntil = now + OFFLINE_PAUSE_MS // this caller probes; everyone else keeps waiting
+        return false
+    }
+
+    /** Test-only: lets the next [isServerOffline] call through as the probe without waiting. */
+    internal fun resetOfflinePauseForTest() {
+        offlineUntil = 0L
+    }
+
+    @Synchronized
+    fun reportServerUnavailable() {
+        offlineUntil = System.currentTimeMillis() + OFFLINE_PAUSE_MS
+        if (!_serverOffline.value) {
+            _serverOffline.value = true
+            AppLog.warn("ESI", "EVE server unreachable — ESI calls paused, showing cached data until it's back")
+        }
+    }
+
+    @Synchronized
+    fun reportServerOk() {
+        if (!_serverOffline.value) return
+        _serverOffline.value = false
+        offlineUntil = 0L
+        AppLog.warn("ESI", "EVE server is back online")
     }
 
     /** True when ESI reports this route healthy, or we have no status data at all (fails open). */

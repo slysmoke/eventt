@@ -77,6 +77,12 @@ class EsiThrottleInterceptor(
                             true
                         }
 
+                        // 504 = ESI already waited out its own upstream timeout on the game server;
+                        // retrying just multiplies that wait (3 × ~10s per call during downtime).
+                        response.code == 504 -> {
+                            false
+                        }
+
                         response.code >= 500 -> {
                             true
                         }
