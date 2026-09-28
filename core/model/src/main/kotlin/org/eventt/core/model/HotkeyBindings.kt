@@ -5,33 +5,41 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * One global hotkey combination: any mix of Ctrl/Alt/Shift plus a letter. At least one modifier
- * is required — a bare letter as a system-wide grab would swallow normal typing everywhere.
+ * One global hotkey combination: any mix of Ctrl/Alt/Shift plus a key — a letter "A".."Z" or a
+ * function key "F1".."F12" (see [KEYS]). At least one modifier is required — a bare letter as a
+ * system-wide grab would swallow normal typing everywhere.
  */
 data class HotkeyCombo(
     val ctrl: Boolean,
     val alt: Boolean,
     val shift: Boolean,
-    val letter: Char,
+    val key: String,
 ) {
+    init {
+        require(key in KEYS) { "hotkey key must be A-Z or F1-F12, got '$key'" }
+    }
+
     val label: String =
         buildString {
             if (ctrl) append("Ctrl+")
             if (alt) append("Alt+")
             if (shift) append("Shift+")
-            append(letter)
+            append(key)
         }
 
-    /** Stable settings form, e.g. "CTRL+ALT+Z". */
+    /** Stable settings form, e.g. "CTRL+ALT+Z" or "CTRL+F11". */
     fun serialize(): String = label.uppercase()
 
     companion object {
-        val QUEUE_DEFAULT = HotkeyCombo(ctrl = true, alt = false, shift = false, letter = 'Z')
-        val OVERLAY_DEFAULT = HotkeyCombo(ctrl = true, alt = false, shift = false, letter = 'M')
+        /** Every bindable key name, letters first: "A".."Z", then "F1".."F12". */
+        val KEYS: List<String> = ('A'..'Z').map { it.toString() } + (1..12).map { "F$it" }
+
+        val QUEUE_DEFAULT = HotkeyCombo(ctrl = true, alt = false, shift = false, key = "Z")
+        val OVERLAY_DEFAULT = HotkeyCombo(ctrl = true, alt = false, shift = false, key = "M")
 
         /**
-         * Parse a stored combo ("CTRL+ALT+Z"). A bare letter (the pre-combo settings format)
-         * is read as Ctrl+letter. Null for anything malformed or modifier-less.
+         * Parse a stored combo ("CTRL+ALT+Z", "CTRL+F11"). A bare key (the pre-combo settings
+         * format) is read as Ctrl+key. Null for anything malformed or modifier-less.
          */
         fun parse(raw: String?): HotkeyCombo? {
             val parts =
@@ -40,11 +48,11 @@ data class HotkeyCombo(
                     ?.uppercase()
                     ?.split("+")
                     ?.filter { it.isNotBlank() } ?: return null
-            val letter = parts.lastOrNull()?.singleOrNull()?.takeIf { it in 'A'..'Z' } ?: return null
+            val key = parts.lastOrNull()?.takeIf { it in KEYS } ?: return null
             val mods = parts.dropLast(1).toSet()
-            if (mods.isEmpty()) return HotkeyCombo(ctrl = true, alt = false, shift = false, letter = letter)
+            if (mods.isEmpty()) return HotkeyCombo(ctrl = true, alt = false, shift = false, key = key)
             if (!mods.all { it == "CTRL" || it == "ALT" || it == "SHIFT" }) return null
-            return HotkeyCombo(ctrl = "CTRL" in mods, alt = "ALT" in mods, shift = "SHIFT" in mods, letter = letter)
+            return HotkeyCombo(ctrl = "CTRL" in mods, alt = "ALT" in mods, shift = "SHIFT" in mods, key = key)
         }
     }
 }

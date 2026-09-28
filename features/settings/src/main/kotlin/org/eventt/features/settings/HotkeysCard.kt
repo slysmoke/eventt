@@ -38,8 +38,8 @@ import org.eventt.core.model.HotkeyCombo
 
 /**
  * Rebind the two global hotkeys by pressing the wanted combination: any mix of Ctrl/Alt/Shift
- * plus a letter (at least one modifier — a bare letter grabbed system-wide would swallow normal
- * typing). Changes are saved and re-registered immediately.
+ * plus a letter or F1–F12 (at least one modifier — a bare letter grabbed system-wide would
+ * swallow normal typing). Changes are saved and re-registered immediately.
  */
 @Composable
 internal fun HotkeysCard() {
@@ -70,7 +70,7 @@ internal fun HotkeysCard() {
             Text("Global Hotkeys", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
                 "System-wide — they trigger even while the EVE client has focus. Click a binding, then " +
-                    "press the combination you want (Ctrl/Alt/Shift + a letter, at least one modifier). " +
+                    "press the combination you want (Ctrl/Alt/Shift + a letter or F1–F12, at least one modifier). " +
                     "Extra mouse buttons: bind them to this combination in your mouse software " +
                     "(Logitech G HUB, Razer Synapse, input-remapper on Linux).",
                 style = MaterialTheme.typography.bodySmall,
@@ -96,8 +96,8 @@ internal fun HotkeysCard() {
     }
 }
 
-// Compose desktop Keys for A..Z, index 0 = 'A'.
-private val LETTER_KEYS =
+// Compose desktop Keys in HotkeyCombo.KEYS order: A..Z, then F1..F12 — index i binds KEYS[i].
+private val BINDABLE_KEYS =
     listOf(
         Key.A,
         Key.B,
@@ -125,6 +125,18 @@ private val LETTER_KEYS =
         Key.X,
         Key.Y,
         Key.Z,
+        Key.F1,
+        Key.F2,
+        Key.F3,
+        Key.F4,
+        Key.F5,
+        Key.F6,
+        Key.F7,
+        Key.F8,
+        Key.F9,
+        Key.F10,
+        Key.F11,
+        Key.F12,
     )
 
 @Composable
@@ -174,7 +186,7 @@ private fun HotkeyCaptureRow(
                     .onPreviewKeyEvent { event ->
                         if (!capturing) return@onPreviewKeyEvent false
                         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent true
-                        val idx = LETTER_KEYS.indexOf(event.key)
+                        val idx = BINDABLE_KEYS.indexOf(event.key)
                         when {
                             event.key == Key.Escape -> {
                                 capturing = false
@@ -182,7 +194,7 @@ private fun HotkeyCaptureRow(
 
                             idx == -1 -> {
                                 // Modifier keydowns pass silently while the user forms the chord;
-                                // anything else that isn't a letter can't be bound.
+                                // anything else that isn't a letter or F-key can't be bound.
                                 val isModifier =
                                     event.key == Key.CtrlLeft ||
                                         event.key == Key.CtrlRight ||
@@ -190,7 +202,7 @@ private fun HotkeyCaptureRow(
                                         event.key == Key.AltRight ||
                                         event.key == Key.ShiftLeft ||
                                         event.key == Key.ShiftRight
-                                if (!isModifier) hint = "Press Ctrl/Alt/Shift + a letter (A–Z)"
+                                if (!isModifier) hint = "Press Ctrl/Alt/Shift + a letter (A–Z) or F1–F12"
                             }
 
                             else -> {
@@ -199,7 +211,7 @@ private fun HotkeyCaptureRow(
                                         ctrl = event.isCtrlPressed,
                                         alt = event.isAltPressed,
                                         shift = event.isShiftPressed,
-                                        letter = 'A' + idx,
+                                        key = HotkeyCombo.KEYS[idx],
                                     )
                                 when {
                                     !picked.ctrl && !picked.alt && !picked.shift -> {

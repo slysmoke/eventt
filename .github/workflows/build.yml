@@ -15,12 +15,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # Empty for push events, which checkout treats as "default ref" (the pushed commit) —
-          # only pull_request needs this, to get the actual PR branch instead of the ephemeral
-          # merge commit checkout defaults to (which has nowhere to push a fix commit back to).
-          ref: ${{ github.head_ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.head_ref || github.ref }}
 
-      - uses: actions/setup-java@v5.7.0
+      - uses: actions/setup-java@v6.0.1
         with:
           java-version: '21'
           distribution: 'temurin'
