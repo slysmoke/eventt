@@ -44,7 +44,7 @@ class BacktestDipStrategyTest {
         result shouldNotBe null
         result!!.buySignals shouldBe (fallStep1.size + fallStep2.size)
         // Bought in on the way down at 7 and 5, ended at 12 -- comfortably profitable overall.
-        (result.unrealizedPnlPct > 50.0) shouldBe true
+        (result.pnlPct > 50.0) shouldBe true
         // But the lots bought at 7 were genuinely underwater once price fell further to 5.
         (result.worstDrawdownPct < -5.0) shouldBe true
     }
@@ -56,8 +56,24 @@ class BacktestDipStrategyTest {
         val noFees = backtestDipStrategy(history, lookbackDays = 30, minDiscountPct = 40.0)!!
         val withFees = backtestDipStrategy(history, 30, 40.0, MaterialFees(8.0, 3.0))!!
 
-        noFees.unrealizedPnlPct shouldBe (100.0 plusOrMinus 1e-9)
+        noFees.pnlPct shouldBe (100.0 plusOrMinus 1e-9)
         // 1/1.03 units per ISK, marked at 10 * 0.89: 0.89 * 2 / 1.03 - 1
-        withFees.unrealizedPnlPct shouldBe ((0.89 * 2 / 1.03 - 1) * 100 plusOrMinus 1e-9)
+        withFees.pnlPct shouldBe ((0.89 * 2 / 1.03 - 1) * 100 plusOrMinus 1e-9)
+    }
+
+    @Test
+    fun `take-profit sells recycle capital through repeated dips`() {
+        // Flat 10 baseline, then two dips to 8 each followed by a recovery to 10.
+        val prices = List(30) { 10.0 } + listOf(8.0) + List(5) { 10.0 } + listOf(8.0) + List(5) { 10.0 }
+        val history = prices.mapIndexed { i, p -> row((prices.size - 1 - i).toLong(), p) }
+
+        val hold = backtestDipStrategy(history, lookbackDays = 30, minDiscountPct = 15.0)!!
+        val swing = backtestDipStrategy(history, lookbackDays = 30, minDiscountPct = 15.0, takeProfitPct = 5.0)!!
+
+        hold.roundTrips shouldBe 0
+        hold.pnlPct shouldBe (25.0 plusOrMinus 1e-9) // two lots at 8, both marked at 10
+        swing.roundTrips shouldBe 2
+        // Same 1M re-used twice at +25% each, vs 1M peak capital.
+        swing.pnlPct shouldBe (50.0 plusOrMinus 1e-9)
     }
 }

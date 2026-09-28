@@ -499,6 +499,7 @@ internal fun MaterialsInvestmentTab(
                                                 }
                                             } ?: MaterialFees()
                                         val feesSnap = fees
+                                        val takeProfitSnap = ladderStepPct.toDoubleOrNull() ?: 5.0
 
                                         statusMsg = "0/${typeIds.size} types checked…"
                                         val semaphore = Semaphore(10)
@@ -548,6 +549,7 @@ internal fun MaterialsInvestmentTab(
                                                                     myAssetQtyByType = myAssetQtyByType,
                                                                     myOrdersByType = myOrdersByType,
                                                                     fees = feesSnap,
+                                                                    takeProfitPct = takeProfitSnap,
                                                                 )
                                                             }.getOrNull()?.let { found.add(it) }
                                                             mutex.withLock {
@@ -695,10 +697,12 @@ private fun MaterialsHeader(
                 MCol("7d", MaterialSortCol.TREND, sort, asc, onSort, Modifier.width(55.dp))
             }
             Tip(
-                "Replays this same \"buy when below the trailing Lookback-day average by Min Discount %\" rule over up to " +
-                    "a year of this item's own history, paying broker fee on each buy and netting sales tax + broker fee on the " +
-                    "exit. Format: final P&L% (worst paper drawdown% along the way). A negative " +
-                    "first number is a warning sign -- the dip-buying pattern hasn't historically paid off for this item.",
+                "Replays this tab's strategy over up to a year of this item's own daily history: buy on every day the " +
+                    "price is Min Discount % under the trailing Lookback-day average, and sell the whole position once " +
+                    "selling nets cost + Ladder Step % (the same take-profit as the sell target), then wait for the next " +
+                    "dip. Broker fee on buys, sales tax + broker fee on sells. Format: total P&L% (worst P&L% along the " +
+                    "way), both vs the most capital tied up at once. A negative first number means the pattern hasn't " +
+                    "historically paid off for this item. Uses the Ladder Step % from the last Analyze.",
             ) {
                 MCol("Backtest", MaterialSortCol.BACKTEST, sort, asc, onSort, Modifier.width(105.dp))
             }
@@ -886,10 +890,10 @@ private fun MaterialRow(
             )
             Text(
                 c.backtest?.let { bt ->
-                    "${signedPct(bt.unrealizedPnlPct)} (${signedPct(bt.worstDrawdownPct)})"
+                    "${signedPct(bt.pnlPct)} (${signedPct(bt.worstDrawdownPct)})"
                 } ?: "—",
                 style = MaterialTheme.typography.labelSmall,
-                color = c.backtest?.let { if (it.unrealizedPnlPct >= 0) positiveColor else negativeColor } ?: Color.Gray,
+                color = c.backtest?.let { if (it.pnlPct >= 0) positiveColor else negativeColor } ?: Color.Gray,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.width(105.dp),

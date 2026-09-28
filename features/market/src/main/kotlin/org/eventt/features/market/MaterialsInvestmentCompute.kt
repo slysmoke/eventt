@@ -210,7 +210,7 @@ internal fun sortMaterials(
             }
 
             MaterialSortCol.BACKTEST -> {
-                compareBy { it.candidate.backtest?.unrealizedPnlPct ?: Double.NEGATIVE_INFINITY }
+                compareBy { it.candidate.backtest?.pnlPct ?: Double.NEGATIVE_INFINITY }
             }
 
             MaterialSortCol.ALLOCATED -> {
@@ -257,6 +257,8 @@ internal fun computeMaterialCandidate(
     // Your active orders, grouped by typeId -- same one-read-per-scan deal.
     myOrdersByType: Map<Int, List<ActiveOrderDao.ActiveOrderRecord>>? = null,
     fees: MaterialFees = MaterialFees(),
+    // Same take-profit the sell target uses (Ladder Step %), so the backtest replays the real exit.
+    takeProfitPct: Double? = null,
 ): MaterialCandidate? {
     // Buy-order-oriented, not instant-buy: this tab's whole point is placing standing buy orders
     // at the ladder's target prices rather than paying the ask, so `currentPrice` is the top
@@ -337,7 +339,7 @@ internal fun computeMaterialCandidate(
         dailyVolume = dailyVolume,
         spikeDetected = spikeDetected,
         position = position,
-        backtest = backtestDipStrategy(fullHistory, lookbackDays, minDiscountPct, fees),
+        backtest = backtestDipStrategy(fullHistory, lookbackDays, minDiscountPct, fees, takeProfitPct),
     )
 }
 
@@ -347,11 +349,14 @@ internal fun computeMaterialCandidate(
 
 internal data class BacktestResult(
     val buySignals: Int,
-    val totalInvested: Double,
-    val currentValue: Double,
-    val unrealizedPnlPct: Double,
-    // The worst unrealized P&L% the simulated position ever sat at along the way -- how much red
-    // you'd have had to stomach, not just where it ended up.
+    // How many times the take-profit sold the whole simulated position.
+    val roundTrips: Int,
+    // Realized profit + the open remainder marked at what selling would net, as % of the most
+    // capital that was ever tied up at once (not of every buy summed: re-used ISK after a sell
+    // would otherwise count twice and understate the return).
+    val pnlPct: Double,
+    // The worst that same P&L% ever sat at along the way -- how much red you'd have had to
+    // stomach, not just where it ended up.
     val worstDrawdownPct: Double,
 )
 
@@ -360,43 +365,58 @@ internal data class BacktestResult(
 // setting because there's nothing meaningful to tune it to.
 private const val BACKTEST_ISK_PER_SIGNAL = 1_000_000.0
 
+/**
+ * Replays this tab's strategy over an item's own daily history: buy a fixed notional (+ broker
+ * fee) on every day the average sits [minDiscountPct] under the trailing [lookbackDays] average,
+ * and — when [takeProfitPct] is set — sell the whole position the first day selling would net
+ * cost + that %, after tax and broker fee, then start over. Null takeProfitPct = buy and hold.
+ * Daily average prices, not real fills: illustrative, not a guarantee.
+ */
 internal fun backtestDipStrategy(
     history: List<org.eventt.core.model.MarketHistoryModel>,
     lookbackDays: Int,
     minDiscountPct: Double,
-    // Each simulated buy pays the broker fee; the position is marked at what selling would net.
     fees: MaterialFees = MaterialFees.NONE,
+    takeProfitPct: Double? = null,
 ): BacktestResult? {
     val asc = history.sortedBy { it.date }
     if (asc.size < lookbackDays + BACKTEST_MIN_RUNWAY_DAYS) return null // not enough history to replay the rule meaningfully
 
     var qty = 0.0
-    var invested = 0.0
+    var openCost = 0.0
+    var realized = 0.0
+    var peakCapital = 0.0
     var worstPnlPct = 0.0
     var signals = 0
+    var trips = 0
+
+    fun pnlPct(price: Double) = (realized + qty * price * fees.sellMultiplier - openCost) / peakCapital * 100.0
+
     for (i in lookbackDays until asc.size) {
         val price = asc[i].average
         if (price <= 0.0) continue
-        val windowAvg = asc.subList(i - lookbackDays, i).map { it.average }.average()
-        if (windowAvg > 0.0 && price <= windowAvg * (1.0 - minDiscountPct / 100.0)) {
-            qty += BACKTEST_ISK_PER_SIGNAL / (price * fees.buyMultiplier)
-            invested += BACKTEST_ISK_PER_SIGNAL
-            signals++
+        val proceeds = qty * price * fees.sellMultiplier
+        if (takeProfitPct != null && qty > 0 && proceeds >= openCost * (1.0 + takeProfitPct / 100.0)) {
+            realized += proceeds - openCost
+            qty = 0.0
+            openCost = 0.0
+            trips++
+        } else {
+            val windowAvg = asc.subList(i - lookbackDays, i).map { it.average }.average()
+            if (windowAvg > 0.0 && price <= windowAvg * (1.0 - minDiscountPct / 100.0)) {
+                qty += BACKTEST_ISK_PER_SIGNAL / (price * fees.buyMultiplier)
+                openCost += BACKTEST_ISK_PER_SIGNAL
+                peakCapital = maxOf(peakCapital, openCost)
+                signals++
+            }
         }
-        if (invested > 0.0) {
-            val pnlPct = (qty * price * fees.sellMultiplier - invested) / invested * 100.0
-            if (pnlPct < worstPnlPct) worstPnlPct = pnlPct
-        }
+        if (peakCapital > 0.0) worstPnlPct = minOf(worstPnlPct, pnlPct(price))
     }
-    if (invested <= 0.0) return null
-
-    val lastPrice = asc.last().average
-    val currentValue = qty * lastPrice * fees.sellMultiplier
+    if (peakCapital <= 0.0) return null
     return BacktestResult(
         buySignals = signals,
-        totalInvested = invested,
-        currentValue = currentValue,
-        unrealizedPnlPct = (currentValue - invested) / invested * 100.0,
+        roundTrips = trips,
+        pnlPct = pnlPct(asc.last().average),
         worstDrawdownPct = worstPnlPct,
     )
 }
