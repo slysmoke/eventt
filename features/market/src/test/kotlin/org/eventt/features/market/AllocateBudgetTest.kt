@@ -1,5 +1,6 @@
 package org.eventt.features.market
 
+import io.kotest.matchers.doubles.plusOrMinus
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.junit.jupiter.api.Test
@@ -81,7 +82,35 @@ class AllocateBudgetTest {
     }
 
     @Test
-    fun `sell ladder is only generated when actually holding a position`() {
+    fun `a position already at its allocation waits instead of recommending more buys`() {
+        // Bought 100 @ 10 = 1000 ISK held; its budget share is capped at 1000 too, so nothing's left to buy.
+        val held = MaterialPosition(qtyHeld = 100, avgBuyPrice = 10.0)
+        val c = candidate(typeId = 1, currentPrice = 8.0, vsAvgPct = -20.0, dailyVolume = 1000, position = held)
+
+        val r = allocateBudget(listOf(c), totalBudget = 1000.0, maxItems = 1, 100.0, 30.0, ladderLevels = 3, ladderStepPct = 5.0).single()
+
+        r.toBuyIsk shouldBe 0.0
+        r.ladder.size shouldBe 0
+        r.action shouldBe MaterialAction.WAIT
+    }
+
+    @Test
+    fun `held position flips to SELL once the lowest ask clears cost plus take-profit after fees`() {
+        val held = MaterialPosition(qtyHeld = 100, avgBuyPrice = 10.0)
+        // Recovered above its average: no longer a dip, so it gets no budget share at all.
+        val c = candidate(typeId = 1, currentPrice = 11.0, vsAvgPct = 5.0, dailyVolume = 1000, position = held).copy(bestAsk = 11.2)
+
+        val r = allocateBudget(listOf(c), totalBudget = 1_000_000.0, maxItems = 1, 100.0, 30.0, 3, 5.0, sellFeePct = 4.0).single()
+
+        // 10 * 1.05 / 0.96 = 10.9375
+        r.sellTarget!!.targetPrice shouldBe (10.0 * 1.05 / 0.96)
+        r.action shouldBe MaterialAction.SELL
+        // (11.2 * 0.96 - 10) * 100
+        r.sellTarget!!.profitNow!! shouldBe ((11.2 * 0.96 - 10.0) * 100 plusOrMinus 1e-6)
+    }
+
+    @Test
+    fun `sell target is only generated when actually holding a position`() {
         val held = MaterialPosition(qtyHeld = 100, avgBuyPrice = 10.0)
         val holding = candidate(typeId = 1, currentPrice = 8.0, vsAvgPct = -20.0, dailyVolume = 1000, position = held)
         val notHolding = candidate(typeId = 2, currentPrice = 8.0, vsAvgPct = -20.0, dailyVolume = 1000, position = null)
@@ -97,7 +126,7 @@ class AllocateBudgetTest {
                 ladderStepPct = 5.0,
             )
 
-        result.first { it.candidate.typeId == 1 }.sellLadder.size shouldBe 3
-        result.first { it.candidate.typeId == 2 }.sellLadder.size shouldBe 0
+        result.first { it.candidate.typeId == 1 }.sellTarget!!.qty shouldBe 100
+        result.first { it.candidate.typeId == 2 }.sellTarget shouldBe null
     }
 }

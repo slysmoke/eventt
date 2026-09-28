@@ -32,6 +32,9 @@ internal data class MaterialCandidate(
     val typeId: Int,
     val typeName: String,
     val currentPrice: Double,
+    // Live lowest sell order -- what a held position would realistically sell at right now (by
+    // undercutting it), used for the "can I sell yet" profit figure. Null when nobody's selling.
+    val bestAsk: Double? = null,
     val avgPrice: Double,
     val highPrice: Double,
     val lowPrice: Double,
@@ -127,7 +130,7 @@ internal fun sortMaterials(
             }
 
             MaterialSortCol.ALLOCATED -> {
-                compareBy { it.allocatedIsk }
+                compareBy { it.toBuyIsk }
             }
         }
     return if (asc) list.sortedWith(cmp) else list.sortedWith(cmp.reversed())
@@ -167,6 +170,22 @@ internal fun computeMaterialCandidate(
     if (buys.isEmpty()) return null
     val currentPrice = buys.maxOf { (it["price"] as? Number)?.toDouble() ?: 0.0 }
     if (currentPrice <= 0.0) return null
+    val bestAsk =
+        orders
+            .filter { (it["is_buy_order"] as? Boolean) == false }
+            .mapNotNull { (it["price"] as? Number)?.toDouble()?.takeIf { p -> p > 0 } }
+            .minOrNull()
+
+    val position =
+        if (myTransactionsByType != null || myAssetQtyByType != null) {
+            computeMaterialPosition(myTransactionsByType?.get(typeId).orEmpty(), myAssetQtyByType?.get(typeId) ?: 0L)
+        } else {
+            null
+        }
+    // A position you actually bought into stays on the list regardless of the entry filters below
+    // -- those decide whether to *start* buying, and once the price recovers (the whole point)
+    // they'd otherwise drop the item exactly when it's time to sell it.
+    val holding = position != null && position.qtyHeld > 0 && position.avgBuyPrice != null
 
     // Fetched once at whichever is longer -- the live discount window still only looks at its own
     // `lookbackDays` prefix of this, while the structural-break check and the backtest use the
@@ -185,29 +204,30 @@ internal fun computeMaterialCandidate(
 
     val variance = window.map { (it.average - avgPrice) * (it.average - avgPrice) }.average()
     val volatilityPct = sqrt(variance) / avgPrice * 100.0
-    if (maxVolatilityPct > 0.0 && volatilityPct > maxVolatilityPct) return null
+    if (!holding && maxVolatilityPct > 0.0 && volatilityPct > maxVolatilityPct) return null
 
     val dailyVolume = medianDailyVolume(fullHistory, lookbackDays)
-    if (dailyVolume < minDailyVol) return null
+    if (!holding && dailyVolume < minDailyVol) return null
 
     val spikeDetected = detectPriceSpike(fullHistory, spikePriceMultiplier, spikeVolumeMultiplier, lookbackDays, currentPrice)
-    if (spikeFilter == SpikeFilter.EXCLUDE && spikeDetected) return null
-    if (spikeFilter == SpikeFilter.ONLY && !spikeDetected) return null
+    if (!holding && spikeFilter == SpikeFilter.EXCLUDE && spikeDetected) return null
+    if (!holding && spikeFilter == SpikeFilter.ONLY && !spikeDetected) return null
 
     val vsAvgPct = (currentPrice - avgPrice) / avgPrice * 100.0
-    if (vsAvgPct > -minDiscountPct) return null // not currently cheap enough vs its own history
+    if (!holding && vsAvgPct > -minDiscountPct) return null // not currently cheap enough vs its own history
 
     // A genuine break to a new multi-month low is a different animal from a routine dip inside a
     // stable range -- could be a balance-patch obsolescence, a permanent supply shift, etc. -- so
     // by default it's excluded rather than fed straight into the ladder as "just a deeper buy."
     val structuralFloor = fullHistory.minOf { it.lowest.takeIf { l -> l > 0 } ?: it.average }
-    if (excludeStructuralBreak && structuralFloor > 0.0 && currentPrice <= structuralFloor) return null
+    if (!holding && excludeStructuralBreak && structuralFloor > 0.0 && currentPrice <= structuralFloor) return null
 
     val type = StaticDataDao.getTypeById(typeId) ?: return null
     return MaterialCandidate(
         typeId = typeId,
         typeName = type.name,
         currentPrice = currentPrice,
+        bestAsk = bestAsk,
         avgPrice = avgPrice,
         highPrice = highPrice,
         lowPrice = lowPrice,
@@ -217,12 +237,7 @@ internal fun computeMaterialCandidate(
         volatilityPct = volatilityPct,
         dailyVolume = dailyVolume,
         spikeDetected = spikeDetected,
-        position =
-            if (myTransactionsByType != null || myAssetQtyByType != null) {
-                computeMaterialPosition(myTransactionsByType?.get(typeId).orEmpty(), myAssetQtyByType?.get(typeId) ?: 0L)
-            } else {
-                null
-            },
+        position = position,
         backtest = backtestDipStrategy(fullHistory, lookbackDays, minDiscountPct),
     )
 }
@@ -299,27 +314,41 @@ internal data class LadderLevel(
     val alreadyTriggered: Boolean,
 )
 
-// One rung of the take-profit sell ladder -- the mirror of LadderLevel, only generated for an item
-// you already hold. Later levels (bigger price recoveries) sell a bigger share of the position --
-// lock in more as the rebound goes further, the reverse logic of buying more as it falls further.
-internal data class SellLevel(
-    val level: Int,
-    val targetPrice: Double,
+// What to do with an item right now. SELL wins over BUY: a position that has reached its take-profit
+// target is the actionable thing, not topping it up.
+internal enum class MaterialAction { BUY, WAIT, SELL }
+
+// Take-profit plan for a held position: sell the whole stack in one order (EVE can't import a
+// multi-rung sell list, so a split ladder only meant more manual order edits).
+internal data class SellTarget(
     val qty: Long,
+    // Lowest sell price that clears your average cost + take-profit % after sales tax and broker fee.
+    val targetPrice: Double,
+    // Net profit (after fees) selling the whole stack at the current lowest ask, and as % of cost.
+    // Null when nobody is selling to price against.
+    val profitNow: Double?,
+    val profitNowPct: Double?,
 )
 
 internal data class AllocatedMaterial(
     val candidate: MaterialCandidate,
+    // Target exposure for this item from the budget split.
     val allocatedIsk: Double,
+    // Allocation minus what you already hold (at cost) -- what's actually left to buy. Zero once
+    // the position is full, which is what stops a position you're just waiting to sell from
+    // being recommended as a buy on every re-scan.
+    val toBuyIsk: Double,
     val ladder: List<LadderLevel>,
-    val sellLadder: List<SellLevel>,
+    val sellTarget: SellTarget?,
+    val action: MaterialAction?,
 )
 
 /**
  * Spreads `totalBudget` across the most-discounted candidates, weighted by how far below their
  * own average price they currently sit, and capped per item both by `maxPerItemPct` of the budget
  * and by a liquidity ceiling (`liquidityDays` worth of the item's own median daily trading value --
- * don't park more ISK in one material than the market could plausibly absorb).
+ * don't park more ISK in one material than the market could plausibly absorb). Items you hold are
+ * always returned (with their sell plan), even when they no longer rank for a share of the budget.
  */
 internal fun allocateBudget(
     candidates: List<MaterialCandidate>,
@@ -329,8 +358,11 @@ internal fun allocateBudget(
     liquidityDays: Double,
     ladderLevels: Int,
     ladderStepPct: Double,
+    // Sales tax + broker fee, % of sale value, for the take-profit math.
+    sellFeePct: Double = 0.0,
+    takeProfitPct: Double = ladderStepPct,
 ): List<AllocatedMaterial> {
-    if (totalBudget <= 0.0 || candidates.isEmpty() || maxItems <= 0) return emptyList()
+    if (candidates.isEmpty()) return emptyList()
 
     // Rank by total ISK opportunity -- discount depth times how much of the item actually trades
     // per day -- not by discount % alone. A thin item down 40% on 2 units/day is a smaller real
@@ -339,12 +371,16 @@ internal fun allocateBudget(
     // one before it ever got a share of the budget.
     fun opportunity(c: MaterialCandidate) = (-c.vsAvgPct).coerceAtLeast(0.0) * c.dailyVolume * c.currentPrice
 
-    val picked = candidates.sortedByDescending { opportunity(it) }.take(maxItems)
+    val picked =
+        if (totalBudget > 0.0 && maxItems > 0) {
+            candidates.filter { opportunity(it) > 0.0 }.sortedByDescending { opportunity(it) }.take(maxItems)
+        } else {
+            emptyList()
+        }
     val weights = picked.map { opportunity(it) }
-    if (weights.sum() <= 0.0) return emptyList()
 
     val caps =
-        picked.mapIndexed { i, c ->
+        picked.map { c ->
             minOf(totalBudget * maxPerItemPct / 100.0, c.dailyVolume * c.currentPrice * liquidityDays)
         }
 
@@ -367,15 +403,33 @@ internal fun allocateBudget(
         active.removeAll { alloc[it] >= caps[it] - 0.01 }
     }
 
-    return picked
-        .mapIndexed { i, c ->
-            AllocatedMaterial(
-                candidate = c,
-                allocatedIsk = alloc[i],
-                ladder = buildLadder(c, alloc[i], ladderLevels, ladderStepPct),
-                sellLadder = buildSellLadder(c, ladderLevels, ladderStepPct),
-            )
-        }.filter { it.allocatedIsk > 1.0 || it.sellLadder.isNotEmpty() }
+    val allocById = picked.indices.associate { picked[it].typeId to alloc[it] }
+    val held = candidates.filter { it.typeId !in allocById && (it.position?.qtyHeld ?: 0L) > 0 && it.position?.avgBuyPrice != null }
+    // ponytail: ISK freed by an already-full position isn't redistributed to other items -- the
+    // budget reads as "target exposure", and a re-scan after selling frees it up again anyway.
+    return (picked + held).mapNotNull { c ->
+        val allocated = allocById[c.typeId] ?: 0.0
+        val position = c.position
+        val heldCost = if (position != null && position.qtyHeld > 0) position.qtyHeld * (position.avgBuyPrice ?: c.currentPrice) else 0.0
+        val toBuy = (allocated - heldCost).coerceAtLeast(0.0)
+        val sell = buildSellTarget(c, sellFeePct, takeProfitPct)
+        val action =
+            when {
+                sell != null && c.bestAsk != null && c.bestAsk >= sell.targetPrice -> MaterialAction.SELL
+                toBuy > 1.0 -> MaterialAction.BUY
+                heldCost > 0.0 -> MaterialAction.WAIT
+                else -> null
+            }
+        if (action == null) return@mapNotNull null
+        AllocatedMaterial(
+            candidate = c,
+            allocatedIsk = allocated,
+            toBuyIsk = toBuy,
+            ladder = if (action == MaterialAction.BUY) buildLadder(c, toBuy, ladderLevels, ladderStepPct) else emptyList(),
+            sellTarget = sell,
+            action = action,
+        )
+    }
 }
 
 private fun buildLadder(
@@ -411,18 +465,21 @@ private fun buildLadder(
     }
 }
 
-private fun buildSellLadder(
+internal fun buildSellTarget(
     candidate: MaterialCandidate,
-    levels: Int,
-    stepPct: Double,
-): List<SellLevel> {
-    val position = candidate.position ?: return emptyList()
+    sellFeePct: Double,
+    takeProfitPct: Double,
+): SellTarget? {
+    val position = candidate.position ?: return null
     val avgCost = position.avgBuyPrice
-    if (position.qtyHeld <= 0 || avgCost == null || avgCost <= 0.0 || levels <= 0) return emptyList()
-    val weightSum = levels * (levels + 1) / 2.0
-    return (1..levels).map { level ->
-        val target = avgCost * (1.0 + stepPct / 100.0 * level)
-        val qty = (position.qtyHeld * level / weightSum).toLong()
-        SellLevel(level, target, qty)
-    }
+    if (position.qtyHeld <= 0 || avgCost == null || avgCost <= 0.0) return null
+    val keep = (1.0 - sellFeePct / 100.0).coerceAtLeast(0.01)
+    val target = avgCost * (1.0 + takeProfitPct / 100.0) / keep
+    val profitNow = candidate.bestAsk?.let { ask -> (ask * keep - avgCost) * position.qtyHeld }
+    return SellTarget(
+        qty = position.qtyHeld,
+        targetPrice = target,
+        profitNow = profitNow,
+        profitNowPct = profitNow?.let { it / (avgCost * position.qtyHeld) * 100.0 },
+    )
 }

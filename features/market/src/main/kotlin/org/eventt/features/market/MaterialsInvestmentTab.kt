@@ -92,6 +92,8 @@ internal fun MaterialsInvestmentTab(
     var analyzeJob by remember { mutableStateOf<Job?>(null) }
     var statusMsg by remember { mutableStateOf("") }
     var candidates by remember { mutableStateOf<List<MaterialCandidate>>(emptyList()) }
+    // Sales tax + broker fee for the selected character, read at Analyze time.
+    var sellFeePct by remember { mutableStateOf(0.0) }
     var sortCol by remember { mutableStateOf(MaterialSortCol.ALLOCATED) }
     var sortAsc by remember { mutableStateOf(false) }
     var detailTypeId by remember { mutableStateOf<Int?>(null) }
@@ -157,7 +159,7 @@ internal fun MaterialsInvestmentTab(
     }
 
     val allocated =
-        remember(candidates, totalBudget, maxItems, maxPerItemPct, liquidityDays, ladderLevels, ladderStepPct) {
+        remember(candidates, totalBudget, maxItems, maxPerItemPct, liquidityDays, ladderLevels, ladderStepPct, sellFeePct) {
             allocateBudget(
                 candidates = candidates,
                 totalBudget = totalBudget.toDoubleOrNull() ?: 0.0,
@@ -166,6 +168,7 @@ internal fun MaterialsInvestmentTab(
                 liquidityDays = liquidityDays.toDoubleOrNull() ?: 3.0,
                 ladderLevels = ladderLevels.toIntOrNull() ?: 4,
                 ladderStepPct = ladderStepPct.toDoubleOrNull() ?: 5.0,
+                sellFeePct = sellFeePct,
             )
         }
     val sorted = remember(allocated, sortCol, sortAsc) { sortMaterials(allocated, sortCol, sortAsc) }
@@ -345,7 +348,8 @@ internal fun MaterialsInvestmentTab(
                     }
                     Tip(
                         "Price gap between each ladder rung. Later rungs (further price drops) get a bigger share of the " +
-                            "item's allocation -- buy more the further it falls.",
+                            "item's allocation -- buy more the further it falls. Also the take-profit % for held items: " +
+                            "the sell target is your average cost + this %, after sales tax and broker fee.",
                     ) {
                         ParamField("Ladder Step %", ladderStepPct, 85.dp) {
                             ladderStepPct = it
@@ -456,6 +460,13 @@ internal fun MaterialsInvestmentTab(
                                                     .groupBy { it.typeId }
                                                     .mapValues { (_, assets) -> assets.sumOf { it.quantity }.toLong() }
                                             }
+
+                                        sellFeePct =
+                                            charId?.let { id ->
+                                                withContext(Dispatchers.IO) {
+                                                    StaticDataDao.getCharSalesTax(id) + StaticDataDao.getCharBrokersFee(id)
+                                                }
+                                            } ?: 0.0
 
                                         statusMsg = "0/${typeIds.size} types checked…"
                                         val semaphore = Semaphore(10)
@@ -581,8 +592,8 @@ internal fun MaterialsInvestmentTab(
                         onShowDetails = { detailTypeId = it },
                         onCreateAlerts = {
                             scope.launch {
-                                withContext(Dispatchers.IO) { createLadderAlerts(alloc, regionId, charId) }
-                                statusMsg = "Alerts set for ${alloc.candidate.typeName}"
+                                val n = withContext(Dispatchers.IO) { createAlerts(listOf(alloc), regionId, charId) }
+                                statusMsg = "$n alert(s) set for ${alloc.candidate.typeName}"
                             }
                         },
                     )
@@ -661,8 +672,11 @@ private fun MaterialsHeader(
             Tip("Median daily trade volume over the lookback window.") {
                 MCol("Vol/day", MaterialSortCol.VOLUME, sort, asc, onSort, Modifier.width(65.dp))
             }
-            Tip("ISK allocated to this item from your total budget, after ranking, the per-item cap, and the liquidity cap.") {
-                MCol("Allocated", MaterialSortCol.ALLOCATED, sort, asc, onSort, Modifier.width(80.dp))
+            Tip(
+                "ISK left to buy: this item's share of the budget (after ranking, the per-item cap and the liquidity cap) " +
+                    "minus what you already hold at cost. 0 once the position is full.",
+            ) {
+                MCol("To Buy", MaterialSortCol.ALLOCATED, sort, asc, onSort, Modifier.width(80.dp))
             }
             Spacer(Modifier.width(28.dp))
         }
@@ -712,6 +726,13 @@ private fun MaterialRow(
     onCreateAlerts: () -> Unit,
 ) {
     val c = alloc.candidate
+    val actionColor =
+        when (alloc.action) {
+            MaterialAction.BUY -> positiveColor
+            MaterialAction.SELL -> warningColor
+            MaterialAction.WAIT -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+            null -> MaterialTheme.colorScheme.onSurface
+        }
     Column(
         modifier =
             Modifier
@@ -722,9 +743,31 @@ private fun MaterialRow(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = checked, onCheckedChange = onCheckedChange, modifier = Modifier.size(28.dp))
             Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                alloc.action?.let { action ->
+                    Tip(
+                        when (action) {
+                            MaterialAction.BUY -> "Buy: still below its share of the budget -- place the buy ladder below."
+                            MaterialAction.WAIT -> "Wait: position is full, sell target not reached yet."
+                            MaterialAction.SELL -> "Sell: the lowest ask already clears your cost + take-profit after fees."
+                        },
+                    ) {
+                        Icon(
+                            when (action) {
+                                MaterialAction.BUY -> Icons.Default.ShoppingCart
+                                MaterialAction.WAIT -> Icons.Default.HourglassEmpty
+                                MaterialAction.SELL -> Icons.Default.Sell
+                            },
+                            contentDescription = action.name,
+                            tint = actionColor,
+                            modifier = Modifier.size(14.dp).padding(end = 2.dp),
+                        )
+                    }
+                }
                 Text(
                     c.typeName,
                     style = MaterialTheme.typography.bodySmall,
+                    color = actionColor,
+                    fontWeight = if (alloc.action == MaterialAction.SELL) FontWeight.SemiBold else null,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
@@ -812,15 +855,15 @@ private fun MaterialRow(
                 modifier = Modifier.width(65.dp),
             )
             Text(
-                formatPriceAbbr(alloc.allocatedIsk),
+                if (alloc.toBuyIsk > 1.0) formatPriceAbbr(alloc.toBuyIsk) else "—",
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.width(80.dp),
             )
             Tip(
-                "Create price alerts (Alerts tab) for this item's remaining buy-ladder rungs -- fires when the market's own " +
-                    "top buy order falls to that price, telling you it's a realistic level to place your order at. Skips " +
-                    "levels already crossed.",
+                "Create price alerts (Alerts tab) for this item: remaining buy-ladder rungs (top buy order falls to the " +
+                    "rung) and, for a held position, the sell target (lowest ask rises to it). Skips levels already crossed " +
+                    "and alerts that already exist.",
             ) {
                 IconButton(onClick = onCreateAlerts, modifier = Modifier.size(28.dp)) {
                     Icon(
@@ -831,36 +874,45 @@ private fun MaterialRow(
                 }
             }
         }
-        val ladderLine =
-            buildString {
-                if (alloc.ladder.isNotEmpty()) {
-                    append("Buy: ")
-                    append(
+        if (alloc.ladder.isNotEmpty()) {
+            Tip(
+                "Target price for a standing buy order → ISK to spend at that rung (* = already at/above the current top " +
+                    "bid, so it's actionable right now rather than a future target).",
+            ) {
+                Text(
+                    "Buy: " +
                         alloc.ladder.joinToString("  ·  ") {
                             "${formatPriceAbbr(it.triggerPrice)}→${formatPriceAbbr(it.iskAmount)}" + if (it.alreadyTriggered) "*" else ""
                         },
-                    )
-                }
-                if (alloc.sellLadder.isNotEmpty()) {
-                    if (isNotEmpty()) append("   ")
-                    append("Sell: ")
-                    append(alloc.sellLadder.joinToString("  ·  ") { "${formatPriceAbbr(it.targetPrice)}→${formatVolume(it.qty)}u" })
-                }
-            }
-        if (ladderLine.isNotEmpty()) {
-            Tip(
-                "Buy: target price for a standing buy order → ISK to spend at that rung (* = already at/above the current " +
-                    "top bid, so it's actionable right now rather than a future target). " +
-                    "Sell: your take-profit target price → quantity to sell, only shown while you hold a position.",
-            ) {
-                Text(
-                    ladderLine,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(start = 28.dp, top = 1.dp),
                 )
+            }
+        }
+        alloc.sellTarget?.let { st ->
+            Tip(
+                "Sell the whole stack in one order at or above the target (average cost + take-profit %, after sales tax " +
+                    "and broker fee). \"now\" is the net profit selling everything at the current lowest ask.",
+            ) {
+                Row(modifier = Modifier.padding(start = 28.dp, top = 1.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "Sell: ${formatVolume(st.qty)}u @ ≥${formatPriceAbbr(st.targetPrice)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                    if (st.profitNow != null && c.bestAsk != null) {
+                        Text(
+                            "now ${formatPriceAbbr(c.bestAsk)} → ${if (st.profitNow >= 0) "+" else ""}${formatPriceAbbr(st.profitNow)} " +
+                                "(${signedPct(st.profitNowPct ?: 0.0)})",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = if (st.profitNow >= 0) positiveColor else negativeColor,
+                        )
+                    }
+                }
             }
         }
     }
@@ -893,21 +945,22 @@ private fun Tip(
     )
 }
 
-// Creates a below-current-price alert (AlertMonitor compares against best sell, matching what
-// `currentPrice` means throughout this tab) for each buy-ladder level not already crossed, skipping
-// any that already have a live, un-triggered alert at essentially the same price -- so clicking the
-// bell again after a re-scan doesn't pile up duplicate alerts for the same trigger.
-private fun createLadderAlerts(
+// Alerts for one item: a "top buy order fell to this rung" alert per buy-ladder level not already
+// crossed, plus a sell-target alert for a held position -- skipping any that already have a live,
+// un-triggered alert at essentially the same price, so re-clicking after a re-scan doesn't pile up
+// duplicates.
+private fun ladderAlerts(
     alloc: AllocatedMaterial,
     regionId: Int,
     charId: Int?,
-) {
+    existing: List<PriceAlertModel>,
+): List<PriceAlertModel> {
     // AlertMonitor trusts whatever region is stored on the alert rather than re-deriving it per
     // typeId (see effectiveRegion in AlertMonitor.kt) -- PLEX only trades in its own global region,
     // so an alert stored with the UI's selected region (e.g. The Forge) would silently watch the
     // wrong market forever and never reflect PLEX's real price.
     val effRegion = if (alloc.candidate.typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else regionId
-    val existing = runCatching { AlertDao.getAll() }.getOrDefault(emptyList())
+    val toInsert = mutableListOf<PriceAlertModel>()
     alloc.ladder.filterNot { it.alreadyTriggered }.forEach { level ->
         val duplicate =
             existing.any {
@@ -916,7 +969,7 @@ private fun createLadderAlerts(
                     kotlin.math.abs(it.targetPrice - level.triggerPrice) < 0.01
             }
         if (!duplicate) {
-            AlertDao.insert(
+            toInsert +=
                 PriceAlertModel(
                     typeId = alloc.candidate.typeId,
                     typeName = alloc.candidate.typeName,
@@ -929,8 +982,41 @@ private fun createLadderAlerts(
                     // competitive), not that you could instant-sell into a buyer at that price.
                     orderType = "buy",
                     characterId = charId,
-                ),
-            )
+                )
         }
     }
+    // Held position: one "lowest ask rose to my sell target" alert -- the signal to go sell.
+    alloc.sellTarget?.takeIf { alloc.action != MaterialAction.SELL }?.let { st ->
+        val duplicate =
+            existing.any {
+                !it.triggered && it.typeId == alloc.candidate.typeId && it.regionId == effRegion &&
+                    it.condition == "above" && it.orderType == "sell" &&
+                    kotlin.math.abs(it.targetPrice - st.targetPrice) < 0.01
+            }
+        if (!duplicate) {
+            toInsert +=
+                PriceAlertModel(
+                    typeId = alloc.candidate.typeId,
+                    typeName = alloc.candidate.typeName,
+                    targetPrice = st.targetPrice,
+                    condition = "above",
+                    regionId = effRegion,
+                    orderType = "sell",
+                    characterId = charId,
+                )
+        }
+    }
+    return toInsert
+}
+
+// One DB read for the duplicate check and one bulk insert, however many items are passed.
+private fun createAlerts(
+    allocs: List<AllocatedMaterial>,
+    regionId: Int,
+    charId: Int?,
+): Int {
+    val existing = runCatching { AlertDao.getAll() }.getOrDefault(emptyList())
+    val alerts = allocs.flatMap { ladderAlerts(it, regionId, charId, existing) }
+    AlertDao.insertAll(alerts)
+    return alerts.size
 }
