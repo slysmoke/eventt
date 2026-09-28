@@ -53,7 +53,15 @@ internal object A4eCodec {
         val plain = encodeColumns(rows)
         val packed = ByteArrayOutputStream()
         packed.write(DEFLATED)
-        DeflaterOutputStream(packed, Deflater(Deflater.BEST_COMPRESSION, true)).use { it.write(plain) }
+        // A caller-supplied Deflater is NOT ended by the stream's close(): its native zlib state
+        // (~270 KB at level 9) would otherwise linger until GC finalizes it — thousands of blocks
+        // per file ran the process up to many GB of native memory during a sync.
+        val deflater = Deflater(Deflater.BEST_COMPRESSION, true)
+        try {
+            DeflaterOutputStream(packed, deflater).use { it.write(plain) }
+        } finally {
+            deflater.end()
+        }
         return if (packed.size() < plain.size + 1) packed.toByteArray() else byteArrayOf(RAW.toByte()) + plain
     }
 
@@ -84,7 +92,17 @@ internal object A4eCodec {
 
     fun decode(data: ByteArray): List<A4eRow> {
         val body = ByteArrayInputStream(data, 1, data.size - 1)
-        val stream = if (data[0].toInt() == DEFLATED) InflaterInputStream(body, Inflater(true)) else body
+        // Same as encode: a caller-supplied Inflater must be ended explicitly.
+        val inflater = if (data[0].toInt() == DEFLATED) Inflater(true) else null
+        val stream = if (inflater != null) InflaterInputStream(body, inflater) else body
+        try {
+            return decodeColumns(stream)
+        } finally {
+            inflater?.end()
+        }
+    }
+
+    private fun decodeColumns(stream: InputStream): List<A4eRow> {
         stream.use { inp ->
             val n = readVar(inp).toInt()
 
