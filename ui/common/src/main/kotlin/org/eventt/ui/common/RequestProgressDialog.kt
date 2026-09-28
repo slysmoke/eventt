@@ -1,8 +1,12 @@
 package org.eventt.ui.common
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -10,17 +14,41 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.sample
+import org.eventt.core.model.QueuedRequest
+import org.eventt.core.model.RequestSource
 import org.eventt.core.model.RequestStatus
 import org.eventt.core.queue.RequestQueueManager
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 
 val EventtBlue = Color(0xFF4A90D9)
+
+private enum class RequestFilter(
+    val label: String,
+) {
+    PENDING("Active & failed"),
+    SERVER("Server"),
+    CACHE("Cache"),
+    ALL("All"),
+}
+
+private val timeFormat =
+    java.time.format.DateTimeFormatter
+        .ofPattern("HH:mm:ss")
+
+private fun formatTime(millis: Long?): String =
+    millis?.let {
+        java.time.Instant
+            .ofEpochMilli(it)
+            .atZone(java.time.ZoneId.systemDefault())
+            .format(timeFormat)
+    } ?: ""
 
 @OptIn(FlowPreview::class)
 @Composable
@@ -34,12 +62,15 @@ fun RequestProgressDialog(onDismiss: () -> Unit) {
     val active = requests.filter { it.status == RequestStatus.QUEUED || it.status == RequestStatus.IN_PROGRESS }
     val failed = requests.filter { it.status == RequestStatus.FAILED }
     val completed = requests.count { it.status == RequestStatus.COMPLETED }
+    val cacheHits = requests.count { it.source == RequestSource.CACHE }
+    var filter by remember { mutableStateOf(RequestFilter.PENDING) }
+    var expandedId by remember { mutableStateOf<String?>(null) }
     val total = requests.size
     val progress = RequestQueueManager.overallProgress
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = Modifier.widthIn(max = 560.dp),
+        modifier = Modifier.widthIn(max = 720.dp),
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (active.isNotEmpty()) {
@@ -59,6 +90,7 @@ fun RequestProgressDialog(onDismiss: () -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     SummaryChip("${active.size} active", if (active.isNotEmpty()) EventtBlue else Color.Gray)
                     SummaryChip("$completed done", positiveColor)
+                    if (cacheHits > 0) SummaryChip("$cacheHits from cache", Color.Gray)
                     if (failed.isNotEmpty()) {
                         SummaryChip("${failed.size} failed", negativeColor)
                     }
@@ -72,9 +104,25 @@ fun RequestProgressDialog(onDismiss: () -> Unit) {
                     }
                 }
 
-                // Active + failed list (not showing completed — just counted above)
-                val visible = active + failed
-                if (visible.isEmpty() && requests.isNotEmpty()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    RequestFilter.entries.forEach { f ->
+                        FilterChip(
+                            selected = filter == f,
+                            onClick = { filter = f },
+                            label = { Text(f.label, style = MaterialTheme.typography.labelSmall) },
+                        )
+                    }
+                }
+
+                // Newest first — the interesting entries are almost always the latest ones.
+                val visible =
+                    when (filter) {
+                        RequestFilter.PENDING -> active + failed
+                        RequestFilter.SERVER -> requests.filter { it.source == RequestSource.SERVER }
+                        RequestFilter.CACHE -> requests.filter { it.source == RequestSource.CACHE }
+                        RequestFilter.ALL -> requests
+                    }.asReversed()
+                if (visible.isEmpty() && filter == RequestFilter.PENDING && requests.isNotEmpty()) {
                     Surface(
                         color = MaterialTheme.colorScheme.surfaceVariant,
                         shape = MaterialTheme.shapes.small,
@@ -95,22 +143,20 @@ fun RequestProgressDialog(onDismiss: () -> Unit) {
                     // however many rows happen to be active at each redraw, which reads as the
                     // whole window jittering rather than just its contents updating.
                     LazyColumn(
-                        modifier = Modifier.height(260.dp).fillMaxWidth(),
+                        modifier = Modifier.height(320.dp).fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         items(visible, key = { it.id }) { request ->
                             RequestRow(
-                                status = request.status,
-                                description = request.description,
-                                source = request.source.name.lowercase(),
-                                progress = request.progress,
-                                error = request.error,
+                                request = request,
+                                expanded = expandedId == request.id,
+                                onToggle = { expandedId = if (expandedId == request.id) null else request.id },
                             )
                         }
                     }
                 } else {
                     Text(
-                        "No active requests",
+                        "No requests",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                     )
@@ -156,12 +202,12 @@ private fun SummaryChip(
 
 @Composable
 private fun RequestRow(
-    status: RequestStatus,
-    description: String,
-    source: String,
-    progress: Float,
-    error: String?,
+    request: QueuedRequest,
+    expanded: Boolean,
+    onToggle: () -> Unit,
 ) {
+    val status = request.status
+    val isCache = request.source == RequestSource.CACHE
     Surface(
         color =
             when (status) {
@@ -170,6 +216,7 @@ private fun RequestRow(
                 else -> Color.Transparent
             },
         shape = MaterialTheme.shapes.extraSmall,
+        modifier = Modifier.clickable(onClick = onToggle),
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
             Row(
@@ -183,36 +230,95 @@ private fun RequestRow(
                     RequestStatus.COMPLETED -> Icon(Icons.Default.Check, null, Modifier.size(13.dp), tint = positiveColor)
                 }
                 Text(
-                    description,
+                    formatTime(request.endTime ?: request.startTime),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                )
+                Text(
+                    request.description,
                     style = MaterialTheme.typography.labelSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                if (source.isNotEmpty()) {
-                    Text(
-                        source,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (source == "cache") positiveColor.copy(alpha = 0.8f) else EventtBlue.copy(alpha = 0.8f),
-                    )
+                request.httpCode?.let {
+                    Text("$it", style = MaterialTheme.typography.labelSmall, color = negativeColor)
                 }
+                Text(
+                    request.source.name.lowercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isCache) Color.Gray else EventtBlue.copy(alpha = 0.8f),
+                )
             }
             if (status == RequestStatus.IN_PROGRESS) {
                 LinearProgressIndicator(
-                    progress = { progress },
+                    progress = { request.progress },
                     modifier = Modifier.fillMaxWidth().padding(top = 2.dp).height(2.dp),
                     trackColor = MaterialTheme.colorScheme.surfaceVariant,
                 )
             }
-            error?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = negativeColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            if (!expanded) {
+                request.error?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = negativeColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            } else {
+                RequestDetails(request)
             }
         }
+    }
+}
+
+@Composable
+private fun RequestDetails(request: QueuedRequest) {
+    val duration =
+        if (request.startTime != null && request.endTime != null) "${request.endTime!! - request.startTime!!} ms" else null
+    SelectionContainer {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            DetailLine("URL", request.endpoint)
+            request.httpCode?.let { DetailLine("HTTP", "$it") }
+            duration?.let { DetailLine("Time", it) }
+            request.error?.let { DetailLine("Error", it, negativeColor) }
+            request.responseBody?.let { body ->
+                Text("Response body", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium)
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = MaterialTheme.shapes.extraSmall,
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 160.dp),
+                ) {
+                    Text(
+                        body.ifEmpty { "(empty)" },
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.verticalScroll(rememberScrollState()).padding(6.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailLine(
+    label: String,
+    value: String,
+    color: Color = MaterialTheme.colorScheme.onSurface,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.width(80.dp),
+        )
+        Text(value, style = MaterialTheme.typography.labelSmall, color = color)
     }
 }

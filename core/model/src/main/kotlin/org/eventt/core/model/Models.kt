@@ -274,6 +274,10 @@ data class QueuedRequest(
     val startTime: Long? = null,
     val endTime: Long? = null,
     val error: String? = null,
+    // Failure details for the request dialog — HTTP status (null for network errors) and the
+    // response body ESI sent back with it, truncated.
+    val httpCode: Int? = null,
+    val responseBody: String? = null,
 )
 
 // ─── Wallet Summary ────────────────────────────────────────────────────────
