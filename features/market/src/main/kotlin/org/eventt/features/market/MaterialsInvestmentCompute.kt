@@ -133,7 +133,21 @@ internal fun computeMaterialPosition(
     )
 }
 
-internal enum class MaterialSortCol { NAME, CURRENT, AVG, DRAWDOWN, VS_AVG, TREND, VOLATILITY, VOLUME, HELD, BACKTEST, ALLOCATED }
+internal enum class MaterialSortCol {
+    NAME,
+    CURRENT,
+    AVG,
+    DRAWDOWN,
+    VS_AVG,
+    TREND,
+    VOLATILITY,
+    VOLUME,
+    HELD,
+    BACKTEST,
+    ALLOCATED,
+    PROFIT,
+    MARGIN,
+}
 
 internal fun sortMaterials(
     list: List<AllocatedMaterial>,
@@ -184,6 +198,14 @@ internal fun sortMaterials(
 
             MaterialSortCol.ALLOCATED -> {
                 compareBy { it.toBuyIsk }
+            }
+
+            MaterialSortCol.PROFIT -> {
+                compareBy { it.sellTarget?.profitNow ?: Double.NEGATIVE_INFINITY }
+            }
+
+            MaterialSortCol.MARGIN -> {
+                compareBy { it.sellTarget?.profitNowPct ?: Double.NEGATIVE_INFINITY }
             }
         }
     return if (asc) list.sortedWith(cmp) else list.sortedWith(cmp.reversed())

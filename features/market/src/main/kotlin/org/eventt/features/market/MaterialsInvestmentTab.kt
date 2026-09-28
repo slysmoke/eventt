@@ -706,6 +706,15 @@ private fun MaterialsHeader(
                 MCol("Vol/day", MaterialSortCol.VOLUME, sort, asc, onSort, Modifier.width(65.dp))
             }
             Tip(
+                "Held positions only: net profit selling the whole stack at the current lowest ask, after sales tax " +
+                    "and broker fee, against your average cost.",
+            ) {
+                MCol("Total Profit", MaterialSortCol.PROFIT, sort, asc, onSort, Modifier.width(85.dp))
+            }
+            Tip("That profit as % of what the held stack cost you.") {
+                MCol("Margin", MaterialSortCol.MARGIN, sort, asc, onSort, Modifier.width(60.dp))
+            }
+            Tip(
                 "ISK left to buy: this item's share of the budget (after ranking, the per-item cap and the liquidity cap) " +
                     "minus what you already hold at cost. 0 once the position is full.",
             ) {
@@ -892,6 +901,21 @@ private fun MaterialRow(
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.Gray,
                 modifier = Modifier.width(65.dp),
+            )
+            val profit = alloc.sellTarget?.profitNow
+            val profitColor = profit?.let { if (it >= 0) positiveColor else negativeColor } ?: Color.Gray
+            Text(
+                profit?.let { (if (it >= 0) "+" else "") + formatPriceAbbr(it) } ?: "—",
+                style = MaterialTheme.typography.bodySmall,
+                color = profitColor,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.width(85.dp),
+            )
+            Text(
+                alloc.sellTarget?.profitNowPct?.let { signedPct(it) } ?: "—",
+                style = MaterialTheme.typography.bodySmall,
+                color = profitColor,
+                modifier = Modifier.width(60.dp),
             )
             Text(
                 if (alloc.toBuyIsk > 1.0) formatPriceAbbr(alloc.toBuyIsk) else "—",
