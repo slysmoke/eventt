@@ -925,7 +925,7 @@ private fun TradingChart(
                     hollow: Boolean = false,
                 ) = fills.forEach { (day, f) ->
                     val i = dayIndex[day]?.takeIf { visible(it) } ?: return@forEach
-                    val r = (3.dp.toPx() + 5.dp.toPx() * sqrt(f.qty / maxQty)).toFloat()
+                    val r = (4.dp.toPx() + 6.dp.toPx() * sqrt(f.qty / maxQty)).toFloat()
                     val c = Offset(xFor(i), yClamped(f.price))
                     val path =
                         Path().apply {
@@ -940,11 +940,16 @@ private fun TradingChart(
                             }
                             close()
                         }
+                    // Same red/green as the candles underneath, so contrast comes from the outline: a
+                    // dark halo first, then white edge (solid) or dark fill + coloured edge (hollow).
+                    val color = if (up) upColor else downColor
+                    drawPath(path, Color.Black.copy(alpha = 0.85f), style = Stroke(4.dp.toPx(), join = StrokeJoin.Round))
                     if (hollow) {
-                        drawPath(path, if (up) upColor else downColor, style = Stroke(1.5.dp.toPx()))
+                        drawPath(path, Color.Black.copy(alpha = 0.75f))
+                        drawPath(path, color, style = Stroke(2.dp.toPx(), join = StrokeJoin.Round))
                     } else {
-                        drawPath(path, if (up) upColor else downColor)
-                        drawPath(path, Color.Black.copy(alpha = 0.6f), style = Stroke(1f))
+                        drawPath(path, color)
+                        drawPath(path, Color.White, style = Stroke(1.5.dp.toPx(), join = StrokeJoin.Round))
                     }
                 }
                 marker(otherBuyFills, up = true, hollow = true)
