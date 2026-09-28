@@ -59,6 +59,8 @@ internal fun StationTradingTab(
 
     var regionId by remember { mutableStateOf(10000002) }
     var stationId by remember { mutableStateOf<Long?>(null) }
+    var stationPresets by remember { mutableStateOf<List<StationPreset>>(emptyList()) }
+    var showSavePresetDialog by remember { mutableStateOf(false) }
     var stations by remember { mutableStateOf<List<StaticStationModel>>(emptyList()) }
     var selectedTopGroup by remember { mutableStateOf<StaticMarketGroupModel?>(null) }
     var selectedSubGroup by remember { mutableStateOf<StaticMarketGroupModel?>(null) }
@@ -96,6 +98,7 @@ internal fun StationTradingTab(
             histSourceIsEsi = EveRefService.getSelectedSource() == "esi"
             S.get(S.ST_REGION)?.toIntOrNull()?.let { regionId = it }
             S.get(S.ST_STATION)?.toLongOrNull()?.let { stationId = it }
+            stationPresets = decodeStationPresets(S.get(S.ST_PRESETS))
             S.get(S.ST_MARGIN)?.let { minMargin = it }
             S.get(S.ST_MIN_VOL)?.let { minDailyVol = it }
             S.get(S.ST_MAX_PRICE)?.let { maxBuyPrice = it }
@@ -157,6 +160,24 @@ internal fun StationTradingTab(
         if (selectedSubGroup?.marketGroupId !in subs.map { it.marketGroupId }) selectedSubGroup = null
     }
 
+    fun savePresets(updated: List<StationPreset>) {
+        stationPresets = updated
+        scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_PRESETS, encodeStationPresets(updated)) } }
+    }
+
+    if (showSavePresetDialog) {
+        SavePresetDialog(
+            title = stringResource(Res.string.save_station_preset),
+            placeholder = stringResource(Res.string.eg_jita_station),
+            initialName = stations.find { it.stationId == stationId }?.name.orEmpty(),
+            onDismiss = { showSavePresetDialog = false },
+            onSave = { name ->
+                savePresets(stationPresets.filter { it.name != name } + StationPreset(name, regionId, stationId))
+                showSavePresetDialog = false
+            },
+        )
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         // ── Filter bar ─────────────────────────────────────────────
         FilterBar {
@@ -174,6 +195,25 @@ internal fun StationTradingTab(
                     stationId = it
                     scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_STATION, it?.toString() ?: "") } }
                 }
+                PresetPicker(
+                    presets = stationPresets.map { it.name },
+                    saveCurrentLabel = stringResource(Res.string.save_current_station),
+                    tooltip = stringResource(Res.string.tip_station_presets),
+                    onApply = { name ->
+                        stationPresets.find { it.name == name }?.let { p ->
+                            regionId = p.regionId
+                            stationId = p.stationId
+                            scope.launch {
+                                withContext(Dispatchers.IO) {
+                                    S.set(S.ST_REGION, p.regionId.toString())
+                                    S.set(S.ST_STATION, p.stationId?.toString() ?: "")
+                                }
+                            }
+                        }
+                    },
+                    onDelete = { name -> savePresets(stationPresets.filter { it.name != name }) },
+                    onSaveCurrent = { showSavePresetDialog = true },
+                )
                 FilterDivider()
                 GroupDropdown(
                     stringResource(Res.string.category),
@@ -206,7 +246,7 @@ internal fun StationTradingTab(
                 Spacer(Modifier.weight(1f))
                 // Read-only tax display — informational, so it lives at the far edge with the
                 // other non-inputs rather than crammed in with the editable filters.
-                FilterControl(stringResource(Res.string.fees)) {
+                FilterControl(stringResource(Res.string.fees), tooltip = stringResource(Res.string.tip_fees)) {
                     Text(
                         stringResource(
                             Res.string.fees_value,
@@ -227,19 +267,24 @@ internal fun StationTradingTab(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.weight(1f),
                 ) {
-                    ParamField(stringResource(Res.string.min_margin_pct), minMargin, 68.dp) {
+                    ParamField(
+                        stringResource(Res.string.min_margin_pct),
+                        minMargin,
+                        68.dp,
+                        tooltip = stringResource(Res.string.tip_min_margin),
+                    ) {
                         minMargin = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MARGIN, it) } }
                     }
-                    ParamField(stringResource(Res.string.min_vol), minDailyVol, 72.dp) {
+                    ParamField(stringResource(Res.string.min_vol), minDailyVol, 72.dp, tooltip = stringResource(Res.string.tip_min_vol)) {
                         minDailyVol = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MIN_VOL, it) } }
                     }
-                    ParamField(stringResource(Res.string.max_buy), maxBuyPrice, 105.dp) {
+                    ParamField(stringResource(Res.string.max_buy), maxBuyPrice, 105.dp, tooltip = stringResource(Res.string.tip_max_buy)) {
                         maxBuyPrice = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MAX_PRICE, it) } }
                     }
-                    ParamField(stringResource(Res.string.min_net), minNetProfit, 100.dp) {
+                    ParamField(stringResource(Res.string.min_net), minNetProfit, 100.dp, tooltip = stringResource(Res.string.tip_min_net)) {
                         minNetProfit = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MIN_PROFIT, it) } }
                     }
@@ -248,6 +293,7 @@ internal fun StationTradingTab(
                     // (e.g. entering 50 shows/copies 50% of the computed daily volume).
                     CheckboxParamField(
                         label = stringResource(Res.string.vol_pct),
+                        tooltip = stringResource(Res.string.tip_vol_pct),
                         checked = volCapEnabled,
                         onCheckedChange = {
                             volCapEnabled = it
@@ -259,7 +305,7 @@ internal fun StationTradingTab(
                             scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_VOL_CAP_PCT, v) } }
                         },
                     )
-                    FilterControl(stringResource(Res.string.skip_owned)) {
+                    FilterControl(stringResource(Res.string.skip_owned), tooltip = stringResource(Res.string.tip_skip_owned)) {
                         Checkbox(
                             checked = skipExistingOrders,
                             onCheckedChange = {
@@ -272,7 +318,7 @@ internal fun StationTradingTab(
                     // Est. Daily otherwise trusts ESI's region-wide, both-sides-combined history --
                     // this caps it at Adam4EVE's real per-station buy/sell fill data instead (see
                     // Adam4EveFlowService). Off by default: a third-party dependency, opt-in.
-                    FilterControl(stringResource(Res.string.a4e_flow)) {
+                    FilterControl(stringResource(Res.string.a4e_flow), tooltip = stringResource(Res.string.tip_a4e_flow)) {
                         Checkbox(
                             checked = useAdam4Eve,
                             onCheckedChange = {
@@ -291,6 +337,7 @@ internal fun StationTradingTab(
                         spikePriceMultiplier,
                         50.dp,
                         enabled = spikeFilter != SpikeFilter.ANY,
+                        tooltip = stringResource(Res.string.tip_price_mult),
                     ) {
                         spikePriceMultiplier = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_SPIKE_PRICE_MULTIPLIER, it) } }
@@ -301,18 +348,25 @@ internal fun StationTradingTab(
                         50.dp,
                         enabled =
                             spikeFilter != SpikeFilter.ANY,
+                        tooltip = stringResource(Res.string.tip_volume_mult),
                     ) {
                         spikeVolumeMultiplier = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_SPIKE_VOLUME_MULTIPLIER, it) } }
                     }
-                    ParamField(stringResource(Res.string.spike_days), spikeWindowDays, 60.dp, enabled = spikeFilter != SpikeFilter.ANY) {
+                    ParamField(
+                        stringResource(Res.string.spike_days),
+                        spikeWindowDays,
+                        60.dp,
+                        enabled = spikeFilter != SpikeFilter.ANY,
+                        tooltip = stringResource(Res.string.tip_spike_days),
+                    ) {
                         spikeWindowDays = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_SPIKE_WINDOW_DAYS, it) } }
                     }
                     FilterDivider()
                     // Toggles whether the hotkey's second press copies the suggested volume, or just
                     // advances straight to the next item after copying the price.
-                    FilterControl(stringResource(Res.string.copy_vol)) {
+                    FilterControl(stringResource(Res.string.copy_vol), tooltip = stringResource(Res.string.tip_copy_vol)) {
                         Switch(
                             checked = copyVolumeEnabled,
                             onCheckedChange = {
@@ -742,5 +796,26 @@ internal fun StationTradingTab(
             charId = charId,
             onDismiss = { detailTypeId = null },
         )
+    }
+}
+
+// ─── Saved stations (region + station), so a favourite hub is one click away ──────────────
+
+internal data class StationPreset(
+    val name: String,
+    val regionId: Int,
+    val stationId: Long?,
+)
+
+// Same line-per-preset, pipe-separated format as the Inter-Region route presets.
+internal fun encodeStationPresets(presets: List<StationPreset>): String =
+    presets.joinToString("\n") { p -> listOf(p.name.replace('|', ' ').replace('\n', ' '), p.regionId, p.stationId ?: "").joinToString("|") }
+
+internal fun decodeStationPresets(raw: String?): List<StationPreset> {
+    if (raw.isNullOrBlank()) return emptyList()
+    return raw.lines().mapNotNull { line ->
+        val parts = line.split("|")
+        if (parts.size != 3) return@mapNotNull null
+        StationPreset(parts[0], parts[1].toIntOrNull() ?: return@mapNotNull null, parts[2].toLongOrNull())
     }
 }

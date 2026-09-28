@@ -247,16 +247,96 @@ internal fun SellOrdersTable(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SortHeader(stringResource(Res.string.h_name), SortCol.NAME, sortCol, sortDir, onSort, Modifier.weight(3f))
-            SortHeader(stringResource(Res.string.h_cost), SortCol.COST, sortCol, sortDir, onSort, Modifier.weight(1.8f))
-            SortHeader(stringResource(Res.string.h_price_best), SortCol.PRICE, sortCol, sortDir, onSort, Modifier.weight(2.4f))
-            SortHeader(stringResource(Res.string.h_relist), SortCol.RELIST, sortCol, sortDir, onSort, Modifier.weight(1.8f))
-            SortHeader(stringResource(Res.string.h_profit), SortCol.PROFIT, sortCol, sortDir, onSort, Modifier.weight(1.8f))
-            SortHeader(stringResource(Res.string.h_margin), SortCol.MARGIN, sortCol, sortDir, onSort, Modifier.weight(1.2f))
-            SortHeader(stringResource(Res.string.h_best_margin), SortCol.BEST_MARGIN, sortCol, sortDir, onSort, Modifier.weight(1.4f))
-            SortHeader(stringResource(Res.string.h_volume), SortCol.VOLUME, sortCol, sortDir, onSort, Modifier.weight(2.5f))
-            SortHeader(stringResource(Res.string.h_total), SortCol.TOTAL, sortCol, sortDir, onSort, Modifier.weight(2f))
-            SortHeader(stringResource(Res.string.h_competition), SortCol.COMPETITION, sortCol, sortDir, onSort, Modifier.weight(1.8f))
-            SortHeader(stringResource(Res.string.h_time_left), SortCol.TIME_LEFT, sortCol, sortDir, onSort, Modifier.weight(1.5f))
+            SortHeader(
+                stringResource(Res.string.h_cost),
+                SortCol.COST,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.8f),
+                tooltip = stringResource(Res.string.tip_o_cost),
+            )
+            SortHeader(
+                stringResource(Res.string.h_price_best),
+                SortCol.PRICE,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(2.4f),
+                tooltip = stringResource(Res.string.tip_o_price_sell),
+            )
+            SortHeader(
+                stringResource(Res.string.h_relist),
+                SortCol.RELIST,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.8f),
+                tooltip = stringResource(Res.string.tip_o_relist),
+            )
+            SortHeader(
+                stringResource(Res.string.h_profit),
+                SortCol.PROFIT,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.8f),
+                tooltip = stringResource(Res.string.tip_o_profit),
+            )
+            SortHeader(
+                stringResource(Res.string.h_margin),
+                SortCol.MARGIN,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.2f),
+                tooltip = stringResource(Res.string.tip_o_margin_sell),
+            )
+            SortHeader(
+                stringResource(Res.string.h_best_margin),
+                SortCol.BEST_MARGIN,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.4f),
+                tooltip = stringResource(Res.string.tip_o_best_margin_sell),
+            )
+            SortHeader(
+                stringResource(Res.string.h_volume),
+                SortCol.VOLUME,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(2.5f),
+                tooltip = stringResource(Res.string.tip_o_volume),
+            )
+            SortHeader(
+                stringResource(Res.string.h_total),
+                SortCol.TOTAL,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(2f),
+                tooltip = stringResource(Res.string.tip_o_total),
+            )
+            SortHeader(
+                stringResource(Res.string.h_competition),
+                SortCol.COMPETITION,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.8f),
+                tooltip = stringResource(Res.string.tip_o_competition),
+            )
+            SortHeader(
+                stringResource(Res.string.h_time_left),
+                SortCol.TIME_LEFT,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.5f),
+                tooltip = stringResource(Res.string.tip_o_time_left),
+            )
             StaticHeader("", Modifier.width(36.dp))
         }
         HorizontalDivider()
@@ -344,15 +424,87 @@ internal fun BuyOrdersTable(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SortHeader(stringResource(Res.string.h_name), SortCol.NAME, sortCol, sortDir, onSort, Modifier.weight(3f))
-            SortHeader(stringResource(Res.string.h_price_best), SortCol.PRICE, sortCol, sortDir, onSort, Modifier.weight(2.4f))
-            SortHeader(stringResource(Res.string.h_relist), SortCol.RELIST, sortCol, sortDir, onSort, Modifier.weight(1.6f))
-            SortHeader(stringResource(Res.string.h_margin), SortCol.MARGIN, sortCol, sortDir, onSort, Modifier.weight(1.2f))
-            SortHeader(stringResource(Res.string.h_best_margin), SortCol.BEST_MARGIN, sortCol, sortDir, onSort, Modifier.weight(1.4f))
-            SortHeader(stringResource(Res.string.h_volume), SortCol.VOLUME, sortCol, sortDir, onSort, Modifier.weight(2.5f))
-            SortHeader(stringResource(Res.string.h_total), SortCol.TOTAL, sortCol, sortDir, onSort, Modifier.weight(2f))
-            SortHeader(stringResource(Res.string.h_competition), SortCol.COMPETITION, sortCol, sortDir, onSort, Modifier.weight(1.8f))
-            SortHeader(stringResource(Res.string.h_time_left), SortCol.TIME_LEFT, sortCol, sortDir, onSort, Modifier.weight(1.5f))
-            SortHeader(stringResource(Res.string.h_order_age), SortCol.ORDER_AGE, sortCol, sortDir, onSort, Modifier.weight(1.5f))
+            SortHeader(
+                stringResource(Res.string.h_price_best),
+                SortCol.PRICE,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(2.4f),
+                tooltip = stringResource(Res.string.tip_o_price_buy),
+            )
+            SortHeader(
+                stringResource(Res.string.h_relist),
+                SortCol.RELIST,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.6f),
+                tooltip = stringResource(Res.string.tip_o_relist_buy),
+            )
+            SortHeader(
+                stringResource(Res.string.h_margin),
+                SortCol.MARGIN,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.2f),
+                tooltip = stringResource(Res.string.tip_o_margin_buy),
+            )
+            SortHeader(
+                stringResource(Res.string.h_best_margin),
+                SortCol.BEST_MARGIN,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.4f),
+                tooltip = stringResource(Res.string.tip_o_best_margin_buy),
+            )
+            SortHeader(
+                stringResource(Res.string.h_volume),
+                SortCol.VOLUME,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(2.5f),
+                tooltip = stringResource(Res.string.tip_o_volume),
+            )
+            SortHeader(
+                stringResource(Res.string.h_total),
+                SortCol.TOTAL,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(2f),
+                tooltip = stringResource(Res.string.tip_o_total),
+            )
+            SortHeader(
+                stringResource(Res.string.h_competition),
+                SortCol.COMPETITION,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.8f),
+                tooltip = stringResource(Res.string.tip_o_competition),
+            )
+            SortHeader(
+                stringResource(Res.string.h_time_left),
+                SortCol.TIME_LEFT,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.5f),
+                tooltip = stringResource(Res.string.tip_o_time_left),
+            )
+            SortHeader(
+                stringResource(Res.string.h_order_age),
+                SortCol.ORDER_AGE,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.5f),
+                tooltip = stringResource(Res.string.tip_o_age),
+            )
             StaticHeader("", Modifier.width(36.dp))
         }
         HorizontalDivider()
@@ -447,11 +599,43 @@ internal fun OrderHistoryTable(
         ) {
             SortHeader(stringResource(Res.string.h_name), HistorySortCol.NAME, sortCol, sortDir, ::toggleSort, Modifier.weight(3f))
             SortHeader(stringResource(Res.string.h_type), HistorySortCol.TYPE, sortCol, sortDir, ::toggleSort, Modifier.weight(1f))
-            SortHeader(stringResource(Res.string.h_state), HistorySortCol.STATE, sortCol, sortDir, ::toggleSort, Modifier.weight(1.5f))
+            SortHeader(
+                stringResource(Res.string.h_state),
+                HistorySortCol.STATE,
+                sortCol,
+                sortDir,
+                ::toggleSort,
+                Modifier.weight(1.5f),
+                tooltip = stringResource(Res.string.tip_h_state),
+            )
             SortHeader(stringResource(Res.string.h_price), HistorySortCol.PRICE, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
-            SortHeader(stringResource(Res.string.h_profit), HistorySortCol.PROFIT, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
-            SortHeader(stringResource(Res.string.h_margin), HistorySortCol.MARGIN, sortCol, sortDir, ::toggleSort, Modifier.weight(1.2f))
-            SortHeader(stringResource(Res.string.h_volume), HistorySortCol.VOLUME, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
+            SortHeader(
+                stringResource(Res.string.h_profit),
+                HistorySortCol.PROFIT,
+                sortCol,
+                sortDir,
+                ::toggleSort,
+                Modifier.weight(2f),
+                tooltip = stringResource(Res.string.tip_h_profit),
+            )
+            SortHeader(
+                stringResource(Res.string.h_margin),
+                HistorySortCol.MARGIN,
+                sortCol,
+                sortDir,
+                ::toggleSort,
+                Modifier.weight(1.2f),
+                tooltip = stringResource(Res.string.tip_h_margin),
+            )
+            SortHeader(
+                stringResource(Res.string.h_volume),
+                HistorySortCol.VOLUME,
+                sortCol,
+                sortDir,
+                ::toggleSort,
+                Modifier.weight(2f),
+                tooltip = stringResource(Res.string.tip_h_volume),
+            )
             SortHeader(stringResource(Res.string.h_issued), HistorySortCol.ISSUED, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
             SortHeader(stringResource(Res.string.h_station), HistorySortCol.STATION, sortCol, sortDir, ::toggleSort, Modifier.weight(2.5f))
         }
@@ -599,8 +783,24 @@ internal fun InventoryTable(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SortHeader(stringResource(Res.string.h_name), InventorySortCol.NAME, sortCol, sortDir, ::toggleSort, Modifier.weight(3f))
-            SortHeader(stringResource(Res.string.h_qty), InventorySortCol.QTY, sortCol, sortDir, ::toggleSort, Modifier.weight(1.5f))
-            SortHeader(stringResource(Res.string.h_age), InventorySortCol.AGE, sortCol, sortDir, ::toggleSort, Modifier.weight(1f))
+            SortHeader(
+                stringResource(Res.string.h_qty),
+                InventorySortCol.QTY,
+                sortCol,
+                sortDir,
+                ::toggleSort,
+                Modifier.weight(1.5f),
+                tooltip = stringResource(Res.string.tip_i_qty),
+            )
+            SortHeader(
+                stringResource(Res.string.h_age),
+                InventorySortCol.AGE,
+                sortCol,
+                sortDir,
+                ::toggleSort,
+                Modifier.weight(1f),
+                tooltip = stringResource(Res.string.tip_i_age),
+            )
             SortHeader(
                 stringResource(Res.string.h_avg_cost),
                 InventorySortCol.AVG_COST,
@@ -608,6 +808,7 @@ internal fun InventoryTable(
                 sortDir,
                 ::toggleSort,
                 Modifier.weight(2f),
+                tooltip = stringResource(Res.string.tip_i_avg_cost),
             )
             SortHeader(
                 stringResource(Res.string.h_total_cost),
@@ -616,6 +817,7 @@ internal fun InventoryTable(
                 sortDir,
                 ::toggleSort,
                 Modifier.weight(2f),
+                tooltip = stringResource(Res.string.tip_i_total_cost),
             )
             SortHeader(
                 stringResource(Res.string.h_sell_price),
@@ -624,6 +826,7 @@ internal fun InventoryTable(
                 sortDir,
                 ::toggleSort,
                 Modifier.weight(2f),
+                tooltip = stringResource(Res.string.tip_i_sell_price),
             )
             SortHeader(
                 stringResource(Res.string.h_total_profit),
@@ -632,8 +835,17 @@ internal fun InventoryTable(
                 sortDir,
                 ::toggleSort,
                 Modifier.weight(2f),
+                tooltip = stringResource(Res.string.tip_i_total_profit),
             )
-            SortHeader(stringResource(Res.string.h_margin), InventorySortCol.MARGIN, sortCol, sortDir, ::toggleSort, Modifier.weight(1.2f))
+            SortHeader(
+                stringResource(Res.string.h_margin),
+                InventorySortCol.MARGIN,
+                sortCol,
+                sortDir,
+                ::toggleSort,
+                Modifier.weight(1.2f),
+                tooltip = stringResource(Res.string.tip_i_margin),
+            )
             SortHeader(
                 stringResource(Res.string.h_realized_pnl),
                 InventorySortCol.REALIZED_PNL,
@@ -641,6 +853,7 @@ internal fun InventoryTable(
                 sortDir,
                 ::toggleSort,
                 Modifier.weight(2f),
+                tooltip = stringResource(Res.string.tip_i_realized),
             )
             Spacer(Modifier.width(28.dp))
         }

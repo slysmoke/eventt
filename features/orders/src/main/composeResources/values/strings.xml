@@ -129,4 +129,31 @@
     <string name="st_cancelled">Cancelled</string>
     <string name="st_expired">Expired</string>
     <string name="st_active">Active</string>
+    <string name="tip_o_cost">Your average purchase cost per unit (FIFO from wallet transactions). "~" = estimated from recent buy orders because the item isn't in your FIFO inventory.</string>
+    <string name="tip_o_price_sell">Your order price / the best competing sell price. Highlighted when someone undercut you.</string>
+    <string name="tip_o_relist">Price changes made so far and the modification fees paid. "~N left" = how many more undercuts you can afford before this order stops being profitable.</string>
+    <string name="tip_o_profit">Expected profit on the remaining units at your price, after sales tax, broker fee and relist fees already paid.</string>
+    <string name="tip_o_margin_sell">That profit as % of your cost.</string>
+    <string name="tip_o_best_margin_sell">Your margin if you matched the best competing sell price (including the relist fee) — shows how much room is left to undercut.</string>
+    <string name="tip_o_volume">Units remaining / units originally in the order.</string>
+    <string name="tip_o_total">Price × remaining units — ISK still in the order.</string>
+    <string name="tip_o_competition">How contested this item is, from snapshots of the order book taken every ~5 minutes over 7 days. Hover a cell for details.</string>
+    <string name="tip_o_time_left">Time until the order expires.</string>
+    <string name="tip_o_price_buy">Your order price / the best competing buy price. Highlighted when someone outbid you.</string>
+    <string name="tip_o_relist_buy">Price changes made so far and the modification fees paid.</string>
+    <string name="tip_o_margin_buy">Margin if you buy at your price and sell at the current best sell price, after fees.</string>
+    <string name="tip_o_best_margin_buy">Margin between the current best buy and best sell prices, after fees — the spread you are competing for.</string>
+    <string name="tip_o_age">How long ago the order was first placed.</string>
+    <string name="tip_h_state">How the order ended: fulfilled, partially filled, cancelled or expired.</string>
+    <string name="tip_h_profit">Realized profit of the units sold by this order, against your FIFO cost.</string>
+    <string name="tip_h_margin">That profit as % of cost.</string>
+    <string name="tip_h_volume">Units remaining / units originally in the order.</string>
+    <string name="tip_i_qty">Units you bought that haven't been sold yet, according to FIFO.</string>
+    <string name="tip_i_age">Days since the oldest unsold lot was bought.</string>
+    <string name="tip_i_avg_cost">Average purchase price per unit of what you still hold (FIFO).</string>
+    <string name="tip_i_total_cost">Quantity × average cost — ISK tied up in this item.</string>
+    <string name="tip_i_sell_price">Price of your active sell order, or the current best sell price if you have none.</string>
+    <string name="tip_i_total_profit">Expected profit if everything held sells at that price, after fees.</string>
+    <string name="tip_i_margin">Profit per unit as % of average cost.</string>
+    <string name="tip_i_realized">Profit already made selling this item since you last started holding it (FIFO). Earlier closed positions are in History.</string>
 </resources>

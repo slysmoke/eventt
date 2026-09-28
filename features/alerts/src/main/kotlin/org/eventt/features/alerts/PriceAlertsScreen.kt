@@ -30,6 +30,7 @@ import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.PriceAlertModel
 import org.eventt.core.model.pluralBlocking
 import org.eventt.ui.common.*
+import org.eventt.ui.common.Tip
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.eventt.ui.theme.warningColor
@@ -318,11 +319,15 @@ private fun AlertTableHeader() {
     Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             HeaderCell(stringResource(Res.string.col_item), Modifier.weight(1f).padding(start = 28.dp))
-            HeaderCell(stringResource(Res.string.col_alerts), Modifier.width(COL_ALERTS))
-            HeaderCell(stringResource(Res.string.col_next_trigger), Modifier.width(COL_NEXT))
-            HeaderCell(stringResource(Res.string.col_bid_ask), Modifier.width(COL_QUOTE))
-            HeaderCell(stringResource(Res.string.col_to_go), Modifier.width(COL_DIST))
-            HeaderCell(stringResource(Res.string.col_status), Modifier.width(COL_STATUS))
+            HeaderCell(stringResource(Res.string.col_alerts), Modifier.width(COL_ALERTS), tooltip = stringResource(Res.string.tip_a_alerts))
+            HeaderCell(
+                stringResource(Res.string.col_next_trigger),
+                Modifier.width(COL_NEXT),
+                tooltip = stringResource(Res.string.tip_a_next),
+            )
+            HeaderCell(stringResource(Res.string.col_bid_ask), Modifier.width(COL_QUOTE), tooltip = stringResource(Res.string.tip_a_quote))
+            HeaderCell(stringResource(Res.string.col_to_go), Modifier.width(COL_DIST), tooltip = stringResource(Res.string.tip_a_to_go))
+            HeaderCell(stringResource(Res.string.col_status), Modifier.width(COL_STATUS), tooltip = stringResource(Res.string.tip_a_status))
             Spacer(Modifier.width(COL_ACTIONS))
         }
     }
@@ -332,8 +337,11 @@ private fun AlertTableHeader() {
 private fun HeaderCell(
     text: String,
     modifier: Modifier,
+    tooltip: String? = null,
 ) {
-    Text(text, style = MaterialTheme.typography.labelSmall, color = MUTED, modifier = modifier, maxLines = 1)
+    Tip(tooltip, modifier) {
+        Text(text, style = MaterialTheme.typography.labelSmall, color = MUTED, modifier = Modifier.fillMaxWidth(), maxLines = 1)
+    }
 }
 
 @Composable
@@ -711,7 +719,9 @@ private fun AlertEditDialog(
 
                 // Order type selector
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(Res.string.price_type), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    Tip(stringResource(Res.string.tip_al_price_type)) {
+                        Text(stringResource(Res.string.price_type), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    }
                     Spacer(Modifier.width(8.dp))
                     FilterChip(
                         selected = orderType == "sell",
@@ -786,7 +796,7 @@ private fun AlertEditDialog(
                 OutlinedTextField(
                     value = targetPrice,
                     onValueChange = { targetPrice = it },
-                    label = { Text(stringResource(Res.string.target_price_isk)) },
+                    label = { Tip(stringResource(Res.string.tip_al_target)) { Text(stringResource(Res.string.target_price_isk)) } },
                     keyboardOptions =
                         androidx.compose.foundation.text.KeyboardOptions(
                             keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal,

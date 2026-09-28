@@ -23,6 +23,7 @@ import org.eventt.core.marketlogs.MarketLogPaths
 import org.eventt.core.staticdata.CitadelService
 import org.eventt.core.staticdata.StaticDataImporter
 import org.eventt.settings.generated.resources.*
+import org.eventt.ui.common.Tip
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import java.io.File
@@ -771,6 +772,7 @@ private fun CharacterFeesCard() {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         TaxField(
                             label = stringResource(Res.string.sales_tax_pct),
+                            tooltip = stringResource(Res.string.tip_set_sales_tax),
                             value = salesTaxValues[char.id] ?: "8.00",
                             onValueChange = { v ->
                                 salesTaxValues[char.id] = v
@@ -783,6 +785,7 @@ private fun CharacterFeesCard() {
 
                         TaxField(
                             label = stringResource(Res.string.brokers_fee_pct),
+                            tooltip = stringResource(Res.string.tip_set_broker_fee),
                             value = brokersFeeValues[char.id] ?: "3.00",
                             onValueChange = { v ->
                                 brokersFeeValues[char.id] = v
@@ -803,10 +806,12 @@ private fun CharacterFeesCard() {
                                 }
                             },
                             label = {
-                                Text(
-                                    stringResource(Res.string.adv_broker_relations_lvl),
-                                    style = MaterialTheme.typography.labelSmall,
-                                )
+                                Tip(stringResource(Res.string.tip_set_relist_skill)) {
+                                    Text(
+                                        stringResource(Res.string.adv_broker_relations_lvl),
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
                             },
                             singleLine = true,
                             modifier = Modifier.width(180.dp),
@@ -835,6 +840,7 @@ private fun TaxField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
+    tooltip: String? = null,
 ) {
     OutlinedTextField(
         value = value,
@@ -843,7 +849,7 @@ private fun TaxField(
             val filtered = v.filter { it.isDigit() || it == '.' }
             if (filtered.count { it == '.' } <= 1) onValueChange(filtered)
         },
-        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+        label = { Tip(tooltip) { Text(label, style = MaterialTheme.typography.labelSmall) } },
         suffix = { Text("%", style = MaterialTheme.typography.bodySmall) },
         singleLine = true,
         modifier = modifier,

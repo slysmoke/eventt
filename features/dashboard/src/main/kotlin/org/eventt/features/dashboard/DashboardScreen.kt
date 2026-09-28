@@ -35,6 +35,7 @@ import org.eventt.features.orders.CostBasisService
 import org.eventt.features.orders.WalletSyncService
 import org.eventt.features.orders.realizedPnlWindow
 import org.eventt.ui.common.CorpAccessNotice
+import org.eventt.ui.common.Tip
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.jetbrains.compose.resources.pluralStringResource
@@ -297,11 +298,13 @@ fun DashboardScreen(
 
         // P&L mini cards — cash flow (gross buy/sell + tax/fees actually paid, from the wallet)
         item {
-            Text(
-                stringResource(Res.string.cash_flow),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-            )
+            Tip(stringResource(Res.string.tip_cash_flow)) {
+                Text(
+                    stringResource(Res.string.cash_flow),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                )
+            }
         }
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -335,11 +338,13 @@ fun DashboardScreen(
         // P&L mini cards — FIFO cost-basis (profit only counted once a lot is actually sold)
         if (fifoWindow != null) {
             item {
-                Text(
-                    stringResource(Res.string.realized_pnl_fifo),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                )
+                Tip(stringResource(Res.string.tip_realized_pnl)) {
+                    Text(
+                        stringResource(Res.string.realized_pnl_fifo),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    )
+                }
             }
             item {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {

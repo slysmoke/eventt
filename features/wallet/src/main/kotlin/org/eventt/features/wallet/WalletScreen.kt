@@ -190,26 +190,29 @@ private fun SortHeaderCell(
     active: Boolean,
     direction: SortDirection,
     rightAlign: Boolean = false,
+    tooltip: String? = null,
     onClick: () -> Unit,
 ) {
-    Row(
-        modifier = modifier.clickable(onClick = onClick),
-        horizontalArrangement = if (rightAlign) Arrangement.End else Arrangement.Start,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = FontWeight.SemiBold,
-        )
-        if (active) {
-            Icon(
-                if (direction == SortDirection.ASC) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                contentDescription = null,
-                modifier = Modifier.size(12.dp).padding(start = 2.dp),
-                tint = MaterialTheme.colorScheme.primary,
+    Tip(tooltip, modifier) {
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+            horizontalArrangement = if (rightAlign) Arrangement.End else Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.SemiBold,
             )
+            if (active) {
+                Icon(
+                    if (direction == SortDirection.ASC) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                    contentDescription = null,
+                    modifier = Modifier.size(12.dp).padding(start = 2.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
     }
 }
@@ -344,7 +347,13 @@ private fun TransactionList(transactions: List<Map<String, Any?>>) {
             SortHeaderCell(stringResource(Res.string.col_date), Modifier.weight(1.8f), sortColumn == TxSortColumn.DATE, sortDirection) {
                 toggleSort(TxSortColumn.DATE)
             }
-            SortHeaderCell(stringResource(Res.string.col_bs), Modifier.weight(0.6f), sortColumn == TxSortColumn.SIDE, sortDirection) {
+            SortHeaderCell(
+                stringResource(Res.string.col_bs),
+                Modifier.weight(0.6f),
+                sortColumn == TxSortColumn.SIDE,
+                sortDirection,
+                tooltip = stringResource(Res.string.tip_w_bs),
+            ) {
                 toggleSort(TxSortColumn.SIDE)
             }
             SortHeaderCell(stringResource(Res.string.col_item), Modifier.weight(3f), sortColumn == TxSortColumn.ITEM, sortDirection) {
@@ -376,6 +385,7 @@ private fun TransactionList(transactions: List<Map<String, Any?>>) {
                 Modifier.weight(2f),
                 sortColumn == TxSortColumn.CLIENT,
                 sortDirection,
+                tooltip = stringResource(Res.string.tip_w_client),
             ) { toggleSort(TxSortColumn.CLIENT) }
             SortHeaderCell(
                 stringResource(Res.string.col_station),
@@ -483,15 +493,18 @@ private fun TxHeader(
     label: String,
     modifier: Modifier,
     rightAlign: Boolean = false,
+    tooltip: String? = null,
 ) {
-    Text(
-        label,
-        modifier = modifier,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        textAlign = if (rightAlign) TextAlign.End else TextAlign.Start,
-        fontWeight = FontWeight.SemiBold,
-    )
+    Tip(tooltip, modifier) {
+        Text(
+            label,
+            modifier = Modifier.fillMaxWidth(),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = if (rightAlign) TextAlign.End else TextAlign.Start,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
 }
 
 private enum class JournalSortColumn { DATE, TYPE, DESCRIPTION, AMOUNT, TAX, BALANCE }
@@ -670,6 +683,7 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
                 Modifier.weight(2.5f),
                 sortColumn == JournalSortColumn.TYPE,
                 sortDirection,
+                tooltip = stringResource(Res.string.tip_w_type),
             ) { toggleSort(JournalSortColumn.TYPE) }
             SortHeaderCell(
                 stringResource(Res.string.col_description),
@@ -683,6 +697,7 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
                 sortColumn == JournalSortColumn.AMOUNT,
                 sortDirection,
                 rightAlign = true,
+                tooltip = stringResource(Res.string.tip_w_amount),
             ) { toggleSort(JournalSortColumn.AMOUNT) }
             SortHeaderCell(
                 stringResource(Res.string.col_tax),
@@ -690,6 +705,7 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
                 sortColumn == JournalSortColumn.TAX,
                 sortDirection,
                 rightAlign = true,
+                tooltip = stringResource(Res.string.tip_w_tax),
             ) { toggleSort(JournalSortColumn.TAX) }
             SortHeaderCell(
                 stringResource(Res.string.balance),
@@ -697,6 +713,7 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
                 sortColumn == JournalSortColumn.BALANCE,
                 sortDirection,
                 rightAlign = true,
+                tooltip = stringResource(Res.string.tip_w_balance),
             ) { toggleSort(JournalSortColumn.BALANCE) }
         }
         HorizontalDivider()
@@ -942,11 +959,13 @@ private fun PnlChart(
     val fifoWindow = fifoResult?.realizedPnlWindow()
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        Text(
-            stringResource(Res.string.cash_flow),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-        )
+        Tip(stringResource(Res.string.tip_cash_flow)) {
+            Text(
+                stringResource(Res.string.cash_flow),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            )
+        }
         Spacer(modifier = Modifier.height(4.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             PnlStatCard(stringResource(Res.string.pnl_today), pnlSignedText(todayNet), pnlColor(todayNet), Modifier.weight(1f))
@@ -962,11 +981,13 @@ private fun PnlChart(
 
         if (fifoWindow != null) {
             Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                stringResource(Res.string.realized_pnl_fifo),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-            )
+            Tip(stringResource(Res.string.tip_realized_pnl)) {
+                Text(
+                    stringResource(Res.string.realized_pnl_fifo),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+            }
             Spacer(modifier = Modifier.height(4.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 PnlStatCard(

@@ -291,6 +291,7 @@ internal object S {
     // Station trading keys
     const val ST_REGION = "analysis.s.region"
     const val ST_STATION = "analysis.s.station"
+    const val ST_PRESETS = "analysis.s.presets"
     const val ST_CAT_TOP = "analysis.s.catTop"
     const val ST_CAT_SUB = "analysis.s.catSub"
     const val ST_MARGIN = "analysis.s.margin"

@@ -30,6 +30,7 @@ import org.eventt.features.tools.ParseWarning
 import org.eventt.features.tools.ToolsInputParser
 import org.eventt.tools.generated.resources.*
 import org.eventt.ui.common.ContentCard
+import org.eventt.ui.common.Tip
 import org.eventt.ui.common.formatPriceSimple
 import org.eventt.ui.theme.positiveColor
 import org.jetbrains.compose.resources.stringResource
@@ -325,7 +326,7 @@ fun PricingScreen(context: ViewContext?) {
                         marginText = it
                         scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(PricingSettings.MARGIN_PCT, it) }
                     },
-                    label = { Text(stringResource(Res.string.margin_pct)) },
+                    label = { Tip(stringResource(Res.string.tip_pr_margin_pct)) { Text(stringResource(Res.string.margin_pct)) } },
                     singleLine = true,
                     enabled = marginLimitEnabled,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -409,36 +410,41 @@ fun PricingScreen(context: ViewContext?) {
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                             )
-                            Text(
-                                stringResource(Res.string.col_cost),
-                                modifier = Modifier.weight(1f),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            Text(
-                                stringResource(Res.string.col_target),
-                                modifier = Modifier.weight(1f),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            Text(
-                                stringResource(Res.string.col_market_low),
-                                modifier = Modifier.weight(1f),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            Text(
-                                stringResource(Res.string.col_final),
-                                modifier = Modifier.weight(1f),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            Text(
-                                stringResource(Res.string.col_margin),
-                                modifier = Modifier.weight(1f),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                            )
+                            Tip(stringResource(Res.string.tip_pr_cost), Modifier.weight(1f)) {
+                                Text(
+                                    stringResource(Res.string.col_cost),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                            Tip(stringResource(Res.string.tip_pr_target), Modifier.weight(1f)) {
+                                Text(
+                                    stringResource(Res.string.col_target),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                            Tip(stringResource(Res.string.tip_pr_market_low), Modifier.weight(1f)) {
+                                Text(
+                                    stringResource(Res.string.col_market_low),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                            Tip(stringResource(Res.string.tip_pr_final), Modifier.weight(1f)) {
+                                Text(
+                                    stringResource(Res.string.col_final),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                            Tip(stringResource(Res.string.tip_pr_margin), Modifier.weight(1f)) {
+                                Text(
+                                    stringResource(Res.string.col_margin),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
                         }
                         HorizontalDivider(Modifier.padding(vertical = 4.dp))
                         results.forEach { r ->

@@ -63,6 +63,7 @@ import org.eventt.core.nostr.OrderSide
 import org.eventt.core.nostr.PostOrderResult
 import org.eventt.p2pmarket.generated.resources.*
 import org.eventt.ui.common.SearchField
+import org.eventt.ui.common.Tip
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 import java.util.Locale
@@ -379,7 +380,7 @@ fun MyOrdersScreen() {
                                 priceText = it
                                 priceSuggestionNote = null
                             },
-                            label = { Text(stringResource(Res.string.price_per_unit)) },
+                            label = { Tip(stringResource(Res.string.tip_p_price)) { Text(stringResource(Res.string.price_per_unit)) } },
                             singleLine = true,
                             trailingIcon = {
                                 IconButton(onClick = ::suggestPrice, enabled = selectedType != null && !isSuggestingPrice) {
@@ -410,7 +411,7 @@ fun MyOrdersScreen() {
                         OutlinedTextField(
                             value = minLotText,
                             onValueChange = { minLotText = it },
-                            label = { Text(stringResource(Res.string.min_lot)) },
+                            label = { Tip(stringResource(Res.string.tip_p_min_lot)) { Text(stringResource(Res.string.min_lot)) } },
                             singleLine = true,
                             modifier = Modifier.weight(1f),
                         )
@@ -518,17 +519,20 @@ private fun MyOrdersTableHeader(
             active = sortColumn == MyOrdersSortColumn.QTY,
             direction = sortDirection,
         ) { onSort(MyOrdersSortColumn.QTY, SortDirection.DESC) }
-        Text(
-            stringResource(Res.string.h_value),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.width(130.dp),
-        )
+        Tip(stringResource(Res.string.tip_p_value)) {
+            Text(
+                stringResource(Res.string.h_value),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.width(130.dp),
+            )
+        }
         SortHeaderCell(
             stringResource(Res.string.h_expires),
             Modifier.width(110.dp),
             active = sortColumn == MyOrdersSortColumn.EXPIRY,
             direction = sortDirection,
+            tooltip = stringResource(Res.string.tip_p_my_expires),
         ) { onSort(MyOrdersSortColumn.EXPIRY, SortDirection.ASC) }
         Spacer(Modifier.width(270.dp))
     }
@@ -627,7 +631,7 @@ private fun EditOrderDialog(
                 OutlinedTextField(
                     value = priceText,
                     onValueChange = { priceText = it },
-                    label = { Text(stringResource(Res.string.price_per_unit)) },
+                    label = { Tip(stringResource(Res.string.tip_p_price)) { Text(stringResource(Res.string.price_per_unit)) } },
                     singleLine = true,
                 )
                 OutlinedTextField(

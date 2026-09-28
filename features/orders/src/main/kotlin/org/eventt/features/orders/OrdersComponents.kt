@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.eventt.core.database.OrderHistoryDao
 import org.eventt.orders.generated.resources.*
+import org.eventt.ui.common.Tip
 import org.eventt.ui.common.formatIsk
 import org.eventt.ui.common.formatVolume
 import org.eventt.ui.theme.negativeColor
@@ -102,49 +103,52 @@ internal fun <T> SortHeader(
     onSort: (T) -> Unit,
     modifier: Modifier,
     rightAlign: Boolean = false,
+    tooltip: String? = null,
 ) {
-    val isActive = currentCol == col
-    val labelColor = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-    Row(
-        modifier = modifier.clickable { onSort(col) },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = if (rightAlign) Arrangement.End else Arrangement.Start,
-    ) {
-        if (isActive && rightAlign) {
-            Icon(
-                if (dir ==
-                    SortDir.ASC
-                ) {
-                    Icons.Default.ArrowUpward
-                } else {
-                    Icons.Default.ArrowDownward
-                },
-                null,
-                Modifier.size(12.dp),
-                tint = labelColor,
+    Tip(tooltip, modifier) {
+        val isActive = currentCol == col
+        val labelColor = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable { onSort(col) },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (rightAlign) Arrangement.End else Arrangement.Start,
+        ) {
+            if (isActive && rightAlign) {
+                Icon(
+                    if (dir ==
+                        SortDir.ASC
+                    ) {
+                        Icons.Default.ArrowUpward
+                    } else {
+                        Icons.Default.ArrowDownward
+                    },
+                    null,
+                    Modifier.size(12.dp),
+                    tint = labelColor,
+                )
+                Spacer(Modifier.width(2.dp))
+            }
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                color = labelColor,
             )
-            Spacer(Modifier.width(2.dp))
-        }
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-            color = labelColor,
-        )
-        if (isActive && !rightAlign) {
-            Spacer(Modifier.width(2.dp))
-            Icon(
-                if (dir ==
-                    SortDir.ASC
-                ) {
-                    Icons.Default.ArrowUpward
-                } else {
-                    Icons.Default.ArrowDownward
-                },
-                null,
-                Modifier.size(12.dp),
-                tint = labelColor,
-            )
+            if (isActive && !rightAlign) {
+                Spacer(Modifier.width(2.dp))
+                Icon(
+                    if (dir ==
+                        SortDir.ASC
+                    ) {
+                        Icons.Default.ArrowUpward
+                    } else {
+                        Icons.Default.ArrowDownward
+                    },
+                    null,
+                    Modifier.size(12.dp),
+                    tint = labelColor,
+                )
+            }
         }
     }
 }
@@ -154,16 +158,18 @@ internal fun StaticHeader(
     label: String,
     modifier: Modifier,
     rightAlign: Boolean = false,
+    tooltip: String? = null,
 ) {
-    Text(
-        label,
-        modifier = modifier,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        textAlign = if (rightAlign) TextAlign.End else TextAlign.Start,
-    )
+    Tip(tooltip, modifier) {
+        Text(
+            label,
+            modifier = Modifier.fillMaxWidth(),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = if (rightAlign) TextAlign.End else TextAlign.Start,
+        )
+    }
 }
-
 // ── Summary bars ──────────────────────────────────────────────────────────
 
 @Composable

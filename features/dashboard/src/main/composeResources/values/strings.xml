@@ -39,4 +39,6 @@
         <item quantity="one">%1$s trade</item>
         <item quantity="other">%1$s trades</item>
     </plurals>
+    <string name="tip_cash_flow">ISK actually in and out of the wallet: sales minus purchases, taxes and fees. Buying stock shows as a loss here even if you'll sell it at a profit later.</string>
+    <string name="tip_realized_pnl">Profit on what you actually sold: sale price minus what those same units cost you (FIFO — first bought, first sold), after fees. Unsold stock doesn't count.</string>
 </resources>

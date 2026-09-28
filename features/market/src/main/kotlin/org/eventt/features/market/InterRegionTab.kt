@@ -327,6 +327,8 @@ internal fun InterRegionTab(
 
     if (showSavePresetDialog) {
         SavePresetDialog(
+            title = stringResource(Res.string.save_route_preset),
+            placeholder = stringResource(Res.string.eg_jita_amarr),
             onDismiss = { showSavePresetDialog = false },
             onSave = { name ->
                 saveCurrentAsPreset(name)
@@ -374,8 +376,10 @@ internal fun InterRegionTab(
                     scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SELL_STATION, it?.toString() ?: "") } }
                 }
                 PresetPicker(
-                    presets = routePresets,
-                    onApply = ::applyPreset,
+                    presets = routePresets.map { it.name },
+                    saveCurrentLabel = stringResource(Res.string.save_current_route),
+                    tooltip = stringResource(Res.string.tip_presets),
+                    onApply = { name -> routePresets.find { it.name == name }?.let(::applyPreset) },
                     onDelete = ::deletePreset,
                     onSaveCurrent = { showSavePresetDialog = true },
                 )
@@ -416,7 +420,7 @@ internal fun InterRegionTab(
                 Spacer(Modifier.weight(1f))
                 // Read-only tax display — informational, so it lives at the far edge with the
                 // other non-inputs rather than crammed in with the editable filters.
-                FilterControl(stringResource(Res.string.fees)) {
+                FilterControl(stringResource(Res.string.fees), tooltip = stringResource(Res.string.tip_fees)) {
                     Text(
                         stringResource(
                             Res.string.fees_value,
@@ -437,7 +441,12 @@ internal fun InterRegionTab(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.weight(1f),
                 ) {
-                    ParamField(stringResource(Res.string.min_margin_pct), minMargin, 68.dp) {
+                    ParamField(
+                        stringResource(Res.string.min_margin_pct),
+                        minMargin,
+                        68.dp,
+                        tooltip = stringResource(Res.string.tip_min_margin),
+                    ) {
                         minMargin = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MARGIN, it) } }
                     }
@@ -447,6 +456,7 @@ internal fun InterRegionTab(
                     // margin would actually be.
                     CheckboxParamField(
                         label = stringResource(Res.string.max_margin_pct),
+                        tooltip = stringResource(Res.string.tip_max_margin),
                         checked = marginLimitEnabled,
                         onCheckedChange = {
                             marginLimitEnabled = it
@@ -459,7 +469,13 @@ internal fun InterRegionTab(
                         },
                         fieldEnabled = true,
                     )
-                    ParamField(stringResource(Res.string.isk_m3), iskPerM3, 88.dp, enabled = !shippingByCostEnabled) {
+                    ParamField(
+                        stringResource(Res.string.isk_m3),
+                        iskPerM3,
+                        88.dp,
+                        enabled = !shippingByCostEnabled,
+                        tooltip = stringResource(Res.string.tip_isk_m3),
+                    ) {
                         iskPerM3 = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_ISK_PER_M3, it) } }
                     }
@@ -468,6 +484,7 @@ internal fun InterRegionTab(
                     // expensive/low-volume items where m³-based shipping badly understates cost.
                     CheckboxParamField(
                         label = stringResource(Res.string.ship_pct_cost),
+                        tooltip = stringResource(Res.string.tip_ship_pct),
                         checked = shippingByCostEnabled,
                         onCheckedChange = {
                             shippingByCostEnabled = it
@@ -483,7 +500,12 @@ internal fun InterRegionTab(
                     // Excludes an item entirely once a single unit alone exceeds this -- too bulky
                     // to haul at all, not a total-cargo-hold cap on suggested quantity (that would
                     // silently understate "Qty to Buy" regardless of Dst/Src vol %).
-                    ParamField(stringResource(Res.string.max_m3_item), maxCargoM3, 88.dp) {
+                    ParamField(
+                        stringResource(Res.string.max_m3_item),
+                        maxCargoM3,
+                        88.dp,
+                        tooltip = stringResource(Res.string.tip_max_m3_item),
+                    ) {
                         maxCargoM3 = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MAX_CARGO, it) } }
                     }
@@ -494,6 +516,7 @@ internal fun InterRegionTab(
                     // "use source volume" is on.
                     CheckboxParamField(
                         label = stringResource(if (volCapEnabled) Res.string.src_vol_pct else Res.string.dst_vol_pct),
+                        tooltip = stringResource(Res.string.tip_src_dst_vol),
                         checked = volCapEnabled,
                         onCheckedChange = {
                             volCapEnabled = it
@@ -506,7 +529,7 @@ internal fun InterRegionTab(
                         },
                         fieldEnabled = true,
                     )
-                    FilterControl(stringResource(Res.string.skip_owned)) {
+                    FilterControl(stringResource(Res.string.skip_owned), tooltip = stringResource(Res.string.tip_skip_owned)) {
                         Checkbox(
                             checked = skipExistingOrders,
                             onCheckedChange = {
@@ -519,7 +542,7 @@ internal fun InterRegionTab(
                     // Caps the leg(s) that are our own placed order (waiting for a counterparty) by
                     // real Adam4EVE per-side flow at that station -- see regionFinalVol. Off by
                     // default: a third-party dependency, opt-in.
-                    FilterControl(stringResource(Res.string.a4e_flow)) {
+                    FilterControl(stringResource(Res.string.a4e_flow), tooltip = stringResource(Res.string.tip_a4e_flow_ir)) {
                         Checkbox(
                             checked = useAdam4Eve,
                             onCheckedChange = {
@@ -538,6 +561,7 @@ internal fun InterRegionTab(
                         spikePriceMultiplier,
                         50.dp,
                         enabled = spikeFilter != SpikeFilter.ANY,
+                        tooltip = stringResource(Res.string.tip_price_mult),
                     ) {
                         spikePriceMultiplier = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SPIKE_PRICE_MULTIPLIER, it) } }
@@ -548,18 +572,25 @@ internal fun InterRegionTab(
                         50.dp,
                         enabled =
                             spikeFilter != SpikeFilter.ANY,
+                        tooltip = stringResource(Res.string.tip_volume_mult),
                     ) {
                         spikeVolumeMultiplier = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SPIKE_VOLUME_MULTIPLIER, it) } }
                     }
-                    ParamField(stringResource(Res.string.spike_days), spikeWindowDays, 60.dp, enabled = spikeFilter != SpikeFilter.ANY) {
+                    ParamField(
+                        stringResource(Res.string.spike_days),
+                        spikeWindowDays,
+                        60.dp,
+                        enabled = spikeFilter != SpikeFilter.ANY,
+                        tooltip = stringResource(Res.string.tip_spike_days),
+                    ) {
                         spikeWindowDays = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SPIKE_WINDOW_DAYS, it) } }
                     }
                     FilterDivider()
                     // Toggles whether the hotkey's second press copies the suggested volume, or just
                     // advances straight to the next item after copying the price.
-                    FilterControl(stringResource(Res.string.copy_vol)) {
+                    FilterControl(stringResource(Res.string.copy_vol), tooltip = stringResource(Res.string.tip_copy_vol)) {
                         Switch(
                             checked = copyVolumeEnabled,
                             onCheckedChange = {
@@ -1135,16 +1166,20 @@ private fun decodeRoutePresets(raw: String?): List<RoutePreset> {
     }
 }
 
+// Shared by Inter-Region (routes) and Station Trading (stations): the caller owns the preset
+// type and storage, this only lists names.
 @Composable
-private fun PresetPicker(
-    presets: List<RoutePreset>,
-    onApply: (RoutePreset) -> Unit,
+internal fun PresetPicker(
+    presets: List<String>,
+    saveCurrentLabel: String,
+    tooltip: String,
+    onApply: (String) -> Unit,
     onDelete: (String) -> Unit,
     onSaveCurrent: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
 
-    FilterControl(stringResource(Res.string.presets)) {
+    FilterControl(stringResource(Res.string.presets), tooltip = tooltip) {
         Box {
             ChipSurface(onClick = { expanded = true }, width = 130.dp) {
                 Icon(Icons.Default.Bookmark, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
@@ -1168,7 +1203,7 @@ private fun PresetPicker(
                 DropdownMenuItem(
                     text = {
                         Text(
-                            stringResource(Res.string.save_current_route),
+                            saveCurrentLabel,
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Medium,
                         )
@@ -1185,7 +1220,7 @@ private fun PresetPicker(
                         DropdownMenuItem(
                             text = {
                                 Text(
-                                    preset.name,
+                                    preset,
                                     style = MaterialTheme.typography.bodySmall,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
@@ -1199,7 +1234,7 @@ private fun PresetPicker(
                                 Icon(
                                     Icons.Default.Close,
                                     contentDescription = stringResource(Res.string.delete_preset),
-                                    modifier = Modifier.size(14.dp).clickable { onDelete(preset.name) },
+                                    modifier = Modifier.size(14.dp).clickable { onDelete(preset) },
                                     tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                                 )
                             },
@@ -1212,20 +1247,23 @@ private fun PresetPicker(
 }
 
 @Composable
-private fun SavePresetDialog(
+internal fun SavePresetDialog(
+    title: String,
+    placeholder: String,
     onDismiss: () -> Unit,
     onSave: (String) -> Unit,
+    initialName: String = "",
 ) {
-    var name by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(initialName) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(Res.string.save_route_preset)) },
+        title = { Text(title) },
         text = {
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
                 singleLine = true,
-                placeholder = { Text(stringResource(Res.string.eg_jita_amarr)) },
+                placeholder = { Text(placeholder) },
                 modifier = Modifier.fillMaxWidth(),
             )
         },

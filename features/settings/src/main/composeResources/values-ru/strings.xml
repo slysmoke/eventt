@@ -96,4 +96,7 @@
     <string name="accent_hex">Акцент (hex)</string>
     <string name="overlay_autostart">Запускать автоматически при старте приложения</string>
     <string name="copy_url">Копировать URL</string>
+    <string name="tip_set_sales_tax">Налог с каждой завершённой продажи. Базово 7,5%, снижается навыком Accounting (~3,4% на 5 уровне). Точное значение видно в окне продажи на рынке в игре.</string>
+    <string name="tip_set_broker_fee">Комиссия за выставление ордера (buy и sell). Зависит от навыка Broker Relations, стендингов и владельца станции/структуры. Смотрите в окне ордера в игре.</string>
+    <string name="tip_set_relist_skill">Уровень навыка Advanced Broker Relations (0–5). Снижает комиссию за каждое изменение цены ордера — используется для оценки стоимости перевыставлений.</string>
 </resources>

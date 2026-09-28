@@ -140,4 +140,14 @@
     <string name="no_one_opted">No one has opted in yet.</string>
     <string name="filter_selling">Selling</string>
     <string name="filter_buying">Buying</string>
+    <string name="tip_p_savings">How much better this P2P price is than trading the same item on the open market in that region right now, fees included. A live snapshot, not a promise.</string>
+    <string name="tip_p_expires">Time until the order disappears from the relays unless its owner renews it.</string>
+    <string name="tip_p_my_expires">Time until the order disappears from the relays. Press Renew to extend it.</string>
+    <string name="tip_p_trader">The character who posted the order, their online status and how many trades others have confirmed with them (reputation).</string>
+    <string name="tip_p_value">Price × remaining quantity.</string>
+    <string name="tip_p_min_lot">Smallest amount a counterparty may request at once — in units, or in ISK value.</string>
+    <string name="tip_p_price">Your price per unit. The suggest button next to it offers one based on The Forge market, minus the sales tax or broker fee the other side saves by trading with you.</string>
+    <string name="tip_p_role">Whether you were the buyer or the seller in this trade.</string>
+    <string name="tip_p_inbox_status">Confirmed = both sides published a completion receipt, so the trade counts toward reputation.</string>
+    <string name="tip_p_attributed">Which character or corporation this trade is booked to for cost basis and margins (Orders, Dashboard). Change it anytime.</string>
 </resources>

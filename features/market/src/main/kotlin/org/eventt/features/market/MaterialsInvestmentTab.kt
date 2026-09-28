@@ -48,6 +48,7 @@ import org.eventt.core.model.StaticRegionModel
 import org.eventt.core.model.eveSigFigStep
 import org.eventt.core.model.stringBlocking
 import org.eventt.market.generated.resources.*
+import org.eventt.ui.common.Tip
 import org.eventt.ui.common.formatPriceAbbr
 import org.eventt.ui.common.formatVolume
 import org.eventt.ui.common.onRightClick
@@ -1080,25 +1081,6 @@ private fun signedPct(pct: Double): String = "${if (pct >= 0) "+" else ""}${Stri
 // aren't, so every non-obvious control gets one rather than relying on remembering an explanation
 // from outside the app.
 @OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun Tip(
-    text: String,
-    content: @Composable () -> Unit,
-) {
-    TooltipArea(
-        tooltip = {
-            Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surfaceVariant, shadowElevation = 4.dp) {
-                Text(
-                    text,
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(8.dp).widthIn(max = 280.dp),
-                )
-            }
-        },
-        content = content,
-    )
-}
-
 // Alerts for one item: a "top buy order fell to this rung" alert per buy-ladder level not already
 // crossed, plus a sell-target alert for a held position -- skipping any that already have a live,
 // un-triggered alert at essentially the same price, so re-clicking after a re-scan doesn't pile up

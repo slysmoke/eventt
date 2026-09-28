@@ -84,4 +84,12 @@
     <string name="daily_cash_flow">Daily Cash Flow</string>
     <string name="daily_breakdown">Daily Breakdown</string>
     <string name="net">Net</string>
+    <string name="tip_w_bs">B = you bought, S = you sold.</string>
+    <string name="tip_w_client">The character or corporation on the other side of the trade.</string>
+    <string name="tip_w_type">What the ISK movement was for: market transaction, taxes, broker fees, escrow, contracts, etc.</string>
+    <string name="tip_w_amount">ISK added to (+) or taken from (−) the wallet.</string>
+    <string name="tip_w_tax">Tax withheld on this entry, if any (e.g. bounty or mission tax).</string>
+    <string name="tip_w_balance">Wallet balance right after this entry.</string>
+    <string name="tip_cash_flow">ISK actually in and out of the wallet: sales minus purchases, taxes and fees. Buying stock shows as a loss here even if you'll sell it at a profit later.</string>
+    <string name="tip_realized_pnl">Profit on what you actually sold: sale price minus what those same units cost you (FIFO — first bought, first sold), after fees. Unsold stock doesn't count.</string>
 </resources>

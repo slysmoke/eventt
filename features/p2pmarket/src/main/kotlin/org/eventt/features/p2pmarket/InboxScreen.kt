@@ -42,6 +42,7 @@ import org.eventt.core.nostr.NostrRelayManager
 import org.eventt.core.nostr.ReceiptService
 import org.eventt.core.nostr.p2pTransactionId
 import org.eventt.p2pmarket.generated.resources.*
+import org.eventt.ui.common.Tip
 import org.jetbrains.compose.resources.stringResource
 import java.time.Instant
 
@@ -170,24 +171,30 @@ private fun InboxTableHeader(
             active = sortColumn == InboxSortColumn.QTY,
             direction = sortDirection,
         ) { onSort(InboxSortColumn.QTY, SortDirection.DESC) }
-        Text(
-            stringResource(Res.string.h_role),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.width(80.dp),
-        )
-        Text(
-            stringResource(Res.string.h_status),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.width(260.dp),
-        )
-        Text(
-            stringResource(Res.string.h_attributed_to),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.width(160.dp),
-        )
+        Tip(stringResource(Res.string.tip_p_role)) {
+            Text(
+                stringResource(Res.string.h_role),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.width(80.dp),
+            )
+        }
+        Tip(stringResource(Res.string.tip_p_inbox_status)) {
+            Text(
+                stringResource(Res.string.h_status),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.width(260.dp),
+            )
+        }
+        Tip(stringResource(Res.string.tip_p_attributed)) {
+            Text(
+                stringResource(Res.string.h_attributed_to),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.width(160.dp),
+            )
+        }
         SortHeaderCell(
             stringResource(Res.string.h_requested),
             Modifier.width(110.dp),

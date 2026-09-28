@@ -77,4 +77,11 @@
     <string name="target_price_isk">Target Price (ISK)</string>
     <string name="create_alert">Create Alert</string>
     <string name="save">Save</string>
+    <string name="tip_a_alerts">How many alerts are set for this item.</string>
+    <string name="tip_a_next">The closest active alert: Buy/Sell price side, ≥ or ≤, and the target price.</string>
+    <string name="tip_a_quote">Current best buy / best sell price in the alert's region.</string>
+    <string name="tip_a_to_go">How far (in %) the price still has to move to trigger the next alert. Yellow = within 2%.</string>
+    <string name="tip_a_status">Active = being checked every 5 minutes; Triggered = the price reached the target; Disabled = paused.</string>
+    <string name="tip_al_price_type">Which price to watch: Sell = the lowest sell order (what you'd pay to buy now), Buy = the highest buy order (what you'd get selling now).</string>
+    <string name="tip_al_target">The alert fires once the watched price goes below (or above) this value. Checked every 5 minutes while the app is running.</string>
 </resources>

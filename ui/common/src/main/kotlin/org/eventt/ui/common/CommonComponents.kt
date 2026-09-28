@@ -1,5 +1,7 @@
 package org.eventt.ui.common
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -300,3 +302,33 @@ private fun corpFeatureName(feature: CorpFeature): String =
             CorpFeature.CONTRACTS -> Res.string.corp_feature_contracts
         },
     )
+
+/**
+ * Hover explanation for a column header or input. [modifier] sizes the whole area (pass the
+ * caller's weight/width here, not to [content]); a null [text] renders [content] without a tooltip.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun Tip(
+    text: String?,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    if (text == null) {
+        Box(modifier) { content() }
+        return
+    }
+    TooltipArea(
+        tooltip = {
+            Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surfaceVariant, shadowElevation = 4.dp) {
+                Text(
+                    text,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(8.dp).widthIn(max = 320.dp),
+                )
+            }
+        },
+        modifier = modifier,
+        content = content,
+    )
+}

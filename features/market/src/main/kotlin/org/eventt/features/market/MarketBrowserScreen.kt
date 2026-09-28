@@ -54,6 +54,7 @@ import org.eventt.core.model.stringBlocking
 import org.eventt.core.staticdata.StaticDataImporter
 import org.eventt.market.generated.resources.*
 import org.eventt.ui.common.*
+import org.eventt.ui.common.Tip
 import org.eventt.ui.common.formatPriceAbbr
 import org.eventt.ui.common.formatVolume
 import org.eventt.ui.theme.negativeColor
@@ -557,7 +558,12 @@ private fun TypeMarketHeader(
             ) {
                 SpreadItem(stringResource(Res.string.best_sell), formatPriceAbbr(bestSell), negativeColor)
                 SpreadItem(stringResource(Res.string.best_buy), formatPriceAbbr(bestBuy), positiveColor)
-                SpreadItem(stringResource(Res.string.spread), "${String.format(Locale.US, "%.2f", spread ?: 0.0)}%", warningColor)
+                SpreadItem(
+                    stringResource(Res.string.spread),
+                    "${String.format(Locale.US, "%.2f", spread ?: 0.0)}%",
+                    warningColor,
+                    tooltip = stringResource(Res.string.tip_spread),
+                )
                 SpreadItem(stringResource(Res.string.sell_orders), sellOrders.size.toString(), MaterialTheme.colorScheme.onSurface)
                 SpreadItem(stringResource(Res.string.buy_orders), buyOrders.size.toString(), MaterialTheme.colorScheme.onSurface)
             }
@@ -572,10 +578,13 @@ private fun SpreadItem(
     label: String,
     value: String,
     color: Color,
+    tooltip: String? = null,
 ) {
-    Column {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = color)
+    Tip(tooltip) {
+        Column {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = color)
+        }
     }
 }
 
@@ -749,6 +758,7 @@ private fun OrderTable(
                 ascending,
                 onSort,
                 Modifier.width(120.dp),
+                tooltip = stringResource(Res.string.tip_c_remain),
             )
             SortableCol(
                 stringResource(Res.string.c_isk_total),
@@ -757,8 +767,17 @@ private fun OrderTable(
                 ascending,
                 onSort,
                 Modifier.width(90.dp),
+                tooltip = stringResource(Res.string.tip_c_isk_total),
             )
-            SortableCol(stringResource(Res.string.c_min), OrderSortColumn.MIN_VOL, sortCol, ascending, onSort, Modifier.width(50.dp))
+            SortableCol(
+                stringResource(Res.string.c_min),
+                OrderSortColumn.MIN_VOL,
+                sortCol,
+                ascending,
+                onSort,
+                Modifier.width(50.dp),
+                tooltip = stringResource(Res.string.tip_c_min),
+            )
             if (isBuy) {
                 SortableCol(
                     stringResource(Res.string.c_range),
@@ -767,11 +786,28 @@ private fun OrderTable(
                     ascending,
                     onSort,
                     Modifier.width(80.dp),
+                    tooltip = stringResource(Res.string.tip_c_range),
                 )
             }
             SortableCol(stringResource(Res.string.c_location), OrderSortColumn.LOCATION, sortCol, ascending, onSort, Modifier.weight(1f))
-            SortableCol(stringResource(Res.string.c_issued), OrderSortColumn.ISSUED, sortCol, ascending, onSort, Modifier.width(82.dp))
-            SortableCol(stringResource(Res.string.c_expires), OrderSortColumn.EXPIRES, sortCol, ascending, onSort, Modifier.width(56.dp))
+            SortableCol(
+                stringResource(Res.string.c_issued),
+                OrderSortColumn.ISSUED,
+                sortCol,
+                ascending,
+                onSort,
+                Modifier.width(82.dp),
+                tooltip = stringResource(Res.string.tip_c_issued),
+            )
+            SortableCol(
+                stringResource(Res.string.c_expires),
+                OrderSortColumn.EXPIRES,
+                sortCol,
+                ascending,
+                onSort,
+                Modifier.width(56.dp),
+                tooltip = stringResource(Res.string.tip_c_expires),
+            )
         }
 
         // Rows
@@ -800,35 +836,39 @@ private fun SortableCol(
     ascending: Boolean,
     onSort: (OrderSortColumn) -> Unit,
     modifier: Modifier = Modifier,
+    tooltip: String? = null,
 ) {
-    val active = col == current
-    Row(
-        modifier =
-            modifier
-                .clickable { onSort(col) }
-                .padding(end = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-            color =
-                if (active) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                },
-            maxLines = 1,
-        )
-        if (active) {
-            Icon(
-                imageVector = if (ascending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                contentDescription = null,
-                modifier = Modifier.size(10.dp),
-                tint = MaterialTheme.colorScheme.primary,
+    Tip(tooltip, modifier) {
+        val active = col == current
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { onSort(col) }
+                    .padding(end = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                color =
+                    if (active) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    },
+                maxLines = 1,
             )
+            if (active) {
+                Icon(
+                    imageVector = if (ascending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                    contentDescription = null,
+                    modifier = Modifier.size(10.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
     }
 }
@@ -1293,7 +1333,7 @@ private fun AddToAlertDialog(
                 OutlinedTextField(
                     value = targetPrice,
                     onValueChange = { targetPrice = it },
-                    label = { Text(stringResource(Res.string.target_price_isk)) },
+                    label = { Tip(stringResource(Res.string.tip_al_target)) { Text(stringResource(Res.string.target_price_isk)) } },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth(),
                 )

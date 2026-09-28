@@ -27,6 +27,7 @@ import org.eventt.core.model.StaticMarketGroupModel
 import org.eventt.core.model.StaticRegionModel
 import org.eventt.core.model.StaticStationModel
 import org.eventt.market.generated.resources.*
+import org.eventt.ui.common.Tip
 import org.jetbrains.compose.resources.stringResource
 
 // ─── Filter bar design tokens ──────────────────────────────────────────────
@@ -91,17 +92,20 @@ internal fun ChipSurface(
 @Composable
 internal fun FilterControl(
     label: String,
+    tooltip: String? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(FilterLabelGap)) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-            maxLines = 1,
-            modifier = Modifier.height(FilterLabelHeight),
-        )
-        Box(modifier = Modifier.height(FilterFieldHeight), contentAlignment = Alignment.CenterStart, content = content)
+    Tip(tooltip) {
+        Column(verticalArrangement = Arrangement.spacedBy(FilterLabelGap)) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                maxLines = 1,
+                modifier = Modifier.height(FilterLabelHeight),
+            )
+            Box(modifier = Modifier.height(FilterFieldHeight), contentAlignment = Alignment.CenterStart, content = content)
+        }
     }
 }
 
@@ -185,8 +189,9 @@ internal fun CheckboxParamField(
     // the box just relabels it to "Src vol %" rather than unlocking "Dst". Callers where the field
     // should stay editable regardless of the checkbox pass `enabled = true` explicitly.
     fieldEnabled: Boolean = checked,
+    tooltip: String? = null,
 ) {
-    FilterControl(label) {
+    FilterControl(label, tooltip) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = checked, onCheckedChange = onCheckedChange, modifier = Modifier.size(24.dp))
             Spacer(Modifier.width(4.dp))
@@ -617,7 +622,7 @@ internal fun TradeTypeChip(
 ) {
     var expanded by remember { mutableStateOf(false) }
 
-    FilterControl(stringResource(Res.string.trade_type)) {
+    FilterControl(stringResource(Res.string.trade_type), tooltip = stringResource(Res.string.tip_trade_type)) {
         Box {
             ChipSurface(onClick = { expanded = !expanded }, width = 175.dp) {
                 Text(
@@ -668,7 +673,7 @@ internal fun SpikeFilterChip(
 ) {
     var expanded by remember { mutableStateOf(false) }
 
-    FilterControl(stringResource(Res.string.price_spike)) {
+    FilterControl(stringResource(Res.string.price_spike), tooltip = stringResource(Res.string.tip_price_spike)) {
         Box {
             ChipSurface(onClick = { expanded = !expanded }, width = 150.dp) {
                 Text(
@@ -718,9 +723,10 @@ internal fun ParamField(
     value: String,
     width: Dp,
     enabled: Boolean = true,
+    tooltip: String? = null,
     onValue: (String) -> Unit,
 ) {
-    FilterControl(label) {
+    FilterControl(label, tooltip) {
         CompactTextField(value = value, onValueChange = onValue, width = width, enabled = enabled)
     }
 }

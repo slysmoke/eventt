@@ -90,4 +90,7 @@
     <string name="accent_hex">Accent (hex)</string>
     <string name="overlay_autostart">Start automatically when the app launches</string>
     <string name="copy_url">Copy URL</string>
+    <string name="tip_set_sales_tax">Tax taken from every completed sale. Base 7.5%, reduced by the Accounting skill (~3.4% at level 5). Check the exact value in the in-game market sell window.</string>
+    <string name="tip_set_broker_fee">Fee for placing an order (both buy and sell). Depends on the Broker Relations skill, standings and the station/structure owner. Check it in the in-game order window.</string>
+    <string name="tip_set_relist_skill">Your Advanced Broker Relations level (0–5). It lowers the fee charged each time you change an order's price, used to estimate relist costs.</string>
 </resources>

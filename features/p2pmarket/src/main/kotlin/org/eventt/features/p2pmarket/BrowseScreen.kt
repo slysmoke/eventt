@@ -55,6 +55,7 @@ import org.eventt.core.nostr.ReputationAggregator
 import org.eventt.core.nostr.ReservationService
 import org.eventt.p2pmarket.generated.resources.*
 import org.eventt.ui.common.SearchField
+import org.eventt.ui.common.Tip
 import org.eventt.ui.theme.positiveColor
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
@@ -215,18 +216,22 @@ private fun BrowseTableHeader(
             Modifier.width(100.dp),
             active = sortColumn == BrowseSortColumn.SAVINGS,
             direction = sortDirection,
+            tooltip = stringResource(Res.string.tip_p_savings),
         ) { onSort(BrowseSortColumn.SAVINGS, SortDirection.DESC) }
-        Text(
-            stringResource(Res.string.h_trader),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.width(160.dp),
-        )
+        Tip(stringResource(Res.string.tip_p_trader)) {
+            Text(
+                stringResource(Res.string.h_trader),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.width(160.dp),
+            )
+        }
         SortHeaderCell(
             stringResource(Res.string.h_expires),
             Modifier.width(110.dp),
             active = sortColumn == BrowseSortColumn.EXPIRY,
             direction = sortDirection,
+            tooltip = stringResource(Res.string.tip_p_expires),
         ) { onSort(BrowseSortColumn.EXPIRY, SortDirection.ASC) }
         Spacer(Modifier.width(110.dp))
     }

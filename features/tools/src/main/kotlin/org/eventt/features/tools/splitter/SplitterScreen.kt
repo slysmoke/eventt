@@ -31,6 +31,7 @@ import org.eventt.features.tools.pricing.PricingService
 import org.eventt.tools.generated.resources.*
 import org.eventt.ui.common.ConfirmDialog
 import org.eventt.ui.common.ContentCard
+import org.eventt.ui.common.Tip
 import org.eventt.ui.common.formatIsk
 import org.eventt.ui.theme.positiveColor
 import org.jetbrains.compose.resources.pluralStringResource
@@ -222,7 +223,7 @@ fun SplitterScreen(context: ViewContext?) {
                             maxIskText = it
                             scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SplitterSettings.MAX_ISK, it) }
                         },
-                        label = { Text(stringResource(Res.string.max_isk_split)) },
+                        label = { Tip(stringResource(Res.string.tip_sp_max_isk)) { Text(stringResource(Res.string.max_isk_split)) } },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
@@ -232,13 +233,15 @@ fun SplitterScreen(context: ViewContext?) {
                             maxVolumeText = it
                             scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SplitterSettings.MAX_VOLUME, it) }
                         },
-                        label = { Text(stringResource(Res.string.max_m3_split)) },
+                        label = { Tip(stringResource(Res.string.tip_sp_max_m3)) { Text(stringResource(Res.string.max_m3_split)) } },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
                 }
                 Spacer(Modifier.height(12.dp))
-                Text(stringResource(Res.string.algorithm), style = MaterialTheme.typography.labelMedium)
+                Tip(stringResource(Res.string.tip_sp_algorithm)) {
+                    Text(stringResource(Res.string.algorithm), style = MaterialTheme.typography.labelMedium)
+                }
                 Spacer(Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(

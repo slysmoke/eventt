@@ -78,4 +78,13 @@
     <string name="characters">Characters</string>
     <string name="corporations_corp_wide">Corporations (corp-wide)</string>
     <string name="no_chars_or_corps">No characters or corporations added yet</string>
+    <string name="tip_pr_cost">Average price you paid per unit, from the selected cost basis source (FIFO), including the buy broker fee.</string>
+    <string name="tip_pr_target">Cost + your margin %, grossed up for sales tax and broker fee so the margin is what you actually keep.</string>
+    <string name="tip_pr_market_low">The current lowest sell order at your station.</string>
+    <string name="tip_pr_final">The price to list at: the market low undercut by one tick when that's cheaper than your target (or always, with the margin limit off). An arrow marks an undercut price.</string>
+    <string name="tip_pr_margin">Margin you actually get at the final price, after sales tax and broker fee, relative to cost.</string>
+    <string name="tip_pr_margin_pct">Profit you want on top of cost, in %. Only used when the margin limit is on.</string>
+    <string name="tip_sp_max_isk">Most ISK value one split (one trip / one fitting) may carry — e.g. to limit what you risk losing to gankers.</string>
+    <string name="tip_sp_max_m3">Most cargo volume one split may take — usually your ship's cargo hold.</string>
+    <string name="tip_sp_algorithm">Fill First packs each split as full as possible (fewer trips, the last one smaller). Balanced spreads value evenly across splits (similar risk per trip).</string>
 </resources>
