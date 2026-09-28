@@ -182,10 +182,15 @@ object UpdateChecker {
                     it.deleteRecursively()
                     it.mkdirs()
                 }
+            val extractRoot = extractDir.toPath().toAbsolutePath().normalize()
             ZipInputStream(zipFile.inputStream().buffered()).use { zip ->
                 var entry = zip.nextEntry
                 while (entry != null) {
-                    val out = File(extractDir, entry.name)
+                    val resolvedOutPath = extractRoot.resolve(entry.name).normalize()
+                    if (!resolvedOutPath.startsWith(extractRoot)) {
+                        throw SecurityException("Blocked unsafe zip entry: ${entry.name}")
+                    }
+                    val out = resolvedOutPath.toFile()
                     if (entry.isDirectory) {
                         out.mkdirs()
                     } else {
