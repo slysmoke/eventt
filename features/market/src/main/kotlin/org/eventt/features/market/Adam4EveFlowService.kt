@@ -33,6 +33,7 @@ internal object Adam4EveFlowService {
     private data class WindowData(
         val forTargetDate: String,
         val rows: Map<Pair<Long, Int>, StationFlow>, // averaged per-day over the days actually fetched
+        val regionRows: Map<Pair<Int, Int>, StationFlow>, // same, summed over every station in the region
     )
 
     // One file covers every station/type in New Eden, so the whole week's parse is cached once
@@ -63,21 +64,36 @@ internal object Adam4EveFlowService {
             typeIds.mapNotNull { id -> window.rows[stationId to id]?.let { id to it } }.toMap()
         }
 
+    /** Same as [fetchStationFlow], summed across every tracked station in [regionId]. Null = no data. */
+    suspend fun fetchRegionFlow(
+        regionId: Int,
+        typeId: Int,
+    ): StationFlow? =
+        withContext(Dispatchers.IO) {
+            loadWindow()?.regionRows?.get(regionId to typeId)
+        }
+
     private fun loadWindow(): WindowData? {
         val targetDate = LocalDate.now().minusDays(1).toString()
         cached?.let { if (it.forTargetDate == targetDate) return it }
 
         val sums = HashMap<Pair<Long, Int>, DoubleArray>() // [buySum, sellSum]
+        val regionSums = HashMap<Pair<Int, Int>, DoubleArray>()
         var daysFetched = 0
         var date = LocalDate.parse(targetDate)
         repeat(WINDOW_DAYS) {
             val body = runCatching { downloadCsv(date.toString()) }.getOrNull()
             if (body != null) {
                 daysFetched++
-                parseCsv(body).forEach { (key, flow) ->
+                val regionOf = HashMap<Long, Int>()
+                parseCsv(body, regionOf).forEach { (key, flow) ->
                     val acc = sums.getOrPut(key) { DoubleArray(2) }
                     acc[0] += flow.buyAmount
                     acc[1] += flow.sellAmount
+                    val region = regionOf[key.first] ?: return@forEach
+                    val rAcc = regionSums.getOrPut(region to key.second) { DoubleArray(2) }
+                    rAcc[0] += flow.buyAmount
+                    rAcc[1] += flow.sellAmount
                 }
             }
             date = date.minusDays(1)
@@ -87,7 +103,9 @@ internal object Adam4EveFlowService {
             return null
         }
         val rows = sums.mapValues { (_, acc) -> StationFlow(buyAmount = acc[0] / daysFetched, sellAmount = acc[1] / daysFetched) }
-        val window = WindowData(targetDate, rows)
+        val regionRows =
+            regionSums.mapValues { (_, acc) -> StationFlow(buyAmount = acc[0] / daysFetched, sellAmount = acc[1] / daysFetched) }
+        val window = WindowData(targetDate, rows, regionRows)
         cached = window
         return window
     }
@@ -104,7 +122,11 @@ internal object Adam4EveFlowService {
     // location_id;region_id;type_id;is_buy_order;has_gone;scanDate;amount;high;low;avg;orderNum;iskValue
     // The export is already one row per (location, type, side, day) -- accumulation below is just
     // a safety net against a duplicate row, not the normal case.
-    internal fun parseCsv(body: String): Map<Pair<Long, Int>, StationFlow> {
+    internal fun parseCsv(
+        body: String,
+        // Filled with location -> region as a side effect, for the per-region aggregate.
+        regionOf: MutableMap<Long, Int>? = null,
+    ): Map<Pair<Long, Int>, StationFlow> {
         val result = HashMap<Pair<Long, Int>, StationFlow>()
         val lines = body.lineSequence().iterator()
         if (!lines.hasNext()) return result
@@ -116,6 +138,7 @@ internal object Adam4EveFlowService {
             val typeId = cols[2].toIntOrNull() ?: continue
             val isBuyOrder = cols[3] == "1"
             val amount = cols[6].toDoubleOrNull() ?: continue
+            cols[1].toIntOrNull()?.let { regionOf?.put(locationId, it) }
             val key = locationId to typeId
             val existing = result[key] ?: StationFlow(buyAmount = 0.0, sellAmount = 0.0)
             result[key] =
