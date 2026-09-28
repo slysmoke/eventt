@@ -20,6 +20,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.ActiveOrderDao
@@ -296,6 +297,7 @@ fun OrdersScreen(context: ViewContext?) {
     // used to surface as a phantom relist bump landing well after the fact.
     var loadJob by remember { mutableStateOf<Job?>(null) }
     var marketJob by remember { mutableStateOf<Job?>(null) }
+    var inventoryJob by remember { mutableStateOf<Job?>(null) }
     var refreshAvailableAt by remember { mutableStateOf<Long?>(null) }
     var activeTab by remember { mutableStateOf(0) }
     var sortCol by remember { mutableStateOf(SortCol.NAME) }
@@ -389,6 +391,7 @@ fun OrdersScreen(context: ViewContext?) {
                     // burst of requests.
                     var latestExpiry: Long? = null
                     for ((typeId, regionId) in uniqueRegionPairs) {
+                        ensureActive()
                         try {
                             val ownOrdersForPair = activeOrders.filter { it.typeId == typeId && it.regionId == regionId }
                             val ownIds = ownOrdersForPair.map { it.orderId }.toSet()
@@ -505,17 +508,28 @@ fun OrdersScreen(context: ViewContext?) {
 
     fun fetchInventoryMarketPrices(inventory: Map<Int, CostBasisService.InventoryItem>) {
         if (inventory.isEmpty()) return
-        scope.launch(Dispatchers.IO) {
-            val result = mutableMapOf<Int, Double>()
-            for (typeId in inventory.keys) {
-                try {
-                    val sellOrders = EsiClient.getMarketRegionOrders(DEFAULT_REGION_ID, "sell", typeId)
-                    sellOrders.mapNotNull { (it["price"] as? Number)?.toDouble() }.minOrNull()?.let { result[typeId] = it }
-                } catch (_: Exception) {
+        inventoryJob?.cancel()
+        inventoryJob =
+            scope.launch(Dispatchers.IO) {
+                val result = mutableMapOf<Int, Double>()
+                for (typeId in inventory.keys) {
+                    ensureActive()
+                    try {
+                        // "all", not "sell": shares the cache entry fetchMarketComparisons and
+                        // MarketWatchService already keep warm, instead of a second request per type.
+                        EsiClient
+                            .getMarketRegionOrders(DEFAULT_REGION_ID, "all", typeId)
+                            .filter { !(it["is_buy_order"] as? Boolean ?: false) }
+                            .mapNotNull { (it["price"] as? Number)?.toDouble() }
+                            .minOrNull()
+                            ?.let { result[typeId] = it }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                    }
                 }
+                withContext(Dispatchers.Main) { inventoryMarketPrices = result }
             }
-            withContext(Dispatchers.Main) { inventoryMarketPrices = result }
-        }
     }
 
     fun loadOrders(clearDenied: Boolean = false) {
