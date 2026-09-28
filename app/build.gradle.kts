@@ -116,6 +116,10 @@ dependencies {
 compose.desktop {
     application {
         mainClass = "org.eventt.MainKt"
+        // After 5 min without a GC, run a concurrent one so G1 hands unused heap back to the OS —
+        // otherwise a burst (e.g. an Adam4EVE backfill) leaves RSS at its peak until the next GC,
+        // which on an idle app may be hours away. No effect while the app is busy GC-ing anyway.
+        jvmArgs += listOf("-XX:G1PeriodicGCInterval=300000")
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
