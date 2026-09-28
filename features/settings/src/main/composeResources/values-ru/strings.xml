@@ -59,7 +59,6 @@
     <string name="adv_broker_relations_lvl">Ур. Advanced Broker Relations</string>
     <string name="fees_total">Итого: %1$s%</string>
     <string name="language">Язык</string>
-    <string name="language_system">Как в системе</string>
     <string name="language_restart">Перезапустите приложение, чтобы применить новый язык.</string>
     <string name="global_hotkeys">Глобальные горячие клавиши</string>
     <string name="global_hotkeys_desc">Работают во всей системе — даже когда в фокусе клиент EVE. Нажмите на привязку, затем нужную комбинацию (Ctrl/Alt/Shift + буква или F1–F12, хотя бы один модификатор). Дополнительные кнопки мыши: назначьте им эту комбинацию в ПО мыши (Logitech G HUB, Razer Synapse, input-remapper в Linux).</string>

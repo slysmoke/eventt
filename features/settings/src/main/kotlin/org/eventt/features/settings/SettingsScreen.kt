@@ -670,25 +670,23 @@ private fun LanguageCard() {
                 Icon(Icons.Default.Language, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Text(stringResource(Res.string.language), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AppLanguage.SUPPORTED.forEach { code ->
-                    FilterChip(
-                        selected = selected == code,
-                        onClick = {
-                            selected = code
-                            scope.launch(Dispatchers.IO) { AppLanguage.set(code) }
-                        },
-                        // Language names stay in their own language so they're findable from any UI language.
-                        label = {
-                            Text(
-                                when (code) {
-                                    "" -> stringResource(Res.string.language_system)
-                                    "ru" -> "Русский"
-                                    else -> "English"
-                                },
-                            )
-                        },
-                    )
+            Box {
+                var expanded by remember { mutableStateOf(false) }
+                OutlinedButton(onClick = { expanded = true }) {
+                    Text(AppLanguage.SUPPORTED.getValue(selected))
+                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                }
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    AppLanguage.SUPPORTED.forEach { (code, name) ->
+                        DropdownMenuItem(
+                            text = { Text(name) },
+                            onClick = {
+                                expanded = false
+                                selected = code
+                                scope.launch(Dispatchers.IO) { AppLanguage.set(code) }
+                            },
+                        )
+                    }
                 }
             }
             if (selected != active) {

@@ -53,7 +53,6 @@
     <string name="adv_broker_relations_lvl">Adv. Broker Relations Lvl</string>
     <string name="fees_total">Total: %1$s%</string>
     <string name="language">Language</string>
-    <string name="language_system">System default</string>
     <string name="language_restart">Restart the app to apply the new language.</string>
     <string name="global_hotkeys">Global Hotkeys</string>
     <string name="global_hotkeys_desc">System-wide — they trigger even while the EVE client has focus. Click a binding, then press the combination you want (Ctrl/Alt/Shift + a letter or F1–F12, at least one modifier). Extra mouse buttons: bind them to this combination in your mouse software (Logitech G HUB, Razer Synapse, input-remapper on Linux).</string>
