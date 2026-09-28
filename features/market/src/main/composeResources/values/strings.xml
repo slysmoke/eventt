@@ -240,7 +240,7 @@
     <string name="max_pct_item">Max %/Item</string>
     <string name="mi_tip_liquidity">Second cap: never allocate more than this many days' worth of the item's own median daily trading value -- avoids parking more ISK in one material than the market could plausibly absorb.</string>
     <string name="liquidity_d">Liquidity d</string>
-    <string name="mi_tip_ladder_levels">How many price rungs to split each item's allocation into. Anchored to your real average cost when you're already holding and underwater, otherwise to the current live price.</string>
+    <string name="mi_tip_ladder_levels">How many price rungs to split each item's allocation into. Spaced down from your real average cost when you're holding at a loss, otherwise from the current price. Rungs the price has already fallen through merge into one rung at the current top bid — never above the market.</string>
     <string name="ladder_levels">Ladder Levels</string>
     <string name="mi_tip_ladder_step">Price gap between each ladder rung. Later rungs (further price drops) get a bigger share of the item's allocation -- buy more the further it falls. Also the take-profit %: the sell target is your cost (incl. buy broker fee) + this %, net of sales tax and broker fee -- and the Backtest sells at the same rule.</string>
     <string name="ladder_step_pct">Ladder Step %</string>
