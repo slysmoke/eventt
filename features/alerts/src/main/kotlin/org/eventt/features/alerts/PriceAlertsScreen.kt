@@ -36,9 +36,13 @@ fun PriceAlertsScreen() {
     val scope = rememberCoroutineScope()
     var alerts by remember { mutableStateOf<List<PriceAlertModel>>(emptyList()) }
     var showAddDialog by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<PriceAlertModel?>(null) }
     var showOnlyEnabled by remember { mutableStateOf(true) }
+    val revision by AlertDao.revision.collectAsState()
 
-    LaunchedEffect(Unit) {
+    // Keyed on AlertDao.revision: this screen stays mounted after its first visit, so alerts
+    // created elsewhere (Market Analysis) or fired by AlertMonitor must push a reload themselves.
+    LaunchedEffect(revision, showOnlyEnabled) {
         alerts =
             withContext(Dispatchers.IO) {
                 if (showOnlyEnabled) AlertDao.getEnabled() else AlertDao.getAll()
@@ -55,14 +59,8 @@ fun PriceAlertsScreen() {
             Row {
                 FilterChip(
                     selected = showOnlyEnabled,
-                    onClick = {
-                        showOnlyEnabled = true
-                        scope.launch(Dispatchers.IO) {
-                            val loaded = AlertDao.getEnabled()
-                            withContext(Dispatchers.Main) { alerts = loaded }
-                        }
-                    },
-                    label = { Text("Active") },
+                    onClick = { showOnlyEnabled = !showOnlyEnabled },
+                    label = { Text("Active only") },
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Button(onClick = { showAddDialog = true }) {
@@ -82,23 +80,12 @@ fun PriceAlertsScreen() {
             )
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                items(alerts) { alert ->
+                items(alerts, key = { it.id }) { alert ->
                     AlertCard(
                         alert = alert,
-                        onToggle = {
-                            scope.launch(Dispatchers.IO) {
-                                AlertDao.setEnabled(alert.id, !alert.enabled)
-                                val loaded = if (showOnlyEnabled) AlertDao.getEnabled() else AlertDao.getAll()
-                                withContext(Dispatchers.Main) { alerts = loaded }
-                            }
-                        },
-                        onDelete = {
-                            scope.launch(Dispatchers.IO) {
-                                AlertDao.delete(alert.id)
-                                val loaded = if (showOnlyEnabled) AlertDao.getEnabled() else AlertDao.getAll()
-                                withContext(Dispatchers.Main) { alerts = loaded }
-                            }
-                        },
+                        onToggle = { scope.launch(Dispatchers.IO) { AlertDao.setEnabled(alert.id, !alert.enabled) } },
+                        onEdit = { editing = alert },
+                        onDelete = { scope.launch(Dispatchers.IO) { AlertDao.delete(alert.id) } },
                     )
                 }
             }
@@ -106,17 +93,27 @@ fun PriceAlertsScreen() {
     }
 
     if (showAddDialog) {
-        AddAlertDialog(
+        AlertEditDialog(
+            initial = null,
             onDismiss = { showAddDialog = false },
-            onAdd = { alert ->
+            onSave = { alert ->
+                scope.launch(Dispatchers.IO) { AlertDao.insert(alert) }
+                showAddDialog = false
+            },
+        )
+    }
+
+    editing?.let { original ->
+        AlertEditDialog(
+            initial = original,
+            onDismiss = { editing = null },
+            onSave = { edited ->
+                // Saving re-arms the alert — a changed target is a new question, so a previous
+                // trigger shouldn't keep it silenced.
                 scope.launch(Dispatchers.IO) {
-                    AlertDao.insert(alert)
-                    val loaded = if (showOnlyEnabled) AlertDao.getEnabled() else AlertDao.getAll()
-                    withContext(Dispatchers.Main) {
-                        alerts = loaded
-                        showAddDialog = false
-                    }
+                    AlertDao.update(edited.copy(id = original.id, enabled = true, triggered = false, triggeredAt = null))
                 }
+                editing = null
             },
         )
     }
@@ -126,6 +123,7 @@ fun PriceAlertsScreen() {
 private fun AlertCard(
     alert: PriceAlertModel,
     onToggle: () -> Unit,
+    onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
     Card(
@@ -155,9 +153,19 @@ private fun AlertCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray,
                 )
+                if (alert.triggered) {
+                    Text(
+                        "Triggered${alert.triggeredAt?.let { " " + formatDateTime(it) } ?: ""} — edit to re-arm",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
 
             Switch(checked = alert.enabled, onCheckedChange = { onToggle() })
+            IconButton(onClick = onEdit) {
+                Icon(Icons.Default.Edit, "Edit alert", modifier = Modifier.size(18.dp))
+            }
             IconButton(onClick = onDelete) {
                 Icon(Icons.Default.Delete, null, tint = Color.Red, modifier = Modifier.size(18.dp))
             }
@@ -165,21 +173,40 @@ private fun AlertCard(
     }
 }
 
+private fun formatDateTime(millis: Long): String =
+    java.time.Instant
+        .ofEpochMilli(millis)
+        .atZone(java.time.ZoneId.systemDefault())
+        .format(
+            java.time.format.DateTimeFormatter
+                .ofPattern("yyyy-MM-dd HH:mm"),
+        )
+
+// Create (initial == null) or edit an alert. Editing keeps the item's region as stored, since
+// alerts from Market Analysis may watch a region other than the Jita default used for new ones.
 @Composable
-private fun AddAlertDialog(
+private fun AlertEditDialog(
+    initial: PriceAlertModel?,
     onDismiss: () -> Unit,
-    onAdd: (PriceAlertModel) -> Unit,
+    onSave: (PriceAlertModel) -> Unit,
 ) {
-    var searchQuery by remember { mutableStateOf("") }
+    var searchQuery by remember { mutableStateOf(initial?.typeName ?: "") }
     var selectedType by remember { mutableStateOf<org.eventt.core.model.StaticTypeModel?>(null) }
     var searchResults by remember { mutableStateOf<List<org.eventt.core.model.StaticTypeModel>>(emptyList()) }
-    var targetPrice by remember { mutableStateOf("") }
-    var condition by remember { mutableStateOf("below") }
-    var orderType by remember { mutableStateOf("sell") }
+    var targetPrice by remember { mutableStateOf(initial?.let { String.format(Locale.US, "%.2f", it.targetPrice) } ?: "") }
+    var condition by remember { mutableStateOf(initial?.condition ?: "below") }
+    var orderType by remember { mutableStateOf(initial?.orderType ?: "sell") }
     var currentBestSell by remember { mutableStateOf<Double?>(null) }
     var currentBestBuy by remember { mutableStateOf<Double?>(null) }
     var isPriceFetching by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(initial) {
+        val init = initial ?: return@LaunchedEffect
+        selectedType = withContext(Dispatchers.IO) { StaticDataDao.getTypeById(init.typeId) }
+    }
+
+    fun regionFor(typeId: Int) = initial?.takeIf { it.typeId == typeId && it.regionId > 0 }?.regionId ?: effectiveRegionId(typeId)
 
     // Fetch current price whenever type or orderType changes
     LaunchedEffect(selectedType, orderType) {
@@ -191,7 +218,7 @@ private fun AddAlertDialog(
             withContext(Dispatchers.IO) {
                 runCatching {
                     EsiClient.getMarketRegionOrders(
-                        effectiveRegionId(type.typeId),
+                        regionFor(type.typeId),
                         typeId = type.typeId,
                     )
                 }.getOrDefault(emptyList())
@@ -214,7 +241,7 @@ private fun AddAlertDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("New Price Alert") },
+        title = { Text(if (initial == null) "New Price Alert" else "Edit Price Alert") },
         text = {
             Column {
                 SearchField(
@@ -285,7 +312,7 @@ private fun AddAlertDialog(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp)
                             Spacer(Modifier.width(6.dp))
-                            Text("Fetching Jita price…", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                            Text("Fetching price…", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                         }
                     } else {
                         val bestSell = currentBestSell
@@ -337,20 +364,22 @@ private fun AddAlertDialog(
                 onClick = {
                     val type = selectedType ?: return@Button
                     val price = targetPrice.toDoubleOrNull() ?: return@Button
-                    onAdd(
-                        PriceAlertModel(
+                    val base =
+                        initial ?: PriceAlertModel(typeId = type.typeId, targetPrice = price, condition = condition)
+                    onSave(
+                        base.copy(
                             typeId = type.typeId,
                             typeName = type.name,
                             targetPrice = price,
                             condition = condition,
                             orderType = orderType,
-                            regionId = effectiveRegionId(type.typeId),
+                            regionId = regionFor(type.typeId),
                         ),
                     )
                 },
                 enabled = selectedType != null && targetPrice.toDoubleOrNull() != null,
             ) {
-                Text("Create Alert")
+                Text(if (initial == null) "Create Alert" else "Save")
             }
         },
         dismissButton = {

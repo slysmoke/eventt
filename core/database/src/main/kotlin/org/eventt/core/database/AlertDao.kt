@@ -1,9 +1,31 @@
 package org.eventt.core.database
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.eventt.core.model.PriceAlertModel
 
 object AlertDao {
-    fun insert(alert: PriceAlertModel): Int =
+    // Bumped after every write — screens stay mounted after their first visit, so the Alerts list
+    // watches this instead of only loading once (an alert created from Market Analysis or fired by
+    // AlertMonitor otherwise never showed up there until a restart).
+    private val _revision = MutableStateFlow(0L)
+    val revision: StateFlow<Long> = _revision.asStateFlow()
+
+    private fun changed() {
+        _revision.value++
+    }
+
+    fun insert(alert: PriceAlertModel): Int = insertRow(alert).also { changed() }
+
+    /** Several inserts, one revision bump — a bulk alert run shouldn't reload the list per row. */
+    fun insertAll(alerts: List<PriceAlertModel>) {
+        if (alerts.isEmpty()) return
+        alerts.forEach { insertRow(it) }
+        changed()
+    }
+
+    private fun insertRow(alert: PriceAlertModel): Int =
         DatabaseManager.transaction {
             prepareStatement(
                 """
@@ -53,6 +75,7 @@ object AlertDao {
                 stmt.executeUpdate()
             }
         }
+        changed()
     }
 
     fun getAll(): List<PriceAlertModel> =
@@ -76,6 +99,7 @@ object AlertDao {
                 stmt.executeUpdate()
             }
         }
+        changed()
     }
 
     fun setEnabled(
@@ -89,6 +113,7 @@ object AlertDao {
                 stmt.executeUpdate()
             }
         }
+        changed()
     }
 
     fun markTriggered(id: Int) {
@@ -99,6 +124,7 @@ object AlertDao {
                 stmt.executeUpdate()
             }
         }
+        changed()
     }
 
     private fun java.sql.ResultSet.mapResultSetToAlerts(): List<PriceAlertModel> {
