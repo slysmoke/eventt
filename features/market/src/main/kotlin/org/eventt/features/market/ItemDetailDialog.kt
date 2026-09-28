@@ -634,6 +634,7 @@ private fun TradingChart(
     val buyFills = remember(trades) { trades?.let { fillsByDay(it.transactions, buy = true) }.orEmpty() }
     val sellFills = remember(trades) { trades?.let { fillsByDay(it.transactions, buy = false) }.orEmpty() }
     var hoverX by remember { mutableStateOf<Float?>(null) }
+    var hoverY by remember { mutableStateOf<Float?>(null) }
     val priceColor = MaterialTheme.colorScheme.primary
     val upColor = positiveColor
     val downColor = negativeColor
@@ -683,6 +684,10 @@ private fun TradingChart(
                             dragX = x
                         }
                         hoverX = x
+                        hoverY =
+                            it.changes
+                                .first()
+                                .position.y
                     }.onPointerEvent(PointerEventType.Press) {
                         val now = System.currentTimeMillis()
                         // Double-click: back to the selected range preset.
@@ -699,6 +704,7 @@ private fun TradingChart(
                         view = view.zoomed(1.15f.pow(c.scrollDelta.y), anchorOf(c.position.x), n)
                     }.onPointerEvent(PointerEventType.Exit) {
                         hoverX = null
+                        hoverY = null
                         dragX = null
                     },
         ) {
@@ -976,6 +982,22 @@ private fun TradingChart(
                 val x = xFor(i)
                 drawLine(Color.White.copy(alpha = 0.35f), Offset(x, priceTop), Offset(x, rsiTop + rsiH), 1f)
                 data.rows[i]?.let { r -> drawCircle(priceColor, 4.dp.toPx(), Offset(x, yP(r.average))) }
+            }
+            // Horizontal line at the cursor, with the value it points at on the right axis —
+            // price in the price pane, volume and RSI in theirs.
+            hoverY?.let { y ->
+                val label =
+                    when (y) {
+                        in priceTop..priceTop + priceH -> formatPriceAbbr(pMin + (1 - (y - priceTop) / priceH) * pRange)
+                        in volTop..volTop + volH -> formatVolume(((volTop + volH - y) / volH * maxVol).toLong())
+                        in rsiTop..rsiTop + rsiH -> ((1 - (y - rsiTop) / rsiH) * 100).roundToInt().toString()
+                        else -> return@let
+                    }
+                drawLine(Color.White.copy(alpha = 0.35f), Offset(lPad, y), Offset(lPad + chartW, y), 1f)
+                val lm = textMeasurer.measure(label, TextStyle(fontSize = 9.sp, color = Color.Black, fontWeight = FontWeight.SemiBold))
+                val tl = Offset(lPad + chartW + 2.dp.toPx(), y - lm.size.height / 2f)
+                drawRect(Color.White.copy(alpha = 0.85f), topLeft = tl, size = Size(lm.size.width + 6.dp.toPx(), lm.size.height.toFloat()))
+                drawText(lm, topLeft = tl + Offset(3.dp.toPx(), 0f))
             }
         }
     }
