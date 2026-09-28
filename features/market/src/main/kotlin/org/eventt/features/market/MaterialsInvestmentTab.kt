@@ -77,6 +77,7 @@ internal fun MaterialsInvestmentTab(
     var minDailyVol by remember { mutableStateOf("50") }
     var minDiscountPct by remember { mutableStateOf("5") }
     var maxVolatilityPct by remember { mutableStateOf("0") }
+    var minVolatilityPct by remember { mutableStateOf("0") }
     var spikeFilter by remember { mutableStateOf(SpikeFilter.ANY) }
     var spikePriceMultiplier by remember { mutableStateOf("1.8") }
     var spikeVolumeMultiplier by remember { mutableStateOf("5") }
@@ -107,6 +108,7 @@ internal fun MaterialsInvestmentTab(
             S.get(S.MI_MIN_VOL)?.let { minDailyVol = it }
             S.get(S.MI_MIN_DISCOUNT)?.let { minDiscountPct = it }
             S.get(S.MI_MAX_VOLATILITY)?.let { maxVolatilityPct = it }
+            S.get(S.MI_MIN_VOLATILITY)?.let { minVolatilityPct = it }
             S.get(S.MI_SPIKE_FILTER)?.let { name -> SpikeFilter.entries.find { it.name == name }?.let { spikeFilter = it } }
             S.get(S.MI_SPIKE_PRICE_MULTIPLIER)?.let { spikePriceMultiplier = it }
             S.get(S.MI_SPIKE_VOLUME_MULTIPLIER)?.let { spikeVolumeMultiplier = it }
@@ -256,6 +258,15 @@ internal fun MaterialsInvestmentTab(
                     ParamField("Min Discount %", minDiscountPct, 90.dp) {
                         minDiscountPct = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MIN_DISCOUNT, it) } }
+                    }
+                }
+                Tip(
+                    "Skip items whose price swings less than this % (std-dev ÷ average) over the lookback window -- too " +
+                        "flat to dip deep enough, or rebound far enough, to beat a round trip's fees. 0 = no limit.",
+                ) {
+                    ParamField("Min Volatility %", minVolatilityPct, 95.dp) {
+                        minVolatilityPct = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MIN_VOLATILITY, it) } }
                     }
                 }
                 Tip("Skip items whose price swings more than this % (std-dev ÷ average) over the lookback window. 0 = no limit.") {
@@ -462,6 +473,7 @@ internal fun MaterialsInvestmentTab(
                                         val minDailyVolSnap = minDailyVol.toLongOrNull() ?: 0L
                                         val minDiscountSnap = minDiscountPct.toDoubleOrNull() ?: 0.0
                                         val maxVolatilitySnap = maxVolatilityPct.toDoubleOrNull() ?: 0.0
+                                        val minVolatilitySnap = minVolatilityPct.toDoubleOrNull() ?: 0.0
                                         val spikeFilterSnap = spikeFilter
                                         val spikePriceMultiplierSnap = spikePriceMultiplier.toDoubleOrNull() ?: 1.8
                                         val spikeVolumeMultiplierSnap = spikeVolumeMultiplier.toDoubleOrNull() ?: 5.0
@@ -545,6 +557,7 @@ internal fun MaterialsInvestmentTab(
                                                                     minDailyVol = minDailyVolSnap,
                                                                     minDiscountPct = minDiscountSnap,
                                                                     maxVolatilityPct = maxVolatilitySnap,
+                                                                    minVolatilityPct = minVolatilitySnap,
                                                                     historySource = histSrc,
                                                                     spikeFilter = spikeFilterSnap,
                                                                     spikePriceMultiplier = spikePriceMultiplierSnap,

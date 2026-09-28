@@ -338,6 +338,7 @@ internal object S {
     const val MI_MIN_VOL = "analysis.m.minVol"
     const val MI_MIN_DISCOUNT = "analysis.m.minDiscount"
     const val MI_MAX_VOLATILITY = "analysis.m.maxVolatility"
+    const val MI_MIN_VOLATILITY = "analysis.m.minVolatility"
     const val MI_SPIKE_FILTER = "analysis.m.spikeFilter"
     const val MI_SPIKE_PRICE_MULTIPLIER = "analysis.m.spikePriceMultiplier"
     const val MI_SPIKE_VOLUME_MULTIPLIER = "analysis.m.spikeVolumeMultiplier"

@@ -235,6 +235,7 @@ internal enum class RejectReason(
     NO_BUY_ORDERS("no buy orders"),
     THIN_HISTORY("too little history"),
     TOO_VOLATILE("too volatile"),
+    TOO_CALM("below Min Volatility"),
     LOW_VOLUME("volume below Min Vol"),
     SPIKE("price spike filter"),
     NOT_A_DIP("not below its average by Min Discount"),
@@ -256,6 +257,8 @@ internal fun computeMaterialCandidate(
     minDailyVol: Long,
     minDiscountPct: Double,
     maxVolatilityPct: Double,
+    // 0 = no floor. A flat item rarely dips far enough, or rebounds enough, to pay a round trip's fees.
+    minVolatilityPct: Double = 0.0,
     historySource: String,
     spikeFilter: SpikeFilter,
     spikePriceMultiplier: Double,
@@ -321,6 +324,7 @@ internal fun computeMaterialCandidate(
     val variance = window.map { (it.average - avgPrice) * (it.average - avgPrice) }.average()
     val volatilityPct = sqrt(variance) / avgPrice * 100.0
     if (!holding && maxVolatilityPct > 0.0 && volatilityPct > maxVolatilityPct) return null.also { onReject(RejectReason.TOO_VOLATILE) }
+    if (!holding && minVolatilityPct > 0.0 && volatilityPct < minVolatilityPct) return null.also { onReject(RejectReason.TOO_CALM) }
 
     val dailyVolume = medianDailyVolume(fullHistory, lookbackDays)
     if (!holding && dailyVolume < minDailyVol) return null.also { onReject(RejectReason.LOW_VOLUME) }
