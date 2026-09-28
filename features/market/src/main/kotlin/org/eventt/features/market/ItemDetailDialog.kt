@@ -174,7 +174,7 @@ private fun Map<String, Any?>.orderId() = (get("order_id") as? Number)?.toLong()
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun ItemDetailDialog(
+fun ItemDetailDialog(
     typeId: Int,
     typeName: String,
     primaryRegionId: Int,

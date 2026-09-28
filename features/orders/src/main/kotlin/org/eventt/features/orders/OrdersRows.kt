@@ -79,6 +79,15 @@ internal fun SellOrderRow(
                 maxLines = 1,
                 modifier = Modifier.weight(1f),
             )
+            ItemDetailButton(
+                ItemDetailTarget(
+                    order.typeId,
+                    order.typeName,
+                    order.regionId,
+                    // Sell competition is per-station; buy orders compete region-wide.
+                    order.locationId.takeIf { !order.isBuyOrder },
+                ),
+            )
             ViewInMarketButton(order.typeId)
         }
 
@@ -210,6 +219,33 @@ private fun CompetitionCell(
 
 // Jumps to the Market tab pre-loaded with this item — AppState.pendingMarketTypeId is the
 // cross-tab signal EventtApp/MarketBrowserScreen watch for this.
+// Which item's detail dialog OrdersScreen should show. Module-level state rather than an onClick
+// threaded through every table and row signature -- ponytail: one dialog at a time is all the UI
+// ever needs.
+internal data class ItemDetailTarget(
+    val typeId: Int,
+    val typeName: String,
+    // 0 = unknown (history/inventory rows carry no region) -- OrdersScreen falls back to Jita.
+    val regionId: Int = 0,
+    val stationId: Long? = null,
+)
+
+internal object ItemDetailRequest {
+    var target by mutableStateOf<ItemDetailTarget?>(null)
+}
+
+@Composable
+internal fun ItemDetailButton(target: ItemDetailTarget) {
+    IconButton(modifier = Modifier.size(20.dp), onClick = { ItemDetailRequest.target = target }) {
+        Icon(
+            Icons.Default.Info,
+            contentDescription = "Item details",
+            modifier = Modifier.size(13.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 @Composable
 private fun ViewInMarketButton(typeId: Int) {
     IconButton(modifier = Modifier.size(20.dp), onClick = { AppState.openInMarket(typeId) }) {
@@ -370,6 +406,15 @@ internal fun BuyOrderRow(
                 maxLines = 1,
                 modifier = Modifier.weight(1f),
             )
+            ItemDetailButton(
+                ItemDetailTarget(
+                    order.typeId,
+                    order.typeName,
+                    order.regionId,
+                    // Sell competition is per-station; buy orders compete region-wide.
+                    order.locationId.takeIf { !order.isBuyOrder },
+                ),
+            )
             ViewInMarketButton(order.typeId)
         }
 
@@ -455,13 +500,16 @@ internal fun OrderHistoryRow(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            order.typeName,
-            modifier = Modifier.weight(3f),
-            style = MaterialTheme.typography.bodyMedium,
-            overflow = TextOverflow.Ellipsis,
-            maxLines = 1,
-        )
+        Row(modifier = Modifier.weight(3f), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                order.typeName,
+                style = MaterialTheme.typography.bodyMedium,
+                overflow = TextOverflow.Ellipsis,
+                maxLines = 1,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            ItemDetailButton(ItemDetailTarget(order.typeId, order.typeName))
+        }
         Text(
             if (order.isBuyOrder) "Buy" else "Sell",
             modifier = Modifier.weight(1f),
@@ -530,13 +578,16 @@ internal fun InventoryRow(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            item.typeName,
-            modifier = Modifier.weight(3f),
-            style = MaterialTheme.typography.bodyMedium,
-            overflow = TextOverflow.Ellipsis,
-            maxLines = 1,
-        )
+        Row(modifier = Modifier.weight(3f), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                item.typeName,
+                style = MaterialTheme.typography.bodyMedium,
+                overflow = TextOverflow.Ellipsis,
+                maxLines = 1,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            ItemDetailButton(ItemDetailTarget(item.typeId, item.typeName))
+        }
         Text(formatNumber(item.remainingQty), modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.bodyMedium)
         val daysHeld = item.daysHeld
         Text(

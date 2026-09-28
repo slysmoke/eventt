@@ -35,6 +35,7 @@ import org.eventt.core.model.CorpFeature
 import org.eventt.core.model.HotkeyBindings
 import org.eventt.core.model.eveSigFigStep
 import org.eventt.core.model.formatEveSigFigPrice
+import org.eventt.features.market.ItemDetailDialog
 import org.eventt.ui.common.CorpAccessNotice
 import org.eventt.ui.common.EmptyState
 import org.eventt.ui.common.EsiRefreshButton
@@ -1151,4 +1152,21 @@ fun OrdersScreen(context: ViewContext?) {
     }
 
     LoadingOverlay(isLoading = isLoading, message = "Loading orders…")
+
+    ItemDetailRequest.target?.let { t ->
+        val regionId = t.regionId.takeIf { it > 0 } ?: DEFAULT_REGION_ID
+        val regionName by produceState("", regionId) {
+            value = withContext(Dispatchers.IO) { StaticDataDao.getRegionById(regionId)?.name ?: "" }
+        }
+        ItemDetailDialog(
+            typeId = t.typeId,
+            typeName = t.typeName,
+            primaryRegionId = regionId,
+            primaryRegionName = regionName,
+            primaryStationId = t.stationId,
+            // Personal fills/orders/assets are per character; in corp view this is the acting member.
+            charId = actingCharId,
+            onDismiss = { ItemDetailRequest.target = null },
+        )
+    }
 }
