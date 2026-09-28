@@ -228,21 +228,6 @@ internal fun sortMaterials(
     return if (asc) list.sortedWith(cmp) else list.sortedWith(cmp.reversed())
 }
 
-// Why a type didn't become a candidate — counted per scan so an empty result says why.
-internal enum class RejectReason(
-    val label: String,
-) {
-    NO_BUY_ORDERS("no buy orders"),
-    THIN_HISTORY("too little history"),
-    TOO_VOLATILE("too volatile"),
-    TOO_CALM("below Min Volatility"),
-    LOW_VOLUME("volume below Min Vol"),
-    SPIKE("price spike filter"),
-    NOT_A_DIP("not below its average by Min Discount"),
-    NEW_LOW("at a 1y low"),
-    UNKNOWN_TYPE("not in static data"),
-}
-
 /**
  * Builds a dip-buying candidate for one type, or null if it fails a filter or lacks enough
  * history to judge. `currentPrice` is the live top buy order (the price to match/beat with your
@@ -274,7 +259,6 @@ internal fun computeMaterialCandidate(
     // Your active orders, grouped by typeId -- same one-read-per-scan deal.
     myOrdersByType: Map<Int, List<ActiveOrderDao.ActiveOrderRecord>>? = null,
     fees: MaterialFees = MaterialFees(),
-    onReject: (RejectReason) -> Unit = {},
     // Same take-profit the sell target uses (Ladder Step %), so the backtest replays the real exit.
     takeProfitPct: Double? = null,
 ): MaterialCandidate? {
@@ -282,9 +266,9 @@ internal fun computeMaterialCandidate(
     // at the ladder's target prices rather than paying the ask, so `currentPrice` is the top
     // competing bid -- what you'd need to match/beat -- not the best sell price.
     val buys = orders.filter { (it["is_buy_order"] as? Boolean) == true }
-    if (buys.isEmpty()) return null.also { onReject(RejectReason.NO_BUY_ORDERS) }
+    if (buys.isEmpty()) return null
     val currentPrice = buys.maxOf { (it["price"] as? Number)?.toDouble() ?: 0.0 }
-    if (currentPrice <= 0.0) return null.also { onReject(RejectReason.NO_BUY_ORDERS) }
+    if (currentPrice <= 0.0) return null
     val bestAsk =
         orders
             .filter { (it["is_buy_order"] as? Boolean) == false }
@@ -314,28 +298,28 @@ internal fun computeMaterialCandidate(
     val window = fullHistory.take(lookbackDays)
     // Require most of the window to actually have trades -- a couple of stale rows scattered over
     // months isn't enough to call today's price "cheap" or "expensive" relative to.
-    if (window.size < (lookbackDays / 3).coerceAtLeast(5)) return null.also { onReject(RejectReason.THIN_HISTORY) }
+    if (window.size < (lookbackDays / 3).coerceAtLeast(5)) return null
 
     val avgPrice = window.map { it.average }.average()
-    if (avgPrice <= 0.0) return null.also { onReject(RejectReason.THIN_HISTORY) }
+    if (avgPrice <= 0.0) return null
     val highPrice = window.maxOf { it.highest.takeIf { h -> h > 0 } ?: it.average }
     val lowPrice = window.minOf { it.lowest.takeIf { l -> l > 0 } ?: it.average }
 
     val variance = window.map { (it.average - avgPrice) * (it.average - avgPrice) }.average()
     val volatilityPct = sqrt(variance) / avgPrice * 100.0
-    if (!holding && maxVolatilityPct > 0.0 && volatilityPct > maxVolatilityPct) return null.also { onReject(RejectReason.TOO_VOLATILE) }
-    if (!holding && minVolatilityPct > 0.0 && volatilityPct < minVolatilityPct) return null.also { onReject(RejectReason.TOO_CALM) }
+    if (!holding && maxVolatilityPct > 0.0 && volatilityPct > maxVolatilityPct) return null
+    if (!holding && minVolatilityPct > 0.0 && volatilityPct < minVolatilityPct) return null
 
     val dailyVolume = medianDailyVolume(fullHistory, lookbackDays)
-    if (!holding && dailyVolume < minDailyVol) return null.also { onReject(RejectReason.LOW_VOLUME) }
+    if (!holding && dailyVolume < minDailyVol) return null
 
     val spikeDetected = detectPriceSpike(fullHistory, spikePriceMultiplier, spikeVolumeMultiplier, lookbackDays, currentPrice)
-    if (!holding && spikeFilter == SpikeFilter.EXCLUDE && spikeDetected) return null.also { onReject(RejectReason.SPIKE) }
-    if (!holding && spikeFilter == SpikeFilter.ONLY && !spikeDetected) return null.also { onReject(RejectReason.SPIKE) }
+    if (!holding && spikeFilter == SpikeFilter.EXCLUDE && spikeDetected) return null
+    if (!holding && spikeFilter == SpikeFilter.ONLY && !spikeDetected) return null
 
     val vsAvgPct = (currentPrice - avgPrice) / avgPrice * 100.0
     // Not currently cheap enough vs its own history.
-    if (!holding && vsAvgPct > -minDiscountPct) return null.also { onReject(RejectReason.NOT_A_DIP) }
+    if (!holding && vsAvgPct > -minDiscountPct) return null
 
     // A genuine break to a new multi-month low is a different animal from a routine dip inside a
     // stable range -- could be a balance-patch obsolescence, a permanent supply shift, etc. -- so
@@ -344,10 +328,10 @@ internal fun computeMaterialCandidate(
     if (!holding && excludeStructuralBreak && structuralFloor > 0.0 &&
         currentPrice <= structuralFloor
     ) {
-        return null.also { onReject(RejectReason.NEW_LOW) }
+        return null
     }
 
-    val type = StaticDataDao.getTypeById(typeId) ?: return null.also { onReject(RejectReason.UNKNOWN_TYPE) }
+    val type = StaticDataDao.getTypeById(typeId) ?: return null
     return MaterialCandidate(
         typeId = typeId,
         typeName = type.name,

@@ -521,7 +521,6 @@ internal fun MaterialsInvestmentTab(
                                         statusMsg = "0/${typeIds.size} types checked…"
                                         val semaphore = Semaphore(10)
                                         val found = java.util.Collections.synchronizedList(mutableListOf<MaterialCandidate>())
-                                        val rejected = java.util.concurrent.ConcurrentHashMap<RejectReason, Int>()
                                         var checked = 0
                                         val mutex = Mutex()
 
@@ -569,7 +568,6 @@ internal fun MaterialsInvestmentTab(
                                                                     myOrdersByType = myOrdersByType,
                                                                     fees = feesSnap,
                                                                     takeProfitPct = takeProfitSnap,
-                                                                    onReject = { r -> rejected.merge(r, 1, Int::plus) },
                                                                 )
                                                             }.getOrNull()?.let { found.add(it) }
                                                             mutex.withLock {
@@ -583,15 +581,7 @@ internal fun MaterialsInvestmentTab(
                                                 }.forEach { it.await() }
                                         }
                                         candidates = found.toList()
-                                        // Say why things were skipped — "0 found" alone reads like a bug when
-                                        // the one item picked (e.g. PLEX) simply isn't below its average.
-                                        val skipped =
-                                            rejected.entries
-                                                .sortedByDescending { it.value }
-                                                .joinToString(", ") { (r, n) -> "$n ${r.label}" }
-                                        statusMsg =
-                                            "${candidates.size} dip candidates found" +
-                                            if (skipped.isNotEmpty()) " · skipped: $skipped" else ""
+                                        statusMsg = "${candidates.size} dip candidates found"
                                     } catch (e: CancellationException) {
                                         statusMsg = "Cancelled"
                                         throw e
