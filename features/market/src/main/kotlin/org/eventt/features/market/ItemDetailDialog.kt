@@ -135,20 +135,23 @@ private fun loadMyTrades(
     val soldQty = sold.sumOf { it.quantity.toLong() }
     val avgBuy = if (boughtQty > 0) bought.sumOf { it.unitPrice * it.quantity } / boughtQty else null
     val avgSell = if (soldQty > 0) sold.sumOf { it.unitPrice * it.quantity } / soldQty else null
+    val openOrders = ActiveOrderDao.getAll(characterId = charId).filter { it.typeId == typeId && it.state == "active" }
     // Physical stock, not net(buys - sells): materials often arrive via mining/reprocessing with no
-    // transaction at all (same reasoning as MaterialPosition.qtyHeld).
+    // transaction at all (same reasoning as MaterialPosition.qtyHeld). Plus whatever's listed in
+    // sell orders, which EVE escrows out of the hangar.
     val held =
         AssetDao
             .getByCharacter(charId)
             .filter { it.typeId == typeId }
-            .sumOf { it.quantity.toLong() }
+            .sumOf { it.quantity.toLong() } +
+            openOrders.filter { !it.isBuyOrder }.sumOf { it.volumeRemaining.toLong() }
     return MyTrades(
         qtyHeld = held,
         avgBuyPrice = avgBuy,
         realizedPnl = if (avgBuy != null && avgSell != null) (avgSell - avgBuy) * soldQty else null,
         sellFeePct = StaticDataDao.getCharSalesTax(charId) + StaticDataDao.getCharBrokersFee(charId),
         transactions = txs,
-        openOrders = ActiveOrderDao.getAll(characterId = charId).filter { it.typeId == typeId && it.state == "active" },
+        openOrders = openOrders,
     )
 }
 

@@ -1,5 +1,6 @@
 package org.eventt.features.market
 
+import org.eventt.core.database.ActiveOrderDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.WalletDao
 import kotlin.math.sqrt
@@ -68,16 +69,39 @@ internal data class MaterialPosition(
     // real purchase price to average in, so when none of the held quantity came from a tracked buy
     // this is null (the ladder then anchors to the live price instead, same as not holding at all).
     val avgBuyPrice: Double?,
-)
+    // Your active market orders on this item. Stock listed in a sell order leaves the hangar (EVE
+    // escrows it), so it isn't in the asset count -- qtyHeld above already includes listedQty.
+    val listedQty: Long = 0,
+    val listedPrice: Double? = null,
+    val buyOrderQty: Long = 0,
+    // ISK still committed to open buy orders (price x remaining) -- counts toward the allocation
+    // the same as stock already bought, or a re-scan would recommend buying it twice.
+    val buyOrderIsk: Double = 0.0,
+    val buyOrderPrice: Double? = null,
+) {
+    val hasOrders get() = listedQty > 0 || buyOrderQty > 0
+}
 
 internal fun computeMaterialPosition(
     transactions: List<WalletDao.RawTxRecord>,
     assetQty: Long,
+    orders: List<ActiveOrderDao.ActiveOrderRecord> = emptyList(),
 ): MaterialPosition {
     val bought = transactions.filter { it.isBuy }
     val boughtQty = bought.sumOf { it.quantity }
     val avgBuy = if (boughtQty > 0) bought.sumOf { it.unitPrice * it.quantity } / boughtQty else null
-    return MaterialPosition(qtyHeld = assetQty, avgBuyPrice = avgBuy)
+    val sells = orders.filter { !it.isBuyOrder }
+    val buys = orders.filter { it.isBuyOrder }
+    val listed = sells.sumOf { it.volumeRemaining.toLong() }
+    return MaterialPosition(
+        qtyHeld = assetQty + listed,
+        avgBuyPrice = avgBuy,
+        listedQty = listed,
+        listedPrice = sells.minOfOrNull { it.price },
+        buyOrderQty = buys.sumOf { it.volumeRemaining.toLong() },
+        buyOrderIsk = buys.sumOf { it.price * it.volumeRemaining },
+        buyOrderPrice = buys.maxOfOrNull { it.price },
+    )
 }
 
 internal enum class MaterialSortCol { NAME, CURRENT, AVG, DRAWDOWN, VS_AVG, TREND, VOLATILITY, VOLUME, HELD, BACKTEST, ALLOCATED }
@@ -162,6 +186,8 @@ internal fun computeMaterialCandidate(
     // location -- the real "am I holding this" signal, since materials routinely arrive via mining
     // + reprocessing without ever creating a wallet transaction at all.
     myAssetQtyByType: Map<Int, Long>? = null,
+    // Your active orders, grouped by typeId -- same one-read-per-scan deal.
+    myOrdersByType: Map<Int, List<ActiveOrderDao.ActiveOrderRecord>>? = null,
 ): MaterialCandidate? {
     // Buy-order-oriented, not instant-buy: this tab's whole point is placing standing buy orders
     // at the ladder's target prices rather than paying the ask, so `currentPrice` is the top
@@ -178,14 +204,18 @@ internal fun computeMaterialCandidate(
 
     val position =
         if (myTransactionsByType != null || myAssetQtyByType != null) {
-            computeMaterialPosition(myTransactionsByType?.get(typeId).orEmpty(), myAssetQtyByType?.get(typeId) ?: 0L)
+            computeMaterialPosition(
+                myTransactionsByType?.get(typeId).orEmpty(),
+                myAssetQtyByType?.get(typeId) ?: 0L,
+                myOrdersByType?.get(typeId).orEmpty(),
+            )
         } else {
             null
         }
     // A position you actually bought into stays on the list regardless of the entry filters below
     // -- those decide whether to *start* buying, and once the price recovers (the whole point)
     // they'd otherwise drop the item exactly when it's time to sell it.
-    val holding = position != null && position.qtyHeld > 0 && position.avgBuyPrice != null
+    val holding = position != null && ((position.qtyHeld > 0 && position.avgBuyPrice != null) || position.hasOrders)
 
     // Fetched once at whichever is longer -- the live discount window still only looks at its own
     // `lookbackDays` prefix of this, while the structural-break check and the backtest use the
@@ -316,7 +346,8 @@ internal data class LadderLevel(
 
 // What to do with an item right now. SELL wins over BUY: a position that has reached its take-profit
 // target is the actionable thing, not topping it up.
-internal enum class MaterialAction { BUY, WAIT, SELL }
+// BUYING / ON_SALE: you already have orders working on that side -- nothing to do but wait for fills.
+internal enum class MaterialAction { BUY, BUYING, WAIT, SELL, ON_SALE }
 
 // Take-profit plan for a held position: sell the whole stack in one order (EVE can't import a
 // multi-rung sell list, so a split ladder only meant more manual order edits).
@@ -404,20 +435,34 @@ internal fun allocateBudget(
     }
 
     val allocById = picked.indices.associate { picked[it].typeId to alloc[it] }
-    val held = candidates.filter { it.typeId !in allocById && (it.position?.qtyHeld ?: 0L) > 0 && it.position?.avgBuyPrice != null }
+    val held =
+        candidates.filter { c ->
+            val p = c.position
+            c.typeId !in allocById && p != null && ((p.qtyHeld > 0 && p.avgBuyPrice != null) || p.hasOrders)
+        }
     // ponytail: ISK freed by an already-full position isn't redistributed to other items -- the
     // budget reads as "target exposure", and a re-scan after selling frees it up again anyway.
     return (picked + held).mapNotNull { c ->
         val allocated = allocById[c.typeId] ?: 0.0
         val position = c.position
         val heldCost = if (position != null && position.qtyHeld > 0) position.qtyHeld * (position.avgBuyPrice ?: c.currentPrice) else 0.0
-        val toBuy = (allocated - heldCost).coerceAtLeast(0.0)
+        val inBuyOrders = position?.buyOrderIsk ?: 0.0
+        val toBuy = (allocated - heldCost - inBuyOrders).coerceAtLeast(0.0)
+        val unlisted = position?.let { it.qtyHeld - it.listedQty } ?: 0L
         val sell = buildSellTarget(c, sellFeePct, takeProfitPct)
         val action =
             when {
-                sell != null && c.bestAsk != null && c.bestAsk >= sell.targetPrice -> MaterialAction.SELL
+                // Only stock not already on the market is actionable for SELL.
+                sell != null && unlisted > 0 && c.bestAsk != null && c.bestAsk >= sell.targetPrice -> MaterialAction.SELL
+
                 toBuy > 1.0 -> MaterialAction.BUY
+
+                position?.buyOrderQty?.let { it > 0 } == true -> MaterialAction.BUYING
+
+                position?.listedQty?.let { it > 0 } == true -> MaterialAction.ON_SALE
+
                 heldCost > 0.0 -> MaterialAction.WAIT
+
                 else -> null
             }
         if (action == null) return@mapNotNull null

@@ -30,6 +30,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import org.eventt.core.database.ActiveOrderDao
 import org.eventt.core.database.AlertDao
 import org.eventt.core.database.AssetDao
 import org.eventt.core.database.StaticDataDao
@@ -485,6 +486,12 @@ internal fun MaterialsInvestmentTab(
                                                     .mapValues { (_, assets) -> assets.sumOf { it.quantity }.toLong() }
                                             }
 
+                                        val myOrdersByType =
+                                            charId?.let { id ->
+                                                withContext(Dispatchers.IO) { ActiveOrderDao.getAll(characterId = id) }
+                                                    .filter { it.state == "active" }
+                                                    .groupBy { it.typeId }
+                                            }
                                         sellFeePct =
                                             charId?.let { id ->
                                                 withContext(Dispatchers.IO) {
@@ -538,6 +545,7 @@ internal fun MaterialsInvestmentTab(
                                                                     excludeStructuralBreak = excludeStructuralBreakSnap,
                                                                     myTransactionsByType = myTransactionsByType,
                                                                     myAssetQtyByType = myAssetQtyByType,
+                                                                    myOrdersByType = myOrdersByType,
                                                                 )
                                                             }.getOrNull()?.let { found.add(it) }
                                                             mutex.withLock {
@@ -665,7 +673,8 @@ private fun MaterialsHeader(
                 MCol("Avg", MaterialSortCol.AVG, sort, asc, onSort, Modifier.width(80.dp))
             }
             Tip(
-                "Your current holding: real quantity from your assets (all locations) @ average cost of your tracked market " +
+                "Your current holding: real quantity from your assets (all locations) plus stock listed in your sell orders, " +
+                    "@ average cost of your tracked market " +
                     "buys (average-cost, not FIFO -- and won't cover stock that arrived via mining/reprocessing/manufacturing " +
                     "rather than a market buy). Used to anchor the buy ladder to your real entry instead of the live price.",
             ) {
@@ -754,6 +763,8 @@ private fun MaterialRow(
         when (alloc.action) {
             MaterialAction.BUY -> positiveColor
             MaterialAction.SELL -> warningColor
+            MaterialAction.BUYING -> positiveColor.copy(alpha = 0.6f)
+            MaterialAction.ON_SALE -> warningColor.copy(alpha = 0.6f)
             MaterialAction.WAIT -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
             null -> MaterialTheme.colorScheme.onSurface
         }
@@ -773,6 +784,8 @@ private fun MaterialRow(
                             MaterialAction.BUY -> "Buy: still below its share of the budget -- place the buy ladder below."
                             MaterialAction.WAIT -> "Wait: position is full, sell target not reached yet."
                             MaterialAction.SELL -> "Sell: the lowest ask already clears your cost + take-profit after fees."
+                            MaterialAction.BUYING -> "Buying: your buy orders already cover the rest of this item's allocation."
+                            MaterialAction.ON_SALE -> "On sale: your stock is listed in sell orders -- waiting for fills."
                         },
                     ) {
                         Icon(
@@ -780,6 +793,8 @@ private fun MaterialRow(
                                 MaterialAction.BUY -> Icons.Default.ShoppingCart
                                 MaterialAction.WAIT -> Icons.Default.HourglassEmpty
                                 MaterialAction.SELL -> Icons.Default.Sell
+                                MaterialAction.BUYING -> Icons.Default.Downloading
+                                MaterialAction.ON_SALE -> Icons.Default.Storefront
                             },
                             contentDescription = action.name,
                             tint = actionColor,
@@ -914,6 +929,27 @@ private fun MaterialRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(start = 28.dp, top = 1.dp),
                 )
+            }
+        }
+        c.position?.takeIf { it.hasOrders }?.let { p ->
+            Tip("Your active market orders on this item (from the last Orders sync).") {
+                Row(modifier = Modifier.padding(start = 28.dp, top = 1.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (p.buyOrderQty > 0) {
+                        Text(
+                            "▲ buying ${formatVolume(p.buyOrderQty)}u @ ${formatPriceAbbr(p.buyOrderPrice ?: 0.0)} " +
+                                "(${formatPriceAbbr(p.buyOrderIsk)} in orders)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = positiveColor.copy(alpha = 0.8f),
+                        )
+                    }
+                    if (p.listedQty > 0) {
+                        Text(
+                            "▼ on sale ${formatVolume(p.listedQty)}u @ ${formatPriceAbbr(p.listedPrice ?: 0.0)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = warningColor.copy(alpha = 0.8f),
+                        )
+                    }
+                }
             }
         }
         alloc.sellTarget?.let { st ->

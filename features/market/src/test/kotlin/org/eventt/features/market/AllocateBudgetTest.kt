@@ -130,4 +130,52 @@ class AllocateBudgetTest {
         result.first { it.candidate.typeId == 1 }.sellTarget!!.qty shouldBe 100
         result.first { it.candidate.typeId == 2 }.sellTarget shouldBe null
     }
+
+    @Test
+    fun `open buy orders count toward the allocation and read as BUYING`() {
+        // 1000 budget share, 400 already bought, 600 sitting in buy orders -> nothing left to buy.
+        val p = MaterialPosition(qtyHeld = 40, avgBuyPrice = 10.0, buyOrderQty = 60, buyOrderIsk = 600.0, buyOrderPrice = 10.0)
+        val c = candidate(typeId = 1, currentPrice = 10.0, vsAvgPct = -20.0, dailyVolume = 1000, position = p)
+
+        val r = allocateBudget(listOf(c), totalBudget = 1000.0, maxItems = 1, 100.0, 30.0, ladderLevels = 3, ladderStepPct = 5.0).single()
+
+        r.toBuyIsk shouldBe 0.0
+        r.action shouldBe MaterialAction.BUYING
+    }
+
+    @Test
+    fun `fully listed stock reads as ON_SALE, not SELL`() {
+        val p = MaterialPosition(qtyHeld = 100, avgBuyPrice = 10.0, listedQty = 100, listedPrice = 12.0)
+        val c = candidate(typeId = 1, currentPrice = 11.0, vsAvgPct = 5.0, dailyVolume = 1000, position = p).copy(bestAsk = 12.0)
+
+        val r = allocateBudget(listOf(c), totalBudget = 1000.0, maxItems = 1, 100.0, 30.0, 3, 5.0).single()
+
+        r.action shouldBe MaterialAction.ON_SALE
+    }
+
+    @Test
+    fun `listed stock counts as held even though it left the hangar`() {
+        val order =
+            org.eventt.core.database.ActiveOrderDao.ActiveOrderRecord(
+                orderId = 1,
+                typeId = 1,
+                typeName = "",
+                locationId = 0,
+                regionId = 0,
+                stationName = "",
+                price = 12.0,
+                volumeTotal = 50,
+                volumeRemaining = 30,
+                isBuyOrder = false,
+                duration = 90,
+                issued = "",
+                state = "active",
+                issuedByCharId = null,
+                characterId = 1,
+                corporationId = null,
+            )
+        val p = computeMaterialPosition(emptyList(), assetQty = 70, orders = listOf(order))
+        p.qtyHeld shouldBe 100
+        p.listedQty shouldBe 30
+    }
 }
