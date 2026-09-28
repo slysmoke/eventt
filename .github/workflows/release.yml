@@ -12,6 +12,9 @@ jobs:
   # every push/PR to main, so by release time the commit has already passed those. The
   # per-platform smoke test below is the real functional check for a release build.
   build:
+    # Checkout + build + upload-artifact only need read access; publishing is the release job.
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
