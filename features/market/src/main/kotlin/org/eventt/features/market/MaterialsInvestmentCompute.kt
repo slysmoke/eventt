@@ -424,7 +424,8 @@ internal fun allocateBudget(
         AllocatedMaterial(
             candidate = c,
             allocatedIsk = allocated,
-            toBuyIsk = toBuy,
+            // SELL outranks a remaining budget share -- showing both read as "sell it and buy more".
+            toBuyIsk = if (action == MaterialAction.BUY) toBuy else 0.0,
             ladder = if (action == MaterialAction.BUY) buildLadder(c, toBuy, ladderLevels, ladderStepPct) else emptyList(),
             sellTarget = sell,
             action = action,

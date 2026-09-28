@@ -97,14 +97,15 @@ class AllocateBudgetTest {
     @Test
     fun `held position flips to SELL once the lowest ask clears cost plus take-profit after fees`() {
         val held = MaterialPosition(qtyHeld = 100, avgBuyPrice = 10.0)
-        // Recovered above its average: no longer a dip, so it gets no budget share at all.
-        val c = candidate(typeId = 1, currentPrice = 11.0, vsAvgPct = 5.0, dailyVolume = 1000, position = held).copy(bestAsk = 11.2)
+        // Still 5% under its average, so it also has a budget share -- SELL must win and hide it.
+        val c = candidate(typeId = 1, currentPrice = 11.0, vsAvgPct = -5.0, dailyVolume = 1000, position = held).copy(bestAsk = 11.2)
 
         val r = allocateBudget(listOf(c), totalBudget = 1_000_000.0, maxItems = 1, 100.0, 30.0, 3, 5.0, sellFeePct = 4.0).single()
 
         // 10 * 1.05 / 0.96 = 10.9375
         r.sellTarget!!.targetPrice shouldBe (10.0 * 1.05 / 0.96)
         r.action shouldBe MaterialAction.SELL
+        r.toBuyIsk shouldBe 0.0
         // (11.2 * 0.96 - 10) * 100
         r.sellTarget!!.profitNow!! shouldBe ((11.2 * 0.96 - 10.0) * 100 plusOrMinus 1e-6)
     }
