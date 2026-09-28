@@ -13,6 +13,8 @@ import org.eventt.core.database.ActiveOrderDao
 import org.eventt.core.database.MarketTopSnapshotDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.esi.EsiClient
+import org.eventt.core.model.stringBlocking
+import org.eventt.orders.generated.resources.*
 
 internal const val NOTIFY_BEATEN_SETTING = "orders.notify_beaten"
 
@@ -159,8 +161,8 @@ object MarketWatchService {
 
         if (freshlyBeatenNames.isNotEmpty() && StaticDataDao.getSetting(NOTIFY_BEATEN_SETTING) != "false") {
             val names = freshlyBeatenNames.take(3).joinToString(", ")
-            val suffix = if (freshlyBeatenNames.size > 3) " (+${freshlyBeatenNames.size - 3} more)" else ""
-            PendingOrdersQueue.notifier?.invoke("Orders beaten", names + suffix)
+            val suffix = if (freshlyBeatenNames.size > 3) " " + stringBlocking(Res.string.n_more, freshlyBeatenNames.size - 3) else ""
+            PendingOrdersQueue.notifier?.invoke(stringBlocking(Res.string.orders_beaten), names + suffix)
         }
     }
 }

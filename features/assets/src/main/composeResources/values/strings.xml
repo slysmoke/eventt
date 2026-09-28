@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="asset_viewer">Asset Viewer</string>
+    <string name="auto_refresh">Auto-refresh</string>
+    <string name="search_assets">Search assets...</string>
+    <plurals name="items_count">
+        <item quantity="one">%1$s item</item>
+        <item quantity="other">%1$s items</item>
+    </plurals>
+    <string name="total_isk">Total: %1$s ISK</string>
+    <string name="no_assets_found">No Assets Found</string>
+    <string name="assets_click_refresh">Click refresh to fetch assets from ESI.</string>
+    <string name="assets_no_match">No assets match your search.</string>
+    <string name="fetching_assets">Fetching assets from ESI...</string>
+    <string name="unknown_location">Unknown Location</string>
+    <string name="expand">Expand</string>
+    <string name="collapse">Collapse</string>
+    <string name="copy_suffix">(Copy)</string>
+</resources>

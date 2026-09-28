@@ -23,6 +23,7 @@ quartz-jvm = { module = "com.vitorpamplona.quartz:quartz-jvm", version.ref = "qu
 # Compose
 compose-desktop = { module = "org.jetbrains.compose.desktop:desktop", version.ref = "compose" }
 compose-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "compose" }
+compose-components-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "compose" }
 compose-materialIcons = { module = "org.jetbrains.compose.material-icons-extended:material-icons-extended", version.ref = "compose" }
 
 # HTTP

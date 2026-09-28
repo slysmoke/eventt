@@ -3,6 +3,8 @@ package org.eventt.features.p2pmarket
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import org.eventt.p2pmarket.generated.resources.*
+import org.jetbrains.compose.resources.stringResource
 
 private const val EXPIRING_SOON_SECONDS = 48L * 3600
 
@@ -13,7 +15,7 @@ internal fun ExpiringSoonLabel(expiration: Long) {
     if (remaining !in 0..EXPIRING_SOON_SECONDS) return
     val hoursLeft = (remaining / 3600).coerceAtLeast(1)
     Text(
-        "Expires in ${hoursLeft}h — renew to keep it visible",
+        stringResource(Res.string.expires_in_h, hoursLeft),
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.error,
     )

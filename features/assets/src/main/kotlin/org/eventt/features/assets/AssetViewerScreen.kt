@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import org.eventt.assets.generated.resources.*
 import org.eventt.core.database.AssetDao
 import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.StaticDataDao
@@ -33,6 +34,8 @@ import org.eventt.core.model.PLEX_MARKET_REGION_ID
 import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.StaticStationModel
 import org.eventt.ui.common.*
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 
 private const val THE_FORGE_REGION_ID = 10000002
 private const val JITA_44_STATION_ID = 60003760L
@@ -158,7 +161,7 @@ fun AssetViewerScreen(context: ViewContext?) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Asset Viewer", style = MaterialTheme.typography.headlineMedium)
+            Text(stringResource(Res.string.asset_viewer), style = MaterialTheme.typography.headlineMedium)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
                     selected = autoRefresh,
@@ -166,7 +169,7 @@ fun AssetViewerScreen(context: ViewContext?) {
                         autoRefresh = !autoRefresh
                         scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(ASSETS_AUTO_REFRESH_SETTING, autoRefresh.toString()) }
                     },
-                    label = { Text("Auto-refresh", style = MaterialTheme.typography.bodySmall) },
+                    label = { Text(stringResource(Res.string.auto_refresh), style = MaterialTheme.typography.bodySmall) },
                 )
                 // The character/corp switcher already decided which of the two to fetch —
                 // no per-click choice needed, unlike the old dual-button dialog.
@@ -191,7 +194,7 @@ fun AssetViewerScreen(context: ViewContext?) {
                 query = searchQuery,
                 onQueryChange = { searchQuery = it },
                 onClear = { searchQuery = "" },
-                placeholder = "Search assets...",
+                placeholder = stringResource(Res.string.search_assets),
                 modifier = Modifier.weight(1f),
             )
         }
@@ -222,12 +225,12 @@ fun AssetViewerScreen(context: ViewContext?) {
                 horizontalArrangement = Arrangement.spacedBy(24.dp),
             ) {
                 Text(
-                    text = "${filteredAssets.size} items",
+                    text = pluralStringResource(Res.plurals.items_count, filteredAssets.size, filteredAssets.size),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                 )
                 Text(
-                    text = "Total: ${formatIsk(totalValue)} ISK",
+                    text = stringResource(Res.string.total_isk, formatIsk(totalValue)),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.primary,
@@ -241,8 +244,15 @@ fun AssetViewerScreen(context: ViewContext?) {
         if (filteredAssets.isEmpty()) {
             EmptyState(
                 icon = Icons.Default.Inventory,
-                title = "No Assets Found",
-                description = if (assets.isEmpty()) "Click refresh to fetch assets from ESI." else "No assets match your search.",
+                title = stringResource(Res.string.no_assets_found),
+                description =
+                    if (assets.isEmpty()) {
+                        stringResource(
+                            Res.string.assets_click_refresh,
+                        )
+                    } else {
+                        stringResource(Res.string.assets_no_match)
+                    },
                 modifier = Modifier.fillMaxWidth().weight(1f),
             )
         } else {
@@ -250,7 +260,7 @@ fun AssetViewerScreen(context: ViewContext?) {
         }
     }
 
-    LoadingOverlay(isLoading = isLoading, message = "Fetching assets from ESI...")
+    LoadingOverlay(isLoading = isLoading, message = stringResource(Res.string.fetching_assets))
 }
 
 @Composable
@@ -264,7 +274,7 @@ private fun AssetByLocationView(assets: List<AssetModel>) {
                     } else if (it.systemName.isNotEmpty()) {
                         it.systemName
                     } else {
-                        "Unknown Location"
+                        stringResource(Res.string.unknown_location)
                     }
                 "${it.regionName} → $locationLabel"
             }.entries
@@ -317,7 +327,7 @@ private fun AssetGroupHeader(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(
                     if (collapsed) Icons.Default.ChevronRight else Icons.Default.ExpandMore,
-                    contentDescription = if (collapsed) "Expand" else "Collapse",
+                    contentDescription = if (collapsed) stringResource(Res.string.expand) else stringResource(Res.string.collapse),
                     modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -352,7 +362,7 @@ private fun AssetRow(asset: AssetModel) {
                     Text(asset.typeName, style = MaterialTheme.typography.bodyMedium)
                     if (asset.isBlueprintCopy) {
                         Text(
-                            "(Copy)",
+                            stringResource(Res.string.copy_suffix),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                         )

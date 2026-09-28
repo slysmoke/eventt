@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="auth_timeout">Время авторизации истекло — возможно, браузер не открылся или обратный вызов заблокирован</string>
+    <string name="html_auth_failed">&lt;html&gt;&lt;body&gt;&lt;h1&gt;Ошибка авторизации&lt;/h1&gt;&lt;p&gt;%1$s&lt;/p&gt;&lt;p&gt;Это окно можно закрыть.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+    <string name="sso_error">Ошибка SSO: %1$s</string>
+    <string name="html_auth_ok">&lt;html&gt;&lt;body&gt;&lt;h1&gt;Авторизация прошла успешно!&lt;/h1&gt;&lt;p&gt;Добро пожаловать, %1$s! Это окно можно закрыть.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+    <string name="html_exchange_failed">&lt;html&gt;&lt;body&gt;&lt;h1&gt;Ошибка авторизации&lt;/h1&gt;&lt;p&gt;Не удалось обменять токен. Код уже использован или недействителен.&lt;/p&gt;&lt;p&gt;Это окно можно закрыть.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+    <string name="token_exchange_failed">Не удалось обменять токен — код недействителен или истёк</string>
+    <string name="html_no_code">&lt;html&gt;&lt;body&gt;&lt;h1&gt;Ошибка авторизации&lt;/h1&gt;&lt;p&gt;Код авторизации не получен.&lt;/p&gt;&lt;p&gt;Это окно можно закрыть.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+    <string name="no_auth_code">В обратном вызове нет кода авторизации</string>
+</resources>

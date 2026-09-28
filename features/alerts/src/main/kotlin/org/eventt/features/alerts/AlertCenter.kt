@@ -16,6 +16,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.eventt.alerts.generated.resources.*
 import org.eventt.core.database.AppState
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.ViewContext
@@ -26,6 +27,7 @@ import org.eventt.ui.common.TypeIcon
 import org.eventt.ui.common.formatPriceAbbr
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
+import org.jetbrains.compose.resources.stringResource
 
 /** The item chart/book/position dialog for an alert's item, as the selected character or corp. */
 @Composable
@@ -66,7 +68,7 @@ fun AlertCenterButton() {
         BadgedBox(badge = { if (triggered.isNotEmpty()) Badge { Text("${triggered.size}") } }) {
             Icon(
                 if (triggered.isNotEmpty()) Icons.Default.NotificationsActive else Icons.Default.Notifications,
-                contentDescription = "Triggered alerts",
+                contentDescription = stringResource(Res.string.triggered_alerts),
                 tint = if (triggered.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
             )
         }
@@ -78,14 +80,14 @@ fun AlertCenterButton() {
             modifier = Modifier.widthIn(min = 560.dp, max = 720.dp),
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Triggered alerts")
+                    Text(stringResource(Res.string.triggered_alerts))
                     Spacer(Modifier.width(8.dp))
                     Text("${triggered.size}", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
                 }
             },
             text = {
                 if (triggered.isEmpty()) {
-                    Text("Nothing new. Alerts that fire while the app is open show up here.", style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(Res.string.alert_center_empty), style = MaterialTheme.typography.bodySmall)
                 } else {
                     LazyColumn(modifier = Modifier.heightIn(max = 460.dp)) {
                         items(triggered.sortedByDescending { it.triggeredAt ?: 0L }, key = { it.id }) { a ->
@@ -94,10 +96,10 @@ fun AlertCenterButton() {
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { open = false }) { Text("Close") } },
+            confirmButton = { TextButton(onClick = { open = false }) { Text(stringResource(Res.string.close)) } },
             dismissButton = {
                 TextButton(onClick = { AlertMonitor.dismissAll() }, enabled = triggered.isNotEmpty()) {
-                    Text("Clear all", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(Res.string.clear_all), color = MaterialTheme.colorScheme.error)
                 }
             },
         )
@@ -137,18 +139,24 @@ private fun TriggeredRow(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                "${if (a.orderType == "buy") "Bid" else "Ask"} ${if (above) "rose to" else "fell to"} ${formatPriceAbbr(a.targetPrice)}" +
+                stringResource(
+                    if (above) Res.string.alert_rose_to else Res.string.alert_fell_to,
+                    stringResource(if (a.orderType == "buy") Res.string.bid else Res.string.ask),
+                    formatPriceAbbr(a.targetPrice),
+                ) +
                     (a.triggeredAt?.let { " · " + formatDateTime(it) } ?: ""),
                 style = MaterialTheme.typography.labelSmall,
                 color = Color.Gray,
             )
         }
         Text(
-            if (a.category == ALERT_CATEGORY_INVESTMENT) "Long-Term" else "General",
+            if (a.category == ALERT_CATEGORY_INVESTMENT) stringResource(Res.string.long_term) else stringResource(Res.string.general),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.primary,
         )
-        IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Close, "Dismiss", Modifier.size(14.dp)) }
+        IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+            Icon(Icons.Default.Close, stringResource(Res.string.dismiss), Modifier.size(14.dp))
+        }
     }
     HorizontalDivider(thickness = 0.5.dp)
 }

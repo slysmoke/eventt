@@ -35,8 +35,11 @@ import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.eveOutbidPrice
 import org.eventt.core.model.eveUndercutPrice
 import org.eventt.core.model.formatEveSigFigPrice
+import org.eventt.overlay.generated.resources.*
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
+import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.stringResource
 import java.awt.KeyboardFocusManager
 import java.awt.MouseInfo
 import java.awt.Toolkit
@@ -80,7 +83,7 @@ fun OverlayWindow(
         undecorated = true,
         alwaysOnTop = true,
         resizable = false,
-        title = "EVE Trade Overlay",
+        title = stringResource(Res.string.overlay_window_title),
     ) {
         MaterialTheme(colorScheme = colorScheme, typography = typography) {
             OverlayContent(onClose = onClose, prefs = prefs)
@@ -247,7 +250,7 @@ private fun OverlayContent(
                             val book = type?.let { fetchTypeBook(it.typeId) }
                             if (type != null && book != null) {
                                 val (sells, buys) = book
-                                val loc = if (type.typeId == PLEX_TYPE_ID) "Global market" else "Jita IV-4"
+                                val loc = if (type.typeId == PLEX_TYPE_ID) getString(Res.string.global_market) else "Jita IV-4"
                                 withContext(Dispatchers.Main) {
                                     bookItemName = type.name
                                     sells.minByOrNull { it.first }?.let {
@@ -310,7 +313,7 @@ private fun OverlayContent(
                     sellPrice = it.price
                     sellLoc =
                         if (isGlobalMarket) {
-                            "Global market"
+                            getString(Res.string.global_market)
                         } else {
                             StaticDataDao.getStationById(it.stationId)?.name ?: it.stationId.toString()
                         }
@@ -321,14 +324,14 @@ private fun OverlayContent(
                     buyPrice = it.price
                     buyLoc =
                         if (isGlobalMarket) {
-                            "Global market"
+                            getString(Res.string.global_market)
                         } else {
                             StaticDataDao.getStationById(it.stationId)?.name ?: it.stationId.toString()
                         }
                     buySource = PriceSource.FILE
                     buyBook = buyRowsUsed.map { row -> row.price to row.volRemaining.toLong() }
                 }
-                bookItemName = StaticDataDao.getTypeName(event.typeId) ?: "Unknown (${event.typeId})"
+                bookItemName = StaticDataDao.getTypeName(event.typeId) ?: getString(Res.string.unknown_type_id, event.typeId)
                 when (autoCopy) {
                     AutoCopy.SELL -> {
                         bestSell?.let { lastClipboard = copyBeatPrice(eveUndercutPrice(it.price)) }
@@ -431,7 +434,7 @@ private fun OverlayContent(
                     // ─── Prices ───────────────────────────────────────────
                     Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                         PriceRow(
-                            label = "SELL",
+                            label = stringResource(Res.string.price_sell),
                             price = sellPrice,
                             beatPrice = sellPrice?.let { eveUndercutPrice(it) },
                             location = sellLoc,
@@ -448,7 +451,7 @@ private fun OverlayContent(
                         )
                         Spacer(Modifier.height(6.dp))
                         PriceRow(
-                            label = "BUY ",
+                            label = stringResource(Res.string.price_buy),
                             price = buyPrice,
                             beatPrice = buyPrice?.let { eveOutbidPrice(it) },
                             location = buyLoc,
@@ -466,14 +469,14 @@ private fun OverlayContent(
                         Spacer(Modifier.height(6.dp))
                         // Which beat price a Marketlogs order-book import auto-copies to the clipboard.
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Auto-copy", color = dimText, style = MaterialTheme.typography.labelSmall)
+                            Text(stringResource(Res.string.auto_copy), color = dimText, style = MaterialTheme.typography.labelSmall)
                             Spacer(Modifier.weight(1f))
                             AutoCopy.entries.forEach { mode ->
                                 val label =
                                     when (mode) {
-                                        AutoCopy.OFF -> "OFF"
-                                        AutoCopy.SELL -> "SELL−"
-                                        AutoCopy.BUY -> "BUY+"
+                                        AutoCopy.OFF -> stringResource(Res.string.ac_off)
+                                        AutoCopy.SELL -> stringResource(Res.string.ac_sell)
+                                        AutoCopy.BUY -> stringResource(Res.string.ac_buy)
                                     }
                                 TextButton(
                                     onClick = {
@@ -512,12 +515,12 @@ private fun OverlayContent(
                         val profitColor = if (profitPerUnit > 0) buyColor else sellColor
 
                         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                            CalcRow("Broker (buy)", fmtIsk(bp * bf), dimText)
-                            CalcRow("Broker (sell)", fmtIsk(sp * bf), dimText)
-                            CalcRow("Sales tax", fmtIsk(sp * st), dimText)
+                            CalcRow(stringResource(Res.string.calc_broker_buy), fmtIsk(bp * bf), dimText)
+                            CalcRow(stringResource(Res.string.calc_broker_sell), fmtIsk(sp * bf), dimText)
+                            CalcRow(stringResource(Res.string.calc_sales_tax), fmtIsk(sp * st), dimText)
                             Spacer(Modifier.height(4.dp))
-                            CalcRow("Profit/unit", fmtIsk(profitPerUnit), profitColor, bold = true)
-                            CalcRow("Margin", "%.1f%%".format(margin), profitColor, bold = true)
+                            CalcRow(stringResource(Res.string.calc_profit_unit), fmtIsk(profitPerUnit), profitColor, bold = true)
+                            CalcRow(stringResource(Res.string.calc_margin), "%.1f%%".format(margin), profitColor, bold = true)
                         }
                     }
 
@@ -534,17 +537,17 @@ private fun OverlayContent(
                             if (sellBook.isNotEmpty()) {
                                 val vol = sellBook.sumOf { it.second }
                                 val cost = sellBook.sumOf { it.first * it.second }
-                                CalcRow("Sell wall: buy out (${fmtVol(vol)} units)", fmtIsk(cost), dimText)
+                                CalcRow(stringResource(Res.string.sell_wall_buyout, fmtVol(vol)), fmtIsk(cost), dimText)
                                 avgTopPrice(sellBook, cheapestFirst = true)?.let {
-                                    CalcRow("Sell wall: avg (top 5%)", fmtIsk(it), dimText)
+                                    CalcRow(stringResource(Res.string.sell_wall_avg), fmtIsk(it), dimText)
                                 }
                             }
                             if (buyBook.isNotEmpty()) {
                                 val vol = buyBook.sumOf { it.second }
                                 val revenue = buyBook.sumOf { it.first * it.second }
-                                CalcRow("Buy wall: sell out (${fmtVol(vol)} units)", fmtIsk(revenue), dimText)
+                                CalcRow(stringResource(Res.string.buy_wall_sellout, fmtVol(vol)), fmtIsk(revenue), dimText)
                                 avgTopPrice(buyBook, cheapestFirst = false)?.let {
-                                    CalcRow("Buy wall: avg (top 5%)", fmtIsk(it), dimText)
+                                    CalcRow(stringResource(Res.string.buy_wall_avg), fmtIsk(it), dimText)
                                 }
                             }
                         }
@@ -555,7 +558,11 @@ private fun OverlayContent(
                         HorizontalDivider(color = overlayBorder)
                         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Inventory value", color = dimText, style = MaterialTheme.typography.labelSmall)
+                                Text(
+                                    stringResource(Res.string.inventory_value),
+                                    color = dimText,
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
                                 Spacer(Modifier.weight(1f))
                                 TextButton(
                                     onClick = {
@@ -566,17 +573,22 @@ private fun OverlayContent(
                                     modifier = Modifier.height(22.dp),
                                 ) {
                                     Text(
-                                        "AUTO-COPY",
+                                        stringResource(Res.string.auto_copy_caps),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = if (autoCopyManifest) accent else dimText,
                                         fontWeight = if (autoCopyManifest) FontWeight.Bold else FontWeight.Normal,
                                     )
                                 }
                             }
-                            CalcRow("Total ($manifestResolved items)", fmtIsk(manifestTotal!!), sellColor, bold = true)
+                            CalcRow(
+                                stringResource(Res.string.manifest_total, manifestResolved),
+                                fmtIsk(manifestTotal!!),
+                                sellColor,
+                                bold = true,
+                            )
                             if (manifestUnresolved.isNotEmpty()) {
                                 Text(
-                                    "Unresolved: ${manifestUnresolved.joinToString(", ")}",
+                                    stringResource(Res.string.unresolved, manifestUnresolved.joinToString(", ")),
                                     color = dimText,
                                     style = MaterialTheme.typography.labelSmall,
                                     maxLines = 2,
@@ -626,7 +638,7 @@ private fun PriceRow(
                 Spacer(Modifier.width(6.dp))
                 SourceBadge(source)
             } else {
-                Text("—  copy an order row", color = dimText, style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(Res.string.copy_order_row), color = dimText, style = MaterialTheme.typography.bodySmall)
             }
             Spacer(Modifier.weight(1f))
             TextButton(
@@ -634,14 +646,14 @@ private fun PriceRow(
                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
                 modifier = Modifier.height(22.dp),
             ) {
-                Text("SET", style = MaterialTheme.typography.labelSmall, color = accent)
+                Text(stringResource(Res.string.set), style = MaterialTheme.typography.labelSmall, color = accent)
             }
         }
         // The beat price already sits in the clipboard (written by the poll loop / book import);
         // clicking here re-copies it after something else overwrote the clipboard.
         if (beatPrice != null) {
             Text(
-                "beat ${formatEveSigFigPrice(beatPrice)}",
+                stringResource(Res.string.beat_price, formatEveSigFigPrice(beatPrice)),
                 color = accent,
                 style = MaterialTheme.typography.labelSmall,
                 modifier =
@@ -672,9 +684,9 @@ private fun SourceBadge(source: PriceSource?) {
     val dimText = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
     val (icon, label) =
         when (source) {
-            PriceSource.FILE -> Icons.Default.Bolt to "auto"
-            PriceSource.CLIPBOARD -> Icons.Default.ContentPaste to "manual"
-            PriceSource.LOOKUP -> Icons.Default.Search to "jita"
+            PriceSource.FILE -> Icons.Default.Bolt to stringResource(Res.string.src_auto)
+            PriceSource.CLIPBOARD -> Icons.Default.ContentPaste to stringResource(Res.string.src_manual)
+            PriceSource.LOOKUP -> Icons.Default.Search to stringResource(Res.string.src_jita)
         }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, null, tint = dimText, modifier = Modifier.size(10.dp))

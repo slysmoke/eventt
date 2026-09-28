@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="asset_viewer">Имущество</string>
+    <string name="auto_refresh">Автообновление</string>
+    <string name="search_assets">Поиск по имуществу...</string>
+    <plurals name="items_count">
+        <item quantity="one">%1$s предмет</item>
+        <item quantity="few">%1$s предмета</item>
+        <item quantity="many">%1$s предметов</item>
+        <item quantity="other">%1$s предмета</item>
+    </plurals>
+    <string name="total_isk">Всего: %1$s ISK</string>
+    <string name="no_assets_found">Имущество не найдено</string>
+    <string name="assets_click_refresh">Нажмите «Обновить», чтобы загрузить имущество из ESI.</string>
+    <string name="assets_no_match">Ничего не найдено по вашему запросу.</string>
+    <string name="fetching_assets">Загрузка имущества из ESI...</string>
+    <string name="unknown_location">Неизвестное место</string>
+    <string name="expand">Развернуть</string>
+    <string name="collapse">Свернуть</string>
+    <string name="copy_suffix">(копия)</string>
+</resources>

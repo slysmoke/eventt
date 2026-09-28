@@ -9,4 +9,5 @@ version = "1.0.0"
 dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.core)
+    api(libs.compose.components.resources)
 }

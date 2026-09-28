@@ -14,7 +14,9 @@ import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import org.eventt.common.generated.resources.*
 import org.eventt.core.model.CorpFeature
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Reusable search field with icon.
@@ -25,7 +27,7 @@ fun SearchField(
     query: String,
     onQueryChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    placeholder: String = "Search...",
+    placeholder: String = stringResource(Res.string.search_placeholder),
     onClear: (() -> Unit)? = null,
 ) {
     OutlinedTextField(
@@ -41,7 +43,7 @@ fun SearchField(
             if (query.isNotEmpty()) {
                 {
                     IconButton(onClick = { onClear?.invoke() ?: onQueryChange("") }) {
-                        Icon(Icons.Default.Close, contentDescription = "Clear")
+                        Icon(Icons.Default.Close, contentDescription = stringResource(Res.string.clear))
                     }
                 }
             } else {
@@ -103,14 +105,16 @@ fun CorpAccessNotice(
             Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                "No corp access to ${features.joinToString(", ") { it.name.lowercase() }} — " +
-                    "this character is missing the required corp role.",
+                stringResource(
+                    Res.string.corp_access_notice,
+                    features.map { corpFeatureName(it) }.joinToString(", "),
+                ),
                 modifier = Modifier.weight(1f),
                 color = MaterialTheme.colorScheme.onErrorContainer,
                 style = MaterialTheme.typography.bodyMedium,
             )
             TextButton(onClick = onRetry) {
-                Text("Retry", color = MaterialTheme.colorScheme.onErrorContainer)
+                Text(stringResource(Res.string.retry), color = MaterialTheme.colorScheme.onErrorContainer)
             }
         }
     }
@@ -122,8 +126,8 @@ fun CorpAccessNotice(
 @Composable
 fun EmptyState(
     icon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Default.Info,
-    title: String = "No Data",
-    description: String = "Nothing to display yet.",
+    title: String = stringResource(Res.string.no_data),
+    description: String = stringResource(Res.string.nothing_to_display),
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -146,7 +150,7 @@ fun EmptyState(
 fun LoadingOverlay(
     isLoading: Boolean,
     modifier: Modifier = Modifier,
-    message: String = "Loading...",
+    message: String = stringResource(Res.string.loading),
 ) {
     if (isLoading) {
         Box(
@@ -181,8 +185,8 @@ fun ConfirmDialog(
     message: String,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
-    confirmText: String = "Confirm",
-    dismissText: String = "Cancel",
+    confirmText: String = stringResource(Res.string.confirm),
+    dismissText: String = stringResource(Res.string.cancel),
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -229,7 +233,13 @@ fun EsiRefreshButton(
         if (coolingDown) {
             val mins = remainingSec / 60
             val secs = remainingSec % 60
-            if (mins > 0) "${mins}m ${"%02d".format(secs)}s" else "${secs}s"
+            if (mins >
+                0
+            ) {
+                stringResource(Res.string.cooldown_min_sec, mins, "%02d".format(secs))
+            } else {
+                stringResource(Res.string.cooldown_sec, secs)
+            }
         } else {
             null
         }
@@ -260,7 +270,7 @@ fun EsiRefreshButton(
             } else {
                 Icon(
                     Icons.Default.Refresh,
-                    contentDescription = "Refresh",
+                    contentDescription = stringResource(Res.string.refresh),
                     tint =
                         if (coolingDown) {
                             MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
@@ -279,3 +289,14 @@ fun Modifier.onRightClick(action: () -> Unit): Modifier =
     this.onPointerEvent(androidx.compose.ui.input.pointer.PointerEventType.Press) {
         if (it.buttons.isSecondaryPressed) action()
     }
+
+@Composable
+private fun corpFeatureName(feature: CorpFeature): String =
+    stringResource(
+        when (feature) {
+            CorpFeature.WALLET -> Res.string.corp_feature_wallet
+            CorpFeature.ASSETS -> Res.string.corp_feature_assets
+            CorpFeature.ORDERS -> Res.string.corp_feature_orders
+            CorpFeature.CONTRACTS -> Res.string.corp_feature_contracts
+        },
+    )

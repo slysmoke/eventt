@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.eventt.alerts.generated.resources.*
 import org.eventt.core.database.AlertDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.esi.EsiClient
@@ -27,10 +28,14 @@ import org.eventt.core.model.ALERT_CATEGORY_INVESTMENT
 import org.eventt.core.model.PLEX_MARKET_REGION_ID
 import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.PriceAlertModel
+import org.eventt.core.model.pluralBlocking
 import org.eventt.ui.common.*
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.eventt.ui.theme.warningColor
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 import java.util.Locale
 
 private const val JITA_REGION_ID = 10000002
@@ -40,12 +45,12 @@ private fun effectiveRegionId(typeId: Int) = if (typeId == PLEX_TYPE_ID) PLEX_MA
 private val MUTED = Color(0xFF8A8A8A)
 
 internal enum class AlertStatusFilter(
-    val label: String,
+    val label: StringResource,
 ) {
-    ALL("All"),
-    ACTIVE("Active"),
-    TRIGGERED("Triggered"),
-    DISABLED("Disabled"),
+    ALL(Res.string.filter_all),
+    ACTIVE(Res.string.filter_active),
+    TRIGGERED(Res.string.filter_triggered),
+    DISABLED(Res.string.filter_disabled),
 }
 
 internal fun PriceAlertModel.matches(f: AlertStatusFilter) =
@@ -117,25 +122,29 @@ fun PriceAlertsScreen() {
     val visible = alerts.filter { it.matches(statusFilter) && (query.isBlank() || it.typeName.contains(query, ignoreCase = true)) }
     val sections =
         listOf(
-            Triple("investment", "Long-Term Investment", visible.filter { it.category == ALERT_CATEGORY_INVESTMENT }),
-            Triple("general", "General", visible.filter { it.category != ALERT_CATEGORY_INVESTMENT }),
+            Triple(
+                "investment",
+                stringResource(Res.string.long_term_investment),
+                visible.filter { it.category == ALERT_CATEGORY_INVESTMENT },
+            ),
+            Triple("general", stringResource(Res.string.general), visible.filter { it.category != ALERT_CATEGORY_INVESTMENT }),
         )
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         // ── Toolbar
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Price Alerts", style = MaterialTheme.typography.headlineMedium)
+            Text(stringResource(Res.string.price_alerts), style = MaterialTheme.typography.headlineMedium)
             Spacer(Modifier.width(16.dp))
-            Pill("${alerts.count { it.enabled && !it.triggered }} active", positiveColor)
+            Pill(stringResource(Res.string.pill_active, alerts.count { it.enabled && !it.triggered }), positiveColor)
             Spacer(Modifier.width(6.dp))
-            Pill("${alerts.count { it.triggered }} triggered", warningColor)
+            Pill(stringResource(Res.string.pill_triggered, alerts.count { it.triggered }), warningColor)
             Spacer(Modifier.width(6.dp))
-            Pill("${alerts.count { !it.enabled }} disabled", MUTED)
+            Pill(stringResource(Res.string.pill_disabled, alerts.count { !it.enabled }), MUTED)
             Spacer(Modifier.weight(1f))
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                placeholder = { Text("Filter items…", style = MaterialTheme.typography.bodySmall) },
+                placeholder = { Text(stringResource(Res.string.filter_items), style = MaterialTheme.typography.bodySmall) },
                 leadingIcon = { Icon(Icons.Default.Search, null, Modifier.size(16.dp)) },
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodySmall,
@@ -143,7 +152,7 @@ fun PriceAlertsScreen() {
             )
             Spacer(Modifier.width(8.dp))
             AlertStatusFilter.entries.forEach { f ->
-                FilterChip(selected = statusFilter == f, onClick = { statusFilter = f }, label = { Text(f.label) })
+                FilterChip(selected = statusFilter == f, onClick = { statusFilter = f }, label = { Text(stringResource(f.label)) })
                 Spacer(Modifier.width(4.dp))
             }
             Spacer(Modifier.width(4.dp))
@@ -160,12 +169,12 @@ fun PriceAlertsScreen() {
                 if (checking) {
                     CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                 } else {
-                    Icon(Icons.Default.Refresh, "Check alerts now")
+                    Icon(Icons.Default.Refresh, stringResource(Res.string.check_alerts_now))
                 }
             }
             Button(onClick = { showAddDialog = true }) {
                 Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
-                Text("Add Alert")
+                Text(stringResource(Res.string.add_alert))
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -173,8 +182,8 @@ fun PriceAlertsScreen() {
         if (alerts.isEmpty()) {
             EmptyState(
                 icon = Icons.Default.Notifications,
-                title = "No Alerts",
-                description = "Create a price alert here, from Market Browser, or in bulk from Long-Term Investment.",
+                title = stringResource(Res.string.no_alerts),
+                description = stringResource(Res.string.no_alerts_desc),
             )
             return@Column
         }
@@ -193,12 +202,12 @@ fun PriceAlertsScreen() {
                         onToggle = { collapsedSections = if (collapsed) collapsedSections - key else collapsedSections + key },
                         onDeleteTriggered = {
                             list.filter { it.triggered }.map { it.id }.takeIf { it.isNotEmpty() }?.let {
-                                confirmDelete = "Delete ${it.size} triggered alert(s) in $title?" to it
+                                confirmDelete = pluralBlocking(Res.plurals.delete_triggered_confirm, it.size, it.size, title) to it
                             }
                         },
                         onDeleteAll = {
                             list.map { it.id }.takeIf { it.isNotEmpty() }?.let {
-                                confirmDelete = "Delete all ${it.size} alert(s) shown in $title?" to it
+                                confirmDelete = pluralBlocking(Res.plurals.delete_all_confirm, it.size, it.size, title) to it
                             }
                         },
                     )
@@ -207,7 +216,7 @@ fun PriceAlertsScreen() {
                     if (groups.isEmpty()) {
                         item(key = "empty-$key") {
                             Text(
-                                "Nothing here for the current filter.",
+                                stringResource(Res.string.nothing_for_filter),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MUTED,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -277,7 +286,7 @@ fun PriceAlertsScreen() {
     confirmDelete?.let { (text, ids) ->
         AlertDialog(
             onDismissRequest = { confirmDelete = null },
-            title = { Text("Delete alerts") },
+            title = { Text(stringResource(Res.string.delete_alerts)) },
             text = { Text(text) },
             confirmButton = {
                 Button(
@@ -286,9 +295,9 @@ fun PriceAlertsScreen() {
                         confirmDelete = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                ) { Text("Delete") }
+                ) { Text(stringResource(Res.string.delete)) }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text(stringResource(Res.string.cancel)) } },
         )
     }
 
@@ -308,12 +317,12 @@ private val COL_ACTIONS = 150.dp
 private fun AlertTableHeader() {
     Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            HeaderCell("Item", Modifier.weight(1f).padding(start = 28.dp))
-            HeaderCell("Alerts", Modifier.width(COL_ALERTS))
-            HeaderCell("Next trigger", Modifier.width(COL_NEXT))
-            HeaderCell("Bid / Ask now", Modifier.width(COL_QUOTE))
-            HeaderCell("To go", Modifier.width(COL_DIST))
-            HeaderCell("Status", Modifier.width(COL_STATUS))
+            HeaderCell(stringResource(Res.string.col_item), Modifier.weight(1f).padding(start = 28.dp))
+            HeaderCell(stringResource(Res.string.col_alerts), Modifier.width(COL_ALERTS))
+            HeaderCell(stringResource(Res.string.col_next_trigger), Modifier.width(COL_NEXT))
+            HeaderCell(stringResource(Res.string.col_bid_ask), Modifier.width(COL_QUOTE))
+            HeaderCell(stringResource(Res.string.col_to_go), Modifier.width(COL_DIST))
+            HeaderCell(stringResource(Res.string.col_status), Modifier.width(COL_STATUS))
             Spacer(Modifier.width(COL_ACTIONS))
         }
     }
@@ -355,18 +364,31 @@ private fun SectionHeader(
             color = MaterialTheme.colorScheme.primary,
         )
         Spacer(Modifier.width(10.dp))
-        Text("$itemCount items · $alertCount alerts", style = MaterialTheme.typography.labelSmall, color = MUTED)
+        Text(
+            pluralStringResource(Res.plurals.items_n, itemCount, itemCount) + " · " +
+                pluralStringResource(Res.plurals.alerts_n, alertCount, alertCount),
+            style = MaterialTheme.typography.labelSmall,
+            color = MUTED,
+        )
         Spacer(Modifier.weight(1f))
-        TextButton(onClick = onDeleteTriggered) { Text("Delete triggered", style = MaterialTheme.typography.labelSmall) }
+        TextButton(
+            onClick = onDeleteTriggered,
+        ) { Text(stringResource(Res.string.delete_triggered), style = MaterialTheme.typography.labelSmall) }
         TextButton(onClick = onDeleteAll) {
-            Text("Delete all", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+            Text(
+                stringResource(Res.string.delete_all),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+            )
         }
     }
     HorizontalDivider(thickness = 0.5.dp)
 }
 
+@Composable
 private fun conditionText(a: PriceAlertModel) =
-    "${if (a.orderType == "buy") "Bid" else "Ask"} ${if (a.condition == "above") "≥" else "≤"} ${formatPriceAbbr(a.targetPrice)}"
+    "${stringResource(if (a.orderType == "buy") Res.string.bid else Res.string.ask)} " +
+        "${if (a.condition == "above") "≥" else "≤"} ${formatPriceAbbr(a.targetPrice)}"
 
 @Composable
 private fun DistanceText(
@@ -392,9 +414,18 @@ private fun DistanceText(
 private fun StatusChip(a: PriceAlertModel) {
     val (text, color) =
         when {
-            a.triggered -> "Triggered${a.triggeredAt?.let { " " + formatDateTime(it).drop(5) } ?: ""}" to warningColor
-            !a.enabled -> "Disabled" to MUTED
-            else -> "Active" to positiveColor
+            a.triggered -> {
+                stringResource(Res.string.status_triggered_at, a.triggeredAt?.let { " " + formatDateTime(it).drop(5) } ?: "") to
+                    warningColor
+            }
+
+            !a.enabled -> {
+                stringResource(Res.string.status_disabled) to MUTED
+            }
+
+            else -> {
+                stringResource(Res.string.status_active) to positiveColor
+            }
         }
     Pill(text, color)
 }
@@ -436,9 +467,11 @@ private fun AlertActions(
     onDelete: () -> Unit,
 ) {
     Switch(checked = alert.enabled, onCheckedChange = { onToggle() }, modifier = Modifier.height(24.dp))
-    IconButton(onClick = onEdit, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Edit, "Edit alert", Modifier.size(16.dp)) }
+    IconButton(onClick = onEdit, modifier = Modifier.size(28.dp)) {
+        Icon(Icons.Default.Edit, stringResource(Res.string.edit_alert), Modifier.size(16.dp))
+    }
     IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
-        Icon(Icons.Default.Delete, "Delete alert", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
+        Icon(Icons.Default.Delete, stringResource(Res.string.delete_alert), Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
     }
 }
 
@@ -480,7 +513,12 @@ private fun GroupRow(
                 modifier = Modifier.weight(1f, fill = false).clickable(onClick = onChart),
             )
             IconButton(onClick = onChart, modifier = Modifier.size(26.dp)) {
-                Icon(Icons.AutoMirrored.Filled.ShowChart, "Open chart", Modifier.size(15.dp), tint = MaterialTheme.colorScheme.primary)
+                Icon(
+                    Icons.AutoMirrored.Filled.ShowChart,
+                    stringResource(Res.string.open_chart),
+                    Modifier.size(15.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
             }
         }
         Text("${group.alerts.size}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(COL_ALERTS))
@@ -500,9 +538,9 @@ private fun GroupRow(
                 val fired = group.alerts.count { it.triggered }
                 Text(
                     listOfNotNull(
-                        "$active active".takeIf { active > 0 },
-                        "$fired triggered".takeIf { fired > 0 },
-                    ).joinToString(" · ").ifEmpty { "disabled" },
+                        stringResource(Res.string.group_active, active).takeIf { active > 0 },
+                        stringResource(Res.string.group_triggered, fired).takeIf { fired > 0 },
+                    ).joinToString(" · ").ifEmpty { stringResource(Res.string.group_disabled) },
                     style = MaterialTheme.typography.labelSmall,
                     color = if (fired > 0) warningColor else MUTED,
                 )
@@ -540,7 +578,11 @@ private fun AlertRow(
                 tint = if (alert.condition == "above") positiveColor else negativeColor,
             )
             Spacer(Modifier.width(6.dp))
-            Text("created ${formatDateTime(alert.createdAt)}", style = MaterialTheme.typography.labelSmall, color = MUTED)
+            Text(
+                stringResource(Res.string.created_at, formatDateTime(alert.createdAt)),
+                style = MaterialTheme.typography.labelSmall,
+                color = MUTED,
+            )
         }
         Spacer(Modifier.width(COL_ALERTS))
         Text(
@@ -627,7 +669,7 @@ private fun AlertEditDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (initial == null) "New Price Alert" else "Edit Price Alert") },
+        title = { Text(if (initial == null) stringResource(Res.string.new_price_alert) else stringResource(Res.string.edit_price_alert)) },
         text = {
             Column {
                 SearchField(
@@ -642,7 +684,7 @@ private fun AlertEditDialog(
                             searchResults = emptyList()
                         }
                     },
-                    placeholder = "Search item...",
+                    placeholder = stringResource(Res.string.search_item),
                 )
 
                 if (searchResults.isNotEmpty()) {
@@ -669,7 +711,7 @@ private fun AlertEditDialog(
 
                 // Order type selector
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Price type:", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    Text(stringResource(Res.string.price_type), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                     Spacer(Modifier.width(8.dp))
                     FilterChip(
                         selected = orderType == "sell",
@@ -677,7 +719,7 @@ private fun AlertEditDialog(
                             orderType = "sell"
                             targetPrice = ""
                         },
-                        label = { Text("Sell") },
+                        label = { Text(stringResource(Res.string.sell)) },
                     )
                     Spacer(Modifier.width(4.dp))
                     FilterChip(
@@ -686,7 +728,7 @@ private fun AlertEditDialog(
                             orderType = "buy"
                             targetPrice = ""
                         },
-                        label = { Text("Buy") },
+                        label = { Text(stringResource(Res.string.buy)) },
                     )
                 }
 
@@ -698,7 +740,7 @@ private fun AlertEditDialog(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp)
                             Spacer(Modifier.width(6.dp))
-                            Text("Fetching price…", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                            Text(stringResource(Res.string.fetching_price), style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                         }
                     } else {
                         val bestSell = currentBestSell
@@ -706,14 +748,14 @@ private fun AlertEditDialog(
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             if (bestSell != null) {
                                 Text(
-                                    "Sell: ${formatIsk(bestSell)}",
+                                    stringResource(Res.string.sell_price, formatIsk(bestSell)),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = if (orderType == "sell") MaterialTheme.colorScheme.primary else Color.Gray,
                                 )
                             }
                             if (bestBuy != null) {
                                 Text(
-                                    "Buy: ${formatIsk(bestBuy)}",
+                                    stringResource(Res.string.buy_price, formatIsk(bestBuy)),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = if (orderType == "buy") MaterialTheme.colorScheme.primary else Color.Gray,
                                 )
@@ -726,9 +768,17 @@ private fun AlertEditDialog(
 
                 // Condition
                 Row {
-                    FilterChip(selected = condition == "below", onClick = { condition = "below" }, label = { Text("Below") })
+                    FilterChip(
+                        selected = condition == "below",
+                        onClick = { condition = "below" },
+                        label = { Text(stringResource(Res.string.below)) },
+                    )
                     Spacer(modifier = Modifier.width(4.dp))
-                    FilterChip(selected = condition == "above", onClick = { condition = "above" }, label = { Text("Above") })
+                    FilterChip(
+                        selected = condition == "above",
+                        onClick = { condition = "above" },
+                        label = { Text(stringResource(Res.string.above)) },
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -736,7 +786,7 @@ private fun AlertEditDialog(
                 OutlinedTextField(
                     value = targetPrice,
                     onValueChange = { targetPrice = it },
-                    label = { Text("Target Price (ISK)") },
+                    label = { Text(stringResource(Res.string.target_price_isk)) },
                     keyboardOptions =
                         androidx.compose.foundation.text.KeyboardOptions(
                             keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal,
@@ -765,11 +815,11 @@ private fun AlertEditDialog(
                 },
                 enabled = selectedType != null && targetPrice.toDoubleOrNull() != null,
             ) {
-                Text(if (initial == null) "Create Alert" else "Save")
+                Text(if (initial == null) stringResource(Res.string.create_alert) else stringResource(Res.string.save))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) }
         },
     )
 }

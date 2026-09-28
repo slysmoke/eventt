@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="so_session">Session</string>
+    <string name="so_trades">Trades</string>
+    <string name="so_profit">Profit</string>
+    <string name="so_relists">Relists</string>
+    <string name="so_sell_orders">Sell Orders</string>
+    <string name="so_buy_orders">Buy Orders</string>
+    <string name="so_beaten">Beaten</string>
+    <string name="so_isk_in_orders">ISK in Orders</string>
+    <string name="so_expected_profit">Expected Profit</string>
+    <string name="so_relist_fees">Relist Fees</string>
+    <string name="overlay_window_title">EVE Trade Overlay</string>
+    <string name="global_market">Global market</string>
+    <string name="unknown_type_id">Unknown (%1$s)</string>
+    <string name="price_sell">SELL</string>
+    <string name="price_buy">BUY </string>
+    <string name="auto_copy">Auto-copy</string>
+    <string name="ac_off">OFF</string>
+    <string name="ac_sell">SELL−</string>
+    <string name="ac_buy">BUY+</string>
+    <string name="calc_broker_buy">Broker (buy)</string>
+    <string name="calc_broker_sell">Broker (sell)</string>
+    <string name="calc_sales_tax">Sales tax</string>
+    <string name="calc_profit_unit">Profit/unit</string>
+    <string name="calc_margin">Margin</string>
+    <string name="sell_wall_buyout">Sell wall: buy out (%1$s units)</string>
+    <string name="sell_wall_avg">Sell wall: avg (top 5%)</string>
+    <string name="buy_wall_sellout">Buy wall: sell out (%1$s units)</string>
+    <string name="buy_wall_avg">Buy wall: avg (top 5%)</string>
+    <string name="inventory_value">Inventory value</string>
+    <string name="auto_copy_caps">AUTO-COPY</string>
+    <string name="manifest_total">Total (%1$s items)</string>
+    <string name="unresolved">Unresolved: %1$s</string>
+    <string name="copy_order_row">—  copy an order row</string>
+    <string name="set">SET</string>
+    <string name="beat_price">beat %1$s</string>
+    <string name="src_auto">auto</string>
+    <string name="src_manual">manual</string>
+    <string name="src_jita">jita</string>
+</resources>

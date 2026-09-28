@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="er_starting">Запуск синхронизации…</string>
+    <string name="er_cleaning">Очистка старых данных вне периода…</string>
+    <string name="er_fetching_index">Загрузка списка файлов…</string>
+    <string name="er_up_to_date">Данные уже актуальны</string>
+    <string name="er_downloading">Загрузка файлов: %1$s (параллельно: %2$s)…</string>
+    <string name="er_progress">загружено %1$s/%2$s…</string>
+    <string name="er_complete">Синхронизация завершена — загружено файлов: %1$s</string>
+    <string name="er_complete_failed">Синхронизация завершена — загружено %1$s, с ошибкой %2$s</string>
+    <string name="er_cancelled">Синхронизация отменена</string>
+    <string name="er_failed">Ошибка синхронизации: %1$s</string>
+</resources>

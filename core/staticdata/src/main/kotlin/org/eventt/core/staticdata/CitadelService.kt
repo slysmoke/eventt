@@ -10,6 +10,8 @@ import okhttp3.Request
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.http.EveHttpClient
 import org.eventt.core.model.StaticStationModel
+import org.eventt.core.model.stringBlocking
+import org.eventt.staticdata.generated.resources.*
 
 object CitadelService {
     private const val CITADEL_URL =
@@ -33,17 +35,18 @@ object CitadelService {
     suspend fun sync() =
         withContext(Dispatchers.IO) {
             if (_state.value.isRunning) return@withContext
-            _state.value = SyncState(isRunning = true, status = "Downloading citadel list…")
+            _state.value = SyncState(isRunning = true, status = stringBlocking(Res.string.cit_downloading))
             try {
                 val json = download()
-                _state.value = _state.value.copy(status = "Parsing…")
+                _state.value = _state.value.copy(status = stringBlocking(Res.string.parsing))
                 val stations = parse(json)
-                _state.value = _state.value.copy(status = "Saving ${stations.size} citadels…")
+                _state.value = _state.value.copy(status = stringBlocking(Res.string.cit_saving, stations.size))
                 StaticDataDao.bulkInsertStations(stations)
                 StaticDataDao.setSetting(PREF_LAST_SYNC, System.currentTimeMillis().toString())
-                _state.value = SyncState(isRunning = false, count = stations.size, status = "Synced ${stations.size} citadels")
+                _state.value =
+                    SyncState(isRunning = false, count = stations.size, status = stringBlocking(Res.string.cit_synced, stations.size))
             } catch (e: Exception) {
-                _state.value = SyncState(isRunning = false, error = e.message ?: "Unknown error")
+                _state.value = SyncState(isRunning = false, error = e.message ?: stringBlocking(Res.string.unknown_error))
             }
         }
 

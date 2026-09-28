@@ -38,9 +38,12 @@ import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.StaticMarketGroupModel
 import org.eventt.core.model.StaticRegionModel
 import org.eventt.core.model.StaticStationModel
+import org.eventt.core.model.stringBlocking
 import org.eventt.core.staticdata.JumpGraphService
+import org.eventt.market.generated.resources.*
 import org.eventt.ui.common.ensureVisible
 import org.eventt.ui.theme.negativeColor
+import org.jetbrains.compose.resources.stringResource
 import java.util.Locale
 
 // ─── Station Trading ──────────────────────────────────────────────────────
@@ -172,7 +175,13 @@ internal fun StationTradingTab(
                     scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_STATION, it?.toString() ?: "") } }
                 }
                 FilterDivider()
-                GroupDropdown("Category", topGroups, selectedTopGroup, "All categories", 150.dp) { g ->
+                GroupDropdown(
+                    stringResource(Res.string.category),
+                    topGroups,
+                    selectedTopGroup,
+                    stringResource(Res.string.all_categories),
+                    150.dp,
+                ) { g ->
                     selectedTopGroup = g
                     selectedSubGroup = null
                     scope.launch {
@@ -183,7 +192,13 @@ internal fun StationTradingTab(
                     }
                 }
                 if (subGroups.isNotEmpty()) {
-                    GroupDropdown("Subcategory", subGroups, selectedSubGroup, "All", 140.dp) { g ->
+                    GroupDropdown(
+                        stringResource(Res.string.subcategory),
+                        subGroups,
+                        selectedSubGroup,
+                        stringResource(Res.string.all_short),
+                        140.dp,
+                    ) { g ->
                         selectedSubGroup = g
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_CAT_SUB, g?.marketGroupId?.toString() ?: "") } }
                     }
@@ -191,13 +206,13 @@ internal fun StationTradingTab(
                 Spacer(Modifier.weight(1f))
                 // Read-only tax display — informational, so it lives at the far edge with the
                 // other non-inputs rather than crammed in with the editable filters.
-                FilterControl("Fees") {
+                FilterControl(stringResource(Res.string.fees)) {
                     Text(
-                        "Tax ${String.format(
-                            Locale.US,
-                            "%.2f",
-                            salesTaxPct,
-                        )}%  ·  Broker ${String.format(Locale.US, "%.2f", brokerFeePct)}%",
+                        stringResource(
+                            Res.string.fees_value,
+                            String.format(Locale.US, "%.2f", salesTaxPct),
+                            String.format(Locale.US, "%.2f", brokerFeePct),
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
                     )
@@ -212,19 +227,19 @@ internal fun StationTradingTab(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.weight(1f),
                 ) {
-                    ParamField("Min Margin %", minMargin, 68.dp) {
+                    ParamField(stringResource(Res.string.min_margin_pct), minMargin, 68.dp) {
                         minMargin = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MARGIN, it) } }
                     }
-                    ParamField("Min Vol", minDailyVol, 72.dp) {
+                    ParamField(stringResource(Res.string.min_vol), minDailyVol, 72.dp) {
                         minDailyVol = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MIN_VOL, it) } }
                     }
-                    ParamField("Max Buy", maxBuyPrice, 105.dp) {
+                    ParamField(stringResource(Res.string.max_buy), maxBuyPrice, 105.dp) {
                         maxBuyPrice = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MAX_PRICE, it) } }
                     }
-                    ParamField("Min Net", minNetProfit, 100.dp) {
+                    ParamField(stringResource(Res.string.min_net), minNetProfit, 100.dp) {
                         minNetProfit = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MIN_PROFIT, it) } }
                     }
@@ -232,7 +247,7 @@ internal fun StationTradingTab(
                     // Volume modifier — scales the suggested/displayed daily volume by this percentage
                     // (e.g. entering 50 shows/copies 50% of the computed daily volume).
                     CheckboxParamField(
-                        label = "Vol %",
+                        label = stringResource(Res.string.vol_pct),
                         checked = volCapEnabled,
                         onCheckedChange = {
                             volCapEnabled = it
@@ -244,7 +259,7 @@ internal fun StationTradingTab(
                             scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_VOL_CAP_PCT, v) } }
                         },
                     )
-                    FilterControl("Skip Owned Items") {
+                    FilterControl(stringResource(Res.string.skip_owned)) {
                         Checkbox(
                             checked = skipExistingOrders,
                             onCheckedChange = {
@@ -257,7 +272,7 @@ internal fun StationTradingTab(
                     // Est. Daily otherwise trusts ESI's region-wide, both-sides-combined history --
                     // this caps it at Adam4EVE's real per-station buy/sell fill data instead (see
                     // Adam4EveFlowService). Off by default: a third-party dependency, opt-in.
-                    FilterControl("Adam4EVE Flow") {
+                    FilterControl(stringResource(Res.string.a4e_flow)) {
                         Checkbox(
                             checked = useAdam4Eve,
                             onCheckedChange = {
@@ -271,22 +286,33 @@ internal fun StationTradingTab(
                         spikeFilter = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_SPIKE_FILTER, it.name) } }
                     }
-                    ParamField("Price ×", spikePriceMultiplier, 50.dp, enabled = spikeFilter != SpikeFilter.ANY) {
+                    ParamField(
+                        stringResource(Res.string.price_mult),
+                        spikePriceMultiplier,
+                        50.dp,
+                        enabled = spikeFilter != SpikeFilter.ANY,
+                    ) {
                         spikePriceMultiplier = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_SPIKE_PRICE_MULTIPLIER, it) } }
                     }
-                    ParamField("Volume ×", spikeVolumeMultiplier, 50.dp, enabled = spikeFilter != SpikeFilter.ANY) {
+                    ParamField(
+                        stringResource(Res.string.volume_mult),
+                        spikeVolumeMultiplier,
+                        50.dp,
+                        enabled =
+                            spikeFilter != SpikeFilter.ANY,
+                    ) {
                         spikeVolumeMultiplier = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_SPIKE_VOLUME_MULTIPLIER, it) } }
                     }
-                    ParamField("Spike Days", spikeWindowDays, 60.dp, enabled = spikeFilter != SpikeFilter.ANY) {
+                    ParamField(stringResource(Res.string.spike_days), spikeWindowDays, 60.dp, enabled = spikeFilter != SpikeFilter.ANY) {
                         spikeWindowDays = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_SPIKE_WINDOW_DAYS, it) } }
                     }
                     FilterDivider()
                     // Toggles whether the hotkey's second press copies the suggested volume, or just
                     // advances straight to the next item after copying the price.
-                    FilterControl("Copy Vol") {
+                    FilterControl(stringResource(Res.string.copy_vol)) {
                         Switch(
                             checked = copyVolumeEnabled,
                             onCheckedChange = {
@@ -298,11 +324,20 @@ internal fun StationTradingTab(
                     }
                 }
                 if (statusMsg.isNotEmpty()) {
+                    val errorPrefix = stringResource(Res.string.status_error, "")
                     FilterActionSlot {
                         Text(
                             statusMsg,
                             style = MaterialTheme.typography.labelSmall,
-                            color = if ("Error" in statusMsg) negativeColor else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            color =
+                                if (statusMsg.startsWith(
+                                        errorPrefix,
+                                    )
+                                ) {
+                                    negativeColor
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                },
                             modifier = Modifier.height(FilterFieldHeight).wrapContentHeight(Alignment.CenterVertically),
                         )
                     }
@@ -317,7 +352,7 @@ internal fun StationTradingTab(
                         ) {
                             Icon(Icons.Default.Stop, null, Modifier.size(14.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Stop")
+                            Text(stringResource(Res.string.stop))
                         }
                     }
                     Spacer(Modifier.width(8.dp))
@@ -388,7 +423,8 @@ internal fun StationTradingTab(
                                             if (stationSystemId != null) {
                                                 withContext(Dispatchers.IO) {
                                                     JumpGraphService.ensureRegionGraph(regionId) { progress ->
-                                                        statusMsg = "Building jump graph: ${progress.fetched}/${progress.total} systems…"
+                                                        statusMsg =
+                                                            stringBlocking(Res.string.building_jump_graph, progress.fetched, progress.total)
                                                     }
                                                     JumpGraphService.bfsDistances(stationSystemId, regionId)
                                                 }
@@ -403,7 +439,7 @@ internal fun StationTradingTab(
                                         // call either way — it trades in its own special region.
                                         val bulkByType: Map<Int, List<Map<String, Any?>>>? =
                                             if (filterGroupIds == null || typeIds.size > BULK_ORDER_FETCH_THRESHOLD) {
-                                                statusMsg = "Fetching all region orders…"
+                                                statusMsg = stringBlocking(Res.string.fetching_region_orders)
                                                 withContext(Dispatchers.IO) { EsiClient.getMarketRegionOrders(regionId) }
                                                     .groupBy { (it["type_id"] as? Number)?.toInt() ?: 0 }
                                             } else {
@@ -415,13 +451,13 @@ internal fun StationTradingTab(
                                         // per-type loop below runs 10-way parallel.
                                         val adam4EveFlow: Map<Int, StationFlow> =
                                             if (useAdam4EveSnap && stationIdSnap != null) {
-                                                statusMsg = "Fetching Adam4EVE flow…"
+                                                statusMsg = stringBlocking(Res.string.fetching_a4e)
                                                 Adam4EveFlowService.fetchStationFlow(stationIdSnap, typeIds)
                                             } else {
                                                 emptyMap()
                                             }
 
-                                        statusMsg = "0/${typeIds.size} types checked…"
+                                        statusMsg = stringBlocking(Res.string.types_checked_zero, typeIds.size)
 
                                         val semaphore = Semaphore(10)
                                         val mutex = Mutex()
@@ -503,7 +539,7 @@ internal fun StationTradingTab(
                                                                     }
                                                                 withContext(Dispatchers.Main) {
                                                                     if (sorted != null) results = sorted
-                                                                    statusMsg = "$c/${typeIds.size} checked, $f found"
+                                                                    statusMsg = stringBlocking(Res.string.checked_found, c, typeIds.size, f)
                                                                 }
                                                             }
                                                         }
@@ -511,12 +547,12 @@ internal fun StationTradingTab(
                                                 }.awaitAll()
                                         }
 
-                                        statusMsg = "${found.size} opportunities found"
+                                        statusMsg = stringBlocking(Res.string.n_found, found.size)
                                     } catch (e: CancellationException) {
-                                        statusMsg = "Stopped — ${results.size} opportunities found so far"
+                                        statusMsg = stringBlocking(Res.string.stopped_found, results.size)
                                         throw e
                                     } catch (e: Exception) {
-                                        statusMsg = "Error: ${e.message}"
+                                        statusMsg = stringBlocking(Res.string.status_error, e.message.orEmpty())
                                     } finally {
                                         isAnalyzing = false
                                     }
@@ -533,7 +569,7 @@ internal fun StationTradingTab(
                             Icon(Icons.Default.Search, null, Modifier.size(14.dp))
                         }
                         Spacer(Modifier.width(6.dp))
-                        Text(if (isAnalyzing) "Analyzing…" else "Analyze")
+                        Text(if (isAnalyzing) stringResource(Res.string.analyzing) else stringResource(Res.string.analyze))
                     }
                 }
             }
@@ -548,8 +584,8 @@ internal fun StationTradingTab(
         if (results.isEmpty() && !isAnalyzing) {
             AnalysisEmptyState(
                 icon = Icons.Default.Store,
-                primary = "Configure filters and click Analyze",
-                secondary = "Finds items with profitable spread between buy and sell orders at the same station",
+                primary = stringResource(Res.string.st_empty_primary),
+                secondary = stringResource(Res.string.st_empty_secondary),
             )
         } else {
             // Not capped at 100 — this scales volume in either direction (50 halves it, 200 doubles it).
@@ -606,8 +642,13 @@ internal fun StationTradingTab(
             if (charId != null && StationTradingQueue.size > 0) {
                 val hotkeyLabel by HotkeyBindings.queueLabel.collectAsState()
                 Text(
-                    "$hotkeyLabel cycles ${StationTradingQueue.size} item(s) — position " +
-                        "${StationTradingQueue.currentPosition}/${StationTradingQueue.size}",
+                    stringResource(
+                        Res.string.hotkey_cycles,
+                        hotkeyLabel,
+                        StationTradingQueue.size,
+                        StationTradingQueue.currentPosition,
+                        StationTradingQueue.size,
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp),

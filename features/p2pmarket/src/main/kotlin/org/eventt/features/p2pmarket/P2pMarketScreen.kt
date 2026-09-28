@@ -35,15 +35,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import org.eventt.p2pmarket.generated.resources.*
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.stringResource
 
 private enum class P2pMarketTab(
-    val label: String,
+    val label: StringResource,
 ) {
-    BROWSE("Browse"),
-    MY_ORDERS("My Orders"),
-    INCOMING_REQUESTS("Incoming Requests"),
-    MY_REQUESTS("My Requests"),
-    INBOX("Inbox"),
+    BROWSE(Res.string.tab_browse),
+    MY_ORDERS(Res.string.tab_my_orders),
+    INCOMING_REQUESTS(Res.string.tab_incoming),
+    MY_REQUESTS(Res.string.tab_my_requests),
+    INBOX(Res.string.tab_inbox),
 }
 
 /** Small numeric pill shown next to a tab/nav label — hidden entirely when there's nothing to flag. */
@@ -92,7 +95,7 @@ fun P2pMarketScreen() {
                         onClick = { tab = t },
                         text = {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(t.label)
+                                Text(stringResource(t.label))
                                 CountBadge(badgeCount)
                             }
                         },
@@ -113,7 +116,7 @@ fun P2pMarketScreen() {
                 }
             }
             IconButton(onClick = { showGuide = true }) {
-                Icon(Icons.Default.HelpOutline, contentDescription = "How P2P Market trading works")
+                Icon(Icons.Default.HelpOutline, contentDescription = stringResource(Res.string.how_p2p_works))
             }
         }
         when (tab) {
@@ -130,43 +133,33 @@ fun P2pMarketScreen() {
 private fun P2pMarketGuideDialog(onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("How P2P Market trading works") },
+        title = { Text(stringResource(Res.string.how_p2p_works)) },
         text = {
             Column(modifier = Modifier.widthIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    "This app only negotiates the deal over Nostr — Browse, requests, and Inbox track who " +
-                        "agreed to what, but no ISK or items ever move through the app itself. Once a " +
-                        "request is accepted, you still have to do the trade in EVE: meet up for a direct " +
-                        "trade, or use a contract for anything you can't hand over in person.",
+                    stringResource(Res.string.guide_1),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
-                    "Attribute trades to a character or corp",
+                    stringResource(Res.string.guide_attr_title),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    "ESI has no visibility into a player trade or contract at all, so unlike a market " +
-                        "order, a P2P deal never counts toward cost-basis/margin (Orders, Dashboard) unless " +
-                        "you tell the app who it belongs to.",
+                    stringResource(Res.string.guide_2),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
-                    "• My Orders → \"Attribute new trades to:\" sets the default every trade you complete " +
-                        "afterward starts out booked to.\n" +
-                        "• Inbox → \"Attributed to\" changes it for any single trade, any time — including " +
-                        "trades from before you set a default.",
+                    stringResource(Res.string.guide_3),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
-                    "This is separate from which character negotiated the deal — attribution only decides " +
-                        "whose cost-basis ledger the ISK/item counts toward (e.g. trading personally but " +
-                        "booking it as a corp trade).",
+                    stringResource(Res.string.guide_4),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Got it") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.got_it)) } },
     )
 }

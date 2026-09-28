@@ -8,14 +8,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import org.eventt.app.generated.resources.Res
-import org.eventt.app.generated.resources.icon
+import org.eventt.app.generated.resources.*
 import org.eventt.core.cache.EsiCacheManager
+import org.eventt.core.database.AppLanguage
 import org.eventt.core.database.DatabaseManager
 import org.eventt.core.http.EveHttpClient
 import org.eventt.core.marketlogs.MarketLogWatcher
 import org.eventt.core.model.AppPaths
 import org.eventt.core.model.HotkeyBindings
+import org.eventt.core.model.stringBlocking
 import org.eventt.core.nostr.NostrIdentityService
 import org.eventt.core.nostr.NostrRelayManager
 import org.eventt.features.assets.AssetWatchService
@@ -45,8 +46,8 @@ private fun acquireSingleInstanceLockOrExit() {
         raf.close()
         JOptionPane.showMessageDialog(
             null,
-            "EVE Night Trade Tools is already running.",
-            "Already running",
+            stringBlocking(Res.string.already_running_msg),
+            stringBlocking(Res.string.already_running_title),
             JOptionPane.WARNING_MESSAGE,
         )
         exitProcess(1)
@@ -75,6 +76,7 @@ fun main() {
     try {
         DatabaseManager.initialize()
         println("[App] Database initialized successfully")
+        AppLanguage.apply()
         // Cache hygiene while nothing else touches the DB yet: purge long-expired ESI cache rows,
         // then reclaim file space when enough has accumulated (both are cheap no-ops otherwise).
         // These existed but were never wired in — the measured result was a 710MB database where

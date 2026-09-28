@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="chars_corps_title">Персонажи и корпорации</string>
+    <string name="add_character">Добавить персонажа</string>
+    <string name="no_characters_added">Персонажи не добавлены</string>
+    <string name="no_characters_desc">Нажмите «Добавить персонажа», чтобы войти через EVE Online SSO.</string>
+    <string name="corporations">Корпорации</string>
+    <string name="corporations_desc">В переключателе персонажей показываются и синхронизируются только отслеживаемые корпорации — отслеживайте ту, чьей торговлей вы действительно управляете, остальные не трогайте.</string>
+    <string name="authenticating">Авторизация...</string>
+    <string name="sso_browser_hint">Откроется браузер для входа через EVE Online SSO.</string>
+    <string name="open_browser">Открыть браузер</string>
+    <string name="cancel">Отмена</string>
+    <string name="remove_character">Удалить персонажа</string>
+    <string name="remove_character_msg">Удалить «%1$s»? Связанные кэшированные данные тоже будут удалены.</string>
+    <string name="token_expired">Токен истёк</string>
+    <string name="token_valid">Токен действителен</string>
+    <string name="corporation_label">Корпорация: %1$s</string>
+    <string name="refresh">Обновить</string>
+    <string name="remove">Удалить</string>
+    <string name="unknown">Неизвестно</string>
+    <string name="untrack">Не отслеживать</string>
+    <string name="track">Отслеживать</string>
+</resources>

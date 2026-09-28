@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="er_starting">Starting sync…</string>
+    <string name="er_cleaning">Cleaning old data outside period…</string>
+    <string name="er_fetching_index">Fetching file index…</string>
+    <string name="er_up_to_date">Already up to date</string>
+    <string name="er_downloading">Downloading %1$s file(s) (%2$s parallel)…</string>
+    <string name="er_progress">%1$s/%2$s downloaded…</string>
+    <string name="er_complete">Sync complete — %1$s files downloaded</string>
+    <string name="er_complete_failed">Sync complete — %1$s downloaded, %2$s failed</string>
+    <string name="er_cancelled">Sync cancelled</string>
+    <string name="er_failed">Sync failed: %1$s</string>
+</resources>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="auth_timeout">Authentication timed out — browser may not have opened or callback blocked</string>
+    <string name="html_auth_failed">&lt;html&gt;&lt;body&gt;&lt;h1&gt;Authentication failed&lt;/h1&gt;&lt;p&gt;%1$s&lt;/p&gt;&lt;p&gt;You can close this window.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+    <string name="sso_error">SSO error: %1$s</string>
+    <string name="html_auth_ok">&lt;html&gt;&lt;body&gt;&lt;h1&gt;Authentication successful!&lt;/h1&gt;&lt;p&gt;Welcome, %1$s! You can close this window.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+    <string name="html_exchange_failed">&lt;html&gt;&lt;body&gt;&lt;h1&gt;Authentication failed&lt;/h1&gt;&lt;p&gt;Could not exchange token. The code may have been used already or is invalid.&lt;/p&gt;&lt;p&gt;You can close this window.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+    <string name="token_exchange_failed">Token exchange failed — code invalid or expired</string>
+    <string name="html_no_code">&lt;html&gt;&lt;body&gt;&lt;h1&gt;Authentication failed&lt;/h1&gt;&lt;p&gt;No authorization code received.&lt;/p&gt;&lt;p&gt;You can close this window.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+    <string name="no_auth_code">No authorization code in callback</string>
+</resources>

@@ -36,10 +36,13 @@ import org.eventt.core.database.NostrReservationModel
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.TransactionAttribution
 import org.eventt.core.database.WalletDao
+import org.eventt.core.model.stringBlocking
 import org.eventt.core.nostr.NostrRelayEvent
 import org.eventt.core.nostr.NostrRelayManager
 import org.eventt.core.nostr.ReceiptService
 import org.eventt.core.nostr.p2pTransactionId
+import org.eventt.p2pmarket.generated.resources.*
+import org.jetbrains.compose.resources.stringResource
 import java.time.Instant
 
 private data class InboxRowData(
@@ -90,7 +93,9 @@ fun InboxScreen() {
             withContext(Dispatchers.IO) {
                 completed.map { reservation ->
                     val order = NostrOrderDao.getByCoordinate(reservation.orderUuid, reservation.orderPubkey)
-                    val typeName = order?.let { StaticDataDao.getTypeById(it.typeId)?.name } ?: "Order ${reservation.orderUuid.take(8)}…"
+                    val typeName =
+                        order?.let { StaticDataDao.getTypeById(it.typeId)?.name }
+                            ?: stringBlocking(Res.string.order_n, reservation.orderUuid.take(8))
                     val attribution = WalletDao.getAttribution(p2pTransactionId(reservation.tradeId, reservation.role))
                     InboxRowData(reservation, typeName, NostrReceiptDao.hasMutualReceipt(reservation.tradeId), attribution, order)
                 }
@@ -112,7 +117,7 @@ fun InboxScreen() {
         if (displayedRows.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    "No completed trades yet — mark a trade completed from My Orders or My Requests once you've traded in-game",
+                    stringResource(Res.string.no_completed_trades),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -153,23 +158,38 @@ private fun InboxTableHeader(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("Item", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        Text(
+            stringResource(Res.string.h_item),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f),
+        )
         SortHeaderCell(
-            "Qty",
+            stringResource(Res.string.h_qty),
             Modifier.width(80.dp),
             active = sortColumn == InboxSortColumn.QTY,
             direction = sortDirection,
         ) { onSort(InboxSortColumn.QTY, SortDirection.DESC) }
-        Text("Role", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(80.dp))
-        Text("Status", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(260.dp))
         Text(
-            "Attributed to",
+            stringResource(Res.string.h_role),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.width(80.dp),
+        )
+        Text(
+            stringResource(Res.string.h_status),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.width(260.dp),
+        )
+        Text(
+            stringResource(Res.string.h_attributed_to),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.width(160.dp),
         )
         SortHeaderCell(
-            "Requested",
+            stringResource(Res.string.h_requested),
             Modifier.width(110.dp),
             active = sortColumn == InboxSortColumn.REQUESTED,
             direction = sortDirection,
@@ -200,14 +220,14 @@ private fun InboxTableRow(
         Text("${reservation.qty}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(80.dp))
         Text(reservation.role, style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(80.dp))
         Text(
-            if (row.isConfirmed) "Confirmed — counted toward reputation" else "Awaiting counterparty confirmation",
+            if (row.isConfirmed) stringResource(Res.string.confirmed_rep) else stringResource(Res.string.awaiting_confirmation),
             style = MaterialTheme.typography.labelSmall,
             color = if (row.isConfirmed) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.width(260.dp),
         )
         AttributionPicker(row.attribution, onAttributionChange, modifier = Modifier.width(160.dp))
         Text(
-            "${formatDurationShort(nowSec - reservation.requestedAt)} ago",
+            stringResource(Res.string.time_ago, formatDurationShort(nowSec - reservation.requestedAt)),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,

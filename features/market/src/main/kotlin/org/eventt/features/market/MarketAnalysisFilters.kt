@@ -26,6 +26,8 @@ import androidx.compose.ui.unit.dp
 import org.eventt.core.model.StaticMarketGroupModel
 import org.eventt.core.model.StaticRegionModel
 import org.eventt.core.model.StaticStationModel
+import org.eventt.market.generated.resources.*
+import org.jetbrains.compose.resources.stringResource
 
 // ─── Filter bar design tokens ──────────────────────────────────────────────
 // A single fixed control height + shape shared by every dropdown chip and text field so a
@@ -200,8 +202,7 @@ internal fun CheckboxParamField(
 @Composable
 internal fun EveRefHint() {
     Text(
-        "Tip: scanning all categories fetches price history from ESI per profitable item — " +
-            "enable EVE Ref bulk data in Settings to make history lookups local and instant.",
+        stringResource(Res.string.evehead_hint),
         style = MaterialTheme.typography.labelSmall,
         color = Color(0xFFFFB74D),
     )
@@ -246,7 +247,7 @@ internal fun RouteArrow(onSwap: (() -> Unit)? = null) {
     ) {
         Icon(
             if (onSwap != null) Icons.Default.SwapHoriz else Icons.AutoMirrored.Filled.ArrowForward,
-            contentDescription = if (onSwap != null) "Swap buy/sell" else null,
+            contentDescription = if (onSwap != null) stringResource(Res.string.swap_buy_sell) else null,
             modifier = Modifier.size(16.dp),
             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (onSwap != null) 0.7f else 0.35f),
         )
@@ -260,7 +261,7 @@ internal fun RegionPicker(
     allRegions: List<StaticRegionModel>,
     selectedRegionId: Int,
     width: Dp = 160.dp,
-    label: String = "Region",
+    label: String = stringResource(Res.string.region),
     accentColor: Color? = null,
     onSelect: (Int) -> Unit,
 ) {
@@ -326,14 +327,26 @@ internal fun RegionPicker(
                         modifier = Modifier.fillMaxWidth(),
                         textStyle = MaterialTheme.typography.bodySmall,
                         singleLine = true,
-                        placeholder = { Text("Search…", style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
+                        placeholder = {
+                            Text(
+                                stringResource(Res.string.search_ellipsis),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray,
+                            )
+                        },
                         leadingIcon = { Icon(Icons.Default.Search, null, Modifier.size(16.dp)) },
                     )
                 }
                 HorizontalDivider()
                 if (filtered.isEmpty()) {
                     DropdownMenuItem(
-                        text = { Text("No match for \"$searchQuery\"", style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
+                        text = {
+                            Text(
+                                stringResource(Res.string.no_match_for, searchQuery),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray,
+                            )
+                        },
                         onClick = {},
                         enabled = false,
                     )
@@ -367,15 +380,16 @@ internal fun StationPicker(
     stations: List<StaticStationModel>,
     selectedStationId: Long?,
     width: Dp = 200.dp,
-    label: String = "Station",
+    label: String = stringResource(Res.string.station),
     onSelect: (Long?) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
 
+    val allStationsLabel = stringResource(Res.string.all_stations)
     val selectedName =
-        remember(selectedStationId, stations) {
-            stations.find { it.stationId == selectedStationId }?.name ?: "All stations"
+        remember(selectedStationId, stations, allStationsLabel) {
+            stations.find { it.stationId == selectedStationId }?.name ?: allStationsLabel
         }
     val filtered =
         remember(searchQuery, stations) {
@@ -436,13 +450,19 @@ internal fun StationPicker(
                         modifier = Modifier.fillMaxWidth(),
                         textStyle = MaterialTheme.typography.bodySmall,
                         singleLine = true,
-                        placeholder = { Text("Search station…", style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
+                        placeholder = {
+                            Text(
+                                stringResource(Res.string.search_station),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray,
+                            )
+                        },
                         leadingIcon = { Icon(Icons.Default.Search, null, Modifier.size(16.dp)) },
                     )
                 }
                 HorizontalDivider()
                 DropdownMenuItem(
-                    text = { Text("All stations", style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
+                    text = { Text(allStationsLabel, style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
                     onClick = {
                         onSelect(null)
                         expanded = false
@@ -458,13 +478,25 @@ internal fun StationPicker(
                 HorizontalDivider()
                 if (stations.isEmpty()) {
                     DropdownMenuItem(
-                        text = { Text("No stations in this region", style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
+                        text = {
+                            Text(
+                                stringResource(Res.string.no_stations_region),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray,
+                            )
+                        },
                         onClick = {},
                         enabled = false,
                     )
                 } else if (filtered.isEmpty()) {
                     DropdownMenuItem(
-                        text = { Text("No match for \"$searchQuery\"", style = MaterialTheme.typography.bodySmall, color = Color.Gray) },
+                        text = {
+                            Text(
+                                stringResource(Res.string.no_match_for, searchQuery),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray,
+                            )
+                        },
                         onClick = {},
                         enabled = false,
                     )
@@ -585,11 +617,11 @@ internal fun TradeTypeChip(
 ) {
     var expanded by remember { mutableStateOf(false) }
 
-    FilterControl("Trade Type") {
+    FilterControl(stringResource(Res.string.trade_type)) {
         Box {
             ChipSurface(onClick = { expanded = !expanded }, width = 175.dp) {
                 Text(
-                    selected.label,
+                    stringResource(selected.label),
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -609,7 +641,7 @@ internal fun TradeTypeChip(
             ) {
                 InterRegionTradeType.entries.forEach { t ->
                     DropdownMenuItem(
-                        text = { Text(t.label, style = MaterialTheme.typography.bodySmall) },
+                        text = { Text(stringResource(t.label), style = MaterialTheme.typography.bodySmall) },
                         onClick = {
                             onSelect(t)
                             expanded = false
@@ -636,11 +668,11 @@ internal fun SpikeFilterChip(
 ) {
     var expanded by remember { mutableStateOf(false) }
 
-    FilterControl("Price Spike") {
+    FilterControl(stringResource(Res.string.price_spike)) {
         Box {
             ChipSurface(onClick = { expanded = !expanded }, width = 150.dp) {
                 Text(
-                    selected.label,
+                    stringResource(selected.label),
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -660,7 +692,7 @@ internal fun SpikeFilterChip(
             ) {
                 SpikeFilter.entries.forEach { f ->
                     DropdownMenuItem(
-                        text = { Text(f.label, style = MaterialTheme.typography.bodySmall) },
+                        text = { Text(stringResource(f.label), style = MaterialTheme.typography.bodySmall) },
                         onClick = {
                             onSelect(f)
                             expanded = false

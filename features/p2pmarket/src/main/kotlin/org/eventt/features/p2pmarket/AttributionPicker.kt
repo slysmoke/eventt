@@ -21,6 +21,9 @@ import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.CorporationDao
 import org.eventt.core.database.TransactionAttribution
 import org.eventt.core.model.CharacterModel
+import org.eventt.core.model.stringBlocking
+import org.eventt.p2pmarket.generated.resources.*
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Character/corp picker for a P2P trade's cost-basis attribution — used both per-trade (Inbox)
@@ -50,22 +53,22 @@ internal fun AttributionPicker(
                 chars
                     .mapNotNull { it.corporationId }
                     .distinct()
-                    .map { it to (corpNames[it] ?: "Corp #$it") }
+                    .map { it to (corpNames[it] ?: stringBlocking(Res.string.corp_n, it)) }
         }
     }
 
     val label =
         when (current) {
             is TransactionAttribution.Character -> {
-                characters.find { it.id == current.characterId }?.name ?: "Character #${current.characterId}"
+                characters.find { it.id == current.characterId }?.name ?: stringResource(Res.string.character_n, current.characterId)
             }
 
             is TransactionAttribution.Corporation -> {
-                corporations.find { it.first == current.corporationId }?.second ?: "Corp #${current.corporationId}"
+                corporations.find { it.first == current.corporationId }?.second ?: stringResource(Res.string.corp_n, current.corporationId)
             }
 
             null -> {
-                "Unattributed"
+                stringResource(Res.string.unattributed)
             }
         }
 

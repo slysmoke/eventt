@@ -35,6 +35,8 @@ import kotlinx.coroutines.withContext
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.model.HotkeyBindings
 import org.eventt.core.model.HotkeyCombo
+import org.eventt.settings.generated.resources.*
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Rebind the two global hotkeys by pressing the wanted combination: any mix of Ctrl/Alt/Shift
@@ -67,17 +69,14 @@ internal fun HotkeysCard() {
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Global Hotkeys", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(Res.string.global_hotkeys), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
-                "System-wide — they trigger even while the EVE client has focus. Click a binding, then " +
-                    "press the combination you want (Ctrl/Alt/Shift + a letter or F1–F12, at least one modifier). " +
-                    "Extra mouse buttons: bind them to this combination in your mouse software " +
-                    "(Logitech G HUB, Razer Synapse, input-remapper on Linux).",
+                stringResource(Res.string.global_hotkeys_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             HotkeyCaptureRow(
-                label = "Cycle order/trade queue",
+                label = stringResource(Res.string.hotkey_cycle_queue),
                 combo = queueCombo,
                 takenCombo = overlayCombo,
                 onPick = { queueCombo = it },
@@ -85,7 +84,7 @@ internal fun HotkeysCard() {
                 save = ::save,
             )
             HotkeyCaptureRow(
-                label = "Toggle Trade Calc overlay",
+                label = stringResource(Res.string.hotkey_toggle_calc),
                 combo = overlayCombo,
                 takenCombo = queueCombo,
                 onPick = { overlayCombo = it },
@@ -151,6 +150,10 @@ private fun HotkeyCaptureRow(
     var capturing by remember { mutableStateOf(false) }
     var hint by remember { mutableStateOf<String?>(null) }
     var pendingSave by remember { mutableStateOf<HotkeyCombo?>(null) }
+    val hintKeys = stringResource(Res.string.hotkey_hint_keys)
+    val hintModifier = stringResource(Res.string.hotkey_hint_modifier)
+    // A picked combo can only clash with takenCombo, so its label is known up front.
+    val hintTaken = stringResource(Res.string.hotkey_hint_taken, takenCombo.label)
     val focusRequester = remember { FocusRequester() }
 
     LaunchedEffect(pendingSave) {
@@ -202,7 +205,7 @@ private fun HotkeyCaptureRow(
                                         event.key == Key.AltRight ||
                                         event.key == Key.ShiftLeft ||
                                         event.key == Key.ShiftRight
-                                if (!isModifier) hint = "Press Ctrl/Alt/Shift + a letter (A–Z) or F1–F12"
+                                if (!isModifier) hint = hintKeys
                             }
 
                             else -> {
@@ -215,11 +218,11 @@ private fun HotkeyCaptureRow(
                                     )
                                 when {
                                     !picked.ctrl && !picked.alt && !picked.shift -> {
-                                        hint = "Hold at least one modifier (Ctrl/Alt/Shift)"
+                                        hint = hintModifier
                                     }
 
                                     picked == takenCombo -> {
-                                        hint = "${picked.label} is already used by the other hotkey"
+                                        hint = hintTaken
                                     }
 
                                     else -> {
@@ -234,7 +237,7 @@ private fun HotkeyCaptureRow(
                         true // swallow everything while capturing
                     },
         ) {
-            Text(if (capturing) "Press keys…" else combo.label)
+            Text(if (capturing) stringResource(Res.string.press_keys) else combo.label)
         }
     }
 }

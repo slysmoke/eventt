@@ -18,6 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.eventt.contracts.generated.resources.*
 import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.ContractDao
 import org.eventt.core.database.StaticDataDao
@@ -26,10 +27,12 @@ import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.ContractItemModel
 import org.eventt.core.model.ContractModel
 import org.eventt.core.model.CorpFeature
+import org.eventt.core.model.stringBlocking
 import org.eventt.ui.common.*
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.eventt.ui.theme.warningColor
+import org.jetbrains.compose.resources.stringResource
 
 private const val SHOW_ALL_CONTRACTS_SETTING = "contracts.show_all"
 
@@ -165,7 +168,7 @@ fun ContractTrackerScreen(context: ViewContext?) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Contract Tracker", style = MaterialTheme.typography.headlineMedium)
+            Text(stringResource(Res.string.contract_tracker), style = MaterialTheme.typography.headlineMedium)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
                     selected = autoRefresh,
@@ -173,7 +176,7 @@ fun ContractTrackerScreen(context: ViewContext?) {
                         autoRefresh = !autoRefresh
                         scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(CONTRACTS_AUTO_REFRESH_SETTING, autoRefresh.toString()) }
                     },
-                    label = { Text("Auto-refresh", style = MaterialTheme.typography.bodySmall) },
+                    label = { Text(stringResource(Res.string.auto_refresh), style = MaterialTheme.typography.bodySmall) },
                     leadingIcon = if (autoRefresh) autoRefreshIcon else null,
                 )
                 FilterChip(
@@ -182,14 +185,14 @@ fun ContractTrackerScreen(context: ViewContext?) {
                         showAll = !showAll
                         scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SHOW_ALL_CONTRACTS_SETTING, showAll.toString()) }
                     },
-                    label = { Text("Show All", style = MaterialTheme.typography.bodySmall) },
+                    label = { Text(stringResource(Res.string.show_all), style = MaterialTheme.typography.bodySmall) },
                 )
                 if (!showAll && actingCharId != null) {
                     EsiRefreshButton(
                         isLoading = isLoading,
                         expiresAtMs = refreshAvailableAt,
                         onClick = { refresh() },
-                        label = "Refresh",
+                        label = stringResource(Res.string.refresh),
                     )
                 }
             }
@@ -206,17 +209,17 @@ fun ContractTrackerScreen(context: ViewContext?) {
         LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             items(
                 listOf(
-                    "all" to "All",
-                    "outstanding" to "Outstanding",
-                    "in_progress" to "In Progress",
-                    "finished" to "Finished",
-                    "cancelled" to "Cancelled",
+                    "all" to Res.string.status_all,
+                    "outstanding" to Res.string.status_outstanding,
+                    "in_progress" to Res.string.status_in_progress,
+                    "finished" to Res.string.status_finished,
+                    "cancelled" to Res.string.status_cancelled,
                 ),
             ) { (key, label) ->
                 FilterChip(
                     selected = statusFilter == key,
                     onClick = { statusFilter = key },
-                    label = { Text(label, style = MaterialTheme.typography.bodySmall) },
+                    label = { Text(stringResource(label), style = MaterialTheme.typography.bodySmall) },
                 )
             }
         }
@@ -227,17 +230,17 @@ fun ContractTrackerScreen(context: ViewContext?) {
         LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             items(
                 listOf(
-                    "all" to "All types",
-                    "item_exchange" to "Item Exchange",
-                    "courier" to "Courier",
-                    "auction" to "Auction",
-                    "loan" to "Loan",
+                    "all" to Res.string.type_all,
+                    "item_exchange" to Res.string.type_item_exchange,
+                    "courier" to Res.string.type_courier,
+                    "auction" to Res.string.type_auction,
+                    "loan" to Res.string.type_loan,
                 ),
             ) { (key, label) ->
                 FilterChip(
                     selected = typeFilter == key,
                     onClick = { typeFilter = key },
-                    label = { Text(label, style = MaterialTheme.typography.bodySmall) },
+                    label = { Text(stringResource(label), style = MaterialTheme.typography.bodySmall) },
                 )
             }
         }
@@ -246,8 +249,13 @@ fun ContractTrackerScreen(context: ViewContext?) {
 
         // Sort controls
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            SortChip("Issued", SortField.ISSUED, sortField, sortDirection) { toggleSort(SortField.ISSUED) }
-            SortChip("Completed", SortField.COMPLETED, sortField, sortDirection) { toggleSort(SortField.COMPLETED) }
+            SortChip(stringResource(Res.string.sort_issued), SortField.ISSUED, sortField, sortDirection) { toggleSort(SortField.ISSUED) }
+            SortChip(
+                stringResource(Res.string.sort_completed),
+                SortField.COMPLETED,
+                sortField,
+                sortDirection,
+            ) { toggleSort(SortField.COMPLETED) }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -256,8 +264,8 @@ fun ContractTrackerScreen(context: ViewContext?) {
         if (visibleContracts.isEmpty()) {
             EmptyState(
                 icon = Icons.Default.Folder,
-                title = "No Contracts",
-                description = "Select a character to fetch contracts from ESI.",
+                title = stringResource(Res.string.no_contracts),
+                description = stringResource(Res.string.select_char_contracts),
             )
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -275,7 +283,7 @@ fun ContractTrackerScreen(context: ViewContext?) {
         }
     }
 
-    LoadingOverlay(isLoading = isLoading, message = "Fetching contracts from ESI...")
+    LoadingOverlay(isLoading = isLoading, message = stringResource(Res.string.fetching_contracts))
 }
 
 @Composable
@@ -370,7 +378,7 @@ private fun ContractCard(
                 Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = if (expanded) "Collapse" else "Expand",
+                        contentDescription = if (expanded) stringResource(Res.string.collapse) else stringResource(Res.string.expand),
                         modifier = Modifier.size(20.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -380,7 +388,7 @@ private fun ContractCard(
                             Text(contract.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         }
                         Text(
-                            text = "${contract.type.replace("_", " ").capitalize()} • ${contract.status.replace("_", " ").capitalize()}",
+                            text = "${contractTypeLabel(contract.type)} • ${contractStatusLabel(contract.status)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = statusColor,
                         )
@@ -389,7 +397,7 @@ private fun ContractCard(
 
                 Surface(color = statusColor.copy(alpha = 0.15f), shape = MaterialTheme.shapes.small) {
                     Text(
-                        text = contract.status.replace("_", " ").capitalize(),
+                        text = contractStatusLabel(contract.status),
                         style = MaterialTheme.typography.labelMedium,
                         color = statusColor,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -404,10 +412,10 @@ private fun ContractCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                if (contract.price > 0) InfoItem("Price", formatIsk(contract.price))
-                if (contract.reward > 0) InfoItem("Reward", formatIsk(contract.reward))
-                if (contract.collateral > 0) InfoItem("Collateral", formatIsk(contract.collateral))
-                if (contract.buyout > 0) InfoItem("Buyout", formatIsk(contract.buyout))
+                if (contract.price > 0) InfoItem(stringResource(Res.string.info_price), formatIsk(contract.price))
+                if (contract.reward > 0) InfoItem(stringResource(Res.string.info_reward), formatIsk(contract.reward))
+                if (contract.collateral > 0) InfoItem(stringResource(Res.string.info_collateral), formatIsk(contract.collateral))
+                if (contract.buyout > 0) InfoItem(stringResource(Res.string.info_buyout), formatIsk(contract.buyout))
             }
 
             // Dates
@@ -416,8 +424,16 @@ private fun ContractCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text("Issued: ${contract.dateIssued.take(10)}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                Text("Expires: ${contract.dateExpired.take(10)}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                Text(
+                    stringResource(Res.string.issued_date, contract.dateIssued.take(10)),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray,
+                )
+                Text(
+                    stringResource(Res.string.expires_date, contract.dateExpired.take(10)),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray,
+                )
             }
 
             if (expanded) {
@@ -427,7 +443,7 @@ private fun ContractCard(
                 Spacer(modifier = Modifier.height(8.dp))
                 val currentItems = items
                 if (currentItems == null) {
-                    Text("Loading items…", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                    Text(stringResource(Res.string.loading_items), style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                 } else {
                     ContractItemsSection(currentItems)
                 }
@@ -442,8 +458,10 @@ private fun ContractDetails(
     partyNames: Map<Int, String>,
 ) {
     fun partyLabel(id: Int) = if (id <= 0) null else partyNames[id] ?: "#$id"
-    val startLocation = StaticDataDao.getStationById(contract.startStationId)?.name ?: "Station #${contract.startStationId}"
-    val endLocation = StaticDataDao.getStationById(contract.endStationId)?.name ?: "Station #${contract.endStationId}"
+    val startLocation =
+        StaticDataDao.getStationById(contract.startStationId)?.name ?: stringResource(Res.string.station_n, contract.startStationId)
+    val endLocation =
+        StaticDataDao.getStationById(contract.endStationId)?.name ?: stringResource(Res.string.station_n, contract.endStationId)
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (contract.description.isNotBlank()) {
@@ -451,21 +469,25 @@ private fun ContractDetails(
         }
 
         FlowInfoRow {
-            contract.dateAccepted?.let { InfoItem("Accepted", it.take(10)) }
-            contract.dateCompleted?.let { InfoItem("Completed", it.take(10)) }
-            if (contract.numDays > 0) InfoItem("Duration", "${contract.numDays}d")
-            InfoItem("For corp", if (contract.forCorp) "Yes" else "No")
+            contract.dateAccepted?.let { InfoItem(stringResource(Res.string.info_accepted), it.take(10)) }
+            contract.dateCompleted?.let { InfoItem(stringResource(Res.string.sort_completed), it.take(10)) }
+            if (contract.numDays >
+                0
+            ) {
+                InfoItem(stringResource(Res.string.info_duration), stringResource(Res.string.days_short, contract.numDays))
+            }
+            InfoItem(stringResource(Res.string.info_for_corp), stringResource(if (contract.forCorp) Res.string.yes else Res.string.no))
         }
 
         FlowInfoRow {
-            InfoItem("From", startLocation)
-            if (contract.endStationId != contract.startStationId) InfoItem("To", endLocation)
+            InfoItem(stringResource(Res.string.info_from), startLocation)
+            if (contract.endStationId != contract.startStationId) InfoItem(stringResource(Res.string.info_to), endLocation)
         }
 
         FlowInfoRow {
-            partyLabel(contract.issuerId)?.let { InfoItem("Issuer", it) }
-            partyLabel(contract.assigneeId)?.let { InfoItem("Assignee", it) }
-            partyLabel(contract.acceptorId)?.let { InfoItem("Acceptor", it) }
+            partyLabel(contract.issuerId)?.let { InfoItem(stringResource(Res.string.info_issuer), it) }
+            partyLabel(contract.assigneeId)?.let { InfoItem(stringResource(Res.string.info_assignee), it) }
+            partyLabel(contract.acceptorId)?.let { InfoItem(stringResource(Res.string.info_acceptor), it) }
         }
     }
 }
@@ -478,7 +500,7 @@ private fun FlowInfoRow(content: @Composable () -> Unit) {
 @Composable
 private fun ContractItemsSection(items: List<ContractItemModel>) {
     if (items.isEmpty()) {
-        Text("No items on this contract", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+        Text(stringResource(Res.string.no_items_contract), style = MaterialTheme.typography.labelSmall, color = Color.Gray)
         return
     }
     val included = items.filter { it.isIncluded }
@@ -486,12 +508,16 @@ private fun ContractItemsSection(items: List<ContractItemModel>) {
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (included.isNotEmpty()) {
-            Text("Items", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(Res.string.items), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
             included.forEach { ContractItemRow(it) }
         }
         if (requested.isNotEmpty()) {
             Spacer(Modifier.height(4.dp))
-            Text("Requested in exchange", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                stringResource(Res.string.requested_in_exchange),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
             requested.forEach { ContractItemRow(it) }
         }
     }
@@ -529,7 +555,7 @@ private fun Map<String, Any?>.toContractItemModel(contractId: Int): ContractItem
         contractId = contractId,
         recordId = (this["record_id"] as? Number)?.toInt() ?: 0,
         typeId = typeId,
-        typeName = StaticDataDao.getTypeById(typeId)?.name ?: "Type #$typeId",
+        typeName = StaticDataDao.getTypeById(typeId)?.name ?: stringBlocking(Res.string.type_n, typeId),
         quantity = (this["quantity"] as? Number)?.toInt() ?: 0,
         rawQuantity = (this["raw_quantity"] as? Number)?.toInt() ?: 0,
         isIncluded = (this["is_included"] as? Boolean) ?: true,
@@ -539,3 +565,29 @@ private fun Map<String, Any?>.toContractItemModel(contractId: Int): ContractItem
 }
 
 private fun String.capitalize(): String = replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+
+@Composable
+private fun contractTypeLabel(type: String): String =
+    when (type) {
+        "item_exchange" -> stringResource(Res.string.type_item_exchange)
+        "courier" -> stringResource(Res.string.type_courier)
+        "auction" -> stringResource(Res.string.type_auction)
+        "loan" -> stringResource(Res.string.type_loan)
+        else -> type.replace("_", " ").capitalize()
+    }
+
+@Composable
+private fun contractStatusLabel(status: String): String =
+    when (status) {
+        "outstanding" -> stringResource(Res.string.cst_outstanding)
+        "in_progress" -> stringResource(Res.string.cst_in_progress)
+        "finished" -> stringResource(Res.string.cst_finished)
+        "finished_issuer" -> stringResource(Res.string.status_finished_issuer)
+        "finished_contractor" -> stringResource(Res.string.status_finished_contractor)
+        "cancelled" -> stringResource(Res.string.cst_cancelled)
+        "rejected" -> stringResource(Res.string.status_rejected)
+        "failed" -> stringResource(Res.string.status_failed)
+        "deleted" -> stringResource(Res.string.status_deleted)
+        "reversed" -> stringResource(Res.string.status_reversed)
+        else -> status.replace("_", " ").capitalize()
+    }

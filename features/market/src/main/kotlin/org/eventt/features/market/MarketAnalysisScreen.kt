@@ -16,6 +16,9 @@ import org.eventt.core.database.AppState
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.model.StaticMarketGroupModel
 import org.eventt.core.model.StaticRegionModel
+import org.eventt.market.generated.resources.*
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.stringResource
 
 // Past this many candidate types, one paginated all-orders region fetch (a few hundred pages)
 // is cheaper than a separate per-type request each — see the bulk cutover in both Analyze paths.
@@ -114,12 +117,12 @@ internal enum class RegionSortCol {
 }
 
 internal enum class InterRegionTradeType(
-    val label: String,
+    val label: StringResource,
 ) {
-    SELL_TO_BUY("Sell → Buy (instant)"),
-    SELL_TO_SELL("Sell → Sell Order"),
-    BUY_TO_BUY("Buy Order → Buy"),
-    BUY_TO_SELL("Buy → Sell (orders)"),
+    SELL_TO_BUY(Res.string.tt_sell_to_buy),
+    SELL_TO_SELL(Res.string.tt_sell_to_sell),
+    BUY_TO_BUY(Res.string.tt_buy_to_buy),
+    BUY_TO_SELL(Res.string.tt_buy_to_sell),
 
     // Places a buy order at the source like BUY_TO_SELL, but doesn't price it by outbidding the
     // current best buy order — instead it's priced at the source's lowest sell price minus the
@@ -128,17 +131,17 @@ internal enum class InterRegionTradeType(
     // squeeze), which is fine for us — we're hauling the stock to sellRegion to sell anyway, so we
     // don't care about capturing margin at the source station, just about a cheap, low-competition
     // fill. Sell leg is a placed sell order at the destination, same as BUY_TO_SELL.
-    SAFE_BUY_TO_SELL("Safe Buy → Sell (orders)"),
+    SAFE_BUY_TO_SELL(Res.string.tt_safe_buy_to_sell),
 }
 
 // Tri-state: don't care either way, cut items whose recent price history shows a spike, or
 // show only those — see detectPriceSpike for what qualifies.
 internal enum class SpikeFilter(
-    val label: String,
+    val label: StringResource,
 ) {
-    ANY("Any"),
-    EXCLUDE("Exclude spikes"),
-    ONLY("Only spikes"),
+    ANY(Res.string.spike_any),
+    EXCLUDE(Res.string.spike_exclude),
+    ONLY(Res.string.spike_only),
 }
 
 // The effective daily volume for a station opportunity once the volume modifier is applied —
@@ -380,19 +383,19 @@ fun MarketAnalysisScreen() {
             Tab(
                 selected = selectedTab == 0,
                 onClick = { selectedTab = 0 },
-                text = { Text("Station Trading") },
+                text = { Text(stringResource(Res.string.tab_station_trading)) },
                 icon = { Icon(Icons.Default.Store, null, Modifier.size(16.dp)) },
             )
             Tab(
                 selected = selectedTab == 1,
                 onClick = { selectedTab = 1 },
-                text = { Text("Inter-Region") },
+                text = { Text(stringResource(Res.string.tab_inter_region)) },
                 icon = { Icon(Icons.AutoMirrored.Filled.CompareArrows, null, Modifier.size(16.dp)) },
             )
             Tab(
                 selected = selectedTab == 2,
                 onClick = { selectedTab = 2 },
-                text = { Text("Long-Term Investment (WIP)") },
+                text = { Text(stringResource(Res.string.tab_long_term)) },
                 icon = { Icon(Icons.AutoMirrored.Filled.TrendingDown, null, Modifier.size(16.dp)) },
             )
         }

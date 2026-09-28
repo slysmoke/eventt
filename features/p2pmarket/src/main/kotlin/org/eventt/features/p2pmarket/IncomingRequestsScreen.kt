@@ -36,10 +36,14 @@ import org.eventt.core.database.NostrOrderDao
 import org.eventt.core.database.NostrReservationDao
 import org.eventt.core.database.NostrReservationModel
 import org.eventt.core.database.StaticDataDao
+import org.eventt.core.model.stringBlocking
 import org.eventt.core.nostr.NostrRelayEvent
 import org.eventt.core.nostr.NostrRelayManager
 import org.eventt.core.nostr.OrderSide
 import org.eventt.core.nostr.ReservationService
+import org.eventt.p2pmarket.generated.resources.*
+import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.stringResource
 import java.time.Instant
 import java.util.Locale
 
@@ -75,7 +79,7 @@ fun IncomingRequestsScreen() {
                             reservation = reservation,
                             typeName =
                                 order?.let { StaticDataDao.getTypeById(it.typeId)?.name }
-                                    ?: "Order ${reservation.orderUuid.take(8)}… (expired/purged)",
+                                    ?: stringBlocking(Res.string.order_expired, reservation.orderUuid.take(8)),
                             regionName = order?.let { StaticDataDao.getRegionById(it.regionId)?.name },
                             price = order?.price,
                             orderSide = order?.side?.let { runCatching { OrderSide.valueOf(it.uppercase()) }.getOrNull() },
@@ -92,12 +96,15 @@ fun IncomingRequestsScreen() {
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text(
-            if (sellerReservations.isEmpty()) "Incoming requests" else "Incoming requests (${sellerReservations.size})",
+            if (sellerReservations.isEmpty()) {
+                stringResource(Res.string.incoming_requests)
+            } else {
+                stringResource(Res.string.incoming_requests_n, sellerReservations.size)
+            },
             style = MaterialTheme.typography.titleMedium,
         )
         Text(
-            "When someone requests one of your orders, it shows up here for you to accept or decline — check the " +
-                "SELL/BUY tag to see whether they're offering to buy from you or sell to you.",
+            stringResource(Res.string.incoming_desc),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -109,7 +116,7 @@ fun IncomingRequestsScreen() {
         Spacer(Modifier.height(8.dp))
         if (sellerReservations.isEmpty()) {
             Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                Text("No incoming requests yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(Res.string.no_incoming), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
             ReservationsTableHeader()
@@ -121,14 +128,14 @@ fun IncomingRequestsScreen() {
                         onAccept = {
                             scope.launch(Dispatchers.IO) {
                                 val ok = ReservationService.respond(row.reservation, accept = true)
-                                actionError = if (ok) null else "Couldn't accept — is your P2P Market identity still set up?"
+                                actionError = if (ok) null else getString(Res.string.err_accept)
                                 reloadReservations()
                             }
                         },
                         onDecline = {
                             scope.launch(Dispatchers.IO) {
                                 val ok = ReservationService.respond(row.reservation, accept = false)
-                                actionError = if (ok) null else "Couldn't decline — is your P2P Market identity still set up?"
+                                actionError = if (ok) null else getString(Res.string.err_decline)
                                 reloadReservations()
                             }
                         },
@@ -136,14 +143,14 @@ fun IncomingRequestsScreen() {
                             scope.launch(Dispatchers.IO) {
                                 val ok = ReservationService.markCompleted(row.reservation)
                                 actionError =
-                                    if (ok) null else "Couldn't publish the completion receipt — is your P2P Market identity still set up?"
+                                    if (ok) null else getString(Res.string.err_receipt)
                                 reloadReservations()
                             }
                         },
                         onRelease = {
                             scope.launch(Dispatchers.IO) {
                                 val ok = ReservationService.release(row.reservation)
-                                actionError = if (ok) null else "Couldn't release — is your P2P Market identity still set up?"
+                                actionError = if (ok) null else getString(Res.string.err_release)
                                 reloadReservations()
                             }
                         },
@@ -161,13 +168,48 @@ private fun ReservationsTableHeader() {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("Item", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-        Text("Region", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(120.dp))
-        Text("Price", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(130.dp))
-        Text("Qty", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(60.dp))
-        Text("Requester", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(150.dp))
-        Text("Status", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(150.dp))
-        Text("Requested", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(110.dp))
+        Text(
+            stringResource(Res.string.h_item),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            stringResource(Res.string.h_region),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.width(120.dp),
+        )
+        Text(
+            stringResource(Res.string.h_price),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.width(130.dp),
+        )
+        Text(
+            stringResource(Res.string.h_qty),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.width(60.dp),
+        )
+        Text(
+            stringResource(Res.string.h_requester),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.width(150.dp),
+        )
+        Text(
+            stringResource(Res.string.h_status),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.width(150.dp),
+        )
+        Text(
+            stringResource(Res.string.h_requested),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.width(110.dp),
+        )
         Text("", modifier = Modifier.width(260.dp))
     }
 }
@@ -204,7 +246,10 @@ private fun SellerReservationTableRow(
             }
             if (reservation.status == "accepted") {
                 reservation.holdUntil?.let {
-                    Text("Held until ${Instant.ofEpochSecond(it)}", style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        stringResource(Res.string.held_until, Instant.ofEpochSecond(it).toString()),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
                 }
             }
         }
@@ -238,20 +283,26 @@ private fun SellerReservationTableRow(
             PresenceBadge(reservation.buyerPubkey)
             row.orderSide?.let {
                 Text(
-                    "wants to ${if (requesterRole(it) == "Buyer") "buy" else "sell"}",
+                    stringResource(if (it == OrderSide.SELL) Res.string.wants_to else Res.string.wants_to_sell),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
         Text(
-            if (reservation.status == "sent") "Awaiting your response" else "Accepted — awaiting completion",
+            if (reservation.status ==
+                "sent"
+            ) {
+                stringResource(Res.string.awaiting_response)
+            } else {
+                stringResource(Res.string.accepted_awaiting)
+            },
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.width(150.dp),
         )
         Text(
-            "${formatDurationShort(nowSec - reservation.requestedAt)} ago",
+            stringResource(Res.string.time_ago, formatDurationShort(nowSec - reservation.requestedAt)),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
@@ -260,11 +311,14 @@ private fun SellerReservationTableRow(
         )
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.width(260.dp)) {
             if (reservation.status == "sent") {
-                Button(onClick = onAccept, contentPadding = COMPACT_BUTTON_PADDING) { Text("Accept") }
-                OutlinedButton(onClick = onDecline, contentPadding = COMPACT_BUTTON_PADDING) { Text("Decline") }
+                Button(onClick = onAccept, contentPadding = COMPACT_BUTTON_PADDING) { Text(stringResource(Res.string.accept)) }
+                OutlinedButton(onClick = onDecline, contentPadding = COMPACT_BUTTON_PADDING) { Text(stringResource(Res.string.decline)) }
             } else {
-                Button(onClick = onMarkCompleted, contentPadding = COMPACT_BUTTON_PADDING) { Text("Mark completed") }
-                OutlinedButton(onClick = onRelease, contentPadding = COMPACT_BUTTON_PADDING) { Text("Release") }
+                Button(
+                    onClick = onMarkCompleted,
+                    contentPadding = COMPACT_BUTTON_PADDING,
+                ) { Text(stringResource(Res.string.mark_completed)) }
+                OutlinedButton(onClick = onRelease, contentPadding = COMPACT_BUTTON_PADDING) { Text(stringResource(Res.string.release)) }
             }
         }
     }

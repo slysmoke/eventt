@@ -40,9 +40,13 @@ import org.eventt.core.model.HotkeyBindings
 import org.eventt.core.model.StaticMarketGroupModel
 import org.eventt.core.model.StaticRegionModel
 import org.eventt.core.model.StaticStationModel
+import org.eventt.core.model.stringBlocking
 import org.eventt.core.staticdata.JumpGraphService
+import org.eventt.market.generated.resources.*
 import org.eventt.ui.common.ensureVisible
 import org.eventt.ui.theme.negativeColor
+import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.stringResource
 import java.util.Locale
 
 // ─── Inter-Region ─────────────────────────────────────────────────────────
@@ -294,7 +298,7 @@ internal fun InterRegionTab(
                     }.sortedByDescending { it.netProfit }
             withContext(Dispatchers.Main) {
                 results = recomputed
-                statusMsg = "${recomputed.size} opportunities found (recalculated)"
+                statusMsg = stringBlocking(Res.string.recalculated, recomputed.size)
             }
         }
     }
@@ -344,13 +348,13 @@ internal fun InterRegionTab(
                     allRegions,
                     buyRegionId,
                     width = 158.dp,
-                    label = "Buy Region",
+                    label = stringResource(Res.string.buy_region),
                     accentColor = MaterialTheme.colorScheme.primary,
                 ) {
                     buyRegionId = it
                     scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_BUY_REGION, it.toString()) } }
                 }
-                StationPicker(buyStations, buyStationId, width = 190.dp, label = "Buy Station") {
+                StationPicker(buyStations, buyStationId, width = 190.dp, label = stringResource(Res.string.buy_station)) {
                     buyStationId = it
                     scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_BUY_STATION, it?.toString() ?: "") } }
                 }
@@ -359,13 +363,13 @@ internal fun InterRegionTab(
                     allRegions,
                     sellRegionId,
                     width = 158.dp,
-                    label = "Sell Region",
+                    label = stringResource(Res.string.sell_region),
                     accentColor = MaterialTheme.colorScheme.tertiary,
                 ) {
                     sellRegionId = it
                     scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SELL_REGION, it.toString()) } }
                 }
-                StationPicker(sellStations, sellStationId, width = 190.dp, label = "Sell Station") {
+                StationPicker(sellStations, sellStationId, width = 190.dp, label = stringResource(Res.string.sell_station)) {
                     sellStationId = it
                     scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SELL_STATION, it?.toString() ?: "") } }
                 }
@@ -381,7 +385,13 @@ internal fun InterRegionTab(
                     scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_TRADE_TYPE, it.name) } }
                 }
                 FilterDivider()
-                GroupDropdown("Category", topGroups, selectedTopGroup, "All categories", 145.dp) { g ->
+                GroupDropdown(
+                    stringResource(Res.string.category),
+                    topGroups,
+                    selectedTopGroup,
+                    stringResource(Res.string.all_categories),
+                    145.dp,
+                ) { g ->
                     selectedTopGroup = g
                     selectedSubGroup = null
                     scope.launch {
@@ -392,7 +402,13 @@ internal fun InterRegionTab(
                     }
                 }
                 if (subGroups.isNotEmpty()) {
-                    GroupDropdown("Subcategory", subGroups, selectedSubGroup, "All", 135.dp) { g ->
+                    GroupDropdown(
+                        stringResource(Res.string.subcategory),
+                        subGroups,
+                        selectedSubGroup,
+                        stringResource(Res.string.all_short),
+                        135.dp,
+                    ) { g ->
                         selectedSubGroup = g
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_CAT_SUB, g?.marketGroupId?.toString() ?: "") } }
                     }
@@ -400,13 +416,13 @@ internal fun InterRegionTab(
                 Spacer(Modifier.weight(1f))
                 // Read-only tax display — informational, so it lives at the far edge with the
                 // other non-inputs rather than crammed in with the editable filters.
-                FilterControl("Fees") {
+                FilterControl(stringResource(Res.string.fees)) {
                     Text(
-                        "Tax ${String.format(
-                            Locale.US,
-                            "%.2f",
-                            salesTaxPct,
-                        )}%  ·  Broker ${String.format(Locale.US, "%.2f", brokerFeePct)}%",
+                        stringResource(
+                            Res.string.fees_value,
+                            String.format(Locale.US, "%.2f", salesTaxPct),
+                            String.format(Locale.US, "%.2f", brokerFeePct),
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
                     )
@@ -421,7 +437,7 @@ internal fun InterRegionTab(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.weight(1f),
                 ) {
-                    ParamField("Min Margin %", minMargin, 68.dp) {
+                    ParamField(stringResource(Res.string.min_margin_pct), minMargin, 68.dp) {
                         minMargin = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MARGIN, it) } }
                     }
@@ -430,7 +446,7 @@ internal fun InterRegionTab(
                     // market can't inflate the shown profit past what a realistic, cost-based
                     // margin would actually be.
                     CheckboxParamField(
-                        label = "Max Margin %",
+                        label = stringResource(Res.string.max_margin_pct),
                         checked = marginLimitEnabled,
                         onCheckedChange = {
                             marginLimitEnabled = it
@@ -443,7 +459,7 @@ internal fun InterRegionTab(
                         },
                         fieldEnabled = true,
                     )
-                    ParamField("ISK/m³", iskPerM3, 88.dp, enabled = !shippingByCostEnabled) {
+                    ParamField(stringResource(Res.string.isk_m3), iskPerM3, 88.dp, enabled = !shippingByCostEnabled) {
                         iskPerM3 = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_ISK_PER_M3, it) } }
                     }
@@ -451,7 +467,7 @@ internal fun InterRegionTab(
                     // its bulk -- a courier/freight-contract convention, more realistic for
                     // expensive/low-volume items where m³-based shipping badly understates cost.
                     CheckboxParamField(
-                        label = "Ship % of Cost",
+                        label = stringResource(Res.string.ship_pct_cost),
                         checked = shippingByCostEnabled,
                         onCheckedChange = {
                             shippingByCostEnabled = it
@@ -467,7 +483,7 @@ internal fun InterRegionTab(
                     // Excludes an item entirely once a single unit alone exceeds this -- too bulky
                     // to haul at all, not a total-cargo-hold cap on suggested quantity (that would
                     // silently understate "Qty to Buy" regardless of Dst/Src vol %).
-                    ParamField("Max m³/item", maxCargoM3, 88.dp) {
+                    ParamField(stringResource(Res.string.max_m3_item), maxCargoM3, 88.dp) {
                         maxCargoM3 = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MAX_CARGO, it) } }
                     }
@@ -477,7 +493,7 @@ internal fun InterRegionTab(
                     // region's when unchecked — so the field stays live either way, not just when
                     // "use source volume" is on.
                     CheckboxParamField(
-                        label = if (volCapEnabled) "Src vol %" else "Dst vol %",
+                        label = stringResource(if (volCapEnabled) Res.string.src_vol_pct else Res.string.dst_vol_pct),
                         checked = volCapEnabled,
                         onCheckedChange = {
                             volCapEnabled = it
@@ -490,7 +506,7 @@ internal fun InterRegionTab(
                         },
                         fieldEnabled = true,
                     )
-                    FilterControl("Skip Owned Items") {
+                    FilterControl(stringResource(Res.string.skip_owned)) {
                         Checkbox(
                             checked = skipExistingOrders,
                             onCheckedChange = {
@@ -503,7 +519,7 @@ internal fun InterRegionTab(
                     // Caps the leg(s) that are our own placed order (waiting for a counterparty) by
                     // real Adam4EVE per-side flow at that station -- see regionFinalVol. Off by
                     // default: a third-party dependency, opt-in.
-                    FilterControl("Adam4EVE Flow") {
+                    FilterControl(stringResource(Res.string.a4e_flow)) {
                         Checkbox(
                             checked = useAdam4Eve,
                             onCheckedChange = {
@@ -517,22 +533,33 @@ internal fun InterRegionTab(
                         spikeFilter = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SPIKE_FILTER, it.name) } }
                     }
-                    ParamField("Price ×", spikePriceMultiplier, 50.dp, enabled = spikeFilter != SpikeFilter.ANY) {
+                    ParamField(
+                        stringResource(Res.string.price_mult),
+                        spikePriceMultiplier,
+                        50.dp,
+                        enabled = spikeFilter != SpikeFilter.ANY,
+                    ) {
                         spikePriceMultiplier = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SPIKE_PRICE_MULTIPLIER, it) } }
                     }
-                    ParamField("Volume ×", spikeVolumeMultiplier, 50.dp, enabled = spikeFilter != SpikeFilter.ANY) {
+                    ParamField(
+                        stringResource(Res.string.volume_mult),
+                        spikeVolumeMultiplier,
+                        50.dp,
+                        enabled =
+                            spikeFilter != SpikeFilter.ANY,
+                    ) {
                         spikeVolumeMultiplier = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SPIKE_VOLUME_MULTIPLIER, it) } }
                     }
-                    ParamField("Spike Days", spikeWindowDays, 60.dp, enabled = spikeFilter != SpikeFilter.ANY) {
+                    ParamField(stringResource(Res.string.spike_days), spikeWindowDays, 60.dp, enabled = spikeFilter != SpikeFilter.ANY) {
                         spikeWindowDays = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SPIKE_WINDOW_DAYS, it) } }
                     }
                     FilterDivider()
                     // Toggles whether the hotkey's second press copies the suggested volume, or just
                     // advances straight to the next item after copying the price.
-                    FilterControl("Copy Vol") {
+                    FilterControl(stringResource(Res.string.copy_vol)) {
                         Switch(
                             checked = copyVolumeEnabled,
                             onCheckedChange = {
@@ -543,13 +570,15 @@ internal fun InterRegionTab(
                         )
                     }
                 }
+                val regionsMustDiffer = stringResource(Res.string.regions_must_differ)
                 if (statusMsg.isNotEmpty()) {
+                    val errorPrefix = stringResource(Res.string.status_error, "")
                     FilterActionSlot {
                         Text(
                             statusMsg,
                             style = MaterialTheme.typography.labelSmall,
                             color =
-                                if ("Error" in statusMsg || "differ" in statusMsg) {
+                                if (statusMsg.startsWith(errorPrefix) || statusMsg == regionsMustDiffer) {
                                     negativeColor
                                 } else {
                                     MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
@@ -568,7 +597,7 @@ internal fun InterRegionTab(
                         ) {
                             Icon(Icons.Default.Stop, null, Modifier.size(14.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Stop")
+                            Text(stringResource(Res.string.stop))
                         }
                     }
                     Spacer(Modifier.width(8.dp))
@@ -577,15 +606,16 @@ internal fun InterRegionTab(
                     Button(
                         onClick = {
                             if (buyRegionId == sellRegionId) {
-                                statusMsg = "Regions must differ"
+                                statusMsg = regionsMustDiffer
                                 return@Button
                             }
                             val job =
                                 scope.launch {
                                     isAnalyzing = true
                                     results = emptyList()
-                                    val buyName = allRegions.find { it.regionId == buyRegionId }?.name ?: "buy"
-                                    val sellName = allRegions.find { it.regionId == sellRegionId }?.name ?: "sell"
+                                    val buyName = allRegions.find { it.regionId == buyRegionId }?.name ?: getString(Res.string.buy_fallback)
+                                    val sellName =
+                                        allRegions.find { it.regionId == sellRegionId }?.name ?: getString(Res.string.sell_fallback)
                                     val filterGroupId = selectedSubGroup?.marketGroupId ?: selectedTopGroup?.marketGroupId
                                     val filterGroupIds = filterGroupId?.let { withContext(Dispatchers.IO) { buildGroupSubtree(it) } }
                                     val iskPerM3D = iskPerM3.toDoubleOrNull() ?: 1000.0
@@ -620,7 +650,7 @@ internal fun InterRegionTab(
                                             if (buySystemId != null) {
                                                 withContext(Dispatchers.IO) {
                                                     JumpGraphService.ensureRegionGraph(buyRegionId) { p ->
-                                                        statusMsg = "Building buy-region jump graph: ${p.fetched}/${p.total}…"
+                                                        statusMsg = stringBlocking(Res.string.building_buy_graph, p.fetched, p.total)
                                                     }
                                                     JumpGraphService.bfsDistances(buySystemId, buyRegionId)
                                                 }
@@ -631,7 +661,7 @@ internal fun InterRegionTab(
                                             if (sellSystemId != null) {
                                                 withContext(Dispatchers.IO) {
                                                     JumpGraphService.ensureRegionGraph(sellRegionId) { p ->
-                                                        statusMsg = "Building sell-region jump graph: ${p.fetched}/${p.total}…"
+                                                        statusMsg = stringBlocking(Res.string.building_sell_graph, p.fetched, p.total)
                                                     }
                                                     JumpGraphService.bfsDistances(sellSystemId, sellRegionId)
                                                 }
@@ -670,14 +700,14 @@ internal fun InterRegionTab(
                                         // fetched once up front, same as Station Trading.
                                         val buyStationFlow: Map<Int, StationFlow> =
                                             if (useAdam4EveSnap && buyStSnap != null) {
-                                                statusMsg = "Fetching Adam4EVE flow…"
+                                                statusMsg = stringBlocking(Res.string.fetching_a4e)
                                                 Adam4EveFlowService.fetchStationFlow(buyStSnap, typeIds)
                                             } else {
                                                 emptyMap()
                                             }
                                         val sellStationFlow: Map<Int, StationFlow> =
                                             if (useAdam4EveSnap && sellStSnap != null) {
-                                                statusMsg = "Fetching Adam4EVE flow…"
+                                                statusMsg = stringBlocking(Res.string.fetching_a4e)
                                                 Adam4EveFlowService.fetchStationFlow(sellStSnap, typeIds)
                                             } else {
                                                 emptyMap()
@@ -694,9 +724,9 @@ internal fun InterRegionTab(
                                         // requests per type.
                                         val bulk: Pair<Map<Int, List<Map<String, Any?>>>, Map<Int, List<Map<String, Any?>>>>? =
                                             if (filterGroupIds == null || typeIds.size > BULK_ORDER_FETCH_THRESHOLD) {
-                                                statusMsg = "Fetching all $buyName orders…"
+                                                statusMsg = stringBlocking(Res.string.fetching_all_named, buyName)
                                                 val buyAll = withContext(Dispatchers.IO) { EsiClient.getMarketRegionOrders(buyRegionId) }
-                                                statusMsg = "Fetching all $sellName orders…"
+                                                statusMsg = stringBlocking(Res.string.fetching_all_named, sellName)
                                                 val sellAll = withContext(Dispatchers.IO) { EsiClient.getMarketRegionOrders(sellRegionId) }
 
                                                 fun List<Map<String, Any?>>.byType() = groupBy { (it["type_id"] as? Number)?.toInt() ?: 0 }
@@ -709,7 +739,7 @@ internal fun InterRegionTab(
                                                 null
                                             }
 
-                                        statusMsg = "0/${typeIds.size} types…"
+                                        statusMsg = stringBlocking(Res.string.types_zero, typeIds.size)
 
                                         // Each permit fires 2 real HTTP requests (buy + sell region
                                         // orders), so this is already up to 8 concurrent ESI calls —
@@ -806,14 +836,14 @@ internal fun InterRegionTab(
                                                                     }
                                                                 withContext(Dispatchers.Main) {
                                                                     if (sorted != null) results = sorted
-                                                                    statusMsg = "$c/${typeIds.size} checked, $f found"
+                                                                    statusMsg = stringBlocking(Res.string.checked_found, c, typeIds.size, f)
                                                                 }
                                                             }
                                                         }
                                                     }
                                                 }.awaitAll()
                                         }
-                                        statusMsg = "${found.size} opportunities found"
+                                        statusMsg = stringBlocking(Res.string.n_found, found.size)
                                         cachedAnalysis =
                                             CachedAnalysisInput(
                                                 typeIds = typeIds,
@@ -838,10 +868,10 @@ internal fun InterRegionTab(
                                                 sellStationFlow = sellStationFlow,
                                             )
                                     } catch (e: CancellationException) {
-                                        statusMsg = "Stopped — ${results.size} opportunities found so far"
+                                        statusMsg = stringBlocking(Res.string.stopped_found, results.size)
                                         throw e
                                     } catch (e: Exception) {
-                                        statusMsg = "Error: ${e.message}"
+                                        statusMsg = stringBlocking(Res.string.status_error, e.message.orEmpty())
                                     } finally {
                                         isAnalyzing = false
                                     }
@@ -858,7 +888,7 @@ internal fun InterRegionTab(
                             Icon(Icons.AutoMirrored.Filled.CompareArrows, null, Modifier.size(14.dp))
                         }
                         Spacer(Modifier.width(6.dp))
-                        Text(if (isAnalyzing) "Analyzing…" else "Analyze")
+                        Text(if (isAnalyzing) stringResource(Res.string.analyzing) else stringResource(Res.string.analyze))
                     }
                 }
             }
@@ -873,8 +903,8 @@ internal fun InterRegionTab(
         if (results.isEmpty() && !isAnalyzing) {
             AnalysisEmptyState(
                 icon = Icons.AutoMirrored.Filled.CompareArrows,
-                primary = "Select regions and click Analyze",
-                secondary = "Finds items priced low in the buy region that sell for more in the sell region",
+                primary = stringResource(Res.string.ir_empty_primary),
+                secondary = stringResource(Res.string.ir_empty_secondary),
             )
         } else {
             // Not capped at 100 — this scales volume in either direction (50 halves it, 200 doubles it).
@@ -936,8 +966,13 @@ internal fun InterRegionTab(
             if (charId != null && InterRegionQueue.size > 0) {
                 val hotkeyLabel by HotkeyBindings.queueLabel.collectAsState()
                 Text(
-                    "$hotkeyLabel cycles ${InterRegionQueue.size} item(s) — position " +
-                        "${InterRegionQueue.currentPosition}/${InterRegionQueue.size}",
+                    stringResource(
+                        Res.string.hotkey_cycles,
+                        hotkeyLabel,
+                        InterRegionQueue.size,
+                        InterRegionQueue.currentPosition,
+                        InterRegionQueue.size,
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp),
@@ -1109,13 +1144,13 @@ private fun PresetPicker(
 ) {
     var expanded by remember { mutableStateOf(false) }
 
-    FilterControl("Presets") {
+    FilterControl(stringResource(Res.string.presets)) {
         Box {
             ChipSurface(onClick = { expanded = true }, width = 130.dp) {
                 Icon(Icons.Default.Bookmark, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    if (presets.isEmpty()) "None saved" else "${presets.size} saved",
+                    if (presets.isEmpty()) stringResource(Res.string.none_saved) else stringResource(Res.string.n_saved, presets.size),
                     style = MaterialTheme.typography.bodySmall,
                     color = if (presets.isEmpty()) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f) else Color.Unspecified,
                     maxLines = 1,
@@ -1131,7 +1166,13 @@ private fun PresetPicker(
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.width(240.dp)) {
                 DropdownMenuItem(
-                    text = { Text("Save current route…", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium) },
+                    text = {
+                        Text(
+                            stringResource(Res.string.save_current_route),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    },
                     leadingIcon = { Icon(Icons.Default.Add, null, Modifier.size(14.dp)) },
                     onClick = {
                         expanded = false
@@ -1157,7 +1198,7 @@ private fun PresetPicker(
                             trailingIcon = {
                                 Icon(
                                     Icons.Default.Close,
-                                    contentDescription = "Delete preset",
+                                    contentDescription = stringResource(Res.string.delete_preset),
                                     modifier = Modifier.size(14.dp).clickable { onDelete(preset.name) },
                                     tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                                 )
@@ -1178,21 +1219,21 @@ private fun SavePresetDialog(
     var name by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Save Route Preset") },
+        title = { Text(stringResource(Res.string.save_route_preset)) },
         text = {
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
                 singleLine = true,
-                placeholder = { Text("e.g. Jita → Amarr") },
+                placeholder = { Text(stringResource(Res.string.eg_jita_amarr)) },
                 modifier = Modifier.fillMaxWidth(),
             )
         },
         confirmButton = {
-            TextButton(onClick = { onSave(name.trim()) }, enabled = name.isNotBlank()) { Text("Save") }
+            TextButton(onClick = { onSave(name.trim()) }, enabled = name.isNotBlank()) { Text(stringResource(Res.string.save)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) }
         },
     )
 }

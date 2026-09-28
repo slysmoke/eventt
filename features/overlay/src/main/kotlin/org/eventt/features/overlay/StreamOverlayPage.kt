@@ -1,10 +1,33 @@
 package org.eventt.features.overlay
 
+import org.eventt.core.model.stringBlocking
+import org.eventt.overlay.generated.resources.*
+
 // The actual OBS Browser Source page: transparent background, all styling/animation self-contained
 // (no CDN — OBS's embedded Chromium shouldn't depend on outbound network to render a local overlay).
 // Visual config (accent color) comes from the page's own query string, e.g.
 // http://127.0.0.1:8001/?accent=00e5ff — read client-side in JS, so the server stays a static file.
 object StreamOverlayPage {
+    private val LABELS =
+        mapOf(
+            "Session" to Res.string.so_session,
+            "Trades" to Res.string.so_trades,
+            "Profit" to Res.string.so_profit,
+            "Relists" to Res.string.so_relists,
+            "Sell Orders" to Res.string.so_sell_orders,
+            "Buy Orders" to Res.string.so_buy_orders,
+            "Beaten" to Res.string.so_beaten,
+            "ISK in Orders" to Res.string.so_isk_in_orders,
+            "Expected Profit" to Res.string.so_expected_profit,
+            "Relist Fees" to Res.string.so_relist_fees,
+        )
+
+    /** [HTML] with the stat labels in the app's UI language. */
+    fun localizedHtml(): String =
+        LABELS.entries.fold(HTML) { html, (en, res) ->
+            html.replace("<div class=\"label\">$en</div>", "<div class=\"label\">${stringBlocking(res)}</div>")
+        }
+
     val HTML =
         """
         <!doctype html>

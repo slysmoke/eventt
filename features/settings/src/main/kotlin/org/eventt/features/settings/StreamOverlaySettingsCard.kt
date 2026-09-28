@@ -30,6 +30,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.StaticDataDao
 import org.eventt.features.overlay.StreamOverlayServer
+import org.eventt.settings.generated.resources.*
+import org.jetbrains.compose.resources.stringResource
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 
@@ -65,10 +67,9 @@ internal fun StreamOverlaySettingsCard() {
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Stream Overlay (OBS)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(Res.string.overlay_title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
-                "Serves a transparent, animated overlay page (session trades, profit, timer, relists) for " +
-                    "OBS's Browser Source. Local only — nothing here is reachable off this machine.",
+                stringResource(Res.string.overlay_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -77,18 +78,18 @@ internal fun StreamOverlaySettingsCard() {
                 Button(onClick = {
                     scope.launch(Dispatchers.IO) { if (isRunning) StreamOverlayServer.stop() else StreamOverlayServer.start() }
                 }) {
-                    Text(if (isRunning) "Stop" else "Start")
+                    Text(if (isRunning) stringResource(Res.string.stop) else stringResource(Res.string.start))
                 }
                 OutlinedButton(
                     enabled = isRunning,
                     onClick = { scope.launch(Dispatchers.IO) { StreamOverlayServer.resetSession() } },
                 ) {
-                    Text("Reset session")
+                    Text(stringResource(Res.string.reset_session))
                 }
                 OutlinedTextField(
                     value = accent,
                     onValueChange = { hex -> saveAccent(hex.filter { it.isLetterOrDigit() }.take(6)) },
-                    label = { Text("Accent (hex)") },
+                    label = { Text(stringResource(Res.string.accent_hex)) },
                     modifier = Modifier.width(140.dp),
                     singleLine = true,
                 )
@@ -102,7 +103,7 @@ internal fun StreamOverlaySettingsCard() {
                         scope.launch(Dispatchers.IO) { StreamOverlayServer.setAutostartEnabled(checked) }
                     },
                 )
-                Text("Start automatically when the app launches", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(Res.string.overlay_autostart), style = MaterialTheme.typography.bodySmall)
             }
 
             if (isRunning) {
@@ -112,7 +113,7 @@ internal fun StreamOverlaySettingsCard() {
                         val sel = StringSelection(url)
                         Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, sel)
                     }) {
-                        Text("Copy URL")
+                        Text(stringResource(Res.string.copy_url))
                     }
                 }
             }

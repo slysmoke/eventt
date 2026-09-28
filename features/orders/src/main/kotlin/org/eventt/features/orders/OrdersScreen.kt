@@ -35,7 +35,9 @@ import org.eventt.core.model.CorpFeature
 import org.eventt.core.model.HotkeyBindings
 import org.eventt.core.model.eveSigFigStep
 import org.eventt.core.model.formatEveSigFigPrice
+import org.eventt.core.model.stringBlocking
 import org.eventt.features.market.ItemDetailDialog
+import org.eventt.orders.generated.resources.*
 import org.eventt.ui.common.CorpAccessNotice
 import org.eventt.ui.common.EmptyState
 import org.eventt.ui.common.EsiRefreshButton
@@ -43,6 +45,8 @@ import org.eventt.ui.common.LoadingOverlay
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.eventt.ui.theme.warningColor
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 import java.time.OffsetDateTime
@@ -127,7 +131,7 @@ internal fun parseOrder(
     return CharacterOrder(
         orderId = (m["order_id"] as? Number)?.toLong() ?: 0L,
         typeId = typeId,
-        typeName = StaticDataDao.getTypeName(typeId) ?: "Unknown ($typeId)",
+        typeName = StaticDataDao.getTypeName(typeId) ?: stringBlocking(Res.string.unknown_type_id, typeId),
         locationId = locationId,
         regionId =
             directRegionId
@@ -599,7 +603,7 @@ fun OrdersScreen(context: ViewContext?) {
                             OrderHistoryDao.OrderHistoryRecord(
                                 orderId = orderId,
                                 typeId = typeId,
-                                typeName = StaticDataDao.getTypeName(typeId) ?: "Unknown ($typeId)",
+                                typeName = StaticDataDao.getTypeName(typeId) ?: stringBlocking(Res.string.unknown_type_id, typeId),
                                 locationId = locationId,
                                 stationName = StaticDataDao.getStationById(locationId)?.name ?: locationId.toString(),
                                 price = (m["price"] as? Number)?.toDouble() ?: 0.0,
@@ -854,10 +858,14 @@ fun OrdersScreen(context: ViewContext?) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Orders", style = MaterialTheme.typography.headlineMedium)
+                Text(stringResource(Res.string.orders_title), style = MaterialTheme.typography.headlineMedium)
                 if (isLoadingMarket) {
                     CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 1.5.dp)
-                    Text("loading market…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        stringResource(Res.string.loading_market),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 // Global hotkey queue indicator — scoped to the visible tab
                 val tabActive =
@@ -895,14 +903,14 @@ fun OrdersScreen(context: ViewContext?) {
                             )
                             Text("·", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(
-                                "$queueSize orders",
+                                pluralStringResource(Res.plurals.queue_orders, queueSize, queueSize),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
                             if (beatenCount > 0) {
                                 Text("·", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(
-                                    "$beatenCount beaten",
+                                    stringResource(Res.string.n_beaten, beatenCount),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = UNDERCUT_COLOR,
                                     fontWeight = FontWeight.SemiBold,
@@ -910,7 +918,7 @@ fun OrdersScreen(context: ViewContext?) {
                             }
                             Text("·", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(
-                                "only beaten",
+                                stringResource(Res.string.only_beaten),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (onlyBeaten) UNDERCUT_COLOR else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                 fontWeight = if (onlyBeaten) FontWeight.SemiBold else FontWeight.Normal,
@@ -941,27 +949,34 @@ fun OrdersScreen(context: ViewContext?) {
                     }) {
                         Icon(
                             if (notifyBeaten) Icons.Default.NotificationsActive else Icons.Default.NotificationsOff,
-                            contentDescription = "Toggle beaten-order notifications",
+                            contentDescription = stringResource(Res.string.toggle_beaten_notif),
                             tint = if (notifyBeaten) UNDERCUT_COLOR else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(18.dp),
                         )
                     }
                     TextButton(onClick = { recalculateFifo() }) {
-                        Text("Recalculate P&L")
+                        Text(stringResource(Res.string.recalc_pnl))
                     }
                     EsiRefreshButton(
                         isLoading = isLoadingMarket,
                         enabled = !isLoading,
                         expiresAtMs = marketComparisonsExpiresAt,
                         onClick = { fetchMarketComparisons(orders) },
-                        label = "Refresh Prices",
+                        label = stringResource(Res.string.refresh_prices),
                     )
                     EsiRefreshButton(
                         isLoading = isLoading,
                         enabled = !isLoadingMarket,
                         expiresAtMs = refreshAvailableAt,
                         onClick = { loadOrders() },
-                        label = if (corpId != null) "Refresh Corp Orders" else "Refresh Orders",
+                        label =
+                            if (corpId !=
+                                null
+                            ) {
+                                stringResource(Res.string.refresh_corp_orders)
+                            } else {
+                                stringResource(Res.string.refresh_orders)
+                            },
                     )
                 }
             }
@@ -994,16 +1009,16 @@ fun OrdersScreen(context: ViewContext?) {
 
         PrimaryTabRow(selectedTabIndex = activeTab, modifier = Modifier.fillMaxWidth()) {
             Tab(selected = activeTab == 0, onClick = { activeTab = 0 }) {
-                Text("Sell (${sellOrders.size})", modifier = Modifier.padding(8.dp))
+                Text(stringResource(Res.string.tab_sell, sellOrders.size), modifier = Modifier.padding(8.dp))
             }
             Tab(selected = activeTab == 1, onClick = { activeTab = 1 }) {
-                Text("Buy (${buyOrders.size})", modifier = Modifier.padding(8.dp))
+                Text(stringResource(Res.string.tab_buy, buyOrders.size), modifier = Modifier.padding(8.dp))
             }
             Tab(selected = activeTab == 2, onClick = { activeTab = 2 }) {
-                Text("History (${historyOrders.size})", modifier = Modifier.padding(8.dp))
+                Text(stringResource(Res.string.tab_history, historyOrders.size), modifier = Modifier.padding(8.dp))
             }
             Tab(selected = activeTab == 3, onClick = { activeTab = 3 }) {
-                Text("Inventory (${inventory.size})", modifier = Modifier.padding(8.dp))
+                Text(stringResource(Res.string.tab_inventory, inventory.size), modifier = Modifier.padding(8.dp))
             }
         }
 
@@ -1025,8 +1040,15 @@ fun OrdersScreen(context: ViewContext?) {
                     if (historyOrders.isEmpty() && !isLoading) {
                         EmptyState(
                             icon = Icons.Default.History,
-                            title = "No Order History",
-                            description = if (context == null) "Add a character to view order history." else "No completed orders found.",
+                            title = stringResource(Res.string.no_order_history),
+                            description =
+                                if (context ==
+                                    null
+                                ) {
+                                    stringResource(Res.string.add_char_history)
+                                } else {
+                                    stringResource(Res.string.no_completed_orders)
+                                },
                         )
                     } else {
                         OrderHistoryTable(historyOrders, fifoResult)
@@ -1037,8 +1059,15 @@ fun OrdersScreen(context: ViewContext?) {
                     if (inventory.isEmpty() && !isLoading) {
                         EmptyState(
                             icon = Icons.Default.Inventory2,
-                            title = "No Inventory",
-                            description = if (context == null) "Add a character to view inventory." else "No items in FIFO inventory.",
+                            title = stringResource(Res.string.no_inventory),
+                            description =
+                                if (context ==
+                                    null
+                                ) {
+                                    stringResource(Res.string.add_char_inventory)
+                                } else {
+                                    stringResource(Res.string.no_fifo_items)
+                                },
                         )
                     } else {
                         InventoryTable(
@@ -1059,8 +1088,22 @@ fun OrdersScreen(context: ViewContext?) {
                     if (filtered.isEmpty() && !isLoading) {
                         EmptyState(
                             icon = Icons.Default.Receipt,
-                            title = if (activeTab == 0) "No Sell Orders" else "No Buy Orders",
-                            description = if (context == null) "Add a character to view orders." else "No active orders.",
+                            title =
+                                if (activeTab ==
+                                    0
+                                ) {
+                                    stringResource(Res.string.no_sell_orders)
+                                } else {
+                                    stringResource(Res.string.no_buy_orders)
+                                },
+                            description =
+                                if (context ==
+                                    null
+                                ) {
+                                    stringResource(Res.string.add_char_orders)
+                                } else {
+                                    stringResource(Res.string.no_active_orders)
+                                },
                         )
                     } else if (activeTab == 0) {
                         Column {
@@ -1077,7 +1120,17 @@ fun OrdersScreen(context: ViewContext?) {
                                             StaticDataDao.setSetting(SHOW_BEATEN_ONLY_SETTING, showBeatenOnly.toString())
                                         }
                                     },
-                                    label = { Text(if (showBeatenOnly) "Beaten only" else "All orders") },
+                                    label = {
+                                        Text(
+                                            if (showBeatenOnly) {
+                                                stringResource(
+                                                    Res.string.beaten_only,
+                                                )
+                                            } else {
+                                                stringResource(Res.string.all_orders)
+                                            },
+                                        )
+                                    },
                                     leadingIcon = if (showBeatenOnly) beatenFilterIcon else null,
                                 )
                             }
@@ -1108,7 +1161,17 @@ fun OrdersScreen(context: ViewContext?) {
                                 FilterChip(
                                     selected = showOverbidOnly,
                                     onClick = { showOverbidOnly = !showOverbidOnly },
-                                    label = { Text(if (showOverbidOnly) "Overbid only" else "All orders") },
+                                    label = {
+                                        Text(
+                                            if (showOverbidOnly) {
+                                                stringResource(
+                                                    Res.string.overbid_only,
+                                                )
+                                            } else {
+                                                stringResource(Res.string.all_orders)
+                                            },
+                                        )
+                                    },
                                     leadingIcon = if (showOverbidOnly) overbidFilterIcon else null,
                                 )
                             }
@@ -1151,7 +1214,7 @@ fun OrdersScreen(context: ViewContext?) {
         }
     }
 
-    LoadingOverlay(isLoading = isLoading, message = "Loading orders…")
+    LoadingOverlay(isLoading = isLoading, message = stringResource(Res.string.loading_orders))
 
     ItemDetailRequest.target?.let { t ->
         val regionId = t.regionId.takeIf { it > 0 } ?: DEFAULT_REGION_ID

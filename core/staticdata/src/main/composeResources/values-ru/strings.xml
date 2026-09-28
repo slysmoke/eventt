@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cit_downloading">Загрузка списка цитаделей…</string>
+    <string name="parsing">Разбор…</string>
+    <string name="cit_saving">Сохранение цитаделей: %1$s…</string>
+    <string name="cit_synced">Синхронизировано цитаделей: %1$s</string>
+    <string name="unknown_error">Неизвестная ошибка</string>
+    <string name="sde_checking">Проверка последней версии SDE…</string>
+    <string name="sde_downloading">Загрузка SDE, сборка %1$s…</string>
+    <string name="sde_done">Готово — загружено типов: %1$s</string>
+    <string name="sde_cancelled">Импорт отменён</string>
+    <string name="sde_failed">Ошибка импорта: %1$s</string>
+    <string name="sde_parsing_types">Разбор типов: %1$s…</string>
+    <string name="sde_saving_types">Сохранение типов: %1$s…</string>
+    <string name="sde_saved_types">Сохранено типов: %1$s / %2$s</string>
+    <string name="sde_saving_groups">Сохранение групп: %1$s…</string>
+    <string name="sde_saving_categories">Сохранение категорий: %1$s…</string>
+    <string name="sde_saving_market_groups">Сохранение рыночных групп: %1$s…</string>
+    <string name="sde_saving_regions">Сохранение регионов: %1$s…</string>
+    <string name="sde_saving_systems">Сохранение систем: %1$s…</string>
+    <string name="sde_resolving_stations">Получение названий NPC-станций из ESI: %1$s…</string>
+    <string name="sde_saving_stations">Сохранение NPC-станций: %1$s…</string>
+    <string name="sde_resolving_ships">Получение упакованных объёмов кораблей из ESI: %1$s…</string>
+    <string name="sde_resolved_ships">Получено объёмов кораблей: %1$s/%2$s…</string>
+</resources>

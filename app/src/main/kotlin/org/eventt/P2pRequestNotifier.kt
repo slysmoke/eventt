@@ -7,11 +7,14 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.launch
+import org.eventt.app.generated.resources.*
 import org.eventt.core.database.NostrReservationModel
 import org.eventt.core.nostr.NostrIdentityService
 import org.eventt.core.nostr.NostrRelayEvent
 import org.eventt.core.nostr.NostrRelayManager
 import org.eventt.notify.TrayNotifier
+import org.jetbrains.compose.resources.getPluralString
+import org.jetbrains.compose.resources.getString
 
 private const val COALESCE_WINDOW_MILLIS = 5_000L
 
@@ -56,10 +59,10 @@ object P2pRequestNotifier {
                 // Which of our characters the request is for — with every identity subscribed,
                 // "from whom" alone doesn't tell a multi-character seller where to look.
                 val toChar = NostrIdentityService.getIdentityByPubkey(r.sellerPubkey)?.label
-                "Request from $who — qty ${r.qty}" + (toChar?.let { " (to $it)" } ?: "")
+                getString(Res.string.p2p_request_from, who, r.qty) + (toChar?.let { " " + getString(Res.string.p2p_request_to, it) } ?: "")
             } else {
-                "${batch.size} new requests"
+                getPluralString(Res.plurals.p2p_new_requests, batch.size, batch.size)
             }
-        TrayNotifier.notify("P2P Market", text)
+        TrayNotifier.notify(getString(Res.string.p2p_market_title), text)
     }
 }

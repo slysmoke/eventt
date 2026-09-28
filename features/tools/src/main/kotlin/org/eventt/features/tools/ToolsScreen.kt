@@ -12,12 +12,15 @@ import androidx.compose.runtime.setValue
 import org.eventt.core.database.ViewContext
 import org.eventt.features.tools.pricing.PricingScreen
 import org.eventt.features.tools.splitter.SplitterScreen
+import org.eventt.tools.generated.resources.*
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.stringResource
 
 private enum class ToolsTab(
-    val label: String,
+    val label: StringResource,
 ) {
-    SPLITTER("Cargo Splitter"),
-    PRICING("Sell Pricing"),
+    SPLITTER(Res.string.tab_cargo_splitter),
+    PRICING(Res.string.tab_sell_pricing),
 }
 
 @Composable
@@ -26,7 +29,7 @@ fun ToolsScreen(context: ViewContext?) {
     Column {
         PrimaryTabRow(selectedTabIndex = tab.ordinal) {
             ToolsTab.entries.forEach { t ->
-                Tab(selected = tab == t, onClick = { tab = t }, text = { Text(t.label) })
+                Tab(selected = tab == t, onClick = { tab = t }, text = { Text(stringResource(t.label)) })
             }
         }
         when (tab) {

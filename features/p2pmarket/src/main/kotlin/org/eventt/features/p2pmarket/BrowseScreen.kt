@@ -46,14 +46,18 @@ import kotlinx.coroutines.withContext
 import org.eventt.core.database.AppState
 import org.eventt.core.database.NostrOrderModel
 import org.eventt.core.database.StaticDataDao
+import org.eventt.core.model.stringBlocking
 import org.eventt.core.nostr.NostrIdentityService
 import org.eventt.core.nostr.OrderFilter
 import org.eventt.core.nostr.OrderRepository
 import org.eventt.core.nostr.OrderSide
 import org.eventt.core.nostr.ReputationAggregator
 import org.eventt.core.nostr.ReservationService
+import org.eventt.p2pmarket.generated.resources.*
 import org.eventt.ui.common.SearchField
 import org.eventt.ui.theme.positiveColor
+import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.stringResource
 import java.util.Locale
 import kotlin.math.abs
 
@@ -115,8 +119,9 @@ fun BrowseScreen() {
                     val side = OrderSide.valueOf(order.side.uppercase())
                     BrowseRow(
                         order = order,
-                        typeName = StaticDataDao.getTypeById(order.typeId)?.name ?: "Type #${order.typeId}",
-                        regionName = StaticDataDao.getRegionById(order.regionId)?.name ?: "Region #${order.regionId}",
+                        typeName = StaticDataDao.getTypeById(order.typeId)?.name ?: stringBlocking(Res.string.type_n, order.typeId),
+                        regionName =
+                            StaticDataDao.getRegionById(order.regionId)?.name ?: stringBlocking(Res.string.region_n, order.regionId),
                         savings = SavingsBadgeService.computeSavings(order.typeId, order.regionId, side, order.price, viewerSalesTaxPct),
                         confirmedTrades = ReputationAggregator.confirmedTradeCount(order.pubkey),
                     )
@@ -135,20 +140,24 @@ fun BrowseScreen() {
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = sideFilter == null, onClick = { sideFilter = null }, label = { Text("All") })
-            FilterChip(selected = sideFilter == OrderSide.SELL, onClick = { sideFilter = OrderSide.SELL }, label = { Text("Selling") })
-            FilterChip(selected = sideFilter == OrderSide.BUY, onClick = { sideFilter = OrderSide.BUY }, label = { Text("Buying") })
+            FilterChip(selected = sideFilter == null, onClick = { sideFilter = null }, label = { Text(stringResource(Res.string.all)) })
+            FilterChip(selected = sideFilter == OrderSide.SELL, onClick = {
+                sideFilter = OrderSide.SELL
+            }, label = { Text(stringResource(Res.string.filter_selling)) })
+            FilterChip(selected = sideFilter == OrderSide.BUY, onClick = {
+                sideFilter = OrderSide.BUY
+            }, label = { Text(stringResource(Res.string.filter_buying)) })
         }
         Spacer(Modifier.height(8.dp))
-        SearchField(query = searchQuery, onQueryChange = { searchQuery = it }, placeholder = "Search item...")
+        SearchField(query = searchQuery, onQueryChange = { searchQuery = it }, placeholder = stringResource(Res.string.search_item))
         Spacer(Modifier.height(12.dp))
         if (displayedRows.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
                     if (rows.isEmpty()) {
-                        "No orders yet — post one (once identity/relays are set up) or wait for others to appear"
+                        stringResource(Res.string.no_orders_yet)
                     } else {
-                        "No orders match \"$searchQuery\""
+                        stringResource(Res.string.no_orders_match, searchQuery)
                     },
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -177,29 +186,44 @@ private fun BrowseTableHeader(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Spacer(Modifier.width(24.dp))
-        Text("Item", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-        Text("Region", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(130.dp))
+        Text(
+            stringResource(Res.string.h_item),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            stringResource(Res.string.h_region),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.width(130.dp),
+        )
         SortHeaderCell(
-            "Price",
+            stringResource(Res.string.h_price),
             Modifier.width(130.dp),
             active = sortColumn == BrowseSortColumn.PRICE,
             direction = sortDirection,
         ) { onSort(BrowseSortColumn.PRICE, SortDirection.DESC) }
         SortHeaderCell(
-            "Qty",
+            stringResource(Res.string.h_qty),
             Modifier.width(80.dp),
             active = sortColumn == BrowseSortColumn.QTY,
             direction = sortDirection,
         ) { onSort(BrowseSortColumn.QTY, SortDirection.DESC) }
         SortHeaderCell(
-            "Savings",
+            stringResource(Res.string.h_savings),
             Modifier.width(100.dp),
             active = sortColumn == BrowseSortColumn.SAVINGS,
             direction = sortDirection,
         ) { onSort(BrowseSortColumn.SAVINGS, SortDirection.DESC) }
-        Text("Trader", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(160.dp))
+        Text(
+            stringResource(Res.string.h_trader),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.width(160.dp),
+        )
         SortHeaderCell(
-            "Expires",
+            stringResource(Res.string.h_expires),
             Modifier.width(110.dp),
             active = sortColumn == BrowseSortColumn.EXPIRY,
             direction = sortDirection,
@@ -244,7 +268,7 @@ private fun BrowseTableRow(
                 IconButton(modifier = Modifier.size(20.dp), onClick = { AppState.openInMarket(order.typeId) }) {
                     Icon(
                         Icons.AutoMirrored.Filled.OpenInNew,
-                        contentDescription = "View in Market",
+                        contentDescription = stringResource(Res.string.view_in_market),
                         modifier = Modifier.size(13.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -297,7 +321,7 @@ private fun BrowseTableRow(
             PresenceBadge(order.pubkey)
             if (row.confirmedTrades > 0) {
                 Text(
-                    "${row.confirmedTrades} confirmed",
+                    stringResource(Res.string.confirmed_n, row.confirmedTrades),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.tertiary,
                 )
@@ -306,7 +330,7 @@ private fun BrowseTableRow(
         Box(modifier = Modifier.width(110.dp)) {
             val remainingSeconds = order.expiration - System.currentTimeMillis() / 1000
             Text(
-                "${formatDurationShort(remainingSeconds)} left",
+                stringResource(Res.string.time_left, formatDurationShort(remainingSeconds)),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -321,9 +345,9 @@ private fun BrowseTableRow(
                 OutlinedButton(onClick = { showRequestDialog = true }, enabled = !requestSent, contentPadding = COMPACT_BUTTON_PADDING) {
                     val label =
                         when {
-                            requestSent -> "Sent"
-                            side == OrderSide.SELL -> "Buy"
-                            else -> "Sell"
+                            requestSent -> stringResource(Res.string.sent)
+                            side == OrderSide.SELL -> stringResource(Res.string.buy)
+                            else -> stringResource(Res.string.sell)
                         }
                     Text(label)
                 }
@@ -348,7 +372,7 @@ private fun BrowseTableRow(
                             requestSent = true
                             showRequestDialog = false
                         } else {
-                            requestError = "No P2P Market identity set up yet — add one in Settings first."
+                            requestError = getString(Res.string.err_no_identity_add)
                         }
                     }
                 }
@@ -372,23 +396,37 @@ private fun RequestReservationDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (side == OrderSide.SELL) "Request to buy" else "Offer to sell") },
+        title = {
+            Text(
+                if (side ==
+                    OrderSide.SELL
+                ) {
+                    stringResource(Res.string.request_to_buy)
+                } else {
+                    stringResource(Res.string.offer_to_sell)
+                },
+            )
+        },
         text = {
             Column {
                 Text(
-                    "Min lot ${order.minLot} · ${order.qtyRemaining} remaining",
+                    stringResource(Res.string.min_lot_remaining, order.minLot, order.qtyRemaining),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = qtyText, onValueChange = { qtyText = it }, label = { Text("Quantity") }, singleLine = true)
+                OutlinedTextField(value = qtyText, onValueChange = {
+                    qtyText = it
+                }, label = { Text(stringResource(Res.string.quantity)) }, singleLine = true)
                 Text(
-                    "Total: ${qty?.let { String.format(Locale.US, "%,.2f", it * order.price) } ?: "—"} ISK",
+                    stringResource(Res.string.total_isk, qty?.let { String.format(Locale.US, "%,.2f", it * order.price) } ?: "—"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Note (optional)") }, singleLine = true)
+                OutlinedTextField(value = note, onValueChange = {
+                    note = it
+                }, label = { Text(stringResource(Res.string.note_optional)) }, singleLine = true)
                 error?.let {
                     Spacer(Modifier.height(8.dp))
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
@@ -396,10 +434,10 @@ private fun RequestReservationDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { qty?.let { onSend(it, note) } }, enabled = valid) { Text("Send") }
+            TextButton(onClick = { qty?.let { onSend(it, note) } }, enabled = valid) { Text(stringResource(Res.string.send)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) }
         },
     )
 }

@@ -6,9 +6,11 @@ import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.eventt.auth.generated.resources.*
 import org.eventt.core.database.CharacterDao
 import org.eventt.core.http.EveHttpClient
 import org.eventt.core.model.CharacterModel
+import org.eventt.core.model.stringBlocking
 import java.awt.Desktop
 import java.net.InetSocketAddress
 import java.net.URI
@@ -132,7 +134,7 @@ object SsoAuthManager {
             authResult!!
         } else {
             println("[Auth] Auth timed out after 5 minutes")
-            AuthResult(success = false, error = "Authentication timed out — browser may not have opened or callback blocked")
+            AuthResult(success = false, error = stringBlocking(Res.string.auth_timeout))
         }
     }
 
@@ -252,10 +254,10 @@ object SsoAuthManager {
             }
 
             if (error != null) {
-                val html = "<html><body><h1>Authentication failed</h1><p>$error</p><p>You can close this window.</p></body></html>"
+                val html = stringBlocking(Res.string.html_auth_failed, error)
                 sendResponse(exchange, 200, html, responseHeaders)
                 synchronized(lock) {
-                    authResult = AuthResult(success = false, error = "SSO error: $error")
+                    authResult = AuthResult(success = false, error = stringBlocking(Res.string.sso_error, error))
                 }
                 println("[Auth] SSO error: $error")
                 return@createContext
@@ -267,8 +269,7 @@ object SsoAuthManager {
                 if (character != null) {
                     CharacterDao.insert(character)
                     val html =
-                        "<html><body><h1>Authentication successful!</h1><p>Welcome, ${character.name}! " +
-                            "You can close this window.</p></body></html>"
+                        stringBlocking(Res.string.html_auth_ok, character.name)
                     sendResponse(exchange, 200, html, responseHeaders)
                     synchronized(lock) {
                         authResult = AuthResult(success = true, character = character)
@@ -276,21 +277,19 @@ object SsoAuthManager {
                     println("[Auth] Auth successful: ${character.name} (ID: ${character.id})")
                 } else {
                     val html =
-                        "<html><body><h1>Authentication failed</h1><p>Could not exchange token. The code may have " +
-                            "been used already or is invalid.</p><p>You can close this window.</p></body></html>"
+                        stringBlocking(Res.string.html_exchange_failed)
                     sendResponse(exchange, 200, html, responseHeaders)
                     synchronized(lock) {
-                        authResult = AuthResult(success = false, error = "Token exchange failed — code invalid or expired")
+                        authResult = AuthResult(success = false, error = stringBlocking(Res.string.token_exchange_failed))
                     }
                     println("[Auth] Token exchange failed for code: ${code.take(10)}...")
                 }
             } else {
                 val html =
-                    "<html><body><h1>Authentication failed</h1><p>No authorization code received.</p>" +
-                        "<p>You can close this window.</p></body></html>"
+                    stringBlocking(Res.string.html_no_code)
                 sendResponse(exchange, 200, html, responseHeaders)
                 synchronized(lock) {
-                    authResult = AuthResult(success = false, error = "No authorization code in callback")
+                    authResult = AuthResult(success = false, error = stringBlocking(Res.string.no_auth_code))
                 }
                 println("[Auth] No authorization code in callback")
             }

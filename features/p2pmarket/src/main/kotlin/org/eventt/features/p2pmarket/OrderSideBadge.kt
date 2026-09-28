@@ -11,6 +11,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.eventt.core.nostr.OrderSide
+import org.eventt.p2pmarket.generated.resources.*
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Always-visible SELL/BUY tag — a lone icon or color tint reads as decoration and gets missed, and
@@ -22,7 +24,7 @@ import org.eventt.core.nostr.OrderSide
 internal fun OrderSideBadge(side: OrderSide) {
     val color = if (side == OrderSide.SELL) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
     Text(
-        if (side == OrderSide.SELL) "SELL" else "BUY",
+        stringResource(if (side == OrderSide.SELL) Res.string.side_sell else Res.string.side_buy),
         style = MaterialTheme.typography.labelSmall,
         fontWeight = FontWeight.Bold,
         color = color,
@@ -34,8 +36,7 @@ internal fun OrderSideBadge(side: OrderSide) {
     )
 }
 
-/** The order owner's real-world role — the opposite of whoever fulfills it (see [requesterRole]). */
-internal fun orderOwnerRole(side: OrderSide): String = if (side == OrderSide.SELL) "Seller" else "Buyer"
-
-/** The role of whoever requests/fulfills the order — a SELL order is fulfilled by a buyer and vice versa. */
-internal fun requesterRole(side: OrderSide): String = if (side == OrderSide.SELL) "Buyer" else "Seller"
+/** The order owner's real-world role — the opposite of whoever fulfills it (a SELL order is fulfilled by a buyer). */
+@Composable
+internal fun orderOwnerRole(side: OrderSide): String =
+    stringResource(if (side == OrderSide.SELL) Res.string.role_seller else Res.string.role_buyer)

@@ -25,11 +25,14 @@ import org.eventt.core.database.CorporationDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.ViewContext
 import org.eventt.core.model.CharacterModel
+import org.eventt.core.model.stringBlocking
 import org.eventt.features.tools.ParseWarning
 import org.eventt.features.tools.ToolsInputParser
+import org.eventt.tools.generated.resources.*
 import org.eventt.ui.common.ContentCard
 import org.eventt.ui.common.formatPriceSimple
 import org.eventt.ui.theme.positiveColor
+import org.jetbrains.compose.resources.stringResource
 import java.awt.Toolkit
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.StringSelection
@@ -65,7 +68,7 @@ private sealed class CostBasisSource {
         get() =
             when (this) {
                 is Character -> name
-                is Corporation -> "$name (corp-wide)"
+                is Corporation -> stringBlocking(Res.string.corp_wide, name)
             }
 }
 
@@ -237,12 +240,12 @@ fun PricingScreen(context: ViewContext?) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            ContentCard(title = "Item list") {
+            ContentCard(title = stringResource(Res.string.item_list)) {
                 OutlinedTextField(
                     value = pasteText,
                     onValueChange = { pasteText = it },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
-                    placeholder = { Text("Paste inventory list (name<TAB>quantity per line)…") },
+                    placeholder = { Text(stringResource(Res.string.paste_inventory)) },
                     minLines = 5,
                 )
                 Spacer(Modifier.height(8.dp))
@@ -257,14 +260,14 @@ fun PricingScreen(context: ViewContext?) {
                 }) {
                     Icon(Icons.Default.ContentPaste, null, Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Paste from clipboard")
+                    Text(stringResource(Res.string.paste_from_clipboard))
                 }
             }
         }
 
         item {
-            ContentCard(title = "Pricing") {
-                Text("Cost basis source (who bought this stock)", style = MaterialTheme.typography.labelMedium)
+            ContentCard(title = stringResource(Res.string.pricing)) {
+                Text(stringResource(Res.string.cost_basis_source), style = MaterialTheme.typography.labelMedium)
                 Spacer(Modifier.height(4.dp))
                 CostBasisSourceDropdown(
                     characters = allCharacters,
@@ -280,7 +283,7 @@ fun PricingScreen(context: ViewContext?) {
                 val corpSource = costBasisSource as? CostBasisSource.Corporation
                 if (corpSource != null) {
                     Spacer(Modifier.height(8.dp))
-                    Text("Acting character (determines station, region & fees)", style = MaterialTheme.typography.labelMedium)
+                    Text(stringResource(Res.string.acting_character), style = MaterialTheme.typography.labelMedium)
                     Spacer(Modifier.height(4.dp))
                     ActingCharacterDropdown(
                         members = allCharacters.filter { it.corporationId == corpSource.corpId },
@@ -294,9 +297,9 @@ fun PricingScreen(context: ViewContext?) {
                 Spacer(Modifier.height(8.dp))
                 Text(
                     when {
-                        pricingActingCharId == null -> "Select a character to determine your current station."
-                        stationInfo != null -> "Selling from: ${stationInfo!!.locationName}"
-                        else -> "Could not determine a docked station for this character — station-scoped pricing will be skipped."
+                        pricingActingCharId == null -> stringResource(Res.string.select_char_station)
+                        stationInfo != null -> stringResource(Res.string.selling_from, stationInfo!!.locationName)
+                        else -> stringResource(Res.string.no_docked_station)
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -313,7 +316,7 @@ fun PricingScreen(context: ViewContext?) {
                         },
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text("Apply margin limit (off = always list at the market undercut — cost/margin columns still shown for reference)")
+                    Text(stringResource(Res.string.apply_margin_limit))
                 }
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
@@ -322,7 +325,7 @@ fun PricingScreen(context: ViewContext?) {
                         marginText = it
                         scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(PricingSettings.MARGIN_PCT, it) }
                     },
-                    label = { Text("Margin %") },
+                    label = { Text(stringResource(Res.string.margin_pct)) },
                     singleLine = true,
                     enabled = marginLimitEnabled,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -330,16 +333,13 @@ fun PricingScreen(context: ViewContext?) {
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "The market's current lowest sell order at your station is always undercut by one price tick " +
-                        "when it's cheaper than your margin target — orders sitting at other stations in the region " +
-                        "don't count.",
+                    stringResource(Res.string.undercut_note),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    "Target price is grossed up for your character's fees (Tax ${"%.2f".format(salesTaxPct)}%  ·  " +
-                        "Broker ${"%.2f".format(brokerFeePct)}%) so the margin above is what you actually net.",
+                    stringResource(Res.string.grossed_up_note, "%.2f".format(salesTaxPct), "%.2f".format(brokerFeePct)),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -356,12 +356,12 @@ fun PricingScreen(context: ViewContext?) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.width(8.dp))
                     }
-                    Text("Calculate")
+                    Text(stringResource(Res.string.calculate))
                 }
                 if (marginLimitEnabled && costBasisSource == null) {
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "Pick a cost basis source above (or add a character in Characters) to compute a margin target.",
+                        stringResource(Res.string.pick_cost_basis),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -371,7 +371,7 @@ fun PricingScreen(context: ViewContext?) {
 
         if (warnings.isNotEmpty() || pricingWarnings.isNotEmpty()) {
             item {
-                ContentCard(title = "Warnings (${warnings.size + pricingWarnings.size})") {
+                ContentCard(title = stringResource(Res.string.warnings_n, warnings.size + pricingWarnings.size)) {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         warnings.forEach { w ->
                             Text(
@@ -394,47 +394,47 @@ fun PricingScreen(context: ViewContext?) {
 
         if (results.isNotEmpty()) {
             item {
-                ContentCard(title = "Results") {
+                ContentCard(title = stringResource(Res.string.results)) {
                     Column {
                         Row(modifier = Modifier.fillMaxWidth()) {
                             Text(
-                                "Item",
+                                stringResource(Res.string.col_item),
                                 modifier = Modifier.weight(2f),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                "Qty",
+                                stringResource(Res.string.col_qty),
                                 modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                "Cost",
+                                stringResource(Res.string.col_cost),
                                 modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                "Target",
+                                stringResource(Res.string.col_target),
                                 modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                "Market low",
+                                stringResource(Res.string.col_market_low),
                                 modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                "Final",
+                                stringResource(Res.string.col_final),
                                 modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                "Margin",
+                                stringResource(Res.string.col_margin),
                                 modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
@@ -481,7 +481,7 @@ fun PricingScreen(context: ViewContext?) {
                                         Spacer(Modifier.width(4.dp))
                                         Icon(
                                             Icons.Default.ArrowDownward,
-                                            "Undercut market price",
+                                            stringResource(Res.string.undercut_market_price),
                                             modifier = Modifier.size(12.dp),
                                             tint = MaterialTheme.colorScheme.tertiary,
                                         )
@@ -508,7 +508,7 @@ fun PricingScreen(context: ViewContext?) {
 
             item {
                 ContentCard(
-                    title = "Copy list",
+                    title = stringResource(Res.string.copy_list),
                     actions = {
                         TextButton(onClick = {
                             val sel = StringSelection(clipboardText)
@@ -516,7 +516,7 @@ fun PricingScreen(context: ViewContext?) {
                         }) {
                             Icon(Icons.Default.ContentCopy, null, Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("Copy to clipboard")
+                            Text(stringResource(Res.string.copy_to_clipboard))
                         }
                     },
                 ) {
@@ -549,7 +549,7 @@ private fun ActingCharacterDropdown(
         OutlinedButton(onClick = { expanded = true }, enabled = members.isNotEmpty()) {
             Icon(Icons.Default.Person, null, Modifier.size(16.dp))
             Spacer(Modifier.width(6.dp))
-            Text(selectedName ?: "No local corp members")
+            Text(selectedName ?: stringResource(Res.string.no_local_corp_members))
             Spacer(Modifier.width(4.dp))
             Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null, Modifier.size(16.dp))
         }
@@ -586,14 +586,14 @@ private fun CostBasisSourceDropdown(
         OutlinedButton(onClick = { expanded = true }) {
             Icon(Icons.Default.Person, null, Modifier.size(16.dp))
             Spacer(Modifier.width(6.dp))
-            Text(selected?.label ?: "Select a character or corporation…")
+            Text(selected?.label ?: stringResource(Res.string.select_char_or_corp))
             Spacer(Modifier.width(4.dp))
             Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null, Modifier.size(16.dp))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             if (characters.isNotEmpty()) {
                 Text(
-                    "Characters",
+                    stringResource(Res.string.characters),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
@@ -617,7 +617,7 @@ private fun CostBasisSourceDropdown(
             if (corporations.isNotEmpty()) {
                 if (characters.isNotEmpty()) HorizontalDivider()
                 Text(
-                    "Corporations (corp-wide)",
+                    stringResource(Res.string.corporations_corp_wide),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
@@ -640,7 +640,7 @@ private fun CostBasisSourceDropdown(
             }
             if (characters.isEmpty() && corporations.isEmpty()) {
                 DropdownMenuItem(
-                    text = { Text("No characters or corporations added yet", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    text = { Text(stringResource(Res.string.no_chars_or_corps), color = MaterialTheme.colorScheme.onSurfaceVariant) },
                     onClick = {},
                     enabled = false,
                 )

@@ -28,13 +28,17 @@ import org.eventt.core.database.*
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.AppLog
 import org.eventt.core.model.CorpFeature
+import org.eventt.core.model.stringBlocking
 import org.eventt.core.model.toPnlWindow
+import org.eventt.dashboard.generated.resources.*
 import org.eventt.features.orders.CostBasisService
 import org.eventt.features.orders.WalletSyncService
 import org.eventt.features.orders.realizedPnlWindow
 import org.eventt.ui.common.CorpAccessNotice
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 import java.time.LocalDate
 
 private const val COMBINE_ALL_SETTING = "dashboard.combine_all"
@@ -166,7 +170,7 @@ fun DashboardScreen(
                         name =
                             fifo.inventory[entry.first]?.typeName?.takeIf { it.isNotEmpty() }
                                 ?: StaticDataDao.getTypeName(entry.first)
-                                ?: "Type ${entry.first}",
+                                ?: stringBlocking(Res.string.type_n, entry.first),
                         profit = entry.second,
                         qty = entry.third,
                     )
@@ -191,7 +195,7 @@ fun DashboardScreen(
 
     if (context == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No character selected", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+            Text(stringResource(Res.string.no_character_selected), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
         }
         return
     }
@@ -221,16 +225,16 @@ fun DashboardScreen(
             ) {
                 Text(
                     when {
-                        combined -> "Dashboard — All characters & corps"
-                        corpName != null -> "Dashboard — $corpName"
-                        else -> "Dashboard"
+                        combined -> stringResource(Res.string.dashboard_all)
+                        corpName != null -> stringResource(Res.string.dashboard_corp, corpName)
+                        else -> stringResource(Res.string.dashboard)
                     },
                     style = MaterialTheme.typography.headlineMedium,
                 )
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (isLoading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                     Text(
-                        "Combine all",
+                        stringResource(Res.string.combine_all),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
@@ -269,21 +273,21 @@ fun DashboardScreen(
                 KpiCard(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.AccountBalance,
-                    label = "Wallet Balance",
+                    label = stringResource(Res.string.wallet_balance),
                     value = formatIsk(walletBalance),
                     color = ACCENT,
                 )
                 KpiCard(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.Storage,
-                    label = "Asset Value",
+                    label = stringResource(Res.string.asset_value),
                     value = formatIsk(assetValue),
                     color = Color(0xFF66D9E8),
                 )
                 KpiCard(
                     modifier = Modifier.weight(1f),
                     icon = Icons.AutoMirrored.Filled.TrendingUp,
-                    label = "Cash Flow 30d",
+                    label = stringResource(Res.string.cash_flow_30d),
                     value = formatIsk(month30CashFlow, showSign = true),
                     color = if (month30CashFlow >= 0) positiveColor else negativeColor,
                     valueColor = if (month30CashFlow >= 0) positiveColor else negativeColor,
@@ -294,17 +298,37 @@ fun DashboardScreen(
         // P&L mini cards — cash flow (gross buy/sell + tax/fees actually paid, from the wallet)
         item {
             Text(
-                "Cash Flow",
+                stringResource(Res.string.cash_flow),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
             )
         }
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                PnlMiniCard(modifier = Modifier.weight(1f), label = "Cash Flow Today", value = todayCashFlow, showSign = true)
-                PnlMiniCard(modifier = Modifier.weight(1f), label = "Cash Flow 7 days", value = week7CashFlow, showSign = true)
-                PnlMiniCard(modifier = Modifier.weight(1f), label = "Income 30d", value = income30d, forceColor = positiveColor)
-                PnlMiniCard(modifier = Modifier.weight(1f), label = "Expenses 30d", value = spend30d, forceColor = negativeColor)
+                PnlMiniCard(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(Res.string.cash_flow_today),
+                    value = todayCashFlow,
+                    showSign = true,
+                )
+                PnlMiniCard(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(Res.string.cash_flow_7d),
+                    value = week7CashFlow,
+                    showSign = true,
+                )
+                PnlMiniCard(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(Res.string.income_30d),
+                    value = income30d,
+                    forceColor = positiveColor,
+                )
+                PnlMiniCard(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(Res.string.expenses_30d),
+                    value = spend30d,
+                    forceColor = negativeColor,
+                )
             }
         }
 
@@ -312,17 +336,37 @@ fun DashboardScreen(
         if (fifoWindow != null) {
             item {
                 Text(
-                    "Realized P&L (FIFO cost-basis)",
+                    stringResource(Res.string.realized_pnl_fifo),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                 )
             }
             item {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    PnlMiniCard(modifier = Modifier.weight(1f), label = "Realized Today", value = fifoWindow.todayPnl, showSign = true)
-                    PnlMiniCard(modifier = Modifier.weight(1f), label = "Realized 7 days", value = fifoWindow.pnl7d, showSign = true)
-                    PnlMiniCard(modifier = Modifier.weight(1f), label = "Realized 30 days", value = fifoWindow.pnl30d, showSign = true)
-                    PnlMiniCard(modifier = Modifier.weight(1f), label = "Realized All-time", value = fifoWindow.pnlAll, showSign = true)
+                    PnlMiniCard(
+                        modifier = Modifier.weight(1f),
+                        label = stringResource(Res.string.realized_today),
+                        value = fifoWindow.todayPnl,
+                        showSign = true,
+                    )
+                    PnlMiniCard(
+                        modifier = Modifier.weight(1f),
+                        label = stringResource(Res.string.realized_7d),
+                        value = fifoWindow.pnl7d,
+                        showSign = true,
+                    )
+                    PnlMiniCard(
+                        modifier = Modifier.weight(1f),
+                        label = stringResource(Res.string.realized_30d),
+                        value = fifoWindow.pnl30d,
+                        showSign = true,
+                    )
+                    PnlMiniCard(
+                        modifier = Modifier.weight(1f),
+                        label = stringResource(Res.string.realized_all),
+                        value = fifoWindow.pnlAll,
+                        showSign = true,
+                    )
                 }
             }
             // Daily realized-P&L bars — profit per calendar day from the same FIFO matches as
@@ -338,8 +382,8 @@ fun DashboardScreen(
                     }
                 PnlBarChart(
                     dailyValues = dailyRealized,
-                    title = "Daily Realized P&L — 30d",
-                    emptyHint = "No realized sales in the last 30 days",
+                    title = stringResource(Res.string.daily_realized_pnl_30d),
+                    emptyHint = stringResource(Res.string.no_realized_sales_30d),
                 )
             }
         }
@@ -356,10 +400,10 @@ fun DashboardScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        SectionHeader("Recent Transactions", count = recentTx.size.takeIf { it > 0 })
+                        SectionHeader(stringResource(Res.string.recent_transactions), count = recentTx.size.takeIf { it > 0 })
                         Spacer(Modifier.height(8.dp))
                         if (recentTx.isEmpty()) {
-                            EmptyHint("No transactions recorded")
+                            EmptyHint(stringResource(Res.string.no_transactions_recorded))
                         } else {
                             recentTx.forEachIndexed { i, tx ->
                                 TransactionRow(tx)
@@ -379,10 +423,10 @@ fun DashboardScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        SectionHeader("Top Items — Realized 30d")
+                        SectionHeader(stringResource(Res.string.top_items_realized))
                         Spacer(Modifier.height(8.dp))
                         if (topWinners.isEmpty() && topLosers.isEmpty()) {
-                            EmptyHint("No realized sells in the last 30 days")
+                            EmptyHint(stringResource(Res.string.no_realized_sells_30d))
                         } else {
                             topWinners.forEach { ItemPnlRow(it) }
                             if (topWinners.isNotEmpty() && topLosers.isNotEmpty()) {
@@ -402,18 +446,18 @@ fun DashboardScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        SectionHeader("Top Buyers & Sellers")
+                        SectionHeader(stringResource(Res.string.top_counterparties))
                         Spacer(Modifier.height(8.dp))
                         if (topSellers.isEmpty() && topBuyers.isEmpty()) {
-                            EmptyHint("No transactions recorded")
+                            EmptyHint(stringResource(Res.string.no_transactions_recorded))
                         } else {
                             Text(
-                                "Sellers",
+                                stringResource(Res.string.sellers),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                             )
                             if (topSellers.isEmpty()) {
-                                EmptyHint("No purchases recorded")
+                                EmptyHint(stringResource(Res.string.no_purchases))
                             } else {
                                 topSellers.forEach { CounterpartyRow(it) }
                             }
@@ -423,12 +467,12 @@ fun DashboardScreen(
                                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
                             )
                             Text(
-                                "Buyers",
+                                stringResource(Res.string.buyers),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                             )
                             if (topBuyers.isEmpty()) {
-                                EmptyHint("No sales recorded")
+                                EmptyHint(stringResource(Res.string.no_sales))
                             } else {
                                 topBuyers.forEach { CounterpartyRow(it) }
                             }
@@ -643,7 +687,7 @@ private fun PnlBarChart(
 @Composable
 private fun TransactionRow(tx: Map<String, Any?>) {
     val isBuy = tx["is_buy"] as? Boolean ?: false
-    val typeName = tx["type_name"] as? String ?: "Unknown"
+    val typeName = tx["type_name"] as? String ?: stringResource(Res.string.unknown)
     val qty = (tx["quantity"] as? Number)?.toInt() ?: 0
     val unitPrice = (tx["unit_price"] as? Number)?.toDouble() ?: 0.0
     val total = (tx["total"] as? Number)?.toDouble() ?: 0.0
@@ -657,7 +701,7 @@ private fun TransactionRow(tx: Map<String, Any?>) {
     ) {
         Surface(color = color.copy(alpha = 0.15f), shape = MaterialTheme.shapes.extraSmall) {
             Text(
-                if (isBuy) "BUY" else "SELL",
+                if (isBuy) stringResource(Res.string.buy_badge) else stringResource(Res.string.sell_badge),
                 style = MaterialTheme.typography.labelSmall,
                 color = color,
                 fontWeight = FontWeight.Bold,
@@ -667,7 +711,7 @@ private fun TransactionRow(tx: Map<String, Any?>) {
         Column(modifier = Modifier.weight(1f)) {
             Text(typeName, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                "${qty}x @ ${formatIsk(unitPrice)}",
+                stringResource(Res.string.qty_at_price, qty, formatIsk(unitPrice)),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
             )
@@ -717,7 +761,7 @@ private fun computeCounterpartyStats(transactions: List<Map<String, Any?>>): Pai
     fun rank(isBuy: Boolean) =
         transactions
             .filter { (it["is_buy"] as? Boolean) == isBuy }
-            .groupBy { (it["client_name"] as? String)?.ifEmpty { null } ?: "Unknown" }
+            .groupBy { (it["client_name"] as? String)?.ifEmpty { null } ?: stringBlocking(Res.string.unknown) }
             .map { (name, txs) -> CounterpartyStat(name, txs.sumOf(::txTotal), txs.size) }
             .sortedByDescending { it.total }
             .take(5)
@@ -735,7 +779,7 @@ private fun ItemPnlRow(item: ItemPnl) {
         Column(modifier = Modifier.weight(1f)) {
             Text(item.name, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                "${item.qty} sold",
+                stringResource(Res.string.qty_sold, item.qty),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
             )
@@ -759,7 +803,7 @@ private fun CounterpartyRow(stat: CounterpartyStat) {
         Column(modifier = Modifier.weight(1f)) {
             Text(stat.name, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                "${stat.count} trade${if (stat.count == 1) "" else "s"}",
+                pluralStringResource(Res.plurals.trades_count, stat.count, stat.count),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
             )

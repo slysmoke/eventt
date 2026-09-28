@@ -56,7 +56,7 @@ object StreamOverlayServer {
 
         val srv = HttpServer.create(InetSocketAddress("127.0.0.1", PORT), 0)
         srv.createContext("/") { exchange ->
-            sendResponse(exchange, "text/html; charset=utf-8", StreamOverlayPage.HTML)
+            sendResponse(exchange, "text/html; charset=utf-8", StreamOverlayPage.localizedHtml())
         }
         srv.createContext("/api/stats") { exchange ->
             sendResponse(exchange, "application/json; charset=utf-8", json.encodeToString(currentStats()))

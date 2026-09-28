@@ -46,12 +46,16 @@ import org.eventt.core.model.PriceAlertModel
 import org.eventt.core.model.StaticMarketGroupModel
 import org.eventt.core.model.StaticRegionModel
 import org.eventt.core.model.eveSigFigStep
+import org.eventt.core.model.stringBlocking
+import org.eventt.market.generated.resources.*
 import org.eventt.ui.common.formatPriceAbbr
 import org.eventt.ui.common.formatVolume
 import org.eventt.ui.common.onRightClick
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.eventt.ui.theme.warningColor
+import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.stringResource
 import java.util.Locale
 
 /**
@@ -220,7 +224,13 @@ internal fun MaterialsInvestmentTab(
                     scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_REGION, it.toString()) } }
                 }
                 FilterDivider()
-                GroupDropdown("Category", topGroups, selectedTopGroup, "All categories", 170.dp) { g ->
+                GroupDropdown(
+                    stringResource(Res.string.category),
+                    topGroups,
+                    selectedTopGroup,
+                    stringResource(Res.string.all_categories),
+                    170.dp,
+                ) { g ->
                     selectedTopGroup = g
                     selectedSubGroup = null
                     scope.launch {
@@ -231,59 +241,58 @@ internal fun MaterialsInvestmentTab(
                     }
                 }
                 if (subGroups.isNotEmpty()) {
-                    GroupDropdown("Subcategory", subGroups, selectedSubGroup, "All", 140.dp) { g ->
+                    GroupDropdown(
+                        stringResource(Res.string.subcategory),
+                        subGroups,
+                        selectedSubGroup,
+                        stringResource(Res.string.all_short),
+                        140.dp,
+                    ) { g ->
                         selectedSubGroup = g
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_CAT_SUB, g?.marketGroupId?.toString() ?: "") } }
                     }
                 }
                 FilterDivider()
                 Tip(
-                    "How many days of price history define \"normal\" for this item -- Avg/High/Low/Volatility and the vs Avg " +
-                        "discount are all computed over this window. It's not a wait time: ESI already has up to ~13 months of " +
-                        "history, so results appear immediately. It's also the window the Backtest column re-checks on every " +
-                        "single simulated day across all available history, not just once.",
+                    stringResource(Res.string.mi_tip_lookback),
                 ) {
-                    ParamField("Lookback d", lookbackDays, 65.dp) {
+                    ParamField(stringResource(Res.string.lookback_d), lookbackDays, 65.dp) {
                         lookbackDays = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_LOOKBACK_DAYS, it) } }
                     }
                 }
-                Tip("Skip items whose median daily trade volume (over the lookback window) is below this -- too thin to reliably trade.") {
-                    ParamField("Min Vol", minDailyVol, 65.dp) {
+                Tip(stringResource(Res.string.mi_tip_min_vol)) {
+                    ParamField(stringResource(Res.string.min_vol), minDailyVol, 65.dp) {
                         minDailyVol = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MIN_VOL, it) } }
                     }
                 }
                 Tip(
-                    "Only include items currently at least this % below their own Lookback-day average price -- the core " +
-                        "\"is it cheap\" filter. Items you hold or have orders on are always shown, whatever the filters.",
+                    stringResource(Res.string.mi_tip_min_discount),
                 ) {
-                    ParamField("Min Discount %", minDiscountPct, 90.dp) {
+                    ParamField(stringResource(Res.string.min_discount_pct), minDiscountPct, 90.dp) {
                         minDiscountPct = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MIN_DISCOUNT, it) } }
                     }
                 }
                 Tip(
-                    "Skip items whose price swings less than this % (std-dev ÷ average) over the lookback window -- too " +
-                        "flat to dip deep enough, or rebound far enough, to beat a round trip's fees. 0 = no limit.",
+                    stringResource(Res.string.mi_tip_min_volatility),
                 ) {
-                    ParamField("Min Volatility %", minVolatilityPct, 95.dp) {
+                    ParamField(stringResource(Res.string.min_volatility_pct), minVolatilityPct, 95.dp) {
                         minVolatilityPct = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MIN_VOLATILITY, it) } }
                     }
                 }
-                Tip("Skip items whose price swings more than this % (std-dev ÷ average) over the lookback window. 0 = no limit.") {
-                    ParamField("Max Volatility %", maxVolatilityPct, 95.dp) {
+                Tip(stringResource(Res.string.mi_tip_max_volatility)) {
+                    ParamField(stringResource(Res.string.max_volatility_pct), maxVolatilityPct, 95.dp) {
                         maxVolatilityPct = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MAX_VOLATILITY, it) } }
                     }
                 }
                 Tip(
-                    "Skip items whose current price is at or below their own lowest recorded price in roughly the last year. " +
-                        "A break to a new multi-month low looks like structural decline (e.g. made obsolete by a balance patch), " +
-                        "not a routine dip worth feeding the buy ladder.",
+                    stringResource(Res.string.mi_tip_1y_lows),
                 ) {
-                    FilterControl("Exclude 1y Lows") {
+                    FilterControl(stringResource(Res.string.exclude_1y_lows)) {
                         Checkbox(
                             checked = excludeStructuralBreak,
                             onCheckedChange = {
@@ -294,20 +303,31 @@ internal fun MaterialsInvestmentTab(
                         )
                     }
                 }
-                Tip("Filters out items whose recent price/volume history shows a sharp one-off spike (e.g. a buyout or wash trading).") {
+                Tip(stringResource(Res.string.mi_tip_spike)) {
                     SpikeFilterChip(spikeFilter) {
                         spikeFilter = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_SPIKE_FILTER, it.name) } }
                     }
                 }
-                Tip("A day's price counts as a spike if it's at least this many times the surrounding baseline.") {
-                    ParamField("Price ×", spikePriceMultiplier, 50.dp, enabled = spikeFilter != SpikeFilter.ANY) {
+                Tip(stringResource(Res.string.mi_tip_price_mult)) {
+                    ParamField(
+                        stringResource(Res.string.price_mult),
+                        spikePriceMultiplier,
+                        50.dp,
+                        enabled = spikeFilter != SpikeFilter.ANY,
+                    ) {
                         spikePriceMultiplier = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_SPIKE_PRICE_MULTIPLIER, it) } }
                     }
                 }
-                Tip("A day's trade volume counts as a spike if it's at least this many times the surrounding baseline.") {
-                    ParamField("Volume ×", spikeVolumeMultiplier, 50.dp, enabled = spikeFilter != SpikeFilter.ANY) {
+                Tip(stringResource(Res.string.mi_tip_vol_mult)) {
+                    ParamField(
+                        stringResource(Res.string.volume_mult),
+                        spikeVolumeMultiplier,
+                        50.dp,
+                        enabled =
+                            spikeFilter != SpikeFilter.ANY,
+                    ) {
                         spikeVolumeMultiplier = it
                         scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_SPIKE_VOLUME_MULTIPLIER, it) } }
                     }
@@ -320,57 +340,48 @@ internal fun MaterialsInvestmentTab(
                     modifier = Modifier.weight(1f),
                 ) {
                     Tip(
-                        "Total ISK you want invested across these items, including what you already hold -- a target " +
-                            "exposure, not new money. Split across the picked candidates below, weighted by discount depth × " +
-                            "daily traded ISK value; each item's To Buy is its share minus what you already hold.",
+                        stringResource(Res.string.mi_tip_budget),
                     ) {
-                        ParamField("Budget (ISK)", totalBudget, 120.dp) {
+                        ParamField(stringResource(Res.string.budget_isk), totalBudget, 120.dp) {
                             totalBudget = it
                             scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_TOTAL_BUDGET, it) } }
                         }
                     }
                     Tip(
-                        "How many of the top-ranked candidates get a share of the budget -- ranked by real ISK opportunity " +
-                            "(discount % × daily traded value), not by raw discount % alone, so a deep discount on a thin/illiquid " +
-                            "item doesn't crowd out a shallower discount on a liquid, high-value one.",
+                        stringResource(Res.string.mi_tip_max_items),
                     ) {
-                        ParamField("Max Items", maxItems, 65.dp) {
+                        ParamField(stringResource(Res.string.max_items), maxItems, 65.dp) {
                             maxItems = it
                             scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MAX_ITEMS, it) } }
                         }
                     }
-                    Tip("Caps any single item at this % of the total budget, regardless of how deep its discount is.") {
-                        ParamField("Max %/Item", maxPerItemPct, 75.dp) {
+                    Tip(stringResource(Res.string.mi_tip_max_per_item)) {
+                        ParamField(stringResource(Res.string.max_pct_item), maxPerItemPct, 75.dp) {
                             maxPerItemPct = it
                             scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MAX_PER_ITEM_PCT, it) } }
                         }
                     }
                     Tip(
-                        "Second cap: never allocate more than this many days' worth of the item's own median daily trading " +
-                            "value -- avoids parking more ISK in one material than the market could plausibly absorb.",
+                        stringResource(Res.string.mi_tip_liquidity),
                     ) {
-                        ParamField("Liquidity d", liquidityDays, 75.dp) {
+                        ParamField(stringResource(Res.string.liquidity_d), liquidityDays, 75.dp) {
                             liquidityDays = it
                             scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_LIQUIDITY_DAYS, it) } }
                         }
                     }
                     FilterDivider()
                     Tip(
-                        "How many price rungs to split each item's allocation into. Anchored to your real average cost when " +
-                            "you're already holding and underwater, otherwise to the current live price.",
+                        stringResource(Res.string.mi_tip_ladder_levels),
                     ) {
-                        ParamField("Ladder Levels", ladderLevels, 80.dp) {
+                        ParamField(stringResource(Res.string.ladder_levels), ladderLevels, 80.dp) {
                             ladderLevels = it
                             scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_LADDER_LEVELS, it) } }
                         }
                     }
                     Tip(
-                        "Price gap between each ladder rung. Later rungs (further price drops) get a bigger share of the " +
-                            "item's allocation -- buy more the further it falls. Also the take-profit %: the sell target is " +
-                            "your cost (incl. buy broker fee) + this %, net of sales tax and broker fee -- and the Backtest " +
-                            "sells at the same rule.",
+                        stringResource(Res.string.mi_tip_ladder_step),
                     ) {
-                        ParamField("Ladder Step %", ladderStepPct, 85.dp) {
+                        ParamField(stringResource(Res.string.ladder_step_pct), ladderStepPct, 85.dp) {
                             ladderStepPct = it
                             scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_LADDER_STEP_PCT, it) } }
                         }
@@ -378,14 +389,18 @@ internal fun MaterialsInvestmentTab(
                     FilterDivider()
                     val hotkeyLabel by HotkeyBindings.queueLabel.collectAsState()
                     Tip(
-                        "Check rows below, then press $hotkeyLabel to step through every checked item's buy-ladder rungs: " +
-                            "opens the item's market window and copies the target price, then on the next press copies the " +
-                            "quantity -- paste each into EVE's buy-order dialog.",
+                        stringResource(Res.string.mi_tip_hotkey, hotkeyLabel),
                     ) {
-                        FilterControl("Hotkey Queue ($hotkeyLabel)") {
+                        FilterControl(stringResource(Res.string.hotkey_queue, hotkeyLabel)) {
                             Text(
                                 if (queueItems.isEmpty()) {
-                                    if (selectedTypeIds.isEmpty()) "check rows →" else "no rungs"
+                                    if (selectedTypeIds.isEmpty()) {
+                                        stringResource(
+                                            Res.string.check_rows,
+                                        )
+                                    } else {
+                                        stringResource(Res.string.no_rungs)
+                                    }
                                 } else {
                                     "${MaterialsInvestmentQueue.currentPosition}/${queueItems.size}"
                                 },
@@ -394,8 +409,8 @@ internal fun MaterialsInvestmentTab(
                             )
                         }
                     }
-                    Tip("Whether the second hotkey press (per rung) also copies the suggested quantity, or just advances.") {
-                        FilterControl("Copy Vol") {
+                    Tip(stringResource(Res.string.mi_tip_copy_vol)) {
+                        FilterControl(stringResource(Res.string.copy_vol)) {
                             Switch(
                                 checked = copyVolumeEnabled,
                                 onCheckedChange = {
@@ -407,17 +422,15 @@ internal fun MaterialsInvestmentTab(
                         }
                     }
                     Tip(
-                        "Create alerts for every checked row at once (all rows if none are checked): buy-ladder rungs " +
-                            "plus sell targets for held positions. Existing identical alerts are skipped. AlertMonitor " +
-                            "fetches each item's order book once, however many alerts it has.",
+                        stringResource(Res.string.mi_tip_alerts),
                     ) {
-                        FilterControl("Alerts") {
+                        FilterControl(stringResource(Res.string.alerts)) {
                             val targets = sorted.filter { selectedTypeIds.isEmpty() || it.candidate.typeId in selectedTypeIds }
                             OutlinedButton(
                                 onClick = {
                                     scope.launch {
                                         val n = withContext(Dispatchers.IO) { createAlerts(targets, regionId, charId) }
-                                        statusMsg = "$n alert(s) set for ${targets.size} item(s)"
+                                        statusMsg = getString(Res.string.alerts_set_items, n, targets.size)
                                     }
                                 },
                                 enabled = targets.isNotEmpty(),
@@ -426,17 +439,35 @@ internal fun MaterialsInvestmentTab(
                             ) {
                                 Icon(Icons.Default.NotificationsActive, null, Modifier.size(14.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text(if (selectedTypeIds.isEmpty()) "All (${targets.size})" else "Checked (${targets.size})")
+                                Text(
+                                    if (selectedTypeIds.isEmpty()) {
+                                        stringResource(
+                                            Res.string.all_n,
+                                            targets.size,
+                                        )
+                                    } else {
+                                        stringResource(Res.string.checked_n, targets.size)
+                                    },
+                                )
                             }
                         }
                     }
                 }
                 if (statusMsg.isNotEmpty()) {
+                    val errorPrefix = stringResource(Res.string.status_error, "")
                     FilterActionSlot {
                         Text(
                             statusMsg,
                             style = MaterialTheme.typography.labelSmall,
-                            color = if ("Error" in statusMsg) negativeColor else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            color =
+                                if (statusMsg.startsWith(
+                                        errorPrefix,
+                                    )
+                                ) {
+                                    negativeColor
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                },
                             modifier = Modifier.height(FilterFieldHeight).wrapContentHeight(Alignment.CenterVertically),
                         )
                     }
@@ -451,7 +482,7 @@ internal fun MaterialsInvestmentTab(
                         ) {
                             Icon(Icons.Default.Stop, null, Modifier.size(14.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Stop")
+                            Text(stringResource(Res.string.stop))
                         }
                     }
                     Spacer(Modifier.width(8.dp))
@@ -466,7 +497,7 @@ internal fun MaterialsInvestmentTab(
                                     try {
                                         val groupId = selectedSubGroup?.marketGroupId ?: selectedTopGroup?.marketGroupId
                                         if (groupId == null) {
-                                            statusMsg = "Error: pick a category first"
+                                            statusMsg = stringBlocking(Res.string.err_pick_category)
                                             return@launch
                                         }
                                         val groupIds = withContext(Dispatchers.IO) { buildGroupSubtree(groupId) }
@@ -483,7 +514,7 @@ internal fun MaterialsInvestmentTab(
                                         val excludeStructuralBreakSnap = excludeStructuralBreak
                                         val histSrc = withContext(Dispatchers.IO) { EveRefService.getSelectedSource() }
 
-                                        statusMsg = "Fetching region orders…"
+                                        statusMsg = stringBlocking(Res.string.mi_fetching_region_orders)
                                         val ordersByType =
                                             withContext(Dispatchers.IO) { EsiClient.getMarketRegionOrders(regionId) }
                                                 .groupBy { (it["type_id"] as? Number)?.toInt() ?: 0 }
@@ -520,7 +551,7 @@ internal fun MaterialsInvestmentTab(
                                         val feesSnap = fees
                                         val takeProfitSnap = ladderStepPct.toDoubleOrNull() ?: 5.0
 
-                                        statusMsg = "0/${typeIds.size} types checked…"
+                                        statusMsg = stringBlocking(Res.string.types_checked_zero, typeIds.size)
                                         val semaphore = Semaphore(10)
                                         val found = java.util.Collections.synchronizedList(mutableListOf<MaterialCandidate>())
                                         var checked = 0
@@ -575,7 +606,8 @@ internal fun MaterialsInvestmentTab(
                                                             mutex.withLock {
                                                                 checked++
                                                                 if (checked % 20 == 0 || checked == typeIds.size) {
-                                                                    statusMsg = "$checked/${typeIds.size} types checked…"
+                                                                    statusMsg =
+                                                                        stringBlocking(Res.string.types_checked, checked, typeIds.size)
                                                                 }
                                                             }
                                                         }
@@ -583,12 +615,12 @@ internal fun MaterialsInvestmentTab(
                                                 }.forEach { it.await() }
                                         }
                                         candidates = found.toList()
-                                        statusMsg = "${candidates.size} dip candidates found"
+                                        statusMsg = stringBlocking(Res.string.dip_candidates, candidates.size)
                                     } catch (e: CancellationException) {
-                                        statusMsg = "Cancelled"
+                                        statusMsg = stringBlocking(Res.string.cancelled)
                                         throw e
                                     } catch (e: Exception) {
-                                        statusMsg = "Error: ${e.message}"
+                                        statusMsg = stringBlocking(Res.string.status_error, e.message.orEmpty())
                                     } finally {
                                         isAnalyzing = false
                                     }
@@ -601,7 +633,7 @@ internal fun MaterialsInvestmentTab(
                     ) {
                         Icon(Icons.AutoMirrored.Filled.TrendingDown, null, Modifier.size(14.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text(if (isAnalyzing) "Analyzing…" else "Analyze")
+                        Text(if (isAnalyzing) stringResource(Res.string.analyzing) else stringResource(Res.string.analyze))
                     }
                 }
             }
@@ -610,12 +642,12 @@ internal fun MaterialsInvestmentTab(
         if (sorted.isEmpty()) {
             AnalysisEmptyState(
                 icon = Icons.AutoMirrored.Filled.TrendingDown,
-                primary = if (isAnalyzing) "Scanning price history…" else "No dip candidates yet",
+                primary = if (isAnalyzing) stringResource(Res.string.scanning_history) else stringResource(Res.string.no_dip_candidates),
                 secondary =
                     if (isAnalyzing) {
                         statusMsg
                     } else {
-                        "Pick a category (defaults to Manufacture & Research > Materials) and click Analyze"
+                        stringResource(Res.string.mi_empty_hint)
                     },
             )
         } else {
@@ -649,7 +681,7 @@ internal fun MaterialsInvestmentTab(
                         onCreateAlerts = {
                             scope.launch {
                                 val n = withContext(Dispatchers.IO) { createAlerts(listOf(alloc), regionId, charId) }
-                                statusMsg = "$n alert(s) set for ${alloc.candidate.typeName}"
+                                statusMsg = getString(Res.string.alerts_set_one, n, alloc.candidate.typeName)
                             }
                         },
                     )
@@ -684,69 +716,57 @@ private fun MaterialsHeader(
 ) {
     Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-            Tip("Select all / none -- checked rows feed the hotkey queue.") {
+            Tip(stringResource(Res.string.mi_tip_select_all)) {
                 Checkbox(checked = allChecked, onCheckedChange = onCheckAll, modifier = Modifier.size(28.dp))
             }
-            MCol("Item", MaterialSortCol.NAME, sort, asc, onSort, Modifier.weight(1f))
+            MCol(stringResource(Res.string.m_item), MaterialSortCol.NAME, sort, asc, onSort, Modifier.weight(1f))
             Tip(
-                "Live top buy order price -- the current best bid. This tab is built around placing your own buy orders, not instant-buying, so ladder prices are targets for standing orders, not asks to pay.",
+                stringResource(Res.string.mi_tip_current),
             ) {
-                MCol("Current", MaterialSortCol.CURRENT, sort, asc, onSort, Modifier.width(80.dp))
+                MCol(stringResource(Res.string.m_current), MaterialSortCol.CURRENT, sort, asc, onSort, Modifier.width(80.dp))
             }
-            Tip("Average price over the Lookback-day window.") {
-                MCol("Avg", MaterialSortCol.AVG, sort, asc, onSort, Modifier.width(80.dp))
-            }
-            Tip(
-                "Your current holding: real quantity from your assets (all locations) plus stock listed in your sell orders, " +
-                    "@ the moving-average cost of your tracked market buys, reset each time the position was fully sold " +
-                    "(before broker fee; not FIFO, and stock from mining/reprocessing/manufacturing has no buy price to " +
-                    "count). Anchors the buy ladder to your real entry instead of the live price.",
-            ) {
-                MCol("Held", MaterialSortCol.HELD, sort, asc, onSort, Modifier.width(140.dp))
-            }
-            Tip("How far below the Lookback-window's highest price the current price sits.") {
-                MCol("Drawdown", MaterialSortCol.DRAWDOWN, sort, asc, onSort, Modifier.width(75.dp))
+            Tip(stringResource(Res.string.mi_tip_avg)) {
+                MCol(stringResource(Res.string.m_avg), MaterialSortCol.AVG, sort, asc, onSort, Modifier.width(80.dp))
             }
             Tip(
-                "How far below the Lookback-window average the current price sits -- the core \"is it cheap\" number this " +
-                    "tab ranks candidates by.",
+                stringResource(Res.string.mi_tip_held),
             ) {
-                MCol("vs Avg", MaterialSortCol.VS_AVG, sort, asc, onSort, Modifier.width(65.dp))
+                MCol(stringResource(Res.string.m_held), MaterialSortCol.HELD, sort, asc, onSort, Modifier.width(140.dp))
             }
-            Tip("Price change over the last 7 days.") {
-                MCol("7d", MaterialSortCol.TREND, sort, asc, onSort, Modifier.width(55.dp))
+            Tip(stringResource(Res.string.mi_tip_drawdown)) {
+                MCol(stringResource(Res.string.m_drawdown), MaterialSortCol.DRAWDOWN, sort, asc, onSort, Modifier.width(75.dp))
             }
             Tip(
-                "Replays this tab's strategy over up to a year of this item's own daily history: buy on every day the " +
-                    "price is Min Discount % under the trailing Lookback-day average, and sell the whole position once " +
-                    "selling nets cost + Ladder Step % (the same take-profit as the sell target), then wait for the next " +
-                    "dip. Broker fee on buys, sales tax + broker fee on sells. Format: total P&L% (worst P&L% along the " +
-                    "way), both vs the most capital tied up at once. A negative first number means the pattern hasn't " +
-                    "historically paid off for this item. Uses the Ladder Step % from the last Analyze.",
+                stringResource(Res.string.mi_tip_vs_avg),
             ) {
-                MCol("Backtest", MaterialSortCol.BACKTEST, sort, asc, onSort, Modifier.width(105.dp))
+                MCol(stringResource(Res.string.m_vs_avg), MaterialSortCol.VS_AVG, sort, asc, onSort, Modifier.width(65.dp))
             }
-            Tip("Price swinginess over the lookback window (std-dev ÷ average). Higher = choppier.") {
-                MCol("Volatility", MaterialSortCol.VOLATILITY, sort, asc, onSort, Modifier.width(70.dp))
-            }
-            Tip("Median daily trade volume over the lookback window.") {
-                MCol("Vol/day", MaterialSortCol.VOLUME, sort, asc, onSort, Modifier.width(65.dp))
+            Tip(stringResource(Res.string.mi_tip_7d)) {
+                MCol(stringResource(Res.string.m_7d), MaterialSortCol.TREND, sort, asc, onSort, Modifier.width(55.dp))
             }
             Tip(
-                "Held positions only: net profit selling the whole stack at the current lowest ask, after sales tax " +
-                    "and broker fee, against your average cost including the broker fee you paid to buy.",
+                stringResource(Res.string.mi_tip_backtest),
             ) {
-                MCol("Total Profit", MaterialSortCol.PROFIT, sort, asc, onSort, Modifier.width(85.dp))
+                MCol(stringResource(Res.string.m_backtest), MaterialSortCol.BACKTEST, sort, asc, onSort, Modifier.width(105.dp))
             }
-            Tip("That profit as % of what the held stack cost you.") {
-                MCol("Margin", MaterialSortCol.MARGIN, sort, asc, onSort, Modifier.width(60.dp))
+            Tip(stringResource(Res.string.mi_tip_volatility)) {
+                MCol(stringResource(Res.string.m_volatility), MaterialSortCol.VOLATILITY, sort, asc, onSort, Modifier.width(70.dp))
+            }
+            Tip(stringResource(Res.string.mi_tip_vol_day)) {
+                MCol(stringResource(Res.string.m_vol_day), MaterialSortCol.VOLUME, sort, asc, onSort, Modifier.width(65.dp))
             }
             Tip(
-                "ISK left to buy: this item's share of the budget (after ranking, the per-item cap and the liquidity cap) " +
-                    "minus what you already hold at cost (incl. buy broker fee) and ISK in your open buy orders. Ladder " +
-                    "quantities leave room for the broker fee. 0 once the position is full.",
+                stringResource(Res.string.mi_tip_total_profit),
             ) {
-                MCol("To Buy", MaterialSortCol.ALLOCATED, sort, asc, onSort, Modifier.width(80.dp))
+                MCol(stringResource(Res.string.m_total_profit), MaterialSortCol.PROFIT, sort, asc, onSort, Modifier.width(85.dp))
+            }
+            Tip(stringResource(Res.string.mi_tip_margin)) {
+                MCol(stringResource(Res.string.m_margin), MaterialSortCol.MARGIN, sort, asc, onSort, Modifier.width(60.dp))
+            }
+            Tip(
+                stringResource(Res.string.mi_tip_to_buy),
+            ) {
+                MCol(stringResource(Res.string.m_to_buy), MaterialSortCol.ALLOCATED, sort, asc, onSort, Modifier.width(80.dp))
             }
             Spacer(Modifier.width(28.dp))
         }
@@ -820,24 +840,23 @@ private fun MaterialRow(
                     Tip(
                         when (action) {
                             MaterialAction.BUY -> {
-                                "Buy: still below its share of the budget -- place the buy ladder below."
+                                stringResource(Res.string.act_buy)
                             }
 
                             MaterialAction.WAIT -> {
-                                "Wait: position is full, sell target not reached yet."
+                                stringResource(Res.string.act_wait)
                             }
 
                             MaterialAction.SELL -> {
-                                "Sell: selling at the lowest ask already nets your cost (incl. buy broker fee) + take-profit, " +
-                                    "after sales tax and broker fee."
+                                stringResource(Res.string.act_sell)
                             }
 
                             MaterialAction.BUYING -> {
-                                "Buying: your buy orders already cover the rest of this item's allocation."
+                                stringResource(Res.string.act_buying)
                             }
 
                             MaterialAction.ON_SALE -> {
-                                "On sale: your stock is listed in sell orders -- waiting for fills."
+                                stringResource(Res.string.act_on_sale)
                             }
                         },
                     ) {
@@ -866,13 +885,11 @@ private fun MaterialRow(
                 )
                 if (c.spikeDetected) {
                     Tip(
-                        "Recent price or volume spike detected -- a sharp one-off jump (e.g. a single large buyout, or wash " +
-                            "trading) rather than an organic move. Doesn't exclude the item by itself (Spike Filter is set to " +
-                            "\"Any\"); check the price chart (chart icon next to the name) before trusting the ladder on this one.",
+                        stringResource(Res.string.mi_tip_spike_row),
                     ) {
                         Icon(
                             Icons.Default.Warning,
-                            contentDescription = "Recent price spike detected",
+                            contentDescription = stringResource(Res.string.spike_detected),
                             modifier = Modifier.size(13.dp),
                             tint = warningColor,
                         )
@@ -881,7 +898,7 @@ private fun MaterialRow(
                 IconButton(onClick = { onShowDetails(c.typeId) }, modifier = Modifier.size(20.dp)) {
                     Icon(
                         Icons.AutoMirrored.Filled.ShowChart,
-                        contentDescription = "Open chart",
+                        contentDescription = stringResource(Res.string.open_chart),
                         modifier = Modifier.size(15.dp),
                         tint = MaterialTheme.colorScheme.primary,
                     )
@@ -973,14 +990,12 @@ private fun MaterialRow(
                 modifier = Modifier.width(80.dp),
             )
             Tip(
-                "Create price alerts (Alerts tab) for this item: remaining buy-ladder rungs (top buy order falls to the " +
-                    "rung) and, for a held position, the sell target (lowest ask rises to it). Skips levels already crossed " +
-                    "and alerts that already exist.",
+                stringResource(Res.string.mi_tip_row_alerts),
             ) {
                 IconButton(onClick = onCreateAlerts, modifier = Modifier.size(28.dp)) {
                     Icon(
                         Icons.Default.NotificationsActive,
-                        contentDescription = "Create alerts for this item's buy ladder",
+                        contentDescription = stringResource(Res.string.create_alerts_row),
                         modifier = Modifier.size(15.dp),
                     )
                 }
@@ -988,12 +1003,10 @@ private fun MaterialRow(
         }
         if (alloc.ladder.isNotEmpty()) {
             Tip(
-                "Target price for a standing buy order → ISK to spend at that rung, broker fee included (the rung's " +
-                    "quantity leaves room for it). * = already at/above the current top bid, so it's actionable right now " +
-                    "rather than a future target.",
+                stringResource(Res.string.mi_tip_ladder),
             ) {
                 Text(
-                    "Buy: " +
+                    stringResource(Res.string.ladder_buy_prefix) + " " +
                         alloc.ladder.joinToString("  ·  ") {
                             "${formatPriceAbbr(it.triggerPrice)}→${formatPriceAbbr(it.iskAmount)}" + if (it.alreadyTriggered) "*" else ""
                         },
@@ -1006,19 +1019,23 @@ private fun MaterialRow(
             }
         }
         c.position?.takeIf { it.hasOrders }?.let { p ->
-            Tip("Your active market orders on this item (from the last Orders sync).") {
+            Tip(stringResource(Res.string.mi_tip_orders)) {
                 Row(modifier = Modifier.padding(start = 28.dp, top = 1.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (p.buyOrderQty > 0) {
                         Text(
-                            "▲ buying ${formatVolume(p.buyOrderQty)}u @ ${formatPriceAbbr(p.buyOrderPrice ?: 0.0)} " +
-                                "(${formatPriceAbbr(p.buyOrderIsk)} in orders)",
+                            stringResource(
+                                Res.string.buying_line,
+                                formatVolume(p.buyOrderQty),
+                                formatPriceAbbr(p.buyOrderPrice ?: 0.0),
+                                formatPriceAbbr(p.buyOrderIsk),
+                            ),
                             style = MaterialTheme.typography.labelSmall,
                             color = positiveColor.copy(alpha = 0.8f),
                         )
                     }
                     if (p.listedQty > 0) {
                         Text(
-                            "▼ on sale ${formatVolume(p.listedQty)}u @ ${formatPriceAbbr(p.listedPrice ?: 0.0)}",
+                            stringResource(Res.string.on_sale_line, formatVolume(p.listedQty), formatPriceAbbr(p.listedPrice ?: 0.0)),
                             style = MaterialTheme.typography.labelSmall,
                             color = warningColor.copy(alpha = 0.8f),
                         )
@@ -1028,20 +1045,22 @@ private fun MaterialRow(
         }
         alloc.sellTarget?.let { st ->
             Tip(
-                "Sell the whole stack in one order at or above the target: your cost (incl. buy broker fee) + take-profit " +
-                    "%, net of sales tax and broker fee. \"now\" is the net profit selling everything at the current " +
-                    "lowest ask, after the same fees.",
+                stringResource(Res.string.mi_tip_sell_target),
             ) {
                 Row(modifier = Modifier.padding(start = 28.dp, top = 1.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        "Sell: ${formatVolume(st.qty)}u @ ≥${formatPriceAbbr(st.targetPrice)}",
+                        stringResource(Res.string.sell_line, formatVolume(st.qty), formatPriceAbbr(st.targetPrice)),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
                     if (st.profitNow != null && c.bestAsk != null) {
                         Text(
-                            "now ${formatPriceAbbr(c.bestAsk)} → ${if (st.profitNow >= 0) "+" else ""}${formatPriceAbbr(st.profitNow)} " +
-                                "(${signedPct(st.profitNowPct ?: 0.0)})",
+                            stringResource(
+                                Res.string.now_line,
+                                formatPriceAbbr(c.bestAsk),
+                                (if (st.profitNow >= 0) "+" else "") + formatPriceAbbr(st.profitNow),
+                                signedPct(st.profitNowPct ?: 0.0),
+                            ),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Medium,
                             color = if (st.profitNow >= 0) positiveColor else negativeColor,
