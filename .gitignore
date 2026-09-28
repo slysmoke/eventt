@@ -75,3 +75,6 @@ compose_resources/
 # Demo-video recording/captioning scripts — local tooling, not shipped with the app
 /scripts/video-tour/
 /remotion-video/
+
+# direnv
+.direnv/
