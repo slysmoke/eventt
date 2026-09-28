@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -865,7 +866,7 @@ private fun MaterialRow(
                     Tip(
                         "Recent price or volume spike detected -- a sharp one-off jump (e.g. a single large buyout, or wash " +
                             "trading) rather than an organic move. Doesn't exclude the item by itself (Spike Filter is set to " +
-                            "\"Any\"); check the price chart (ⓘ) before trusting the ladder on this one.",
+                            "\"Any\"); check the price chart (chart icon next to the name) before trusting the ladder on this one.",
                     ) {
                         Icon(
                             Icons.Default.Warning,
@@ -876,7 +877,12 @@ private fun MaterialRow(
                     }
                 }
                 IconButton(onClick = { onShowDetails(c.typeId) }, modifier = Modifier.size(20.dp)) {
-                    Icon(Icons.Default.Info, contentDescription = "Item details", modifier = Modifier.size(14.dp))
+                    Icon(
+                        Icons.AutoMirrored.Filled.ShowChart,
+                        contentDescription = "Open chart",
+                        modifier = Modifier.size(15.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
                 }
             }
             Text(formatPriceAbbr(c.currentPrice), style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(80.dp))

@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -238,10 +239,10 @@ internal object ItemDetailRequest {
 internal fun ItemDetailButton(target: ItemDetailTarget) {
     IconButton(modifier = Modifier.size(20.dp), onClick = { ItemDetailRequest.target = target }) {
         Icon(
-            Icons.Default.Info,
-            contentDescription = "Item details",
-            modifier = Modifier.size(13.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            Icons.AutoMirrored.Filled.ShowChart,
+            contentDescription = "Open chart",
+            modifier = Modifier.size(14.dp),
+            tint = MaterialTheme.colorScheme.primary,
         )
     }
 }
