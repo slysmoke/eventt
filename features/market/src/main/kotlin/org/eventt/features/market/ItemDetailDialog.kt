@@ -23,7 +23,9 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -59,6 +61,9 @@ import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import java.time.LocalDate
 import java.util.Locale
+import kotlin.math.ceil
+import kotlin.math.floor
+import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
@@ -504,10 +509,9 @@ private class ChartData(
 private fun buildChartData(
     history: List<MarketHistoryModel>,
     secondary: List<MarketHistoryModel>,
-    range: ChartRange,
 ): ChartData {
-    // Indicators run over the *full* history so a short range still has warmed-up SMA/RSI values
-    // at its left edge, then get sliced down to the visible days.
+    // Indicators run over the full history, so any zoomed window has warmed-up SMA/RSI values at
+    // its left edge.
     val prices = history.map { it.average }
     val byDate = history.indices.associateBy { history[it].date.take(10) }
     val fast = sma(prices, 20)
@@ -523,17 +527,13 @@ private fun buildChartData(
             ?.date
             ?.take(10)
             ?.let(LocalDate::parse) ?: LocalDate.now()
+    // Always the whole history: the range buttons and mouse zoom/pan only move the viewport.
     val span =
-        if (range == ChartRange.ALL) {
-            history.firstOrNull()?.let {
-                java.time.temporal.ChronoUnit.DAYS
-                    .between(LocalDate.parse(it.date.take(10)), end)
-                    .toInt() + 1
-            }
-                ?: range.days
-        } else {
-            range.days
-        }
+        history.firstOrNull()?.let {
+            java.time.temporal.ChronoUnit.DAYS
+                .between(LocalDate.parse(it.date.take(10)), end)
+                .toInt() + 1
+        } ?: 1
     val days = (span - 1 downTo 0).map { end.minusDays(it.toLong()).toString() }
     val idx = days.map { byDate[it] }
     return ChartData(
@@ -548,6 +548,45 @@ private fun buildChartData(
         secondary = days.map { secondaryByDate[it] },
     )
 }
+
+// Visible chart window, in fractional day indices of ChartData.days.
+internal data class ChartView(
+    val start: Float,
+    val end: Float,
+) {
+    val span get() = end - start
+
+    // Keeps the window inside [0, n-1] without changing its width (as far as it fits).
+    private fun clamped(n: Int): ChartView {
+        val last = (n - 1).toFloat()
+        val w = span.coerceAtMost(last)
+        val s = start.coerceIn(0f, (last - w).coerceAtLeast(0f))
+        return ChartView(s, s + w)
+    }
+
+    fun panned(
+        byDays: Float,
+        n: Int,
+    ) = ChartView(start + byDays, end + byDays).clamped(n)
+
+    // factor > 1 zooms out. The day at `anchor` (0..1 across the plot) stays under the cursor.
+    fun zoomed(
+        factor: Float,
+        anchor: Float,
+        n: Int,
+    ): ChartView {
+        val w = (span * factor).coerceIn(MIN_VIEW_DAYS.coerceAtMost((n - 1).toFloat()), (n - 1).toFloat())
+        val pivot = start + anchor * span
+        return ChartView(pivot - anchor * w, pivot - anchor * w + w).clamped(n)
+    }
+}
+
+private const val MIN_VIEW_DAYS = 7f
+
+internal fun presetView(
+    n: Int,
+    days: Int,
+) = ChartView((n - days).coerceAtLeast(0).toFloat(), (n - 1).coerceAtLeast(1).toFloat())
 
 // One day's own fills on one side: volume-weighted price and total quantity.
 private data class DayFill(
@@ -591,7 +630,7 @@ private fun TradingChart(
         )
         return
     }
-    val data = remember(history, secondaryHistory, range) { buildChartData(history, secondaryHistory, range) }
+    val data = remember(history, secondaryHistory) { buildChartData(history, secondaryHistory) }
     val buyFills = remember(trades) { trades?.let { fillsByDay(it.transactions, buy = true) }.orEmpty() }
     val sellFills = remember(trades) { trades?.let { fillsByDay(it.transactions, buy = false) }.orEmpty() }
     var hoverX by remember { mutableStateOf<Float?>(null) }
@@ -600,6 +639,10 @@ private fun TradingChart(
     val downColor = negativeColor
     val textMeasurer = rememberTextMeasurer()
     val n = data.days.size
+    // Visible window as fractional day indices; the range buttons set it, wheel/drag move it.
+    var view by remember(data, range) { mutableStateOf(presetView(n, range.days)) }
+    var dragX by remember { mutableStateOf<Float?>(null) }
+    var lastPress by remember { mutableStateOf(0L) }
 
     // Layout constants shared by drawing and hit-testing.
     val lPadDp = 8.dp
@@ -611,8 +654,12 @@ private fun TradingChart(
         hoverX?.let { x ->
             val lPad = with(density) { lPadDp.toPx() }
             val chartW = canvasWidth - lPad - with(density) { rPadDp.toPx() }
-            if (chartW <= 0 || n < 2) null else ((x - lPad) / chartW * (n - 1)).roundToInt().coerceIn(0, n - 1)
+            if (chartW <= 0 || n < 2) null else (view.start + (x - lPad) / chartW * view.span).roundToInt().coerceIn(0, n - 1)
         }
+
+    fun plotWidth() = canvasWidth - with(density) { (lPadDp + rPadDp).toPx() }
+
+    fun anchorOf(x: Float) = ((x - with(density) { lPadDp.toPx() }) / plotWidth()).coerceIn(0f, 1f)
 
     Column(modifier = modifier) {
         // Legend strip: follows the crosshair, or shows the latest day when not hovering.
@@ -626,11 +673,34 @@ private fun TradingChart(
                     .weight(1f)
                     .onSizeChanged { canvasWidth = it.width }
                     .onPointerEvent(PointerEventType.Move) {
-                        hoverX =
+                        val x =
                             it.changes
                                 .first()
                                 .position.x
-                    }.onPointerEvent(PointerEventType.Exit) { hoverX = null },
+                        val from = dragX
+                        if (from != null && it.buttons.isPrimaryPressed && plotWidth() > 0) {
+                            view = view.panned(-(x - from) / plotWidth() * view.span, n)
+                            dragX = x
+                        }
+                        hoverX = x
+                    }.onPointerEvent(PointerEventType.Press) {
+                        val now = System.currentTimeMillis()
+                        // Double-click: back to the selected range preset.
+                        if (now - lastPress < 350) view = presetView(n, range.days)
+                        lastPress = now
+                        dragX =
+                            it.changes
+                                .first()
+                                .position.x
+                    }.onPointerEvent(PointerEventType.Release) { dragX = null }
+                    .onPointerEvent(PointerEventType.Scroll) {
+                        val c = it.changes.first()
+                        // Wheel down zooms out, up zooms in, anchored on the day under the cursor.
+                        view = view.zoomed(1.15f.pow(c.scrollDelta.y), anchorOf(c.position.x), n)
+                    }.onPointerEvent(PointerEventType.Exit) {
+                        hoverX = null
+                        dragX = null
+                    },
         ) {
             val lPad = lPadDp.toPx()
             val rPad = rPadDp.toPx()
@@ -646,14 +716,20 @@ private fun TradingChart(
             val rsiTop = volTop + volH + gap
             val rsiH = usable * 0.20f - priceTop
 
-            fun xFor(i: Int) = lPad + i.toFloat() / (n - 1) * chartW
+            fun xFor(i: Int) = lPad + (i - view.start) / view.span * chartW
+            val iFrom = floor(view.start).toInt().coerceIn(0, n - 1)
+            val iTo = ceil(view.end).toInt().coerceIn(0, n - 1)
+
+            fun visible(i: Int) = i in iFrom..iTo
+
+            fun clipPlot(block: DrawScope.() -> Unit) = clipRect(lPad, 0f, lPad + chartW, size.height, block = block)
 
             // ── Price pane range: daily highs/lows plus any overlay that's within reason, so a
             // far-off stale order or cost line doesn't squash the actual price action flat.
             val core =
-                data.rows.filterNotNull().flatMap {
+                data.rows.subList(iFrom, iTo + 1).filterNotNull().flatMap {
                     listOf(it.average, it.highest.takeIf { h -> h > 0 } ?: it.average, it.lowest.takeIf { l -> l > 0 } ?: it.average)
-                } + data.secondary.filterNotNull()
+                } + data.secondary.subList(iFrom, iTo + 1).filterNotNull()
             if (core.isEmpty()) return@Canvas
             val coreMin = core.min()
             val coreMax = core.max()
@@ -663,14 +739,14 @@ private fun TradingChart(
                     book.bestAsk?.let { add(it) }
                     trades?.avgBuyPrice?.let { add(it) }
                     trades?.openOrders?.forEach { add(it.price) }
-                    data.days.forEach { d ->
+                    data.days.subList(iFrom, iTo + 1).forEach { d ->
                         a4e[d]?.let { day ->
                             day.low?.let { add(it) }
                             day.high?.let { add(it) }
                         }
                     }
                     if (showBands) {
-                        data.bands.filterNotNull().forEach {
+                        data.bands.subList(iFrom, iTo + 1).filterNotNull().forEach {
                             add(it.upper)
                             add(it.lower)
                         }
@@ -701,7 +777,7 @@ private fun TradingChart(
                             pts.reversed().forEach { (i, b) -> lineTo(xFor(i), yP(b.lower)) }
                             close()
                         }
-                    drawPath(path, BAND_COLOR.copy(alpha = 0.12f))
+                    clipPlot { drawPath(path, BAND_COLOR.copy(alpha = 0.12f)) }
                 }
             }
 
@@ -709,11 +785,12 @@ private fun TradingChart(
             // day's average to this day's (green up, red down) and the wick is CCP's H/L. Adam4EVE's
             // range is drawn first as a thin light line underneath, so only where real fills went
             // beyond CCP's outlier-trimmed H/L does it show — as tails past the candle.
-            val barW = (chartW / n * 0.6f).coerceIn(1f, 12.dp.toPx())
+            val barW = (chartW / (view.span + 1) * 0.6f).coerceIn(1f, 12.dp.toPx())
             val tick = barW / 2 + 3.dp.toPx()
 
             fun yClamped(v: Double) = yP(v).coerceIn(priceTop, priceTop + priceH)
             data.days.forEachIndexed { i, d ->
+                if (!visible(i)) return@forEachIndexed
                 val day = a4e[d] ?: return@forEachIndexed
                 val lo = day.low ?: return@forEachIndexed
                 val hi = day.high ?: return@forEachIndexed
@@ -725,7 +802,7 @@ private fun TradingChart(
                 )
             }
             data.rows.forEachIndexed { i, r ->
-                if (r == null) return@forEachIndexed
+                if (r == null || !visible(i)) return@forEachIndexed
                 val x = xFor(i)
                 val open = data.open[i] ?: r.average
                 val color = if (r.average >= open) upColor else downColor
@@ -738,6 +815,7 @@ private fun TradingChart(
             }
             // Adam4EVE side VWAP ticks on top: bid fills left, ask fills right.
             data.days.forEachIndexed { i, d ->
+                if (!visible(i)) return@forEachIndexed
                 val day = a4e[d] ?: return@forEachIndexed
                 val x = xFor(i)
                 day.bid?.let {
@@ -758,10 +836,10 @@ private fun TradingChart(
                 }
             }
 
-            if (secondaryLabel != null) drawSeries(data.secondary, SECONDARY_COLOR, 1.5.dp.toPx(), ::xFor, ::yP)
-            if (showAvgLine) drawSeries(data.rows.map { it?.average }, priceColor, 2.dp.toPx(), ::xFor, ::yP)
-            if (showSmaFast) drawSeries(data.smaFast, SMA_FAST_COLOR, 1.2.dp.toPx(), ::xFor, ::yP)
-            if (showSmaSlow) drawSeries(data.smaSlow, SMA_SLOW_COLOR, 1.2.dp.toPx(), ::xFor, ::yP)
+            clipPlot { if (secondaryLabel != null) drawSeries(data.secondary, SECONDARY_COLOR, 1.5.dp.toPx(), ::xFor, ::yP) }
+            clipPlot { if (showAvgLine) drawSeries(data.rows.map { it?.average }, priceColor, 2.dp.toPx(), ::xFor, ::yP) }
+            clipPlot { if (showSmaFast) drawSeries(data.smaFast, SMA_FAST_COLOR, 1.2.dp.toPx(), ::xFor, ::yP) }
+            clipPlot { if (showSmaSlow) drawSeries(data.smaSlow, SMA_SLOW_COLOR, 1.2.dp.toPx(), ::xFor, ::yP) }
 
             // Horizontal levels: live bid/ask, your average cost, your open orders.
             fun level(
@@ -800,7 +878,7 @@ private fun TradingChart(
                     fills: Map<String, DayFill>,
                     up: Boolean,
                 ) = fills.forEach { (day, f) ->
-                    val i = dayIndex[day] ?: return@forEach
+                    val i = dayIndex[day]?.takeIf { visible(it) } ?: return@forEach
                     val r = (3.dp.toPx() + 5.dp.toPx() * sqrt(f.qty / maxQty)).toFloat()
                     val c = Offset(xFor(i), yP(f.price))
                     val path =
@@ -826,6 +904,7 @@ private fun TradingChart(
             // ── Volume pane.
             val maxVol =
                 data.rows
+                    .subList(iFrom, iTo + 1)
                     .maxOfOrNull { it?.volume ?: 0L }
                     ?.toFloat()
                     ?.coerceAtLeast(1f) ?: 1f
@@ -835,6 +914,10 @@ private fun TradingChart(
             data.rows.forEachIndexed { i, r ->
                 if (r == null) return@forEachIndexed
                 val up = prevAvg?.let { r.average >= it } ?: true
+                if (!visible(i)) {
+                    prevAvg = r.average
+                    return@forEachIndexed
+                }
                 prevAvg = r.average
                 val x = xFor(i)
                 val bottom = volTop + volH
@@ -860,7 +943,7 @@ private fun TradingChart(
                     drawLine(c.copy(alpha = 0.55f), Offset(x, bottom), Offset(x, top), strokeWidth = barW)
                 }
             }
-            drawSeries(data.volSma, AXIS_COLOR, 1.dp.toPx(), ::xFor, ::yV)
+            clipPlot { drawSeries(data.volSma, AXIS_COLOR, 1.dp.toPx(), ::xFor, ::yV) }
             axisLabel(textMeasurer, "Vol " + formatVolume(maxVol.toLong()), Offset(lPad + chartW + 6.dp.toPx(), volTop), AXIS_COLOR)
 
             // ── RSI pane with 30/70 guides.
@@ -876,13 +959,13 @@ private fun TradingChart(
                 )
                 axisLabel(textMeasurer, lv.toInt().toString(), Offset(lPad + chartW + 6.dp.toPx(), yR(lv) - 6.dp.toPx()), AXIS_COLOR)
             }
-            drawSeries(data.rsi, RSI_COLOR, 1.2.dp.toPx(), ::xFor, ::yR)
+            clipPlot { drawSeries(data.rsi, RSI_COLOR, 1.2.dp.toPx(), ::xFor, ::yR) }
             axisLabel(textMeasurer, "RSI 14", Offset(lPad + 2.dp.toPx(), rsiTop), AXIS_COLOR)
 
             // ── Date axis.
             val ticks = 6
             for (t in 0..ticks) {
-                val i = (n - 1) * t / ticks
+                val i = iFrom + (iTo - iFrom) * t / ticks
                 val lm = textMeasurer.measure(data.days[i].drop(5), TextStyle(fontSize = 9.sp, color = AXIS_COLOR))
                 val x = (xFor(i) - lm.size.width / 2f).coerceIn(lPad, lPad + chartW - lm.size.width)
                 drawText(lm, topLeft = Offset(x, size.height - bottomAxis + 3.dp.toPx()))
