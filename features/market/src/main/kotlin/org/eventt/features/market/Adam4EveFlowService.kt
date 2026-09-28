@@ -27,7 +27,8 @@ internal data class StationFlow(
 )
 
 internal object Adam4EveFlowService {
-    internal var baseUrl = "http://static.adam4eve.eu/MarketOrdersTrades"
+    // HTTPS: the server only gzips over TLS (plain HTTP just redirects), ~5x less to download.
+    internal var baseUrl = "https://static.adam4eve.eu/MarketOrdersTrades"
     private const val WINDOW_DAYS = 7 // days averaged; the daily export has gaps, e.g. over weekends
 
     private data class WindowData(

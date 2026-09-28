@@ -69,6 +69,7 @@ private val BAND_COLOR = Color(0xFF90A4AE)
 private val SECONDARY_COLOR = Color(0xFF81C784)
 private val COST_COLOR = Color(0xFFFFD54F)
 private val RSI_COLOR = Color(0xFFFFB74D)
+private val WICK_COLOR = Color(0xFFE0E0E0)
 private val AXIS_COLOR = Color(0xFF777777)
 private val GRID_COLOR = Color(0x22FFFFFF)
 
@@ -200,6 +201,9 @@ fun ItemDetailDialog(
     var showSmaSlow by remember { mutableStateOf(true) }
     var showBands by remember { mutableStateOf(false) }
     var showTrades by remember { mutableStateOf(true) }
+    var showA4e by remember { mutableStateOf(true) }
+    var a4e by remember { mutableStateOf<Map<String, A4eDay>>(emptyMap()) }
+    val a4eSync by A4eHistorySync.state.collectAsState()
 
     val effPrimaryRegion = if (typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else primaryRegionId
     // Station/system scoping is meaningless for PLEX (global market) — filtering its book down to
@@ -241,6 +245,21 @@ fun ItemDetailDialog(
         flowLoading = false
     }
 
+    // Local Adam4EVE history — re-read as the background sync lands more files.
+    LaunchedEffect(typeId, effPrimaryRegion, effPrimaryStation, a4eSync.revision) {
+        a4e =
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val today = LocalDate.now().toEpochDay().toInt()
+                    aggregateA4e(
+                        A4eHistorySync.store.query(typeId, today - ChartRange.ALL.days, today),
+                        effPrimaryStation,
+                        effPrimaryRegion,
+                    )
+                }.getOrDefault(emptyMap())
+            }
+    }
+
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
             modifier = Modifier.fillMaxWidth(0.96f).fillMaxHeight(0.94f),
@@ -271,6 +290,17 @@ fun ItemDetailDialog(
                             ToggleChip("SMA 50", SMA_SLOW_COLOR, showSmaSlow) { showSmaSlow = it }
                             ToggleChip("Bollinger", BAND_COLOR, showBands) { showBands = it }
                             if (myTrades != null) ToggleChip("My trades", COST_COLOR, showTrades) { showTrades = it }
+                            ToggleChip("Adam4EVE", WICK_COLOR, showA4e) { showA4e = it }
+                            Text(
+                                when {
+                                    a4eSync.running -> "Adam4EVE syncing ${a4eSync.filesDone}/${a4eSync.filesTotal}…"
+                                    a4e.isEmpty() -> "Adam4EVE: no fills tracked here"
+                                    else -> "Adam4EVE: ${if (effPrimaryStation != null) "this station" else "tracked hubs in region"}"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = AXIS_COLOR,
+                                modifier = Modifier.align(Alignment.CenterVertically),
+                            )
                         }
                         Spacer(Modifier.height(6.dp))
                         TradingChart(
@@ -282,6 +312,7 @@ fun ItemDetailDialog(
                             showSmaSlow = showSmaSlow,
                             showBands = showBands,
                             trades = myTrades.takeIf { showTrades },
+                            a4e = a4e.takeIf { showA4e }.orEmpty(),
                             book = book,
                             modifier = Modifier.fillMaxWidth().weight(1f),
                         )
@@ -498,6 +529,7 @@ private fun TradingChart(
     showSmaSlow: Boolean,
     showBands: Boolean,
     trades: MyTrades?,
+    a4e: Map<String, A4eDay>,
     book: BookSide,
     modifier: Modifier = Modifier,
 ) {
@@ -534,7 +566,7 @@ private fun TradingChart(
 
     Column(modifier = modifier) {
         // Legend strip: follows the crosshair, or shows the latest day when not hovering.
-        HoverLegend(data, hoverIndex ?: data.rows.indexOfLast { it != null }.takeIf { it >= 0 }, buyFills, sellFills, secondaryLabel)
+        HoverLegend(data, hoverIndex ?: data.rows.indexOfLast { it != null }.takeIf { it >= 0 }, buyFills, sellFills, a4e, secondaryLabel)
         Spacer(Modifier.height(4.dp))
 
         Canvas(
@@ -581,6 +613,12 @@ private fun TradingChart(
                     book.bestAsk?.let { add(it) }
                     trades?.avgBuyPrice?.let { add(it) }
                     trades?.openOrders?.forEach { add(it.price) }
+                    data.days.forEach { d ->
+                        a4e[d]?.let { day ->
+                            day.low?.let { add(it) }
+                            day.high?.let { add(it) }
+                        }
+                    }
                     if (showBands) {
                         data.bands.filterNotNull().forEach {
                             add(it.upper)
@@ -627,6 +665,35 @@ private fun TradingChart(
                     Offset(xFor(i), yP(r.lowest)),
                     strokeWidth = barW,
                 )
+            }
+
+            // Adam4EVE wick: the full range fills actually printed at (CCP's H/L above trims
+            // outliers), with the bid-side VWAP ticked left (green) and ask-side VWAP right (red).
+            val tick = barW / 2 + 3.dp.toPx()
+
+            fun yClamped(v: Double) = yP(v).coerceIn(priceTop, priceTop + priceH)
+            data.days.forEachIndexed { i, d ->
+                val day = a4e[d] ?: return@forEachIndexed
+                val lo = day.low ?: return@forEachIndexed
+                val hi = day.high ?: return@forEachIndexed
+                val x = xFor(i)
+                drawLine(WICK_COLOR.copy(alpha = 0.8f), Offset(x, yClamped(hi)), Offset(x, yClamped(lo)), strokeWidth = 1.5.dp.toPx())
+                day.bid?.let {
+                    drawLine(
+                        upColor,
+                        Offset(x - tick, yClamped(it.vwap)),
+                        Offset(x, yClamped(it.vwap)),
+                        strokeWidth = 2.dp.toPx(),
+                    )
+                }
+                day.ask?.let {
+                    drawLine(
+                        downColor,
+                        Offset(x, yClamped(it.vwap)),
+                        Offset(x + tick, yClamped(it.vwap)),
+                        strokeWidth = 2.dp.toPx(),
+                    )
+                }
             }
 
             if (secondaryLabel != null) drawSeries(data.secondary, SECONDARY_COLOR, 1.5.dp.toPx(), ::xFor, ::yP)
@@ -707,12 +774,29 @@ private fun TradingChart(
                 if (r == null) return@forEachIndexed
                 val up = prevAvg?.let { r.average >= it } ?: true
                 prevAvg = r.average
-                drawLine(
-                    (if (up) upColor else downColor).copy(alpha = 0.55f),
-                    Offset(xFor(i), volTop + volH),
-                    Offset(xFor(i), yV(r.volume.toDouble())),
-                    strokeWidth = barW,
-                )
+                val x = xFor(i)
+                val bottom = volTop + volH
+                val top = yV(r.volume.toDouble())
+                val day = a4e[data.days[i]]
+                val bidAmt = day?.bid?.amount ?: 0L
+                val askAmt = day?.ask?.amount ?: 0L
+                if (a4e.isNotEmpty() && bidAmt + askAmt > 0) {
+                    // ESI's total volume, split by Adam4EVE's side ratio: green = sold into bids,
+                    // red = bought from asks — who was the aggressor that day.
+                    val split = bottom - (bottom - top) * bidAmt / (bidAmt + askAmt)
+                    drawLine(upColor.copy(alpha = 0.6f), Offset(x, bottom), Offset(x, split), strokeWidth = barW)
+                    drawLine(downColor.copy(alpha = 0.6f), Offset(x, split), Offset(x, top), strokeWidth = barW)
+                } else {
+                    val c =
+                        if (a4e.isNotEmpty()) {
+                            AXIS_COLOR
+                        } else if (up) {
+                            upColor
+                        } else {
+                            downColor
+                        }
+                    drawLine(c.copy(alpha = 0.55f), Offset(x, bottom), Offset(x, top), strokeWidth = barW)
+                }
             }
             drawSeries(data.volSma, AXIS_COLOR, 1.dp.toPx(), ::xFor, ::yV)
             axisLabel(textMeasurer, "Vol " + formatVolume(maxVol.toLong()), Offset(lPad + chartW + 6.dp.toPx(), volTop), AXIS_COLOR)
@@ -780,17 +864,20 @@ private fun DrawScope.drawSeries(
     drawPath(path, color, style = Stroke(width = width, cap = StrokeCap.Round, join = StrokeJoin.Round))
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun HoverLegend(
     data: ChartData,
     index: Int?,
     buyFills: Map<String, DayFill>,
     sellFills: Map<String, DayFill>,
+    a4e: Map<String, A4eDay>,
     secondaryLabel: String?,
 ) {
     val style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace)
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.height(16.dp)) {
-        if (index == null) return@Row
+    // Fixed two-line height so hovering days with more/less detail doesn't make the chart jump.
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth().height(34.dp)) {
+        if (index == null) return@FlowRow
         val day = data.days[index]
         val r = data.rows[index]
         Text(day, style = style, color = AXIS_COLOR)
@@ -811,6 +898,24 @@ private fun HoverLegend(
         }
         buyFills[day]?.let { Text("▲ bought ${formatVolume(it.qty)} @ ${formatPriceAbbr(it.price)}", style = style, color = positiveColor) }
         sellFills[day]?.let { Text("▼ sold ${formatVolume(it.qty)} @ ${formatPriceAbbr(it.price)}", style = style, color = negativeColor) }
+        a4e[day]?.let { d ->
+            d.bid?.let {
+                Text(
+                    "A4E bid ${formatVolume(
+                        it.amount,
+                    )} @ ${formatPriceAbbr(it.vwap)} (${formatPriceAbbr(it.low)}–${formatPriceAbbr(it.high)})",
+                    style = style,
+                    color = positiveColor,
+                )
+            }
+            d.ask?.let {
+                Text(
+                    "ask ${formatVolume(it.amount)} @ ${formatPriceAbbr(it.vwap)} (${formatPriceAbbr(it.low)}–${formatPriceAbbr(it.high)})",
+                    style = style,
+                    color = negativeColor,
+                )
+            }
+        }
     }
 }
 

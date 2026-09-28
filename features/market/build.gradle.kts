@@ -13,6 +13,7 @@ dependencies {
     implementation(project(":core:auth"))
     implementation(project(":core:esi"))
     implementation(project(":core:http"))
+    implementation(project(":core:queue")) // A4eHistorySync reports its downloads in the ESI Requests dialog
     implementation(project(":core:image"))
     implementation(project(":core:staticdata"))
     implementation(project(":core:everef"))
