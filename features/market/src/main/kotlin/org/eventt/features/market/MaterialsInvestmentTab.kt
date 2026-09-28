@@ -250,7 +250,8 @@ internal fun MaterialsInvestmentTab(
                     }
                 }
                 Tip(
-                    "Only include items currently at least this % below their own Lookback-day average price -- the core \"is it cheap\" filter.",
+                    "Only include items currently at least this % below their own Lookback-day average price -- the core " +
+                        "\"is it cheap\" filter. Items you hold or have orders on are always shown, whatever the filters.",
                 ) {
                     ParamField("Min Discount %", minDiscountPct, 90.dp) {
                         minDiscountPct = it
@@ -305,7 +306,9 @@ internal fun MaterialsInvestmentTab(
                     modifier = Modifier.weight(1f),
                 ) {
                     Tip(
-                        "Total ISK you're willing to invest. Split across the picked candidates below, weighted by discount depth × daily traded ISK value.",
+                        "Total ISK you want invested across these items, including what you already hold -- a target " +
+                            "exposure, not new money. Split across the picked candidates below, weighted by discount depth × " +
+                            "daily traded ISK value; each item's To Buy is its share minus what you already hold.",
                     ) {
                         ParamField("Budget (ISK)", totalBudget, 120.dp) {
                             totalBudget = it
@@ -349,8 +352,9 @@ internal fun MaterialsInvestmentTab(
                     }
                     Tip(
                         "Price gap between each ladder rung. Later rungs (further price drops) get a bigger share of the " +
-                            "item's allocation -- buy more the further it falls. Also the take-profit % for held items: " +
-                            "the sell target is your average cost + this %, after sales tax and broker fee.",
+                            "item's allocation -- buy more the further it falls. Also the take-profit %: the sell target is " +
+                            "your cost (incl. buy broker fee) + this %, net of sales tax and broker fee -- and the Backtest " +
+                            "sells at the same rule.",
                     ) {
                         ParamField("Ladder Step %", ladderStepPct, 85.dp) {
                             ladderStepPct = it
@@ -678,9 +682,9 @@ private fun MaterialsHeader(
             }
             Tip(
                 "Your current holding: real quantity from your assets (all locations) plus stock listed in your sell orders, " +
-                    "@ average cost of your tracked market " +
-                    "buys (average-cost, not FIFO -- and won't cover stock that arrived via mining/reprocessing/manufacturing " +
-                    "rather than a market buy). Used to anchor the buy ladder to your real entry instead of the live price.",
+                    "@ the moving-average cost of your tracked market buys, reset each time the position was fully sold " +
+                    "(before broker fee; not FIFO, and stock from mining/reprocessing/manufacturing has no buy price to " +
+                    "count). Anchors the buy ladder to your real entry instead of the live price.",
             ) {
                 MCol("Held", MaterialSortCol.HELD, sort, asc, onSort, Modifier.width(140.dp))
             }
@@ -798,11 +802,26 @@ private fun MaterialRow(
                 alloc.action?.let { action ->
                     Tip(
                         when (action) {
-                            MaterialAction.BUY -> "Buy: still below its share of the budget -- place the buy ladder below."
-                            MaterialAction.WAIT -> "Wait: position is full, sell target not reached yet."
-                            MaterialAction.SELL -> "Sell: the lowest ask already clears your cost + take-profit after fees."
-                            MaterialAction.BUYING -> "Buying: your buy orders already cover the rest of this item's allocation."
-                            MaterialAction.ON_SALE -> "On sale: your stock is listed in sell orders -- waiting for fills."
+                            MaterialAction.BUY -> {
+                                "Buy: still below its share of the budget -- place the buy ladder below."
+                            }
+
+                            MaterialAction.WAIT -> {
+                                "Wait: position is full, sell target not reached yet."
+                            }
+
+                            MaterialAction.SELL -> {
+                                "Sell: selling at the lowest ask already nets your cost (incl. buy broker fee) + take-profit, " +
+                                    "after sales tax and broker fee."
+                            }
+
+                            MaterialAction.BUYING -> {
+                                "Buying: your buy orders already cover the rest of this item's allocation."
+                            }
+
+                            MaterialAction.ON_SALE -> {
+                                "On sale: your stock is listed in sell orders -- waiting for fills."
+                            }
                         },
                     ) {
                         Icon(
@@ -947,8 +966,9 @@ private fun MaterialRow(
         }
         if (alloc.ladder.isNotEmpty()) {
             Tip(
-                "Target price for a standing buy order → ISK to spend at that rung (* = already at/above the current top " +
-                    "bid, so it's actionable right now rather than a future target).",
+                "Target price for a standing buy order → ISK to spend at that rung, broker fee included (the rung's " +
+                    "quantity leaves room for it). * = already at/above the current top bid, so it's actionable right now " +
+                    "rather than a future target.",
             ) {
                 Text(
                     "Buy: " +
@@ -986,8 +1006,9 @@ private fun MaterialRow(
         }
         alloc.sellTarget?.let { st ->
             Tip(
-                "Sell the whole stack in one order at or above the target (average cost + take-profit %, after sales tax " +
-                    "and broker fee). \"now\" is the net profit selling everything at the current lowest ask.",
+                "Sell the whole stack in one order at or above the target: your cost (incl. buy broker fee) + take-profit " +
+                    "%, net of sales tax and broker fee. \"now\" is the net profit selling everything at the current " +
+                    "lowest ask, after the same fees.",
             ) {
                 Row(modifier = Modifier.padding(start = 28.dp, top = 1.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(

@@ -47,27 +47,27 @@ internal data class MaterialCandidate(
     val volatilityPct: Double,
     val dailyVolume: Long,
     val spikeDetected: Boolean,
-    // Your own current holding in this item (average-cost, not FIFO), or null when no character
-    // is selected. Used to anchor the buy ladder to your real cost basis instead of resetting to
-    // "current price" on every re-scan, and to generate a take-profit sell ladder.
+    // Your own current holding in this item, or null when no character is selected. Anchors the
+    // buy ladder to your real cost basis instead of resetting to "current price" on every re-scan,
+    // and drives the sell target, To Buy and the BUY/WAIT/SELL status.
     val position: MaterialPosition?,
     // Replaying this same discount rule over up to a year of this item's own history, or null when
     // there isn't enough history to do that meaningfully. Illustrative, not a guarantee.
     val backtest: BacktestResult?,
 )
 
-// Your current holding in one item -- qtyHeld is net of sells (can be 0), avgBuyPrice is the
-// average-cost of every buy transaction on record (not FIFO -- a quick reference, not the exact
-// cost basis the Orders tab's FIFO ledger computes).
+// Your current holding in one item -- physical stock plus listed sell orders, the moving-average
+// cost of tracked buys (see txCostBasis; not the Orders tab's exact FIFO), and your open orders.
 internal data class MaterialPosition(
     // Actual physical quantity in your assets right now (all locations), not net(buys - sells) --
     // materials commonly arrive without ever going through a wallet transaction at all (mining +
     // reprocessing being the obvious one for this exact market group), so a transaction-only count
     // silently reads as "not held" for stock you can see sitting in your hangar.
     val qtyHeld: Long,
-    // Average cost of tracked market buys only -- reprocessed/manufactured/contracted stock has no
-    // real purchase price to average in, so when none of the held quantity came from a tracked buy
-    // this is null (the ladder then anchors to the live price instead, same as not holding at all).
+    // Moving-average cost (pre-fee) of tracked market buys still held, reset whenever the position
+    // was fully sold -- see txCostBasis. Reprocessed/manufactured/contracted stock has no purchase
+    // price to average in, so this is null when no tracked buy is still held (the ladder then
+    // anchors to the live price, same as not holding at all).
     val avgBuyPrice: Double?,
     // Your active market orders on this item. Stock listed in a sell order leaves the hangar (EVE
     // escrows it), so it isn't in the asset count -- qtyHeld above already includes listedQty.
