@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.ActiveOrderDao
 import org.eventt.core.database.AssetDao
@@ -196,12 +197,22 @@ fun ItemDetailDialog(
     var flow by remember { mutableStateOf<StationFlow?>(null) }
     var flowLoading by remember { mutableStateOf(true) }
 
+    // Chart settings persist across dialogs and restarts (loaded with the data below).
+    val scope = rememberCoroutineScope()
     var range by remember { mutableStateOf(ChartRange.M6) }
+    var showAvgLine by remember { mutableStateOf(false) }
     var showSmaFast by remember { mutableStateOf(true) }
     var showSmaSlow by remember { mutableStateOf(true) }
     var showBands by remember { mutableStateOf(false) }
     var showTrades by remember { mutableStateOf(true) }
     var showA4e by remember { mutableStateOf(true) }
+
+    fun save(
+        key: String,
+        value: Any,
+    ) {
+        scope.launch(Dispatchers.IO) { S.set("itemChart.$key", value.toString()) }
+    }
     var a4e by remember { mutableStateOf<Map<String, A4eDay>>(emptyMap()) }
     val a4eSync by A4eHistorySync.state.collectAsState()
 
@@ -215,6 +226,16 @@ fun ItemDetailDialog(
 
     LaunchedEffect(typeId, primaryRegionId, secondaryRegionId) {
         isLoading = true
+        withContext(Dispatchers.IO) {
+            fun flag(key: String) = S.get("itemChart.$key")?.toBooleanStrictOrNull()
+            S.get("itemChart.range")?.let { name -> ChartRange.entries.find { it.name == name } }?.let { range = it }
+            flag("avg")?.let { showAvgLine = it }
+            flag("sma20")?.let { showSmaFast = it }
+            flag("sma50")?.let { showSmaSlow = it }
+            flag("bollinger")?.let { showBands = it }
+            flag("trades")?.let { showTrades = it }
+            flag("a4e")?.let { showA4e = it }
+        }
         withContext(Dispatchers.IO) {
             primaryOrders = runCatching { EsiClient.getMarketRegionOrders(effPrimaryRegion, typeId = typeId) }.getOrDefault(emptyList())
             primaryHistory = fetchLiveHistory(typeId, primaryRegionId)
@@ -283,14 +304,38 @@ fun ItemDetailDialog(
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             ChartRange.entries.forEach { r ->
-                                FilterChip(selected = range == r, onClick = { range = r }, label = { Text(r.label) })
+                                FilterChip(selected = range == r, onClick = {
+                                    range = r
+                                    save("range", r.name)
+                                }, label = { Text(r.label) })
                             }
                             Spacer(Modifier.width(12.dp))
-                            ToggleChip("SMA 20", SMA_FAST_COLOR, showSmaFast) { showSmaFast = it }
-                            ToggleChip("SMA 50", SMA_SLOW_COLOR, showSmaSlow) { showSmaSlow = it }
-                            ToggleChip("Bollinger", BAND_COLOR, showBands) { showBands = it }
-                            if (myTrades != null) ToggleChip("My trades", COST_COLOR, showTrades) { showTrades = it }
-                            ToggleChip("Adam4EVE", WICK_COLOR, showA4e) { showA4e = it }
+                            ToggleChip("Avg line", MaterialTheme.colorScheme.primary, showAvgLine) {
+                                showAvgLine = it
+                                save("avg", it)
+                            }
+                            ToggleChip("SMA 20", SMA_FAST_COLOR, showSmaFast) {
+                                showSmaFast = it
+                                save("sma20", it)
+                            }
+                            ToggleChip("SMA 50", SMA_SLOW_COLOR, showSmaSlow) {
+                                showSmaSlow = it
+                                save("sma50", it)
+                            }
+                            ToggleChip("Bollinger", BAND_COLOR, showBands) {
+                                showBands = it
+                                save("bollinger", it)
+                            }
+                            if (myTrades != null) {
+                                ToggleChip("My trades", COST_COLOR, showTrades) {
+                                    showTrades = it
+                                    save("trades", it)
+                                }
+                            }
+                            ToggleChip("Adam4EVE", WICK_COLOR, showA4e) {
+                                showA4e = it
+                                save("a4e", it)
+                            }
                             Text(
                                 when {
                                     a4eSync.running -> "Adam4EVE syncing ${a4eSync.filesDone}/${a4eSync.filesTotal}…"
@@ -308,6 +353,7 @@ fun ItemDetailDialog(
                             secondaryHistory = secondaryHistory,
                             secondaryLabel = secondaryLabel,
                             range = range,
+                            showAvgLine = showAvgLine,
                             showSmaFast = showSmaFast,
                             showSmaSlow = showSmaSlow,
                             showBands = showBands,
@@ -445,6 +491,8 @@ private fun ToggleChip(
 private class ChartData(
     val days: List<String>,
     val rows: List<MarketHistoryModel?>,
+    // Previous trading day's average — the candle's "open".
+    val open: List<Double?>,
     val smaFast: List<Double?>,
     val smaSlow: List<Double?>,
     val bands: List<Band?>,
@@ -491,6 +539,7 @@ private fun buildChartData(
     return ChartData(
         days = days,
         rows = idx.map { i -> i?.let { history[it] } },
+        open = idx.map { i -> i?.takeIf { it > 0 }?.let { prices[it - 1] } },
         smaFast = idx.map { i -> i?.let { fast[it] } },
         smaSlow = idx.map { i -> i?.let { slow[it] } },
         bands = idx.map { i -> i?.let { bands[it] } },
@@ -525,6 +574,7 @@ private fun TradingChart(
     secondaryHistory: List<MarketHistoryModel>,
     secondaryLabel: String?,
     range: ChartRange,
+    showAvgLine: Boolean,
     showSmaFast: Boolean,
     showSmaSlow: Boolean,
     showBands: Boolean,
@@ -655,20 +705,11 @@ private fun TradingChart(
                 }
             }
 
-            // Daily high-low range bars.
-            val barW = (chartW / n * 0.6f).coerceIn(1f, 6.dp.toPx())
-            data.rows.forEachIndexed { i, r ->
-                if (r == null || r.highest <= 0 || r.lowest <= 0) return@forEachIndexed
-                drawLine(
-                    priceColor.copy(alpha = 0.25f),
-                    Offset(xFor(i), yP(r.highest)),
-                    Offset(xFor(i), yP(r.lowest)),
-                    strokeWidth = barW,
-                )
-            }
-
-            // Adam4EVE wick: the full range fills actually printed at (CCP's H/L above trims
-            // outliers), with the bid-side VWAP ticked left (green) and ask-side VWAP right (red).
+            // Candles. ESI history has no open/close, so the body runs from the previous trading
+            // day's average to this day's (green up, red down) and the wick is CCP's H/L. Adam4EVE's
+            // range is drawn first as a thin light line underneath, so only where real fills went
+            // beyond CCP's outlier-trimmed H/L does it show — as tails past the candle.
+            val barW = (chartW / n * 0.6f).coerceIn(1f, 12.dp.toPx())
             val tick = barW / 2 + 3.dp.toPx()
 
             fun yClamped(v: Double) = yP(v).coerceIn(priceTop, priceTop + priceH)
@@ -676,20 +717,41 @@ private fun TradingChart(
                 val day = a4e[d] ?: return@forEachIndexed
                 val lo = day.low ?: return@forEachIndexed
                 val hi = day.high ?: return@forEachIndexed
+                drawLine(
+                    WICK_COLOR.copy(alpha = 0.6f),
+                    Offset(xFor(i), yClamped(hi)),
+                    Offset(xFor(i), yClamped(lo)),
+                    strokeWidth = 1.dp.toPx(),
+                )
+            }
+            data.rows.forEachIndexed { i, r ->
+                if (r == null) return@forEachIndexed
                 val x = xFor(i)
-                drawLine(WICK_COLOR.copy(alpha = 0.8f), Offset(x, yClamped(hi)), Offset(x, yClamped(lo)), strokeWidth = 1.5.dp.toPx())
+                val open = data.open[i] ?: r.average
+                val color = if (r.average >= open) upColor else downColor
+                if (r.highest > 0 && r.lowest > 0) {
+                    drawLine(color, Offset(x, yClamped(r.highest)), Offset(x, yClamped(r.lowest)), strokeWidth = 1.5.dp.toPx())
+                }
+                val top = yClamped(maxOf(open, r.average))
+                val bottom = maxOf(yClamped(minOf(open, r.average)), top + 1.dp.toPx()) // flat day still visible
+                drawRect(color, topLeft = Offset(x - barW / 2, top), size = Size(barW, bottom - top))
+            }
+            // Adam4EVE side VWAP ticks on top: bid fills left, ask fills right.
+            data.days.forEachIndexed { i, d ->
+                val day = a4e[d] ?: return@forEachIndexed
+                val x = xFor(i)
                 day.bid?.let {
                     drawLine(
-                        upColor,
+                        WICK_COLOR,
                         Offset(x - tick, yClamped(it.vwap)),
-                        Offset(x, yClamped(it.vwap)),
+                        Offset(x - barW / 2, yClamped(it.vwap)),
                         strokeWidth = 2.dp.toPx(),
                     )
                 }
                 day.ask?.let {
                     drawLine(
-                        downColor,
-                        Offset(x, yClamped(it.vwap)),
+                        WICK_COLOR,
+                        Offset(x + barW / 2, yClamped(it.vwap)),
                         Offset(x + tick, yClamped(it.vwap)),
                         strokeWidth = 2.dp.toPx(),
                     )
@@ -697,7 +759,7 @@ private fun TradingChart(
             }
 
             if (secondaryLabel != null) drawSeries(data.secondary, SECONDARY_COLOR, 1.5.dp.toPx(), ::xFor, ::yP)
-            drawSeries(data.rows.map { it?.average }, priceColor, 2.dp.toPx(), ::xFor, ::yP)
+            if (showAvgLine) drawSeries(data.rows.map { it?.average }, priceColor, 2.dp.toPx(), ::xFor, ::yP)
             if (showSmaFast) drawSeries(data.smaFast, SMA_FAST_COLOR, 1.2.dp.toPx(), ::xFor, ::yP)
             if (showSmaSlow) drawSeries(data.smaSlow, SMA_SLOW_COLOR, 1.2.dp.toPx(), ::xFor, ::yP)
 
@@ -885,7 +947,7 @@ private fun HoverLegend(
             Text("no trades", style = style, color = AXIS_COLOR)
         } else {
             Text("avg ${formatIsk(r.average)}", style = style)
-            Text("H ${formatPriceAbbr(r.highest)}  L ${formatPriceAbbr(r.lowest)}", style = style, color = AXIS_COLOR)
+            Text("CCP H ${formatPriceAbbr(r.highest)}  L ${formatPriceAbbr(r.lowest)}", style = style, color = AXIS_COLOR)
             Text("vol ${formatVolume(r.volume)}", style = style, color = AXIS_COLOR)
         }
         data.smaFast[index]?.let { Text("SMA20 ${formatPriceAbbr(it)}", style = style, color = SMA_FAST_COLOR) }
