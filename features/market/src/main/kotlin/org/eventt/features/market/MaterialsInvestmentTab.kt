@@ -48,6 +48,7 @@ import org.eventt.core.model.StaticRegionModel
 import org.eventt.core.model.eveSigFigStep
 import org.eventt.ui.common.formatPriceAbbr
 import org.eventt.ui.common.formatVolume
+import org.eventt.ui.common.onRightClick
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.eventt.ui.theme.warningColor
@@ -808,6 +809,7 @@ private fun MaterialRow(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .onRightClick { onShowDetails(c.typeId) }
                 .then(if (isActiveInQueue) Modifier.border(BorderStroke(1.dp, MaterialTheme.colorScheme.primary)) else Modifier)
                 .padding(horizontal = 10.dp, vertical = 3.dp),
     ) {

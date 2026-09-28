@@ -13,6 +13,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
@@ -631,6 +632,8 @@ internal fun StationTradingTab(
                     Modifier
                         .fillMaxSize()
                         .onPointerEvent(PointerEventType.Press) { e ->
+                            // Left button only — right-click on a row opens its chart instead.
+                            if (!e.buttons.isPrimaryPressed) return@onPointerEvent
                             dragStartIdx =
                                 itemIndexAt(
                                     e.changes

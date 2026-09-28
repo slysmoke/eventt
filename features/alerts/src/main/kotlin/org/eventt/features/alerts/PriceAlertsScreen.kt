@@ -460,6 +460,7 @@ private fun GroupRow(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .onRightClick(onChart)
                 .then(if (single == null) Modifier.clickable(onClick = onToggle) else Modifier)
                 .padding(horizontal = 12.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,

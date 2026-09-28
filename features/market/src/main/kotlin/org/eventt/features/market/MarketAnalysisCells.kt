@@ -19,6 +19,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.eventt.ui.common.formatPriceAbbr
 import org.eventt.ui.common.formatVolume
+import org.eventt.ui.common.onRightClick
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.eventt.ui.theme.warningColor
@@ -117,6 +118,7 @@ internal fun StationRow(
             Modifier
                 .fillMaxWidth()
                 .background(bg)
+                .onRightClick { onShowDetails(opp.typeId) }
                 .then(if (isActiveInGame) Modifier.border(BorderStroke(1.dp, STATION_ACTIVE_IN_GAME)) else Modifier)
                 .padding(horizontal = 10.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -198,6 +200,7 @@ internal fun RegionRow(
             Modifier
                 .fillMaxWidth()
                 .background(bg)
+                .onRightClick { onShowDetails(opp.typeId) }
                 .then(if (isActiveInGame) Modifier.border(BorderStroke(1.dp, STATION_ACTIVE_IN_GAME)) else Modifier)
                 .padding(horizontal = 10.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,

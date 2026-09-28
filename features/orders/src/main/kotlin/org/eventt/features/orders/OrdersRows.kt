@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import org.eventt.core.database.AppState
 import org.eventt.core.database.OrderHistoryDao
 import org.eventt.ui.common.formatIsk
+import org.eventt.ui.common.onRightClick
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.eventt.ui.theme.warningColor
@@ -60,7 +61,10 @@ internal fun SellOrderRow(
                 .fillMaxWidth()
                 .background(rowBg)
                 .clickable { onSelect() }
-                .padding(horizontal = 8.dp, vertical = 3.dp),
+                .onRightClick {
+                    ItemDetailRequest.target =
+                        ItemDetailTarget(order.typeId, order.typeName, order.regionId, order.locationId.takeIf { !order.isBuyOrder })
+                }.padding(horizontal = 8.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Name + status dot
@@ -388,7 +392,10 @@ internal fun BuyOrderRow(
                 .fillMaxWidth()
                 .background(rowBg)
                 .clickable { onSelect() }
-                .padding(horizontal = 8.dp, vertical = 3.dp),
+                .onRightClick {
+                    ItemDetailRequest.target =
+                        ItemDetailTarget(order.typeId, order.typeName, order.regionId, order.locationId.takeIf { !order.isBuyOrder })
+                }.padding(horizontal = 8.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
@@ -498,7 +505,11 @@ internal fun OrderHistoryRow(
     val profitColor = pnl?.let { if (it >= 0) PROFIT_COLOR else LOSS_COLOR }
 
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .onRightClick { ItemDetailRequest.target = ItemDetailTarget(order.typeId, order.typeName) }
+                .padding(horizontal = 8.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(modifier = Modifier.weight(3f), verticalAlignment = Alignment.CenterVertically) {
@@ -576,7 +587,11 @@ internal fun InventoryRow(
     val realizedColor = realizedPnl?.let { if (it >= 0) PROFIT_COLOR else LOSS_COLOR } ?: MaterialTheme.colorScheme.onSurfaceVariant
 
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .onRightClick { ItemDetailRequest.target = ItemDetailTarget(item.typeId, item.typeName) }
+                .padding(horizontal = 8.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(modifier = Modifier.weight(3f), verticalAlignment = Alignment.CenterVertically) {

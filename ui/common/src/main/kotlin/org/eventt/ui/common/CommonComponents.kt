@@ -9,6 +9,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -270,3 +272,10 @@ fun EsiRefreshButton(
         }
     }
 }
+
+/** Runs [action] on a right mouse button press — e.g. "open the chart" on a table row. */
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+fun Modifier.onRightClick(action: () -> Unit): Modifier =
+    this.onPointerEvent(androidx.compose.ui.input.pointer.PointerEventType.Press) {
+        if (it.buttons.isSecondaryPressed) action()
+    }
