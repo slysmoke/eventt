@@ -123,7 +123,7 @@ private fun fetchLiveHistory(
 
 // ─── Data ─────────────────────────────────────────────────────────────────────────────────
 
-private data class MyTrades(
+internal data class MyTrades(
     val qtyHeld: Long,
     val avgBuyPrice: Double?,
     val realizedPnl: Double?,
@@ -138,7 +138,7 @@ private data class MyTrades(
 
 // In corp view (corpId set) everything comes from the corporation's wallet, orders and hangars —
 // corp transactions are stored without a character_id — while fees stay the acting member's.
-private fun loadMyTrades(
+internal fun loadMyTrades(
     charId: Int,
     corpId: Int?,
     typeId: Int,
@@ -225,25 +225,6 @@ fun ItemDetailDialog(
     var flow by remember { mutableStateOf<StationFlow?>(null) }
     var flowLoading by remember { mutableStateOf(true) }
 
-    // Chart settings persist across dialogs and restarts (loaded with the data below).
-    val scope = rememberCoroutineScope()
-    var range by remember { mutableStateOf(ChartRange.M6) }
-    var showAvgLine by remember { mutableStateOf(false) }
-    var showSmaFast by remember { mutableStateOf(true) }
-    var showSmaSlow by remember { mutableStateOf(true) }
-    var showBands by remember { mutableStateOf(false) }
-    var showTrades by remember { mutableStateOf(true) }
-    var showA4e by remember { mutableStateOf(true) }
-
-    fun save(
-        key: String,
-        value: Any,
-    ) {
-        scope.launch(Dispatchers.IO) { S.set("itemChart.$key", value.toString()) }
-    }
-    var a4e by remember { mutableStateOf<Map<String, A4eDay>>(emptyMap()) }
-    val a4eSync by A4eHistorySync.state.collectAsState()
-
     val effPrimaryRegion = if (typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else primaryRegionId
     // Station/system scoping is meaningless for PLEX (global market) — filtering its book down to
     // some other item's station would just show an empty book.
@@ -254,16 +235,6 @@ fun ItemDetailDialog(
 
     LaunchedEffect(typeId, primaryRegionId, secondaryRegionId) {
         isLoading = true
-        withContext(Dispatchers.IO) {
-            fun flag(key: String) = S.get("itemChart.$key")?.toBooleanStrictOrNull()
-            S.get("itemChart.range")?.let { name -> ChartRange.entries.find { it.name == name } }?.let { range = it }
-            flag("avg")?.let { showAvgLine = it }
-            flag("sma20")?.let { showSmaFast = it }
-            flag("sma50")?.let { showSmaSlow = it }
-            flag("bollinger")?.let { showBands = it }
-            flag("trades")?.let { showTrades = it }
-            flag("a4e")?.let { showA4e = it }
-        }
         withContext(Dispatchers.IO) {
             primaryOrders = runCatching { EsiClient.getMarketRegionOrders(effPrimaryRegion, typeId = typeId) }.getOrDefault(emptyList())
             primaryHistory = fetchLiveHistory(typeId, primaryRegionId)
@@ -294,21 +265,6 @@ fun ItemDetailDialog(
         flowLoading = false
     }
 
-    // Local Adam4EVE history — re-read as the background sync lands more files.
-    LaunchedEffect(typeId, effPrimaryRegion, effPrimaryStation, a4eSync.revision) {
-        a4e =
-            withContext(Dispatchers.IO) {
-                runCatching {
-                    val today = LocalDate.now().toEpochDay().toInt()
-                    aggregateA4e(
-                        A4eHistorySync.store.query(typeId, today - ChartRange.ALL.days, today),
-                        effPrimaryStation,
-                        effPrimaryRegion,
-                    )
-                }.getOrDefault(emptyMap())
-            }
-    }
-
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
             modifier = Modifier.fillMaxWidth(0.96f).fillMaxHeight(0.94f),
@@ -326,71 +282,18 @@ fun ItemDetailDialog(
                 }
 
                 Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            ChartRange.entries.forEach { r ->
-                                FilterChip(selected = range == r, onClick = {
-                                    range = r
-                                    save("range", r.name)
-                                }, label = { Text(r.label) })
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            ToggleChip("Avg line", MaterialTheme.colorScheme.primary, showAvgLine) {
-                                showAvgLine = it
-                                save("avg", it)
-                            }
-                            ToggleChip("SMA 20", SMA_FAST_COLOR, showSmaFast) {
-                                showSmaFast = it
-                                save("sma20", it)
-                            }
-                            ToggleChip("SMA 50", SMA_SLOW_COLOR, showSmaSlow) {
-                                showSmaSlow = it
-                                save("sma50", it)
-                            }
-                            ToggleChip("Bollinger", BAND_COLOR, showBands) {
-                                showBands = it
-                                save("bollinger", it)
-                            }
-                            if (myTrades != null) {
-                                ToggleChip("My trades", COST_COLOR, showTrades) {
-                                    showTrades = it
-                                    save("trades", it)
-                                }
-                            }
-                            ToggleChip("Adam4EVE", WICK_COLOR, showA4e) {
-                                showA4e = it
-                                save("a4e", it)
-                            }
-                            Text(
-                                when {
-                                    a4eSync.running -> "Adam4EVE syncing ${a4eSync.filesDone}/${a4eSync.filesTotal}…"
-                                    a4e.isEmpty() -> "Adam4EVE: no fills tracked here"
-                                    else -> "Adam4EVE: ${if (effPrimaryStation != null) "this station" else "tracked hubs in region"}"
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = AXIS_COLOR,
-                                modifier = Modifier.align(Alignment.CenterVertically),
-                            )
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        TradingChart(
-                            history = primaryHistory,
-                            secondaryHistory = secondaryHistory,
-                            secondaryLabel = secondaryLabel,
-                            range = range,
-                            showAvgLine = showAvgLine,
-                            showSmaFast = showSmaFast,
-                            showSmaSlow = showSmaSlow,
-                            showBands = showBands,
-                            trades = myTrades.takeIf { showTrades },
-                            a4e = a4e.takeIf { showA4e }.orEmpty(),
-                            book = book,
-                            modifier = Modifier.fillMaxWidth().weight(1f),
-                        )
-                    }
+                    ItemPriceChart(
+                        typeId = typeId,
+                        regionId = effPrimaryRegion,
+                        stationId = effPrimaryStation,
+                        history = primaryHistory,
+                        secondaryHistory = secondaryHistory,
+                        secondaryLabel = secondaryLabel,
+                        trades = myTrades,
+                        bestBid = book.bestBid,
+                        bestAsk = book.bestAsk,
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                    )
                     Column(
                         modifier = Modifier.width(360.dp).fillMaxHeight().verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -408,6 +311,140 @@ fun ItemDetailDialog(
                 }
             }
         }
+    }
+}
+
+/**
+ * The chart half of the item view — range/indicator toolbar, candles with SMA/Bollinger/RSI and
+ * volume, your fills and levels, Adam4EVE overlay — shared by ItemDetailDialog and the Market
+ * Browser's history tab. Toolbar choices persist in settings (itemChart.*) across both.
+ * [regionId]/[stationId] are the effective (PLEX-redirected) market the Adam4EVE data is read for.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun ItemPriceChart(
+    typeId: Int,
+    regionId: Int,
+    stationId: Long?,
+    history: List<MarketHistoryModel>,
+    secondaryHistory: List<MarketHistoryModel> = emptyList(),
+    secondaryLabel: String? = null,
+    trades: MyTrades?,
+    bestBid: Double?,
+    bestAsk: Double?,
+    modifier: Modifier = Modifier,
+) {
+    val scope = rememberCoroutineScope()
+    var range by remember { mutableStateOf(ChartRange.M6) }
+    var showAvgLine by remember { mutableStateOf(false) }
+    var showSmaFast by remember { mutableStateOf(true) }
+    var showSmaSlow by remember { mutableStateOf(true) }
+    var showBands by remember { mutableStateOf(false) }
+    var showTrades by remember { mutableStateOf(true) }
+    var showA4e by remember { mutableStateOf(true) }
+    var a4e by remember { mutableStateOf<Map<String, A4eDay>>(emptyMap()) }
+    val a4eSync by A4eHistorySync.state.collectAsState()
+
+    fun save(
+        key: String,
+        value: Any,
+    ) {
+        scope.launch(Dispatchers.IO) { S.set("itemChart.$key", value.toString()) }
+    }
+
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            fun flag(key: String) = S.get("itemChart.$key")?.toBooleanStrictOrNull()
+            S.get("itemChart.range")?.let { name -> ChartRange.entries.find { it.name == name } }?.let { range = it }
+            flag("avg")?.let { showAvgLine = it }
+            flag("sma20")?.let { showSmaFast = it }
+            flag("sma50")?.let { showSmaSlow = it }
+            flag("bollinger")?.let { showBands = it }
+            flag("trades")?.let { showTrades = it }
+            flag("a4e")?.let { showA4e = it }
+        }
+    }
+
+    // Local Adam4EVE history — re-read as the background sync lands more files.
+    LaunchedEffect(typeId, regionId, stationId, a4eSync.revision) {
+        a4e =
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val today = LocalDate.now().toEpochDay().toInt()
+                    aggregateA4e(
+                        A4eHistorySync.store.query(typeId, today - ChartRange.ALL.days, today),
+                        stationId,
+                        regionId,
+                    )
+                }.getOrDefault(emptyMap())
+            }
+    }
+
+    Column(modifier = modifier) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            ChartRange.entries.forEach { r ->
+                FilterChip(selected = range == r, onClick = {
+                    range = r
+                    save("range", r.name)
+                }, label = { Text(r.label) })
+            }
+            Spacer(Modifier.width(12.dp))
+            ToggleChip("Avg line", MaterialTheme.colorScheme.primary, showAvgLine) {
+                showAvgLine = it
+                save("avg", it)
+            }
+            ToggleChip("SMA 20", SMA_FAST_COLOR, showSmaFast) {
+                showSmaFast = it
+                save("sma20", it)
+            }
+            ToggleChip("SMA 50", SMA_SLOW_COLOR, showSmaSlow) {
+                showSmaSlow = it
+                save("sma50", it)
+            }
+            ToggleChip("Bollinger", BAND_COLOR, showBands) {
+                showBands = it
+                save("bollinger", it)
+            }
+            if (trades != null) {
+                ToggleChip("My trades", COST_COLOR, showTrades) {
+                    showTrades = it
+                    save("trades", it)
+                }
+            }
+            ToggleChip("Adam4EVE", WICK_COLOR, showA4e) {
+                showA4e = it
+                save("a4e", it)
+            }
+            Text(
+                when {
+                    a4eSync.running -> "Adam4EVE syncing ${a4eSync.filesDone}/${a4eSync.filesTotal}…"
+                    a4e.isEmpty() -> "Adam4EVE: no fills tracked here"
+                    else -> "Adam4EVE: ${if (stationId != null) "this station" else "tracked hubs in region"}"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = AXIS_COLOR,
+                modifier = Modifier.align(Alignment.CenterVertically),
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        TradingChart(
+            history = history,
+            secondaryHistory = secondaryHistory,
+            secondaryLabel = secondaryLabel,
+            range = range,
+            showAvgLine = showAvgLine,
+            showSmaFast = showSmaFast,
+            showSmaSlow = showSmaSlow,
+            showBands = showBands,
+            trades = trades.takeIf { showTrades },
+            a4e = a4e.takeIf { showA4e }.orEmpty(),
+            bestBid = bestBid,
+            bestAsk = bestAsk,
+            modifier = Modifier.fillMaxWidth().weight(1f),
+        )
     }
 }
 
@@ -642,7 +679,8 @@ private fun TradingChart(
     showBands: Boolean,
     trades: MyTrades?,
     a4e: Map<String, A4eDay>,
-    book: BookSide,
+    bestBid: Double?,
+    bestAsk: Double?,
     modifier: Modifier = Modifier,
 ) {
     if (history.isEmpty()) {
@@ -776,8 +814,8 @@ private fun TradingChart(
             val coreMax = core.max()
             val extras =
                 buildList {
-                    book.bestBid?.let { add(it) }
-                    book.bestAsk?.let { add(it) }
+                    bestBid?.let { add(it) }
+                    bestAsk?.let { add(it) }
                     trades?.avgBuyPrice?.let { add(it) }
                     trades?.regionOrders?.forEach { add(it.price) }
                     data.days.subList(iFrom, iTo + 1).forEach { d ->
@@ -903,8 +941,8 @@ private fun TradingChart(
                 drawRect(color, topLeft = tl, size = Size(lm.size.width + 6.dp.toPx(), lm.size.height.toFloat()))
                 drawText(lm, topLeft = tl + Offset(3.dp.toPx(), 0f))
             }
-            book.bestBid?.let { level(it, upColor, formatPriceAbbr(it), dashed = false) }
-            book.bestAsk?.let { level(it, downColor, formatPriceAbbr(it), dashed = false) }
+            bestBid?.let { level(it, upColor, formatPriceAbbr(it), dashed = false) }
+            bestAsk?.let { level(it, downColor, formatPriceAbbr(it), dashed = false) }
             trades?.avgBuyPrice?.takeIf { trades.qtyHeld > 0 }?.let { level(it, COST_COLOR, "cost ${formatPriceAbbr(it)}", dashed = true) }
             trades?.regionOrders?.forEach { o ->
                 level(o.price, if (o.isBuyOrder) upColor else downColor, "my ${if (o.isBuyOrder) "B" else "S"}", dashed = true)
