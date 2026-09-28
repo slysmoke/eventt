@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.eventt.core.database.AppLanguage
 import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.everef.EveRefDao
@@ -21,6 +22,10 @@ import org.eventt.core.everef.EveRefService
 import org.eventt.core.marketlogs.MarketLogPaths
 import org.eventt.core.staticdata.CitadelService
 import org.eventt.core.staticdata.StaticDataImporter
+import org.eventt.settings.generated.resources.*
+import org.eventt.ui.common.Tip
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -49,6 +54,7 @@ fun SettingsScreen() {
 
     var marketLogPath by remember { mutableStateOf<String?>(null) }
     var marketLogAutoDetectFailed by remember { mutableStateOf(false) }
+    val selectFolderTitle = stringResource(Res.string.select_marketlogs_folder)
 
     fun reloadStats() {
         downloadCount = EveRefDao.getDownloadCount()
@@ -96,7 +102,9 @@ fun SettingsScreen() {
                 .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        Text("Settings", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(Res.string.settings_title), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+
+        LanguageCard()
 
         CharacterFeesCard()
 
@@ -129,7 +137,7 @@ fun SettingsScreen() {
                 val chooser =
                     JFileChooser().apply {
                         fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
-                        dialogTitle = "Select EVE Marketlogs folder"
+                        dialogTitle = selectFolderTitle
                         marketLogPath?.let { currentDirectory = File(it) }
                     }
                 if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
@@ -196,7 +204,11 @@ private fun MarketHistorySourceCard(
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Default.History, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text("Market History Source", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    stringResource(Res.string.market_history_source),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
 
             HorizontalDivider()
@@ -204,18 +216,16 @@ private fun MarketHistorySourceCard(
             // ESI option
             SourceOption(
                 selected = selectedSource == "esi",
-                title = "ESI (EVE Online API)",
-                description = "Fetches history on demand per item and region. Always current, no storage required.",
+                title = stringResource(Res.string.source_esi_title),
+                description = stringResource(Res.string.source_esi_desc),
                 onClick = { onSourceSelected("esi") },
             )
 
             // EveRef option
             SourceOption(
                 selected = selectedSource == "everef",
-                title = "EveRef Bulk Data",
-                description =
-                    "Downloads complete daily market history files from data.everef.net. " +
-                        "Covers all items and regions. Data is ~3 days behind.",
+                title = stringResource(Res.string.source_everef_title),
+                description = stringResource(Res.string.source_everef_desc),
                 onClick = { onSourceSelected("everef") },
             )
 
@@ -284,12 +294,15 @@ private fun EveRefSettings(
         // Period selector
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
-                "History period to keep",
+                stringResource(Res.string.history_period_to_keep),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(1 to "1 month", 3 to "3 months").forEach { (months, label) ->
+                listOf(
+                    1 to stringResource(Res.string.period_1_month),
+                    3 to stringResource(Res.string.period_3_months),
+                ).forEach { (months, label) ->
                     FilterChip(
                         selected = periodMonths == months,
                         onClick = { onPeriodSelected(months) },
@@ -310,7 +323,7 @@ private fun EveRefSettings(
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.CheckCircle, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
                         Text(
-                            "$downloadCount days downloaded  ($earliestDate → $latestDate)",
+                            pluralStringResource(Res.plurals.days_downloaded, downloadCount, downloadCount, earliestDate, latestDate),
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
@@ -318,7 +331,7 @@ private fun EveRefSettings(
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Info, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(
-                            "No data downloaded yet",
+                            stringResource(Res.string.no_data_downloaded),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -326,14 +339,14 @@ private fun EveRefSettings(
                 }
                 if (lastSyncMillis != null) {
                     Text(
-                        "Last sync: ${formatTimestamp(lastSyncMillis)}",
+                        stringResource(Res.string.last_sync, formatTimestamp(lastSyncMillis)),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 if (syncState.error != null) {
                     Text(
-                        "Error: ${syncState.error}",
+                        stringResource(Res.string.error_prefix, syncState.error.orEmpty()),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
@@ -354,7 +367,7 @@ private fun EveRefSettings(
                     Icon(Icons.Default.Sync, null, Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
                 }
-                Text(if (syncState.isRunning) "Syncing…" else "Sync Now")
+                Text(if (syncState.isRunning) stringResource(Res.string.syncing) else stringResource(Res.string.sync_now))
             }
 
             if (syncState.isRunning || syncState.progress > 0f) {
@@ -386,12 +399,11 @@ private fun SdeCard(
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Default.Storage, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text("Static Data (SDE)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(Res.string.sde_title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             }
 
             Text(
-                "Universe data: types, market groups, regions, NPC stations. " +
-                    "Downloaded from the official EVE Online SDE. Re-import to pick up NPC stations or new content.",
+                stringResource(Res.string.sde_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -406,13 +418,16 @@ private fun SdeCard(
                     if (typeCount > 0) {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.CheckCircle, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
-                            Text("$typeCount types loaded", style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                pluralStringResource(Res.plurals.types_loaded, typeCount, typeCount),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
                         }
                     } else {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Warning, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error)
                             Text(
-                                "No SDE data — import required",
+                                stringResource(Res.string.no_sde_data),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error,
                             )
@@ -420,21 +435,21 @@ private fun SdeCard(
                     }
                     if (buildNumber != null) {
                         Text(
-                            "Build: $buildNumber",
+                            stringResource(Res.string.sde_build, buildNumber),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     if (importDate != null) {
                         Text(
-                            "Imported: ${formatTimestamp(importDate)}",
+                            stringResource(Res.string.sde_imported, formatTimestamp(importDate)),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     if (sdeState.error != null) {
                         Text(
-                            "Error: ${sdeState.error}",
+                            stringResource(Res.string.error_prefix, sdeState.error.orEmpty()),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error,
                         )
@@ -453,11 +468,11 @@ private fun SdeCard(
                     }
                     Text(
                         if (sdeState.isRunning) {
-                            "Importing…"
+                            stringResource(Res.string.importing)
                         } else if (typeCount > 0) {
-                            "Re-import SDE"
+                            stringResource(Res.string.reimport_sde)
                         } else {
-                            "Import SDE"
+                            stringResource(Res.string.import_sde)
                         },
                     )
                 }
@@ -494,12 +509,15 @@ private fun CitadelCard(
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Default.LocationCity, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text("Player Structures (Citadels)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    stringResource(Res.string.citadels_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
 
             Text(
-                "Downloads the community citadel database from slysmoke/evernus-db. " +
-                    "Enables name and system resolution for player-owned structures in orders, assets, and wallet.",
+                stringResource(Res.string.citadels_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -515,13 +533,16 @@ private fun CitadelCard(
                     if (citadelCount > 0) {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.CheckCircle, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
-                            Text("$citadelCount structures in database", style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                pluralStringResource(Res.plurals.structures_in_db, citadelCount, citadelCount),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
                         }
                     } else {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Info, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(
-                                "No citadel data. Structures will show ID instead of name.",
+                                stringResource(Res.string.no_citadel_data),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -529,7 +550,7 @@ private fun CitadelCard(
                     }
                     if (lastSyncMillis != null) {
                         Text(
-                            "Last sync: ${formatTimestamp(lastSyncMillis)}",
+                            stringResource(Res.string.last_sync, formatTimestamp(lastSyncMillis)),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -539,7 +560,7 @@ private fun CitadelCard(
                     }
                     if (syncState.error != null) {
                         Text(
-                            "Error: ${syncState.error}",
+                            stringResource(Res.string.error_prefix, syncState.error.orEmpty()),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error,
                         )
@@ -556,7 +577,7 @@ private fun CitadelCard(
                         Icon(Icons.Default.Sync, null, Modifier.size(16.dp))
                         Spacer(Modifier.width(8.dp))
                     }
-                    Text(if (syncState.isRunning) "Syncing…" else "Sync Citadels")
+                    Text(if (syncState.isRunning) stringResource(Res.string.syncing) else stringResource(Res.string.sync_citadels))
                 }
                 if (syncState.isRunning) {
                     Text(syncState.status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -577,12 +598,15 @@ private fun MarketLogsCard(
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Default.FolderOpen, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text("Marketlogs Folder", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    stringResource(Res.string.marketlogs_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
 
             Text(
-                "EVE's client can export your active orders and item order books to this folder. " +
-                    "EventNight Trade Tools watches it and imports new exports automatically, bypassing ESI's cache delay.",
+                stringResource(Res.string.marketlogs_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -602,19 +626,23 @@ private fun MarketLogsCard(
                     } else {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Warning, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error)
-                            Text("Not configured", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                            Text(
+                                stringResource(Res.string.not_configured),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
                         }
                     }
                     if (autoDetectFailed) {
                         Text(
-                            "Auto-detect couldn't find it — please Browse to it manually.",
+                            stringResource(Res.string.autodetect_failed),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
                     if (System.getProperty("os.name").lowercase().contains("mac")) {
                         Text(
-                            "macOS path detection is best-effort and unverified — please confirm the folder manually.",
+                            stringResource(Res.string.macos_path_warning),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.tertiary,
                         )
@@ -623,8 +651,51 @@ private fun MarketLogsCard(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onAutoDetect) { Text("Auto-detect") }
-                OutlinedButton(onClick = onBrowse) { Text("Browse…") }
+                OutlinedButton(onClick = onAutoDetect) { Text(stringResource(Res.string.auto_detect)) }
+                OutlinedButton(onClick = onBrowse) { Text(stringResource(Res.string.browse)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LanguageCard() {
+    val scope = rememberCoroutineScope()
+    // What's running now vs what's saved: the choice only applies on the next launch.
+    val active = remember { AppLanguage.get() }
+    var selected by remember { mutableStateOf(active) }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.Language, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text(stringResource(Res.string.language), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            }
+            Box {
+                var expanded by remember { mutableStateOf(false) }
+                OutlinedButton(onClick = { expanded = true }) {
+                    Text(AppLanguage.SUPPORTED.getValue(selected))
+                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                }
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    AppLanguage.SUPPORTED.forEach { (code, name) ->
+                        DropdownMenuItem(
+                            text = { Text(name) },
+                            onClick = {
+                                expanded = false
+                                selected = code
+                                scope.launch(Dispatchers.IO) { AppLanguage.set(code) }
+                            },
+                        )
+                    }
+                }
+            }
+            if (selected != active) {
+                Text(
+                    stringResource(Res.string.language_restart),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
             }
         }
     }
@@ -679,11 +750,15 @@ private fun CharacterFeesCard() {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Default.Percent, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text("Character Fees", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    stringResource(Res.string.character_fees),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
 
             Text(
-                "Set the actual fees for each character. Used to calculate net profit in analysis.",
+                stringResource(Res.string.character_fees_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -696,7 +771,8 @@ private fun CharacterFeesCard() {
 
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         TaxField(
-                            label = "Sales Tax %",
+                            label = stringResource(Res.string.sales_tax_pct),
+                            tooltip = stringResource(Res.string.tip_set_sales_tax),
                             value = salesTaxValues[char.id] ?: "8.00",
                             onValueChange = { v ->
                                 salesTaxValues[char.id] = v
@@ -708,7 +784,8 @@ private fun CharacterFeesCard() {
                         )
 
                         TaxField(
-                            label = "Broker's Fee %",
+                            label = stringResource(Res.string.brokers_fee_pct),
+                            tooltip = stringResource(Res.string.tip_set_broker_fee),
                             value = brokersFeeValues[char.id] ?: "3.00",
                             onValueChange = { v ->
                                 brokersFeeValues[char.id] = v
@@ -728,7 +805,14 @@ private fun CharacterFeesCard() {
                                     scope.launch(Dispatchers.IO) { StaticDataDao.setCharRelistSkillLevel(char.id, level.coerceIn(0, 5)) }
                                 }
                             },
-                            label = { Text("Adv. Broker Relations Lvl", style = MaterialTheme.typography.labelSmall) },
+                            label = {
+                                Tip(stringResource(Res.string.tip_set_relist_skill)) {
+                                    Text(
+                                        stringResource(Res.string.adv_broker_relations_lvl),
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
+                            },
                             singleLine = true,
                             modifier = Modifier.width(180.dp),
                             textStyle = MaterialTheme.typography.bodyMedium,
@@ -737,7 +821,7 @@ private fun CharacterFeesCard() {
                         val tax = salesTaxValues[char.id]?.toDoubleOrNull() ?: 0.0
                         val fee = brokersFeeValues[char.id]?.toDoubleOrNull() ?: 0.0
                         Text(
-                            "Total: ${"%.2f".format(tax + fee)}%",
+                            stringResource(Res.string.fees_total, "%.2f".format(tax + fee)),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -756,6 +840,7 @@ private fun TaxField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
+    tooltip: String? = null,
 ) {
     OutlinedTextField(
         value = value,
@@ -764,7 +849,7 @@ private fun TaxField(
             val filtered = v.filter { it.isDigit() || it == '.' }
             if (filtered.count { it == '.' } <= 1) onValueChange(filtered)
         },
-        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+        label = { Tip(tooltip) { Text(label, style = MaterialTheme.typography.labelSmall) } },
         suffix = { Text("%", style = MaterialTheme.typography.bodySmall) },
         singleLine = true,
         modifier = modifier,

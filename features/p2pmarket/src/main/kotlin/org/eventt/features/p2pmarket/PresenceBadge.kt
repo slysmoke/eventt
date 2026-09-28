@@ -11,6 +11,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
 import org.eventt.core.nostr.PresenceService
+import org.eventt.p2pmarket.generated.resources.*
+import org.jetbrains.compose.resources.stringResource
 
 private const val TICK_MILLIS = 30_000L
 
@@ -34,10 +36,10 @@ internal fun PresenceBadge(pubkey: String) {
 
     val presence = presenceMap[pubkey] ?: return
     if (presence.isOnline(nowSec)) {
-        Text("● Online", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+        Text(stringResource(Res.string.online), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
     } else {
         Text(
-            "○ Seen ${formatDurationShort(nowSec - presence.lastSeen)} ago",
+            stringResource(Res.string.seen_ago, formatDurationShort(nowSec - presence.lastSeen)),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

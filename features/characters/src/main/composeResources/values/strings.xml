@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="chars_corps_title">Characters &amp; Corporations</string>
+    <string name="add_character">Add Character</string>
+    <string name="no_characters_added">No Characters Added</string>
+    <string name="no_characters_desc">Click 'Add Character' to authenticate with EVE Online SSO.</string>
+    <string name="corporations">Corporations</string>
+    <string name="corporations_desc">Only tracked corporations show up in the character switcher and get synced — track a corp you actually manage trades for, leave the rest alone.</string>
+    <string name="authenticating">Authenticating...</string>
+    <string name="sso_browser_hint">This will open your browser to authenticate with EVE Online SSO.</string>
+    <string name="open_browser">Open Browser</string>
+    <string name="cancel">Cancel</string>
+    <string name="remove_character">Remove Character</string>
+    <string name="remove_character_msg">Remove '%1$s'? This will also remove associated cached data.</string>
+    <string name="token_expired">Token expired</string>
+    <string name="token_valid">Token valid</string>
+    <string name="corporation_label">Corporation: %1$s</string>
+    <string name="refresh">Refresh</string>
+    <string name="remove">Remove</string>
+    <string name="unknown">Unknown</string>
+    <string name="untrack">Untrack</string>
+    <string name="track">Track</string>
+</resources>

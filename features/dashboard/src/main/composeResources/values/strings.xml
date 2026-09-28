@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="type_n">Type %1$s</string>
+    <string name="no_character_selected">No character selected</string>
+    <string name="dashboard_all">Dashboard — All characters &amp; corps</string>
+    <string name="dashboard_corp">Dashboard — %1$s</string>
+    <string name="dashboard">Dashboard</string>
+    <string name="combine_all">Combine all</string>
+    <string name="wallet_balance">Wallet Balance</string>
+    <string name="asset_value">Asset Value</string>
+    <string name="cash_flow_30d">Cash Flow 30d</string>
+    <string name="cash_flow">Cash Flow</string>
+    <string name="cash_flow_today">Cash Flow Today</string>
+    <string name="cash_flow_7d">Cash Flow 7 days</string>
+    <string name="income_30d">Income 30d</string>
+    <string name="expenses_30d">Expenses 30d</string>
+    <string name="realized_pnl_fifo">Realized P&amp;L (FIFO cost-basis)</string>
+    <string name="realized_today">Realized Today</string>
+    <string name="realized_7d">Realized 7 days</string>
+    <string name="realized_30d">Realized 30 days</string>
+    <string name="realized_all">Realized All-time</string>
+    <string name="daily_realized_pnl_30d">Daily Realized P&amp;L — 30d</string>
+    <string name="no_realized_sales_30d">No realized sales in the last 30 days</string>
+    <string name="recent_transactions">Recent Transactions</string>
+    <string name="no_transactions_recorded">No transactions recorded</string>
+    <string name="top_items_realized">Top Items — Realized 30d</string>
+    <string name="no_realized_sells_30d">No realized sells in the last 30 days</string>
+    <string name="top_counterparties">Top Buyers &amp; Sellers</string>
+    <string name="sellers">Sellers</string>
+    <string name="no_purchases">No purchases recorded</string>
+    <string name="buyers">Buyers</string>
+    <string name="no_sales">No sales recorded</string>
+    <string name="unknown">Unknown</string>
+    <string name="buy_badge">BUY</string>
+    <string name="sell_badge">SELL</string>
+    <string name="qty_at_price">%1$sx @ %2$s</string>
+    <string name="qty_sold">%1$s sold</string>
+    <plurals name="trades_count">
+        <item quantity="one">%1$s trade</item>
+        <item quantity="other">%1$s trades</item>
+    </plurals>
+    <string name="tip_cash_flow">ISK actually in and out of the wallet: sales minus purchases, taxes and fees. Buying stock shows as a loss here even if you'll sell it at a profit later.</string>
+    <string name="tip_realized_pnl">Profit on what you actually sold: sale price minus what those same units cost you (FIFO — first bought, first sold), after fees. Unsold stock doesn't count.</string>
+</resources>

@@ -20,9 +20,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.InventoryAdjustmentDao
 import org.eventt.core.database.OrderHistoryDao
+import org.eventt.core.model.stringBlocking
 import org.eventt.core.model.utcToLocalDateTime
+import org.eventt.orders.generated.resources.*
 import org.eventt.ui.common.ensureVisible
 import org.eventt.ui.common.formatIsk
+import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.stringResource
 import java.time.Instant
 
 // ── Sorting ───────────────────────────────────────────────────────────────
@@ -242,17 +246,97 @@ internal fun SellOrdersTable(
                     ).padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SortHeader("Name", SortCol.NAME, sortCol, sortDir, onSort, Modifier.weight(3f))
-            SortHeader("Cost", SortCol.COST, sortCol, sortDir, onSort, Modifier.weight(1.8f))
-            SortHeader("Price / Best", SortCol.PRICE, sortCol, sortDir, onSort, Modifier.weight(2.4f))
-            SortHeader("Relist", SortCol.RELIST, sortCol, sortDir, onSort, Modifier.weight(1.8f))
-            SortHeader("Profit", SortCol.PROFIT, sortCol, sortDir, onSort, Modifier.weight(1.8f))
-            SortHeader("Margin", SortCol.MARGIN, sortCol, sortDir, onSort, Modifier.weight(1.2f))
-            SortHeader("Best Margin", SortCol.BEST_MARGIN, sortCol, sortDir, onSort, Modifier.weight(1.4f))
-            SortHeader("Volume", SortCol.VOLUME, sortCol, sortDir, onSort, Modifier.weight(2.5f))
-            SortHeader("Total", SortCol.TOTAL, sortCol, sortDir, onSort, Modifier.weight(2f))
-            SortHeader("Competition", SortCol.COMPETITION, sortCol, sortDir, onSort, Modifier.weight(1.8f))
-            SortHeader("Time Left", SortCol.TIME_LEFT, sortCol, sortDir, onSort, Modifier.weight(1.5f))
+            SortHeader(stringResource(Res.string.h_name), SortCol.NAME, sortCol, sortDir, onSort, Modifier.weight(3f))
+            SortHeader(
+                stringResource(Res.string.h_cost),
+                SortCol.COST,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.8f),
+                tooltip = stringResource(Res.string.tip_o_cost),
+            )
+            SortHeader(
+                stringResource(Res.string.h_price_best),
+                SortCol.PRICE,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(2.4f),
+                tooltip = stringResource(Res.string.tip_o_price_sell),
+            )
+            SortHeader(
+                stringResource(Res.string.h_relist),
+                SortCol.RELIST,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.8f),
+                tooltip = stringResource(Res.string.tip_o_relist),
+            )
+            SortHeader(
+                stringResource(Res.string.h_profit),
+                SortCol.PROFIT,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.8f),
+                tooltip = stringResource(Res.string.tip_o_profit),
+            )
+            SortHeader(
+                stringResource(Res.string.h_margin),
+                SortCol.MARGIN,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.2f),
+                tooltip = stringResource(Res.string.tip_o_margin_sell),
+            )
+            SortHeader(
+                stringResource(Res.string.h_best_margin),
+                SortCol.BEST_MARGIN,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.4f),
+                tooltip = stringResource(Res.string.tip_o_best_margin_sell),
+            )
+            SortHeader(
+                stringResource(Res.string.h_volume),
+                SortCol.VOLUME,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(2.5f),
+                tooltip = stringResource(Res.string.tip_o_volume),
+            )
+            SortHeader(
+                stringResource(Res.string.h_total),
+                SortCol.TOTAL,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(2f),
+                tooltip = stringResource(Res.string.tip_o_total),
+            )
+            SortHeader(
+                stringResource(Res.string.h_competition),
+                SortCol.COMPETITION,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.8f),
+                tooltip = stringResource(Res.string.tip_o_competition),
+            )
+            SortHeader(
+                stringResource(Res.string.h_time_left),
+                SortCol.TIME_LEFT,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.5f),
+                tooltip = stringResource(Res.string.tip_o_time_left),
+            )
             StaticHeader("", Modifier.width(36.dp))
         }
         HorizontalDivider()
@@ -339,16 +423,88 @@ internal fun BuyOrdersTable(
                     ).padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SortHeader("Name", SortCol.NAME, sortCol, sortDir, onSort, Modifier.weight(3f))
-            SortHeader("Price / Best", SortCol.PRICE, sortCol, sortDir, onSort, Modifier.weight(2.4f))
-            SortHeader("Relist", SortCol.RELIST, sortCol, sortDir, onSort, Modifier.weight(1.6f))
-            SortHeader("Margin", SortCol.MARGIN, sortCol, sortDir, onSort, Modifier.weight(1.2f))
-            SortHeader("Best Margin", SortCol.BEST_MARGIN, sortCol, sortDir, onSort, Modifier.weight(1.4f))
-            SortHeader("Volume", SortCol.VOLUME, sortCol, sortDir, onSort, Modifier.weight(2.5f))
-            SortHeader("Total", SortCol.TOTAL, sortCol, sortDir, onSort, Modifier.weight(2f))
-            SortHeader("Competition", SortCol.COMPETITION, sortCol, sortDir, onSort, Modifier.weight(1.8f))
-            SortHeader("Time Left", SortCol.TIME_LEFT, sortCol, sortDir, onSort, Modifier.weight(1.5f))
-            SortHeader("Order Age", SortCol.ORDER_AGE, sortCol, sortDir, onSort, Modifier.weight(1.5f))
+            SortHeader(stringResource(Res.string.h_name), SortCol.NAME, sortCol, sortDir, onSort, Modifier.weight(3f))
+            SortHeader(
+                stringResource(Res.string.h_price_best),
+                SortCol.PRICE,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(2.4f),
+                tooltip = stringResource(Res.string.tip_o_price_buy),
+            )
+            SortHeader(
+                stringResource(Res.string.h_relist),
+                SortCol.RELIST,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.6f),
+                tooltip = stringResource(Res.string.tip_o_relist_buy),
+            )
+            SortHeader(
+                stringResource(Res.string.h_margin),
+                SortCol.MARGIN,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.2f),
+                tooltip = stringResource(Res.string.tip_o_margin_buy),
+            )
+            SortHeader(
+                stringResource(Res.string.h_best_margin),
+                SortCol.BEST_MARGIN,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.4f),
+                tooltip = stringResource(Res.string.tip_o_best_margin_buy),
+            )
+            SortHeader(
+                stringResource(Res.string.h_volume),
+                SortCol.VOLUME,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(2.5f),
+                tooltip = stringResource(Res.string.tip_o_volume),
+            )
+            SortHeader(
+                stringResource(Res.string.h_total),
+                SortCol.TOTAL,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(2f),
+                tooltip = stringResource(Res.string.tip_o_total),
+            )
+            SortHeader(
+                stringResource(Res.string.h_competition),
+                SortCol.COMPETITION,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.8f),
+                tooltip = stringResource(Res.string.tip_o_competition),
+            )
+            SortHeader(
+                stringResource(Res.string.h_time_left),
+                SortCol.TIME_LEFT,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.5f),
+                tooltip = stringResource(Res.string.tip_o_time_left),
+            )
+            SortHeader(
+                stringResource(Res.string.h_order_age),
+                SortCol.ORDER_AGE,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.5f),
+                tooltip = stringResource(Res.string.tip_o_age),
+            )
             StaticHeader("", Modifier.width(36.dp))
         }
         HorizontalDivider()
@@ -441,15 +597,47 @@ internal fun OrderHistoryTable(
                     ).padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SortHeader("Name", HistorySortCol.NAME, sortCol, sortDir, ::toggleSort, Modifier.weight(3f))
-            SortHeader("Type", HistorySortCol.TYPE, sortCol, sortDir, ::toggleSort, Modifier.weight(1f))
-            SortHeader("State", HistorySortCol.STATE, sortCol, sortDir, ::toggleSort, Modifier.weight(1.5f))
-            SortHeader("Price", HistorySortCol.PRICE, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
-            SortHeader("Profit", HistorySortCol.PROFIT, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
-            SortHeader("Margin", HistorySortCol.MARGIN, sortCol, sortDir, ::toggleSort, Modifier.weight(1.2f))
-            SortHeader("Volume", HistorySortCol.VOLUME, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
-            SortHeader("Issued", HistorySortCol.ISSUED, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
-            SortHeader("Station", HistorySortCol.STATION, sortCol, sortDir, ::toggleSort, Modifier.weight(2.5f))
+            SortHeader(stringResource(Res.string.h_name), HistorySortCol.NAME, sortCol, sortDir, ::toggleSort, Modifier.weight(3f))
+            SortHeader(stringResource(Res.string.h_type), HistorySortCol.TYPE, sortCol, sortDir, ::toggleSort, Modifier.weight(1f))
+            SortHeader(
+                stringResource(Res.string.h_state),
+                HistorySortCol.STATE,
+                sortCol,
+                sortDir,
+                ::toggleSort,
+                Modifier.weight(1.5f),
+                tooltip = stringResource(Res.string.tip_h_state),
+            )
+            SortHeader(stringResource(Res.string.h_price), HistorySortCol.PRICE, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
+            SortHeader(
+                stringResource(Res.string.h_profit),
+                HistorySortCol.PROFIT,
+                sortCol,
+                sortDir,
+                ::toggleSort,
+                Modifier.weight(2f),
+                tooltip = stringResource(Res.string.tip_h_profit),
+            )
+            SortHeader(
+                stringResource(Res.string.h_margin),
+                HistorySortCol.MARGIN,
+                sortCol,
+                sortDir,
+                ::toggleSort,
+                Modifier.weight(1.2f),
+                tooltip = stringResource(Res.string.tip_h_margin),
+            )
+            SortHeader(
+                stringResource(Res.string.h_volume),
+                HistorySortCol.VOLUME,
+                sortCol,
+                sortDir,
+                ::toggleSort,
+                Modifier.weight(2f),
+                tooltip = stringResource(Res.string.tip_h_volume),
+            )
+            SortHeader(stringResource(Res.string.h_issued), HistorySortCol.ISSUED, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
+            SortHeader(stringResource(Res.string.h_station), HistorySortCol.STATION, sortCol, sortDir, ::toggleSort, Modifier.weight(2.5f))
         }
         HorizontalDivider()
         LazyColumn {
@@ -573,13 +761,16 @@ internal fun InventoryTable(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
-                if (writtenOff > 0) "Written off: ${formatIsk(writtenOff)}" else "",
+                if (writtenOff > 0) stringResource(Res.string.written_off, formatIsk(writtenOff)) else "",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row {
-                TextButton(enabled = actingCharId != null, onClick = { showReconcile = true }) { Text("Check assets") }
-                TextButton(onClick = { showHistory = true }) { Text("Write-off history") }
+                TextButton(
+                    enabled = actingCharId != null,
+                    onClick = { showReconcile = true },
+                ) { Text(stringResource(Res.string.check_assets)) }
+                TextButton(onClick = { showHistory = true }) { Text(stringResource(Res.string.write_off_history)) }
             }
         }
         Row(
@@ -591,15 +782,79 @@ internal fun InventoryTable(
                     ).padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SortHeader("Name", InventorySortCol.NAME, sortCol, sortDir, ::toggleSort, Modifier.weight(3f))
-            SortHeader("Qty", InventorySortCol.QTY, sortCol, sortDir, ::toggleSort, Modifier.weight(1.5f))
-            SortHeader("Age", InventorySortCol.AGE, sortCol, sortDir, ::toggleSort, Modifier.weight(1f))
-            SortHeader("Avg Cost", InventorySortCol.AVG_COST, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
-            SortHeader("Total Cost", InventorySortCol.TOTAL_COST, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
-            SortHeader("Sell Price", InventorySortCol.SELL_PRICE, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
-            SortHeader("Total Profit", InventorySortCol.PROFIT, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
-            SortHeader("Margin", InventorySortCol.MARGIN, sortCol, sortDir, ::toggleSort, Modifier.weight(1.2f))
-            SortHeader("Realized P&L", InventorySortCol.REALIZED_PNL, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
+            SortHeader(stringResource(Res.string.h_name), InventorySortCol.NAME, sortCol, sortDir, ::toggleSort, Modifier.weight(3f))
+            SortHeader(
+                stringResource(Res.string.h_qty),
+                InventorySortCol.QTY,
+                sortCol,
+                sortDir,
+                ::toggleSort,
+                Modifier.weight(1.5f),
+                tooltip = stringResource(Res.string.tip_i_qty),
+            )
+            SortHeader(
+                stringResource(Res.string.h_age),
+                InventorySortCol.AGE,
+                sortCol,
+                sortDir,
+                ::toggleSort,
+                Modifier.weight(1f),
+                tooltip = stringResource(Res.string.tip_i_age),
+            )
+            SortHeader(
+                stringResource(Res.string.h_avg_cost),
+                InventorySortCol.AVG_COST,
+                sortCol,
+                sortDir,
+                ::toggleSort,
+                Modifier.weight(2f),
+                tooltip = stringResource(Res.string.tip_i_avg_cost),
+            )
+            SortHeader(
+                stringResource(Res.string.h_total_cost),
+                InventorySortCol.TOTAL_COST,
+                sortCol,
+                sortDir,
+                ::toggleSort,
+                Modifier.weight(2f),
+                tooltip = stringResource(Res.string.tip_i_total_cost),
+            )
+            SortHeader(
+                stringResource(Res.string.h_sell_price),
+                InventorySortCol.SELL_PRICE,
+                sortCol,
+                sortDir,
+                ::toggleSort,
+                Modifier.weight(2f),
+                tooltip = stringResource(Res.string.tip_i_sell_price),
+            )
+            SortHeader(
+                stringResource(Res.string.h_total_profit),
+                InventorySortCol.PROFIT,
+                sortCol,
+                sortDir,
+                ::toggleSort,
+                Modifier.weight(2f),
+                tooltip = stringResource(Res.string.tip_i_total_profit),
+            )
+            SortHeader(
+                stringResource(Res.string.h_margin),
+                InventorySortCol.MARGIN,
+                sortCol,
+                sortDir,
+                ::toggleSort,
+                Modifier.weight(1.2f),
+                tooltip = stringResource(Res.string.tip_i_margin),
+            )
+            SortHeader(
+                stringResource(Res.string.h_realized_pnl),
+                InventorySortCol.REALIZED_PNL,
+                sortCol,
+                sortDir,
+                ::toggleSort,
+                Modifier.weight(2f),
+                tooltip = stringResource(Res.string.tip_i_realized),
+            )
             Spacer(Modifier.width(28.dp))
         }
         HorizontalDivider()
@@ -676,12 +931,11 @@ private fun WriteOffDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Write off ${item.typeName}") },
+        title = { Text(stringResource(Res.string.write_off_title, item.typeName)) },
         text = {
             Column {
                 Text(
-                    "Removes this quantity from FIFO inventory with no matching sale — use for lost cargo or " +
-                        "a purchase that was actually sold under a different character/corp. Doesn't touch realized P&L.",
+                    stringResource(Res.string.write_off_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -689,7 +943,7 @@ private fun WriteOffDialog(
                 OutlinedTextField(
                     value = qtyText,
                     onValueChange = { qtyText = it },
-                    label = { Text("Quantity (max ${item.remainingQty})") },
+                    label = { Text(stringResource(Res.string.quantity_max, item.remainingQty)) },
                     isError = !valid,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -698,17 +952,17 @@ private fun WriteOffDialog(
                 OutlinedTextField(
                     value = reason,
                     onValueChange = { reason = it },
-                    label = { Text("Reason (optional)") },
+                    label = { Text(stringResource(Res.string.reason_optional)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
         },
         confirmButton = {
-            TextButton(enabled = valid, onClick = { onConfirm(qty!!, reason) }) { Text("Write off") }
+            TextButton(enabled = valid, onClick = { onConfirm(qty!!, reason) }) { Text(stringResource(Res.string.write_off)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) }
         },
     )
 }
@@ -733,10 +987,10 @@ private fun WriteOffHistoryDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Write-off history") },
+        title = { Text(stringResource(Res.string.write_off_history)) },
         text = {
             if (adjustments.isEmpty()) {
-                Text("No write-offs recorded.", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(Res.string.no_write_offs), style = MaterialTheme.typography.bodySmall)
             } else {
                 Column(modifier = Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
                     adjustments.reversed().forEach { adj ->
@@ -761,7 +1015,11 @@ private fun WriteOffHistoryDialog(
                                     }
                                 }
                             }) {
-                                Icon(Icons.Default.Undo, contentDescription = "Undo write-off", modifier = Modifier.size(18.dp))
+                                Icon(
+                                    Icons.Default.Undo,
+                                    contentDescription = stringResource(Res.string.undo_write_off),
+                                    modifier = Modifier.size(18.dp),
+                                )
                             }
                         }
                     }
@@ -769,7 +1027,7 @@ private fun WriteOffHistoryDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
+            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.close)) }
         },
     )
 }
@@ -810,20 +1068,20 @@ private fun ReconcileDialog(
                     }
                 ReconcileState.Done(discrepancies)
             } catch (e: Exception) {
-                ReconcileState.Error(e.message ?: "Failed to refresh assets from ESI")
+                ReconcileState.Error(e.message ?: getString(Res.string.failed_refresh_assets))
             }
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Check assets") },
+        title = { Text(stringResource(Res.string.check_assets)) },
         text = {
             when (val s = state) {
                 is ReconcileState.Loading -> {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.width(12.dp))
-                        Text("Refreshing assets from ESI and comparing against FIFO inventory…", style = MaterialTheme.typography.bodySmall)
+                        Text(stringResource(Res.string.refreshing_assets), style = MaterialTheme.typography.bodySmall)
                     }
                 }
 
@@ -834,7 +1092,7 @@ private fun ReconcileDialog(
                 is ReconcileState.Done -> {
                     if (s.discrepancies.isEmpty()) {
                         Text(
-                            "No discrepancies — every item FIFO says you should hold is actually in your assets.",
+                            stringResource(Res.string.no_discrepancies),
                             style = MaterialTheme.typography.bodySmall,
                         )
                     } else {
@@ -847,14 +1105,14 @@ private fun ReconcileDialog(
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(d.typeName, style = MaterialTheme.typography.bodyMedium)
                                         Text(
-                                            "FIFO: ${d.fifoQty}   Assets: ${d.actualQty}   Missing: ${d.shortfall}",
+                                            stringResource(Res.string.fifo_line, d.fifoQty, d.actualQty, d.shortfall),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     }
                                     TextButton(onClick = {
                                         inventory[d.typeId]?.let { onWriteOff(it, d.shortfall) }
-                                    }) { Text("Write off") }
+                                    }) { Text(stringResource(Res.string.write_off)) }
                                 }
                             }
                         }
@@ -863,7 +1121,7 @@ private fun ReconcileDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
+            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.close)) }
         },
     )
 }

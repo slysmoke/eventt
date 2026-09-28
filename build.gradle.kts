@@ -43,6 +43,9 @@ subprojects {
 
     tasks.withType<Test> {
         useJUnitPlatform()
+        // Localized strings resolve against the JVM locale — pin it so assertions on text don't
+        // depend on the machine's language.
+        jvmArgs("-Duser.language=en", "-Duser.country=US")
     }
 
     // The `testImplementation` configuration only exists once the Kotlin plugin (applied by

@@ -17,12 +17,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.eventt.market.generated.resources.*
+import org.eventt.ui.common.Tip
 import org.eventt.ui.common.formatPriceAbbr
 import org.eventt.ui.common.formatVolume
 import org.eventt.ui.common.onRightClick
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.eventt.ui.theme.warningColor
+import org.jetbrains.compose.resources.stringResource
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 import java.util.Locale
@@ -43,21 +46,86 @@ internal fun StationHeader(
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
                 modifier = Modifier.width(28.dp),
             )
-            ACol("Item", StationSortCol.NAME, sort, asc, onSort, Modifier.weight(1f))
-            ACol("Buy At", StationSortCol.BUY_PRICE, sort, asc, onSort, Modifier.width(95.dp))
-            ACol("Sell At", StationSortCol.SELL_PRICE, sort, asc, onSort, Modifier.width(95.dp))
-            ACol("Margin", StationSortCol.MARGIN, sort, asc, onSort, Modifier.width(65.dp))
-            ACol("ROI", StationSortCol.ROI, sort, asc, onSort, Modifier.width(65.dp))
-            ACol("Net/unit", StationSortCol.NET_PROFIT, sort, asc, onSort, Modifier.width(95.dp))
-            ACol("7d", StationSortCol.TREND_7D, sort, asc, onSort, Modifier.width(65.dp))
-            ACol("Vol/day", StationSortCol.VOLUME, sort, asc, onSort, Modifier.width(75.dp))
-            ACol("Est. Daily", StationSortCol.DAILY_PROFIT, sort, asc, onSort, Modifier.width(95.dp))
-            Text(
-                "Orders (sell/buy)",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                modifier = Modifier.width(95.dp),
+            ACol(stringResource(Res.string.col_item), StationSortCol.NAME, sort, asc, onSort, Modifier.weight(1f))
+            ACol(
+                stringResource(Res.string.col_buy_at),
+                StationSortCol.BUY_PRICE,
+                sort,
+                asc,
+                onSort,
+                Modifier.width(95.dp),
+                tooltip = stringResource(Res.string.tip_st_buy_at),
             )
+            ACol(
+                stringResource(Res.string.col_sell_at),
+                StationSortCol.SELL_PRICE,
+                sort,
+                asc,
+                onSort,
+                Modifier.width(95.dp),
+                tooltip = stringResource(Res.string.tip_st_sell_at),
+            )
+            ACol(
+                stringResource(Res.string.col_margin),
+                StationSortCol.MARGIN,
+                sort,
+                asc,
+                onSort,
+                Modifier.width(65.dp),
+                tooltip = stringResource(Res.string.tip_st_margin),
+            )
+            ACol(
+                stringResource(Res.string.col_roi),
+                StationSortCol.ROI,
+                sort,
+                asc,
+                onSort,
+                Modifier.width(65.dp),
+                tooltip = stringResource(Res.string.tip_st_roi),
+            )
+            ACol(
+                stringResource(Res.string.col_net_unit),
+                StationSortCol.NET_PROFIT,
+                sort,
+                asc,
+                onSort,
+                Modifier.width(95.dp),
+                tooltip = stringResource(Res.string.tip_st_net),
+            )
+            ACol(
+                stringResource(Res.string.col_7d),
+                StationSortCol.TREND_7D,
+                sort,
+                asc,
+                onSort,
+                Modifier.width(65.dp),
+                tooltip = stringResource(Res.string.tip_st_7d),
+            )
+            ACol(
+                stringResource(Res.string.col_vol_day),
+                StationSortCol.VOLUME,
+                sort,
+                asc,
+                onSort,
+                Modifier.width(75.dp),
+                tooltip = stringResource(Res.string.tip_st_vol),
+            )
+            ACol(
+                stringResource(Res.string.col_est_daily),
+                StationSortCol.DAILY_PROFIT,
+                sort,
+                asc,
+                onSort,
+                Modifier.width(95.dp),
+                tooltip = stringResource(Res.string.tip_st_est_daily),
+            )
+            Tip(stringResource(Res.string.tip_st_orders), Modifier.width(95.dp)) {
+                Text(
+                    stringResource(Res.string.orders_sell_buy),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                )
+            }
         }
     }
 }
@@ -76,18 +144,106 @@ internal fun RegionHeader(
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
                 modifier = Modifier.width(28.dp),
             )
-            ACol("Item", RegionSortCol.NAME, sort, asc, onSort, Modifier.weight(1f))
-            ACol("Buy", RegionSortCol.BUY_PRICE, sort, asc, onSort, Modifier.width(95.dp))
-            ACol("Sell", RegionSortCol.SELL_PRICE, sort, asc, onSort, Modifier.width(95.dp))
-            ACol("Margin", RegionSortCol.MARGIN, sort, asc, onSort, Modifier.width(65.dp))
-            ACol("ROI", RegionSortCol.ROI, sort, asc, onSort, Modifier.width(65.dp))
-            ACol("m³/unit", RegionSortCol.ITEM_VOL, sort, asc, onSort, Modifier.width(70.dp))
-            ACol("Ship/unit", RegionSortCol.SHIPPING, sort, asc, onSort, Modifier.width(90.dp))
-            ACol("Net/unit", RegionSortCol.NET_PROFIT, sort, asc, onSort, Modifier.width(95.dp))
-            ACol("7d", RegionSortCol.TREND_7D, sort, asc, onSort, Modifier.width(65.dp))
-            ACol("Vol/day", RegionSortCol.VOLUME, sort, asc, onSort, Modifier.width(70.dp))
-            ACol("Qty to Buy", RegionSortCol.QTY_TO_BUY, sort, asc, onSort, Modifier.width(85.dp))
-            ACol("Net×Vol", RegionSortCol.NET_VOL, sort, asc, onSort, Modifier.width(95.dp))
+            ACol(stringResource(Res.string.col_item), RegionSortCol.NAME, sort, asc, onSort, Modifier.weight(1f))
+            ACol(
+                stringResource(Res.string.col_buy),
+                RegionSortCol.BUY_PRICE,
+                sort,
+                asc,
+                onSort,
+                Modifier.width(95.dp),
+                tooltip = stringResource(Res.string.tip_ir_buy),
+            )
+            ACol(
+                stringResource(Res.string.col_sell),
+                RegionSortCol.SELL_PRICE,
+                sort,
+                asc,
+                onSort,
+                Modifier.width(95.dp),
+                tooltip = stringResource(Res.string.tip_ir_sell),
+            )
+            ACol(
+                stringResource(Res.string.col_margin),
+                RegionSortCol.MARGIN,
+                sort,
+                asc,
+                onSort,
+                Modifier.width(65.dp),
+                tooltip = stringResource(Res.string.tip_ir_margin),
+            )
+            ACol(
+                stringResource(Res.string.col_roi),
+                RegionSortCol.ROI,
+                sort,
+                asc,
+                onSort,
+                Modifier.width(65.dp),
+                tooltip = stringResource(Res.string.tip_ir_roi),
+            )
+            ACol(
+                stringResource(Res.string.col_m3_unit),
+                RegionSortCol.ITEM_VOL,
+                sort,
+                asc,
+                onSort,
+                Modifier.width(70.dp),
+                tooltip = stringResource(Res.string.tip_ir_m3),
+            )
+            ACol(
+                stringResource(Res.string.col_ship_unit),
+                RegionSortCol.SHIPPING,
+                sort,
+                asc,
+                onSort,
+                Modifier.width(90.dp),
+                tooltip = stringResource(Res.string.tip_ir_ship),
+            )
+            ACol(
+                stringResource(Res.string.col_net_unit),
+                RegionSortCol.NET_PROFIT,
+                sort,
+                asc,
+                onSort,
+                Modifier.width(95.dp),
+                tooltip = stringResource(Res.string.tip_ir_net),
+            )
+            ACol(
+                stringResource(Res.string.col_7d),
+                RegionSortCol.TREND_7D,
+                sort,
+                asc,
+                onSort,
+                Modifier.width(65.dp),
+                tooltip = stringResource(Res.string.tip_ir_7d),
+            )
+            ACol(
+                stringResource(Res.string.col_vol_day),
+                RegionSortCol.VOLUME,
+                sort,
+                asc,
+                onSort,
+                Modifier.width(70.dp),
+                tooltip = stringResource(Res.string.tip_ir_vol),
+            )
+            ACol(
+                stringResource(Res.string.col_qty_to_buy),
+                RegionSortCol.QTY_TO_BUY,
+                sort,
+                asc,
+                onSort,
+                Modifier.width(85.dp),
+                tooltip = stringResource(Res.string.tip_ir_qty),
+            )
+            ACol(
+                stringResource(Res.string.col_net_vol),
+                RegionSortCol.NET_VOL,
+                sort,
+                asc,
+                onSort,
+                Modifier.width(95.dp),
+                tooltip = stringResource(Res.string.tip_ir_net_vol),
+            )
         }
     }
 }
@@ -142,7 +298,7 @@ internal fun StationRow(
             IconButton(onClick = { onShowDetails(opp.typeId) }, modifier = Modifier.size(20.dp)) {
                 Icon(
                     Icons.AutoMirrored.Filled.ShowChart,
-                    contentDescription = "Open chart",
+                    contentDescription = stringResource(Res.string.open_chart),
                     modifier = Modifier.size(15.dp),
                     tint = MaterialTheme.colorScheme.primary,
                 )
@@ -166,7 +322,7 @@ internal fun StationRow(
             modifier = Modifier.width(95.dp),
         )
         Text(
-            "${opp.sellOrderCount}s / ${opp.buyOrderCount}b",
+            stringResource(Res.string.order_counts, opp.sellOrderCount, opp.buyOrderCount),
             style = MaterialTheme.typography.labelSmall,
             color = Color.Gray,
             modifier = Modifier.width(95.dp),
@@ -224,7 +380,7 @@ internal fun RegionRow(
             IconButton(onClick = { onShowDetails(opp.typeId) }, modifier = Modifier.size(20.dp)) {
                 Icon(
                     Icons.AutoMirrored.Filled.ShowChart,
-                    contentDescription = "Open chart",
+                    contentDescription = stringResource(Res.string.open_chart),
                     modifier = Modifier.size(15.dp),
                     tint = MaterialTheme.colorScheme.primary,
                 )
@@ -276,27 +432,30 @@ private fun <T> ACol(
     asc: Boolean,
     onSort: (T) -> Unit,
     modifier: Modifier = Modifier,
+    tooltip: String? = null,
 ) {
-    val active = col == current
-    Row(
-        modifier = modifier.clickable { onSort(col) }.padding(end = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-            color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-            maxLines = 1,
-        )
-        if (active) {
-            Icon(
-                if (asc) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                null,
-                Modifier.size(10.dp),
-                tint = MaterialTheme.colorScheme.primary,
+    Tip(tooltip, modifier) {
+        val active = col == current
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable { onSort(col) }.padding(end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                maxLines = 1,
             )
+            if (active) {
+                Icon(
+                    if (asc) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                    null,
+                    Modifier.size(10.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
     }
 }
@@ -360,7 +519,7 @@ private fun Avg7dDeviationText(deviationPct: Double) {
             else -> negativeColor
         }
     Text(
-        "${if (deviationPct >= 0) "+" else ""}${String.format(Locale.US, "%.1f", deviationPct)}% vs 7d",
+        stringResource(Res.string.vs_7d, (if (deviationPct >= 0) "+" else "") + String.format(Locale.US, "%.1f", deviationPct)),
         style = MaterialTheme.typography.labelSmall,
         color = color,
     )
@@ -443,7 +602,7 @@ internal fun SelectionBar(
                 tint = MaterialTheme.colorScheme.onSecondaryContainer,
             )
             Text(
-                "$count selected",
+                stringResource(Res.string.n_selected, count),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
@@ -455,14 +614,14 @@ internal fun SelectionBar(
             ) {
                 Icon(Icons.Default.ContentCopy, null, Modifier.size(13.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("Copy list", style = MaterialTheme.typography.labelSmall)
+                Text(stringResource(Res.string.copy_list), style = MaterialTheme.typography.labelSmall)
             }
             TextButton(
                 onClick = onClear,
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                 modifier = Modifier.height(28.dp),
             ) {
-                Text("Clear", style = MaterialTheme.typography.labelSmall)
+                Text(stringResource(Res.string.clear), style = MaterialTheme.typography.labelSmall)
             }
         }
     }

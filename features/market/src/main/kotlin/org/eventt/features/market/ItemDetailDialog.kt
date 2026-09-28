@@ -52,6 +52,7 @@ import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.MarketHistoryModel
 import org.eventt.core.model.PLEX_MARKET_REGION_ID
 import org.eventt.core.model.PLEX_TYPE_ID
+import org.eventt.market.generated.resources.*
 import org.eventt.ui.common.ContentCard
 import org.eventt.ui.common.EmptyState
 import org.eventt.ui.common.TypeIcon
@@ -60,6 +61,8 @@ import org.eventt.ui.common.formatPriceAbbr
 import org.eventt.ui.common.formatVolume
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.stringResource
 import java.time.LocalDate
 import java.util.Locale
 import kotlin.math.ceil
@@ -84,14 +87,14 @@ private const val THE_FORGE = 10000002
 private const val JITA_44 = 60003760L
 
 private enum class ChartRange(
-    val label: String,
+    val label: StringResource,
     val days: Int,
 ) {
-    M1("1M", 30),
-    M3("3M", 90),
-    M6("6M", 180),
-    Y1("1Y", 365),
-    ALL("All", 450),
+    M1(Res.string.range_1m, 30),
+    M3(Res.string.range_3m, 90),
+    M6(Res.string.range_6m, 180),
+    Y1(Res.string.range_1y, 365),
+    ALL(Res.string.range_all, 450),
 }
 
 // Always hits ESI directly (which has its own response-level cache, so this doesn't spam the
@@ -228,8 +231,8 @@ fun ItemDetailDialog(
     // some other item's station would just show an empty book.
     val effPrimaryStation = if (typeId == PLEX_TYPE_ID) null else primaryStationId
     val effSecondaryStation = if (typeId == PLEX_TYPE_ID) null else secondaryStationId
-    val primaryLabel = if (typeId == PLEX_TYPE_ID) "Global Market (PLEX)" else primaryRegionName
-    val secondaryLabel = if (typeId == PLEX_TYPE_ID) "Global Market (PLEX)" else secondaryRegionName
+    val primaryLabel = if (typeId == PLEX_TYPE_ID) stringResource(Res.string.global_market_plex) else primaryRegionName
+    val secondaryLabel = if (typeId == PLEX_TYPE_ID) stringResource(Res.string.global_market_plex) else secondaryRegionName
 
     LaunchedEffect(typeId, primaryRegionId, secondaryRegionId) {
         isLoading = true
@@ -391,10 +394,10 @@ internal fun ItemPriceChart(
                 FilterChip(selected = range == r, onClick = {
                     range = r
                     save("range", r.name)
-                }, label = { Text(r.label) })
+                }, label = { Text(stringResource(r.label)) })
             }
             Spacer(Modifier.width(12.dp))
-            ToggleChip("Avg line", MaterialTheme.colorScheme.primary, showAvgLine) {
+            ToggleChip(stringResource(Res.string.avg_line), MaterialTheme.colorScheme.primary, showAvgLine) {
                 showAvgLine = it
                 save("avg", it)
             }
@@ -411,7 +414,7 @@ internal fun ItemPriceChart(
                 save("bollinger", it)
             }
             if (trades != null) {
-                ToggleChip("My trades", COST_COLOR, showTrades) {
+                ToggleChip(stringResource(Res.string.my_trades_chip), COST_COLOR, showTrades) {
                     showTrades = it
                     save("trades", it)
                 }
@@ -422,11 +425,11 @@ internal fun ItemPriceChart(
             }
             Text(
                 when {
-                    a4eSync.running -> "Adam4EVE syncing ${a4eSync.filesDone}/${a4eSync.filesTotal}…"
-                    a4e.isEmpty() -> "Adam4EVE: no fills tracked here"
-                    stationId != null -> "Adam4EVE: this station"
-                    a4eStation == JITA_44 -> "Adam4EVE: Jita 4-4 only"
-                    else -> "Adam4EVE: all stations in region"
+                    a4eSync.running -> stringResource(Res.string.a4e_syncing, a4eSync.filesDone, a4eSync.filesTotal)
+                    a4e.isEmpty() -> stringResource(Res.string.a4e_no_fills)
+                    stationId != null -> stringResource(Res.string.a4e_this_station)
+                    a4eStation == JITA_44 -> stringResource(Res.string.a4e_jita_only)
+                    else -> stringResource(Res.string.a4e_all_stations)
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = AXIS_COLOR,
@@ -493,16 +496,62 @@ private fun Header(
             Text(regionLabel, style = MaterialTheme.typography.labelSmall, color = AXIS_COLOR)
         }
         Spacer(Modifier.width(28.dp))
-        HeaderQuote("Bid", book.bestBid?.let { formatIsk(it) } ?: "—", positiveColor)
-        HeaderQuote("Ask", book.bestAsk?.let { formatIsk(it) } ?: "—", negativeColor)
+        HeaderQuote(stringResource(Res.string.q_bid), book.bestBid?.let { formatIsk(it) } ?: "—", positiveColor)
+        HeaderQuote(stringResource(Res.string.q_ask), book.bestAsk?.let { formatIsk(it) } ?: "—", negativeColor)
         val bid = book.bestBid
         val ask = book.bestAsk
-        HeaderQuote("Spread", if (bid != null && ask != null && bid > 0) pct((ask - bid) / bid * 100) else "—", null)
-        changeOver(history, 1)?.let { HeaderQuote("1d", signedPct(it), if (it >= 0) positiveColor else negativeColor) }
-        changeOver(history, 7)?.let { HeaderQuote("7d", signedPct(it), if (it >= 0) positiveColor else negativeColor) }
-        changeOver(history, 30)?.let { HeaderQuote("30d", signedPct(it), if (it >= 0) positiveColor else negativeColor) }
+        HeaderQuote(
+            stringResource(Res.string.q_spread),
+            if (bid != null && ask != null &&
+                bid > 0
+            ) {
+                pct((ask - bid) / bid * 100)
+            } else {
+                "—"
+            },
+            null,
+        )
+        changeOver(history, 1)?.let {
+            HeaderQuote(
+                stringResource(Res.string.q_1d),
+                signedPct(it),
+                if (it >=
+                    0
+                ) {
+                    positiveColor
+                } else {
+                    negativeColor
+                },
+            )
+        }
+        changeOver(history, 7)?.let {
+            HeaderQuote(
+                stringResource(Res.string.q_7d),
+                signedPct(it),
+                if (it >=
+                    0
+                ) {
+                    positiveColor
+                } else {
+                    negativeColor
+                },
+            )
+        }
+        changeOver(history, 30)?.let {
+            HeaderQuote(
+                stringResource(Res.string.q_30d),
+                signedPct(it),
+                if (it >=
+                    0
+                ) {
+                    positiveColor
+                } else {
+                    negativeColor
+                },
+            )
+        }
         Spacer(Modifier.weight(1f))
-        IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Close") }
+        IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = stringResource(Res.string.close)) }
     }
 }
 
@@ -690,8 +739,8 @@ private fun TradingChart(
     if (history.isEmpty()) {
         EmptyState(
             icon = Icons.AutoMirrored.Filled.ShowChart,
-            title = "No Price History",
-            description = "No market history yet for this item.",
+            title = stringResource(Res.string.no_price_history),
+            description = stringResource(Res.string.no_price_history_desc),
         )
         return
     }
@@ -744,6 +793,11 @@ private fun TradingChart(
         )
         Spacer(Modifier.height(4.dp))
 
+        // DrawScope isn't composable — resolve the chart's text up front.
+        val costWord = stringResource(Res.string.chart_cost)
+        val myBuyWord = stringResource(Res.string.chart_my_buy)
+        val mySellWord = stringResource(Res.string.chart_my_sell)
+        val volWord = stringResource(Res.string.chart_vol)
         Canvas(
             modifier =
                 Modifier
@@ -947,9 +1001,16 @@ private fun TradingChart(
             }
             bestBid?.let { level(it, upColor, formatPriceAbbr(it), dashed = false) }
             bestAsk?.let { level(it, downColor, formatPriceAbbr(it), dashed = false) }
-            trades?.avgBuyPrice?.takeIf { trades.qtyHeld > 0 }?.let { level(it, COST_COLOR, "cost ${formatPriceAbbr(it)}", dashed = true) }
+            trades?.avgBuyPrice?.takeIf { trades.qtyHeld > 0 }?.let {
+                level(
+                    it,
+                    COST_COLOR,
+                    "$costWord ${formatPriceAbbr(it)}",
+                    dashed = true,
+                )
+            }
             trades?.regionOrders?.forEach { o ->
-                level(o.price, if (o.isBuyOrder) upColor else downColor, "my ${if (o.isBuyOrder) "B" else "S"}", dashed = true)
+                level(o.price, if (o.isBuyOrder) upColor else downColor, if (o.isBuyOrder) myBuyWord else mySellWord, dashed = true)
             }
 
             // Your fills: ▲ buys / ▼ sells at the day's VWAP, sized by quantity — solid in this
@@ -1043,7 +1104,7 @@ private fun TradingChart(
                 }
             }
             clipPlot { drawSeries(data.volSma, AXIS_COLOR, 1.dp.toPx(), ::xFor, ::yV) }
-            axisLabel(textMeasurer, "Vol " + formatVolume(maxVol.toLong()), Offset(lPad + chartW + 6.dp.toPx(), volTop), AXIS_COLOR)
+            axisLabel(textMeasurer, "$volWord " + formatVolume(maxVol.toLong()), Offset(lPad + chartW + 6.dp.toPx(), volTop), AXIS_COLOR)
 
             // ── RSI pane with 30/70 guides.
             fun yR(v: Double) = rsiTop + (1f - (v / 100.0).toFloat()) * rsiH
@@ -1144,11 +1205,15 @@ private fun HoverLegend(
         val r = data.rows[index]
         Text(day, style = style, color = AXIS_COLOR)
         if (r == null) {
-            Text("no trades", style = style, color = AXIS_COLOR)
+            Text(stringResource(Res.string.no_trades), style = style, color = AXIS_COLOR)
         } else {
-            Text("avg ${formatIsk(r.average)}", style = style)
-            Text("CCP H ${formatPriceAbbr(r.highest)}  L ${formatPriceAbbr(r.lowest)}", style = style, color = AXIS_COLOR)
-            Text("vol ${formatVolume(r.volume)}", style = style, color = AXIS_COLOR)
+            Text(stringResource(Res.string.leg_avg, formatIsk(r.average)), style = style)
+            Text(
+                stringResource(Res.string.leg_ccp, formatPriceAbbr(r.highest), formatPriceAbbr(r.lowest)),
+                style = style,
+                color = AXIS_COLOR,
+            )
+            Text(stringResource(Res.string.leg_vol, formatVolume(r.volume)), style = style, color = AXIS_COLOR)
         }
         data.smaFast[index]?.let { Text("SMA20 ${formatPriceAbbr(it)}", style = style, color = SMA_FAST_COLOR) }
         data.smaSlow[index]?.let { Text("SMA50 ${formatPriceAbbr(it)}", style = style, color = SMA_SLOW_COLOR) }
@@ -1158,27 +1223,53 @@ private fun HoverLegend(
         ) {
             data.secondary[index]?.let { Text("$secondaryLabel ${formatPriceAbbr(it)}", style = style, color = SECONDARY_COLOR) }
         }
-        buyFills[day]?.let { Text("▲ bought ${formatVolume(it.qty)} @ ${formatPriceAbbr(it.price)}", style = style, color = positiveColor) }
-        sellFills[day]?.let { Text("▼ sold ${formatVolume(it.qty)} @ ${formatPriceAbbr(it.price)}", style = style, color = negativeColor) }
+        buyFills[day]?.let {
+            Text(
+                stringResource(Res.string.leg_bought, formatVolume(it.qty), formatPriceAbbr(it.price)),
+                style = style,
+                color = positiveColor,
+            )
+        }
+        sellFills[day]?.let {
+            Text(stringResource(Res.string.leg_sold, formatVolume(it.qty), formatPriceAbbr(it.price)), style = style, color = negativeColor)
+        }
         otherBuyFills[day]?.let {
-            Text("△ bought ${formatVolume(it.qty)} @ ${formatPriceAbbr(it.price)} (other region)", style = style, color = positiveColor)
+            Text(
+                stringResource(Res.string.leg_bought_other, formatVolume(it.qty), formatPriceAbbr(it.price)),
+                style = style,
+                color = positiveColor,
+            )
         }
         otherSellFills[day]?.let {
-            Text("▽ sold ${formatVolume(it.qty)} @ ${formatPriceAbbr(it.price)} (other region)", style = style, color = negativeColor)
+            Text(
+                stringResource(Res.string.leg_sold_other, formatVolume(it.qty), formatPriceAbbr(it.price)),
+                style = style,
+                color = negativeColor,
+            )
         }
         a4e[day]?.let { d ->
             d.bid?.let {
                 Text(
-                    "A4E bid ${formatVolume(
-                        it.amount,
-                    )} @ ${formatPriceAbbr(it.vwap)} (${formatPriceAbbr(it.low)}–${formatPriceAbbr(it.high)})",
+                    stringResource(
+                        Res.string.leg_a4e_bid,
+                        formatVolume(it.amount),
+                        formatPriceAbbr(it.vwap),
+                        formatPriceAbbr(it.low),
+                        formatPriceAbbr(it.high),
+                    ),
                     style = style,
                     color = positiveColor,
                 )
             }
             d.ask?.let {
                 Text(
-                    "ask ${formatVolume(it.amount)} @ ${formatPriceAbbr(it.vwap)} (${formatPriceAbbr(it.low)}–${formatPriceAbbr(it.high)})",
+                    stringResource(
+                        Res.string.leg_a4e_ask,
+                        formatVolume(it.amount),
+                        formatPriceAbbr(it.vwap),
+                        formatPriceAbbr(it.low),
+                        formatPriceAbbr(it.high),
+                    ),
                     style = style,
                     color = negativeColor,
                 )
@@ -1210,41 +1301,44 @@ private fun StatsCard(
     isStation: Boolean,
 ) {
     val lastYear = history.takeLast(365)
-    ContentCard("Market") {
-        KV("Median vol/day 7d", formatVolume(medianDailyVolume(history, windowDays = 7)))
-        KV("Median vol/day 30d", formatVolume(medianDailyVolume(history, windowDays = 30)))
+    ContentCard(stringResource(Res.string.market)) {
+        KV(stringResource(Res.string.kv_median_7d), formatVolume(medianDailyVolume(history, windowDays = 7)))
+        KV(stringResource(Res.string.kv_median_30d), formatVolume(medianDailyVolume(history, windowDays = 30)))
         if (lastYear.isNotEmpty()) {
-            KV("1y high", formatIsk(lastYear.maxOf { it.highest.takeIf { h -> h > 0 } ?: it.average }))
-            KV("1y low", formatIsk(lastYear.minOf { it.lowest.takeIf { l -> l > 0 } ?: it.average }))
+            KV(stringResource(Res.string.kv_1y_high), formatIsk(lastYear.maxOf { it.highest.takeIf { h -> h > 0 } ?: it.average }))
+            KV(stringResource(Res.string.kv_1y_low), formatIsk(lastYear.minOf { it.lowest.takeIf { l -> l > 0 } ?: it.average }))
         }
         val last30 = history.takeLast(30).map { it.average }
         if (last30.size > 1) {
             val mean = last30.average()
             val sd = sqrt(last30.sumOf { (it - mean) * (it - mean) } / last30.size)
-            KV("Volatility 30d", pct(sd / mean * 100))
+            KV(stringResource(Res.string.kv_volatility), pct(sd / mean * 100))
         }
-        KV("Orders sell / buy", "${book.sells.size} / ${book.buys.size}")
-        KV("Depth sell / buy", "${formatVolume(book.sells.sumOf { it.vol() })} / ${formatVolume(book.buys.sumOf { it.vol() })}")
+        KV(stringResource(Res.string.kv_orders_sb), "${book.sells.size} / ${book.buys.size}")
+        KV(
+            stringResource(Res.string.kv_depth_sb),
+            "${formatVolume(book.sells.sumOf { it.vol() })} / ${formatVolume(book.buys.sumOf { it.vol() })}",
+        )
         Spacer(Modifier.height(6.dp))
         Text(
-            "Adam4EVE fills/day (7d, ${if (isStation) "station" else "region"})",
+            stringResource(if (isStation) Res.string.a4e_fills_station else Res.string.a4e_fills_region),
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.SemiBold,
         )
         when {
             flowLoading -> {
-                KV("", "loading…", AXIS_COLOR)
+                KV("", stringResource(Res.string.loading_lc), AXIS_COLOR)
             }
 
             flow == null -> {
-                KV("", "no data", AXIS_COLOR)
+                KV("", stringResource(Res.string.no_data_lc), AXIS_COLOR)
             }
 
             else -> {
-                KV("Sell orders filled", formatVolume(flow.sellAmount.toLong()), negativeColor)
-                KV("Buy orders filled", formatVolume(flow.buyAmount.toLong()), positiveColor)
+                KV(stringResource(Res.string.kv_sell_filled), formatVolume(flow.sellAmount.toLong()), negativeColor)
+                KV(stringResource(Res.string.kv_buy_filled), formatVolume(flow.buyAmount.toLong()), positiveColor)
                 val total = flow.buyAmount + flow.sellAmount
-                if (total > 0) KV("Buy-side share", pct(flow.buyAmount / total * 100))
+                if (total > 0) KV(stringResource(Res.string.kv_buy_share), pct(flow.buyAmount / total * 100))
             }
         }
     }
@@ -1255,9 +1349,9 @@ private fun PositionCard(
     t: MyTrades,
     book: BookSide,
 ) {
-    ContentCard("My Position") {
-        KV("Held", formatVolume(t.qtyHeld))
-        KV("Avg buy", t.avgBuyPrice?.let { formatIsk(it) } ?: "—")
+    ContentCard(stringResource(Res.string.my_position)) {
+        KV(stringResource(Res.string.kv_held), formatVolume(t.qtyHeld))
+        KV(stringResource(Res.string.kv_avg_buy), t.avgBuyPrice?.let { formatIsk(it) } ?: "—")
         val cost = t.avgBuyPrice
         if (t.qtyHeld > 0 && cost != null) {
             val keep = 1.0 - t.sellFeePct / 100.0
@@ -1265,7 +1359,7 @@ private fun PositionCard(
             book.bestAsk?.let { ask ->
                 val pnl = (ask * keep - cost) * t.qtyHeld
                 KV(
-                    "P&L at ask (net)",
+                    stringResource(Res.string.kv_pnl_at_ask),
                     "${formatIsk(pnl)} (${signedPct(pnl / (cost * t.qtyHeld) * 100)})",
                     if (pnl >=
                         0
@@ -1276,25 +1370,26 @@ private fun PositionCard(
                     },
                 )
             }
-            KV("Break-even ask", formatIsk(cost / keep))
+            KV(stringResource(Res.string.kv_break_even), formatIsk(cost / keep))
         }
-        t.realizedPnl?.let { KV("Realized, all time*", formatIsk(it), if (it >= 0) positiveColor else negativeColor) }
+        t.realizedPnl?.let { KV(stringResource(Res.string.kv_realized), formatIsk(it), if (it >= 0) positiveColor else negativeColor) }
         if (t.openOrders.isNotEmpty()) {
             Spacer(Modifier.height(4.dp))
             t.openOrders.forEach { o ->
                 KV(
-                    "${if (o.isBuyOrder) "Buy" else "Sell"} order ${formatVolume(
-                        o.volumeRemaining.toLong(),
-                    )}/${formatVolume(o.volumeTotal.toLong())}",
+                    stringResource(
+                        Res.string.kv_order_line,
+                        stringResource(if (o.isBuyOrder) Res.string.buy else Res.string.sell),
+                        formatVolume(o.volumeRemaining.toLong()),
+                        formatVolume(o.volumeTotal.toLong()),
+                    ),
                     formatIsk(o.price),
                     if (o.isBuyOrder) positiveColor else negativeColor,
                 )
             }
         }
         Text(
-            "* moving-average cost (resets when the position closes), before fees; the Orders tab has exact FIFO. Fees: ${pct(
-                t.sellFeePct,
-            )} (tax + broker).",
+            stringResource(Res.string.position_footnote, pct(t.sellFeePct)),
             style = MaterialTheme.typography.labelSmall,
             color = AXIS_COLOR,
         )
@@ -1311,14 +1406,14 @@ private fun OrderBookCard(
     val sells = book.sells.take(8)
     val buys = book.buys.take(8)
     val maxVol = (sells + buys).maxOfOrNull { it.vol() }?.toFloat()?.coerceAtLeast(1f) ?: 1f
-    ContentCard("Book — $label") {
+    ContentCard(stringResource(Res.string.book_label, label)) {
         // Asks top-down to the spread, then bids — the usual ladder layout, with a depth bar.
         sells.reversed().forEach { BookRow(it, negativeColor, maxVol, it.orderId() in mine) }
         val bid = book.bestBid
         val ask = book.bestAsk
         if (bid != null && ask != null) {
             Text(
-                "spread ${formatIsk(ask - bid)} (${pct((ask - bid) / bid * 100)})",
+                stringResource(Res.string.spread_line, formatIsk(ask - bid), pct((ask - bid) / bid * 100)),
                 style = MaterialTheme.typography.labelSmall,
                 color = AXIS_COLOR,
                 modifier = Modifier.padding(vertical = 2.dp),
@@ -1364,7 +1459,7 @@ private fun TradesCard(
     here: List<WalletDao.RawTxRecord>,
 ) {
     val inRegion = here.toSet()
-    ContentCard("My Trades") {
+    ContentCard(stringResource(Res.string.my_trades)) {
         txs.takeLast(15).reversed().forEach { t ->
             // Fills in another region: dimmed, hollow marker — matches the chart.
             val other = t !in inRegion
@@ -1378,11 +1473,11 @@ private fun TradesCard(
                 Text(
                     (
                         if (t.isBuy) {
-                            (if (other) "△ BUY" else "▲ BUY")
+                            (if (other) "△ " else "▲ ") + stringResource(Res.string.t_buy)
                         } else if (other) {
-                            "▽ SELL"
+                            "▽ " + stringResource(Res.string.t_sell)
                         } else {
-                            "▼ SELL"
+                            "▼ " + stringResource(Res.string.t_sell)
                         }
                     ),
                     style = MaterialTheme.typography.labelSmall,

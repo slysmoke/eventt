@@ -17,11 +17,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.eventt.core.database.OrderHistoryDao
+import org.eventt.orders.generated.resources.*
+import org.eventt.ui.common.Tip
 import org.eventt.ui.common.formatIsk
 import org.eventt.ui.common.formatVolume
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.eventt.ui.theme.warningColor
+import org.jetbrains.compose.resources.stringResource
 import java.util.Locale
 
 // ── Sub-components ────────────────────────────────────────────────────────
@@ -39,7 +42,7 @@ internal fun AllCharactersCheckbox(
     ) {
         Checkbox(checked = checked, onCheckedChange = onCheckedChange, modifier = Modifier.size(24.dp))
         Spacer(Modifier.width(2.dp))
-        Text("All characters", style = MaterialTheme.typography.labelMedium)
+        Text(stringResource(Res.string.all_characters), style = MaterialTheme.typography.labelMedium)
     }
 }
 
@@ -100,49 +103,52 @@ internal fun <T> SortHeader(
     onSort: (T) -> Unit,
     modifier: Modifier,
     rightAlign: Boolean = false,
+    tooltip: String? = null,
 ) {
-    val isActive = currentCol == col
-    val labelColor = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-    Row(
-        modifier = modifier.clickable { onSort(col) },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = if (rightAlign) Arrangement.End else Arrangement.Start,
-    ) {
-        if (isActive && rightAlign) {
-            Icon(
-                if (dir ==
-                    SortDir.ASC
-                ) {
-                    Icons.Default.ArrowUpward
-                } else {
-                    Icons.Default.ArrowDownward
-                },
-                null,
-                Modifier.size(12.dp),
-                tint = labelColor,
+    Tip(tooltip, modifier) {
+        val isActive = currentCol == col
+        val labelColor = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable { onSort(col) },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (rightAlign) Arrangement.End else Arrangement.Start,
+        ) {
+            if (isActive && rightAlign) {
+                Icon(
+                    if (dir ==
+                        SortDir.ASC
+                    ) {
+                        Icons.Default.ArrowUpward
+                    } else {
+                        Icons.Default.ArrowDownward
+                    },
+                    null,
+                    Modifier.size(12.dp),
+                    tint = labelColor,
+                )
+                Spacer(Modifier.width(2.dp))
+            }
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                color = labelColor,
             )
-            Spacer(Modifier.width(2.dp))
-        }
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-            color = labelColor,
-        )
-        if (isActive && !rightAlign) {
-            Spacer(Modifier.width(2.dp))
-            Icon(
-                if (dir ==
-                    SortDir.ASC
-                ) {
-                    Icons.Default.ArrowUpward
-                } else {
-                    Icons.Default.ArrowDownward
-                },
-                null,
-                Modifier.size(12.dp),
-                tint = labelColor,
-            )
+            if (isActive && !rightAlign) {
+                Spacer(Modifier.width(2.dp))
+                Icon(
+                    if (dir ==
+                        SortDir.ASC
+                    ) {
+                        Icons.Default.ArrowUpward
+                    } else {
+                        Icons.Default.ArrowDownward
+                    },
+                    null,
+                    Modifier.size(12.dp),
+                    tint = labelColor,
+                )
+            }
         }
     }
 }
@@ -152,16 +158,18 @@ internal fun StaticHeader(
     label: String,
     modifier: Modifier,
     rightAlign: Boolean = false,
+    tooltip: String? = null,
 ) {
-    Text(
-        label,
-        modifier = modifier,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        textAlign = if (rightAlign) TextAlign.End else TextAlign.Start,
-    )
+    Tip(tooltip, modifier) {
+        Text(
+            label,
+            modifier = Modifier.fillMaxWidth(),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = if (rightAlign) TextAlign.End else TextAlign.Start,
+        )
+    }
 }
-
 // ── Summary bars ──────────────────────────────────────────────────────────
 
 @Composable
@@ -190,16 +198,19 @@ internal fun OrdersSummaryBar(
             horizontalArrangement = Arrangement.spacedBy(24.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SummaryItem("Active orders", active.size.toString())
-            SummaryItem("Volume", "${formatNumber(totalRemain)}/${formatNumber(totalEntered)} (${String.format(Locale.US, "%.1f", pct)}%)")
-            SummaryItem("Total ISK", "${formatIsk(totalIsk)} ISK")
+            SummaryItem(stringResource(Res.string.s_active_orders), active.size.toString())
+            SummaryItem(
+                stringResource(Res.string.s_volume),
+                "${formatNumber(totalRemain)}/${formatNumber(totalEntered)} (${String.format(Locale.US, "%.1f", pct)}%)",
+            )
+            SummaryItem(stringResource(Res.string.s_total_isk), "${formatIsk(totalIsk)} ISK")
             if (totalProfit != null) {
                 val color = if (totalProfit >= 0) PROFIT_COLOR else LOSS_COLOR
-                SummaryItem("Expected profit", "${formatIsk(totalProfit)} ISK", color)
+                SummaryItem(stringResource(Res.string.s_expected_profit), "${formatIsk(totalProfit)} ISK", color)
             }
             val totalRelistFees = active.sumOf { it.relistFeesPaid }
             if (totalRelistFees > 0) {
-                SummaryItem("Relist fees", "${formatIsk(totalRelistFees)} ISK", LOSS_COLOR)
+                SummaryItem(stringResource(Res.string.s_relist_fees), "${formatIsk(totalRelistFees)} ISK", LOSS_COLOR)
             }
         }
     }
@@ -227,15 +238,15 @@ internal fun HistorySummaryBar(
             horizontalArrangement = Arrangement.spacedBy(24.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SummaryItem("Total", orders.size.toString())
-            SummaryItem("Fulfilled", fulfilled.toString())
-            if (partiallyFilled > 0) SummaryItem("Partially filled", partiallyFilled.toString())
-            SummaryItem("Cancelled", cancelled.toString())
-            SummaryItem("Expired", expired.toString())
-            if (totalSold > 0) SummaryItem("Sell volume", "${formatIsk(totalSold)} ISK")
+            SummaryItem(stringResource(Res.string.s_total), orders.size.toString())
+            SummaryItem(stringResource(Res.string.s_fulfilled), fulfilled.toString())
+            if (partiallyFilled > 0) SummaryItem(stringResource(Res.string.s_partially_filled), partiallyFilled.toString())
+            SummaryItem(stringResource(Res.string.s_cancelled), cancelled.toString())
+            SummaryItem(stringResource(Res.string.s_expired), expired.toString())
+            if (totalSold > 0) SummaryItem(stringResource(Res.string.s_sell_volume), "${formatIsk(totalSold)} ISK")
             if (totalPnl != null) {
                 val color = if (totalPnl >= 0) PROFIT_COLOR else LOSS_COLOR
-                SummaryItem("Total realized P&L", "${formatIsk(totalPnl)} ISK", color)
+                SummaryItem(stringResource(Res.string.s_total_realized), "${formatIsk(totalPnl)} ISK", color)
             }
         }
     }
@@ -256,9 +267,9 @@ internal fun InventorySummaryBar(
             horizontalArrangement = Arrangement.spacedBy(24.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SummaryItem("Items", inventory.size.toString())
-            SummaryItem("Inventory cost", "${formatIsk(totalCost)} ISK")
-            SummaryItem("All-time realized P&L", "${formatIsk(totalPnl)} ISK", pnlColor)
+            SummaryItem(stringResource(Res.string.s_items), inventory.size.toString())
+            SummaryItem(stringResource(Res.string.s_inventory_cost), "${formatIsk(totalCost)} ISK")
+            SummaryItem(stringResource(Res.string.s_all_time_realized), "${formatIsk(totalPnl)} ISK", pnlColor)
         }
     }
 }

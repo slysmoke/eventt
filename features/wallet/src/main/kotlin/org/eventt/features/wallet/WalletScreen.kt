@@ -38,12 +38,16 @@ import org.eventt.core.database.ViewContext
 import org.eventt.core.database.WalletDao
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.DailyWalletEntry
+import org.eventt.core.model.stringBlocking
 import org.eventt.core.model.toPnlWindow
 import org.eventt.features.orders.CostBasisService
 import org.eventt.features.orders.realizedPnlWindow
 import org.eventt.ui.common.*
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
+import org.eventt.wallet.generated.resources.*
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -89,7 +93,7 @@ fun WalletScreen(context: ViewContext?) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Wallet", style = MaterialTheme.typography.headlineMedium)
+            Text(stringResource(Res.string.wallet), style = MaterialTheme.typography.headlineMedium)
             actingCharId?.let { acting ->
                 EsiRefreshButton(
                     isLoading = isLoading,
@@ -124,9 +128,13 @@ fun WalletScreen(context: ViewContext?) {
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("Balance", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
                 Text(
-                    text = "${formatIsk(balance)} ISK",
+                    stringResource(Res.string.balance),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                Text(
+                    text = stringResource(Res.string.isk_amount, formatIsk(balance)),
                     style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -134,8 +142,16 @@ fun WalletScreen(context: ViewContext?) {
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     val totalEarned = dailyBreakdown.sumOf { it.income }
                     val totalSpent = dailyBreakdown.sumOf { it.expenses }
-                    Text("Earned: ${formatIsk(totalEarned)}", style = MaterialTheme.typography.bodySmall, color = positiveColor)
-                    Text("Spent: ${formatIsk(totalSpent)}", style = MaterialTheme.typography.bodySmall, color = negativeColor)
+                    Text(
+                        stringResource(Res.string.earned, formatIsk(totalEarned)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = positiveColor,
+                    )
+                    Text(
+                        stringResource(Res.string.spent, formatIsk(totalSpent)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = negativeColor,
+                    )
                 }
             }
         }
@@ -144,8 +160,8 @@ fun WalletScreen(context: ViewContext?) {
 
         // Tabs
         PrimaryTabRow(selectedTabIndex = activeTab) {
-            Tab(selected = activeTab == 0, onClick = { activeTab = 0 }, text = { Text("Transactions") })
-            Tab(selected = activeTab == 1, onClick = { activeTab = 1 }, text = { Text("Journal") })
+            Tab(selected = activeTab == 0, onClick = { activeTab = 0 }, text = { Text(stringResource(Res.string.transactions)) })
+            Tab(selected = activeTab == 1, onClick = { activeTab = 1 }, text = { Text(stringResource(Res.string.journal)) })
             Tab(selected = activeTab == 2, onClick = { activeTab = 2 }, text = { Text("P&L") })
         }
 
@@ -161,7 +177,7 @@ fun WalletScreen(context: ViewContext?) {
         }
     }
 
-    LoadingOverlay(isLoading = isLoading, message = "Loading wallet data...")
+    LoadingOverlay(isLoading = isLoading, message = stringResource(Res.string.loading_wallet))
 }
 
 private enum class SortDirection { ASC, DESC }
@@ -174,26 +190,29 @@ private fun SortHeaderCell(
     active: Boolean,
     direction: SortDirection,
     rightAlign: Boolean = false,
+    tooltip: String? = null,
     onClick: () -> Unit,
 ) {
-    Row(
-        modifier = modifier.clickable(onClick = onClick),
-        horizontalArrangement = if (rightAlign) Arrangement.End else Arrangement.Start,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = FontWeight.SemiBold,
-        )
-        if (active) {
-            Icon(
-                if (direction == SortDirection.ASC) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                contentDescription = null,
-                modifier = Modifier.size(12.dp).padding(start = 2.dp),
-                tint = MaterialTheme.colorScheme.primary,
+    Tip(tooltip, modifier) {
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+            horizontalArrangement = if (rightAlign) Arrangement.End else Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.SemiBold,
             )
+            if (active) {
+                Icon(
+                    if (direction == SortDirection.ASC) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                    contentDescription = null,
+                    modifier = Modifier.size(12.dp).padding(start = 2.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
     }
 }
@@ -211,17 +230,17 @@ private fun PaginationBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            "$totalCount entries",
+            pluralStringResource(Res.plurals.entries_count, totalCount, totalCount),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             IconButton(onClick = { onPageChange(page - 1) }, enabled = page > 0) {
-                Icon(Icons.Default.ChevronLeft, contentDescription = "Previous page")
+                Icon(Icons.Default.ChevronLeft, contentDescription = stringResource(Res.string.previous_page))
             }
-            Text("Page ${page + 1} of $totalPages", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(Res.string.page_of, page + 1, totalPages), style = MaterialTheme.typography.bodySmall)
             IconButton(onClick = { onPageChange(page + 1) }, enabled = page < totalPages - 1) {
-                Icon(Icons.Default.ChevronRight, contentDescription = "Next page")
+                Icon(Icons.Default.ChevronRight, contentDescription = stringResource(Res.string.next_page))
             }
         }
     }
@@ -238,7 +257,11 @@ private fun txTotal(tx: Map<String, Any?>): Double {
 @Composable
 private fun TransactionList(transactions: List<Map<String, Any?>>) {
     if (transactions.isEmpty()) {
-        EmptyState(icon = Icons.Default.Receipt, title = "No Transactions", description = "Select a character to load transactions.")
+        EmptyState(
+            icon = Icons.Default.Receipt,
+            title = stringResource(Res.string.no_transactions),
+            description = stringResource(Res.string.select_char_transactions),
+        )
         return
     }
 
@@ -299,12 +322,16 @@ private fun TransactionList(transactions: List<Map<String, Any?>>) {
         SearchField(
             query = searchQuery,
             onQueryChange = { searchQuery = it },
-            placeholder = "Search item, client, station...",
+            placeholder = stringResource(Res.string.search_tx),
             modifier = Modifier.padding(bottom = 8.dp),
         )
 
         if (sorted.isEmpty()) {
-            EmptyState(icon = Icons.Default.Receipt, title = "No Matches", description = "No transactions match your search.")
+            EmptyState(
+                icon = Icons.Default.Receipt,
+                title = stringResource(Res.string.no_matches),
+                description = stringResource(Res.string.no_tx_match),
+            )
             return
         }
 
@@ -317,38 +344,51 @@ private fun TransactionList(transactions: List<Map<String, Any?>>) {
                     .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SortHeaderCell("Date", Modifier.weight(1.8f), sortColumn == TxSortColumn.DATE, sortDirection) { toggleSort(TxSortColumn.DATE) }
-            SortHeaderCell("B/S", Modifier.weight(0.6f), sortColumn == TxSortColumn.SIDE, sortDirection) { toggleSort(TxSortColumn.SIDE) }
-            SortHeaderCell("Item", Modifier.weight(3f), sortColumn == TxSortColumn.ITEM, sortDirection) { toggleSort(TxSortColumn.ITEM) }
+            SortHeaderCell(stringResource(Res.string.col_date), Modifier.weight(1.8f), sortColumn == TxSortColumn.DATE, sortDirection) {
+                toggleSort(TxSortColumn.DATE)
+            }
             SortHeaderCell(
-                "Qty",
+                stringResource(Res.string.col_bs),
+                Modifier.weight(0.6f),
+                sortColumn == TxSortColumn.SIDE,
+                sortDirection,
+                tooltip = stringResource(Res.string.tip_w_bs),
+            ) {
+                toggleSort(TxSortColumn.SIDE)
+            }
+            SortHeaderCell(stringResource(Res.string.col_item), Modifier.weight(3f), sortColumn == TxSortColumn.ITEM, sortDirection) {
+                toggleSort(TxSortColumn.ITEM)
+            }
+            SortHeaderCell(
+                stringResource(Res.string.col_qty),
                 Modifier.weight(1f),
                 sortColumn == TxSortColumn.QTY,
                 sortDirection,
                 rightAlign = true,
             ) { toggleSort(TxSortColumn.QTY) }
             SortHeaderCell(
-                "Unit Price",
+                stringResource(Res.string.col_unit_price),
                 Modifier.weight(2f),
                 sortColumn == TxSortColumn.UNIT_PRICE,
                 sortDirection,
                 rightAlign = true,
             ) { toggleSort(TxSortColumn.UNIT_PRICE) }
             SortHeaderCell(
-                "Total",
+                stringResource(Res.string.col_total),
                 Modifier.weight(2f),
                 sortColumn == TxSortColumn.TOTAL,
                 sortDirection,
                 rightAlign = true,
             ) { toggleSort(TxSortColumn.TOTAL) }
             SortHeaderCell(
-                "Client",
+                stringResource(Res.string.col_client),
                 Modifier.weight(2f),
                 sortColumn == TxSortColumn.CLIENT,
                 sortDirection,
+                tooltip = stringResource(Res.string.tip_w_client),
             ) { toggleSort(TxSortColumn.CLIENT) }
             SortHeaderCell(
-                "Station",
+                stringResource(Res.string.col_station),
                 Modifier.weight(2.5f),
                 sortColumn == TxSortColumn.STATION,
                 sortDirection,
@@ -363,7 +403,7 @@ private fun TransactionList(transactions: List<Map<String, Any?>>) {
                 val total = txTotal(tx)
                 val typeName =
                     tx["type_name"]?.toString()?.ifEmpty { null }
-                        ?: "Unknown (${tx["type_id"]})"
+                        ?: stringResource(Res.string.unknown_type_id, tx["type_id"].toString())
                 val clientName =
                     tx["client_name"]?.toString()?.ifEmpty { null }
                         ?: tx["client_id"]?.let { "#$it" } ?: ""
@@ -390,7 +430,7 @@ private fun TransactionList(transactions: List<Map<String, Any?>>) {
                         shape = MaterialTheme.shapes.extraSmall,
                     ) {
                         Text(
-                            if (isBuy) "Buy" else "Sell",
+                            if (isBuy) stringResource(Res.string.buy) else stringResource(Res.string.sell),
                             style = MaterialTheme.typography.labelSmall,
                             color = if (isBuy) buyColor else sellColor,
                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
@@ -453,15 +493,18 @@ private fun TxHeader(
     label: String,
     modifier: Modifier,
     rightAlign: Boolean = false,
+    tooltip: String? = null,
 ) {
-    Text(
-        label,
-        modifier = modifier,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        textAlign = if (rightAlign) TextAlign.End else TextAlign.Start,
-        fontWeight = FontWeight.SemiBold,
-    )
+    Tip(tooltip, modifier) {
+        Text(
+            label,
+            modifier = Modifier.fillMaxWidth(),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = if (rightAlign) TextAlign.End else TextAlign.Start,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
 }
 
 private enum class JournalSortColumn { DATE, TYPE, DESCRIPTION, AMOUNT, TAX, BALANCE }
@@ -469,7 +512,11 @@ private enum class JournalSortColumn { DATE, TYPE, DESCRIPTION, AMOUNT, TAX, BAL
 @Composable
 private fun JournalList(journal: List<Map<String, Any?>>) {
     if (journal.isEmpty()) {
-        EmptyState(icon = Icons.AutoMirrored.Filled.List, title = "No Journal Entries", description = "Select a character to load journal.")
+        EmptyState(
+            icon = Icons.AutoMirrored.Filled.List,
+            title = stringResource(Res.string.no_journal),
+            description = stringResource(Res.string.select_char_journal),
+        )
         return
     }
 
@@ -530,7 +577,7 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
         SearchField(
             query = searchQuery,
             onQueryChange = { searchQuery = it },
-            placeholder = "Search type, description...",
+            placeholder = stringResource(Res.string.search_journal),
             modifier = Modifier.padding(bottom = 8.dp),
         )
 
@@ -553,14 +600,14 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
                         tint = MaterialTheme.colorScheme.onErrorContainer,
                     )
                     Text(
-                        "Taxes paid (shown entries):",
+                        stringResource(Res.string.taxes_paid),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                     )
                     if (totalTax != 0.0) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                "Sales Tax",
+                                stringResource(Res.string.sales_tax),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer,
                             )
@@ -575,7 +622,7 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
                     if (totalBroker != 0.0) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                "Broker's Fee",
+                                stringResource(Res.string.brokers_fee),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer,
                             )
@@ -589,7 +636,11 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
                     }
                     if (totalTax != 0.0 && totalBroker != 0.0) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Total", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                            Text(
+                                stringResource(Res.string.col_total),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
                             Text(
                                 formatIsk(totalTax + totalBroker),
                                 style = MaterialTheme.typography.bodySmall,
@@ -604,7 +655,11 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
         }
 
         if (sorted.isEmpty()) {
-            EmptyState(icon = Icons.AutoMirrored.Filled.List, title = "No Matches", description = "No journal entries match your search.")
+            EmptyState(
+                icon = Icons.AutoMirrored.Filled.List,
+                title = stringResource(Res.string.no_matches),
+                description = stringResource(Res.string.no_journal_match),
+            )
             return
         }
 
@@ -618,43 +673,47 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SortHeaderCell(
-                "Date",
+                stringResource(Res.string.col_date),
                 Modifier.weight(1.8f),
                 sortColumn == JournalSortColumn.DATE,
                 sortDirection,
             ) { toggleSort(JournalSortColumn.DATE) }
             SortHeaderCell(
-                "Type",
+                stringResource(Res.string.col_type),
                 Modifier.weight(2.5f),
                 sortColumn == JournalSortColumn.TYPE,
                 sortDirection,
+                tooltip = stringResource(Res.string.tip_w_type),
             ) { toggleSort(JournalSortColumn.TYPE) }
             SortHeaderCell(
-                "Description",
+                stringResource(Res.string.col_description),
                 Modifier.weight(3f),
                 sortColumn == JournalSortColumn.DESCRIPTION,
                 sortDirection,
             ) { toggleSort(JournalSortColumn.DESCRIPTION) }
             SortHeaderCell(
-                "Amount",
+                stringResource(Res.string.col_amount),
                 Modifier.weight(2f),
                 sortColumn == JournalSortColumn.AMOUNT,
                 sortDirection,
                 rightAlign = true,
+                tooltip = stringResource(Res.string.tip_w_amount),
             ) { toggleSort(JournalSortColumn.AMOUNT) }
             SortHeaderCell(
-                "Tax",
+                stringResource(Res.string.col_tax),
                 Modifier.weight(1.5f),
                 sortColumn == JournalSortColumn.TAX,
                 sortDirection,
                 rightAlign = true,
+                tooltip = stringResource(Res.string.tip_w_tax),
             ) { toggleSort(JournalSortColumn.TAX) }
             SortHeaderCell(
-                "Balance",
+                stringResource(Res.string.balance),
                 Modifier.weight(2f),
                 sortColumn == JournalSortColumn.BALANCE,
                 sortDirection,
                 rightAlign = true,
+                tooltip = stringResource(Res.string.tip_w_balance),
             ) { toggleSort(JournalSortColumn.BALANCE) }
         }
         HorizontalDivider()
@@ -734,103 +793,103 @@ private fun JournalList(journal: List<Map<String, Any?>>) {
 private fun formatRefType(refType: String): String =
     when (refType) {
         "transaction_tax" -> {
-            "Sales Tax"
+            stringBlocking(Res.string.ref_transaction_tax)
         }
 
         "brokers_fee" -> {
-            "Broker's Fee"
+            stringBlocking(Res.string.ref_brokers_fee)
         }
 
         "market_transaction" -> {
-            "Market Transaction"
+            stringBlocking(Res.string.ref_market_transaction)
         }
 
         "market_escrow" -> {
-            "Buy Order Escrow"
+            stringBlocking(Res.string.ref_market_escrow)
         }
 
         "market_escrow_refund" -> {
-            "Escrow Refund"
+            stringBlocking(Res.string.ref_market_escrow_refund)
         }
 
         "player_trading" -> {
-            "Trade"
+            stringBlocking(Res.string.ref_player_trading)
         }
 
         "contract_price" -> {
-            "Contract"
+            stringBlocking(Res.string.ref_contract_price)
         }
 
         "contract_reward" -> {
-            "Contract Reward"
+            stringBlocking(Res.string.ref_contract_reward)
         }
 
         "contract_deposit" -> {
-            "Contract Deposit"
+            stringBlocking(Res.string.ref_contract_deposit)
         }
 
         "contract_deposit_refund" -> {
-            "Contract Deposit Refund"
+            stringBlocking(Res.string.ref_contract_deposit_refund)
         }
 
         "contract_price_payment_corp" -> {
-            "Corp Contract"
+            stringBlocking(Res.string.ref_contract_price_payment_corp)
         }
 
         "bounty_prizes" -> {
-            "Bounty"
+            stringBlocking(Res.string.ref_bounty_prizes)
         }
 
         "industry_job_tax" -> {
-            "Industry Tax"
+            stringBlocking(Res.string.ref_industry_job_tax)
         }
 
         "manufacturing" -> {
-            "Manufacturing"
+            stringBlocking(Res.string.ref_manufacturing)
         }
 
         "reprocessing_tax" -> {
-            "Reprocessing Tax"
+            stringBlocking(Res.string.ref_reprocessing_tax)
         }
 
         "jump_clone_installation_fee" -> {
-            "Clone Jump Fee"
+            stringBlocking(Res.string.ref_jump_clone_installation_fee)
         }
 
         "planetary_import_tax" -> {
-            "PI Import Tax"
+            stringBlocking(Res.string.ref_planetary_import_tax)
         }
 
         "planetary_export_tax" -> {
-            "PI Export Tax"
+            stringBlocking(Res.string.ref_planetary_export_tax)
         }
 
         "corporation_account_withdrawal" -> {
-            "Corp Withdrawal"
+            stringBlocking(Res.string.ref_corporation_account_withdrawal)
         }
 
         "corporation_dividend_payment" -> {
-            "Dividend"
+            stringBlocking(Res.string.ref_corporation_dividend_payment)
         }
 
         "structure_gate_jump" -> {
-            "Jump Gate"
+            stringBlocking(Res.string.ref_structure_gate_jump)
         }
 
         "asset_safety_recovery_tax" -> {
-            "Asset Safety Tax"
+            stringBlocking(Res.string.ref_asset_safety_recovery_tax)
         }
 
         "skill_purchase" -> {
-            "Skill Purchase"
+            stringBlocking(Res.string.ref_skill_purchase)
         }
 
         "agent_mission_reward" -> {
-            "Mission Reward"
+            stringBlocking(Res.string.ref_agent_mission_reward)
         }
 
         "agent_mission_time_bonus_reward" -> {
-            "Mission Bonus"
+            stringBlocking(Res.string.ref_agent_mission_time_bonus_reward)
         }
 
         else -> {
@@ -859,8 +918,8 @@ private fun PnlChart(
     if (dailyBreakdown.isEmpty()) {
         EmptyState(
             icon = Icons.AutoMirrored.Filled.ShowChart,
-            title = "No P&L Data",
-            description = "Need journal entries to calculate P&L.",
+            title = stringResource(Res.string.no_pnl),
+            description = stringResource(Res.string.no_pnl_desc),
         )
         return
     }
@@ -900,47 +959,76 @@ private fun PnlChart(
     val fifoWindow = fifoResult?.realizedPnlWindow()
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        Text(
-            "Cash Flow",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-        )
+        Tip(stringResource(Res.string.tip_cash_flow)) {
+            Text(
+                stringResource(Res.string.cash_flow),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            )
+        }
         Spacer(modifier = Modifier.height(4.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            PnlStatCard("Today", pnlSignedText(todayNet), pnlColor(todayNet), Modifier.weight(1f))
-            PnlStatCard("7 Days", pnlSignedText(net7), pnlColor(net7), Modifier.weight(1f))
-            PnlStatCard("30 Days", pnlSignedText(net30), pnlColor(net30), Modifier.weight(1f))
-            PnlStatCard("${chronological.size}d Total", pnlSignedText(netAll), pnlColor(netAll), Modifier.weight(1f))
+            PnlStatCard(stringResource(Res.string.pnl_today), pnlSignedText(todayNet), pnlColor(todayNet), Modifier.weight(1f))
+            PnlStatCard(stringResource(Res.string.pnl_7_days), pnlSignedText(net7), pnlColor(net7), Modifier.weight(1f))
+            PnlStatCard(stringResource(Res.string.pnl_30_days), pnlSignedText(net30), pnlColor(net30), Modifier.weight(1f))
+            PnlStatCard(
+                stringResource(Res.string.pnl_days_total, chronological.size),
+                pnlSignedText(netAll),
+                pnlColor(netAll),
+                Modifier.weight(1f),
+            )
         }
 
         if (fifoWindow != null) {
             Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                "Realized P&L (FIFO cost-basis)",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-            )
+            Tip(stringResource(Res.string.tip_realized_pnl)) {
+                Text(
+                    stringResource(Res.string.realized_pnl_fifo),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+            }
             Spacer(modifier = Modifier.height(4.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                PnlStatCard("Today", pnlSignedText(fifoWindow.todayPnl), pnlColor(fifoWindow.todayPnl), Modifier.weight(1f))
-                PnlStatCard("7 Days", pnlSignedText(fifoWindow.pnl7d), pnlColor(fifoWindow.pnl7d), Modifier.weight(1f))
-                PnlStatCard("30 Days", pnlSignedText(fifoWindow.pnl30d), pnlColor(fifoWindow.pnl30d), Modifier.weight(1f))
-                PnlStatCard("All-time", pnlSignedText(fifoWindow.pnlAll), pnlColor(fifoWindow.pnlAll), Modifier.weight(1f))
+                PnlStatCard(
+                    stringResource(Res.string.pnl_today),
+                    pnlSignedText(fifoWindow.todayPnl),
+                    pnlColor(fifoWindow.todayPnl),
+                    Modifier.weight(1f),
+                )
+                PnlStatCard(
+                    stringResource(Res.string.pnl_7_days),
+                    pnlSignedText(fifoWindow.pnl7d),
+                    pnlColor(fifoWindow.pnl7d),
+                    Modifier.weight(1f),
+                )
+                PnlStatCard(
+                    stringResource(Res.string.pnl_30_days),
+                    pnlSignedText(fifoWindow.pnl30d),
+                    pnlColor(fifoWindow.pnl30d),
+                    Modifier.weight(1f),
+                )
+                PnlStatCard(
+                    stringResource(Res.string.all_time),
+                    pnlSignedText(fifoWindow.pnlAll),
+                    pnlColor(fifoWindow.pnlAll),
+                    Modifier.weight(1f),
+                )
             }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            PnlStatCard("Income", "+${formatIsk(incomeAll)}", positiveColor, Modifier.weight(1f))
-            PnlStatCard("Expenses", "-${formatIsk(expensesAll)}", negativeColor, Modifier.weight(1f))
+            PnlStatCard(stringResource(Res.string.income), "+${formatIsk(incomeAll)}", positiveColor, Modifier.weight(1f))
+            PnlStatCard(stringResource(Res.string.expenses), "-${formatIsk(expensesAll)}", negativeColor, Modifier.weight(1f))
             PnlStatCard(
-                "Avg Margin (realized)",
+                stringResource(Res.string.avg_margin_realized),
                 margin?.let { "%.1f%%".format(it) } ?: "—",
                 pnlColor(margin ?: 0.0),
                 Modifier.weight(1f),
             )
             PnlStatCard(
-                "Profitable Days",
+                stringResource(Res.string.profitable_days),
                 "$profitableDays / $tradingDays",
                 MaterialTheme.colorScheme.onSurface,
                 Modifier.weight(1f),
@@ -952,7 +1040,7 @@ private fun PnlChart(
         // Realized profit per sell date, mirroring the Dashboard chart — the cash-flow series
         // this used to plot spikes hugely negative on every restock day, which reads as a loss.
         if (fifoResult != null) {
-            ContentCard("Daily Realized P&L — 30d") {
+            ContentCard(stringResource(Res.string.daily_realized_pnl_30d)) {
                 val today = java.time.LocalDate.now()
                 val days = (29 downTo 0).map { today.minusDays(it.toLong()).toString() }
                 PnlBarChart(
@@ -962,7 +1050,7 @@ private fun PnlChart(
                 )
             }
         } else {
-            ContentCard("Daily Cash Flow") {
+            ContentCard(stringResource(Res.string.daily_cash_flow)) {
                 PnlBarChart(
                     data = chronological.map { it.net },
                     dates = chronological.map { it.date },
@@ -973,7 +1061,7 @@ private fun PnlChart(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        ContentCard("Daily Breakdown") {
+        ContentCard(stringResource(Res.string.daily_breakdown)) {
             PnlTable(chronological.reversed())
         }
     }
@@ -1001,10 +1089,10 @@ private fun PnlStatCard(
 private fun PnlTable(entries: List<DailyWalletEntry>) {
     Column {
         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            TxHeader("Date", Modifier.weight(2f))
-            TxHeader("Income", Modifier.weight(1.5f), rightAlign = true)
-            TxHeader("Expenses", Modifier.weight(1.5f), rightAlign = true)
-            TxHeader("Net", Modifier.weight(1.5f), rightAlign = true)
+            TxHeader(stringResource(Res.string.col_date), Modifier.weight(2f))
+            TxHeader(stringResource(Res.string.income), Modifier.weight(1.5f), rightAlign = true)
+            TxHeader(stringResource(Res.string.expenses), Modifier.weight(1.5f), rightAlign = true)
+            TxHeader(stringResource(Res.string.net), Modifier.weight(1.5f), rightAlign = true)
         }
         HorizontalDivider()
         entries.forEach { entry ->

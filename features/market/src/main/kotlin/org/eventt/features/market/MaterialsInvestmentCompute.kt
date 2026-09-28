@@ -603,11 +603,18 @@ private fun buildLadder(
             candidate.currentPrice
         }
     val weightSum = levels * (levels + 1) / 2.0
-    return (1..levels).map { level ->
-        val trigger = anchor * (1.0 - stepPct / 100.0 * (level - 1))
-        val share = isk * level / weightSum
+    val rungs =
+        (1..levels).map { level ->
+            anchor * (1.0 - stepPct / 100.0 * (level - 1)) to isk * level / weightSum
+        }
+    // Rungs the market has already fallen through (priced at or above the live top bid) would
+    // mean bidding above the market -- overpaying for what the top bid can buy right now. They
+    // collapse into one rung at the live bid carrying their combined ISK; the rest stay below it.
+    val (crossed, ahead) = rungs.partition { (trigger, _) -> trigger >= candidate.currentPrice }
+    val merged = crossed.takeIf { it.isNotEmpty() }?.let { listOf(candidate.currentPrice to it.sumOf { (_, share) -> share }) }
+    return (merged.orEmpty() + ahead).mapIndexed { i, (trigger, share) ->
         LadderLevel(
-            level = level,
+            level = i + 1,
             triggerPrice = trigger,
             iskAmount = share,
             // The rung's ISK covers the broker fee too, so fewer units than share / price.

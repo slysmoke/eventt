@@ -24,13 +24,18 @@ import org.eventt.core.database.ViewContext
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.PLEX_MARKET_REGION_ID
 import org.eventt.core.model.PLEX_TYPE_ID
+import org.eventt.core.model.stringBlocking
 import org.eventt.features.tools.ParseWarning
 import org.eventt.features.tools.ToolsInputParser
 import org.eventt.features.tools.pricing.PricingService
+import org.eventt.tools.generated.resources.*
 import org.eventt.ui.common.ConfirmDialog
 import org.eventt.ui.common.ContentCard
+import org.eventt.ui.common.Tip
 import org.eventt.ui.common.formatIsk
 import org.eventt.ui.theme.positiveColor
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 import java.awt.Toolkit
 import java.awt.datatransfer.DataFlavor
 
@@ -108,9 +113,8 @@ fun SplitterScreen(context: ViewContext?) {
             if (regionId == null) {
                 priceWarnings +=
                     ParseWarning(
-                        "(region)",
-                        "could not determine your character's current region — valuing items off ESI's global " +
-                            "average price instead of live sell orders",
+                        stringBlocking(Res.string.region_paren),
+                        stringBlocking(Res.string.warn_no_region),
                     )
             }
             val globalPrices = EsiClient.getMarketPrices()
@@ -144,10 +148,10 @@ fun SplitterScreen(context: ViewContext?) {
                     val price = regionSell ?: globalPrices[item.typeId]
                     if (regionId != null && regionSell == null) {
                         priceWarnings +=
-                            ParseWarning(item.name, "no live sell orders in your region — used ESI's global average price instead")
+                            ParseWarning(item.name, stringBlocking(Res.string.warn_no_live_sells))
                     }
                     if (price == null) {
-                        priceWarnings += ParseWarning(item.name, "no price data found anywhere — valued at 0 ISK")
+                        priceWarnings += ParseWarning(item.name, stringBlocking(Res.string.warn_no_price))
                     }
                     SplitLineItem(item.typeId, item.name, item.quantity, price ?: 0.0, item.unitVolume)
                 }
@@ -180,12 +184,12 @@ fun SplitterScreen(context: ViewContext?) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            ContentCard(title = "Cargo list") {
+            ContentCard(title = stringResource(Res.string.cargo_list)) {
                 OutlinedTextField(
                     value = pasteText,
                     onValueChange = { pasteText = it },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
-                    placeholder = { Text("Paste inventory list (name<TAB>quantity per line)…") },
+                    placeholder = { Text(stringResource(Res.string.paste_inventory)) },
                     minLines = 5,
                 )
                 Spacer(Modifier.height(8.dp))
@@ -201,14 +205,14 @@ fun SplitterScreen(context: ViewContext?) {
                     }) {
                         Icon(Icons.Default.ContentPaste, null, Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Paste from clipboard")
+                        Text(stringResource(Res.string.paste_from_clipboard))
                     }
                 }
             }
         }
 
         item {
-            ContentCard(title = "Constraints") {
+            ContentCard(title = stringResource(Res.string.constraints)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -219,7 +223,7 @@ fun SplitterScreen(context: ViewContext?) {
                             maxIskText = it
                             scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SplitterSettings.MAX_ISK, it) }
                         },
-                        label = { Text("Max ISK / split") },
+                        label = { Tip(stringResource(Res.string.tip_sp_max_isk)) { Text(stringResource(Res.string.max_isk_split)) } },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
@@ -229,13 +233,15 @@ fun SplitterScreen(context: ViewContext?) {
                             maxVolumeText = it
                             scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SplitterSettings.MAX_VOLUME, it) }
                         },
-                        label = { Text("Max m³ / split") },
+                        label = { Tip(stringResource(Res.string.tip_sp_max_m3)) { Text(stringResource(Res.string.max_m3_split)) } },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
                 }
                 Spacer(Modifier.height(12.dp))
-                Text("Algorithm", style = MaterialTheme.typography.labelMedium)
+                Tip(stringResource(Res.string.tip_sp_algorithm)) {
+                    Text(stringResource(Res.string.algorithm), style = MaterialTheme.typography.labelMedium)
+                }
                 Spacer(Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
@@ -246,7 +252,12 @@ fun SplitterScreen(context: ViewContext?) {
                                 Dispatchers.IO,
                             ) { StaticDataDao.setSetting(SplitterSettings.ALGORITHM, SplitAlgorithm.FILL_FIRST.name) }
                         },
-                        label = { Text("Fill First" + if (recommended == SplitAlgorithm.FILL_FIRST) " (recommended)" else "") },
+                        label = {
+                            Text(
+                                stringResource(Res.string.fill_first) +
+                                    if (recommended == SplitAlgorithm.FILL_FIRST) " " + stringResource(Res.string.recommended) else "",
+                            )
+                        },
                     )
                     FilterChip(
                         selected = algorithm == SplitAlgorithm.BALANCED,
@@ -256,11 +267,16 @@ fun SplitterScreen(context: ViewContext?) {
                                 Dispatchers.IO,
                             ) { StaticDataDao.setSetting(SplitterSettings.ALGORITHM, SplitAlgorithm.BALANCED.name) }
                         },
-                        label = { Text("Balanced" + if (recommended == SplitAlgorithm.BALANCED) " (recommended)" else "") },
+                        label = {
+                            Text(
+                                stringResource(Res.string.balanced) +
+                                    if (recommended == SplitAlgorithm.BALANCED) " " + stringResource(Res.string.recommended) else "",
+                            )
+                        },
                     )
                 }
                 Spacer(Modifier.height(12.dp))
-                Text("Ship (fitting label only — doesn't affect the split)", style = MaterialTheme.typography.labelMedium)
+                Text(stringResource(Res.string.ship_label), style = MaterialTheme.typography.labelMedium)
                 Spacer(Modifier.height(4.dp))
                 ShipDropdown(
                     selectedTypeId = shipTypeId,
@@ -275,14 +291,14 @@ fun SplitterScreen(context: ViewContext?) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.width(8.dp))
                     }
-                    Text("Calculate")
+                    Text(stringResource(Res.string.calculate))
                 }
             }
         }
 
         if (warnings.isNotEmpty()) {
             item {
-                ContentCard(title = "Warnings (${warnings.size})") {
+                ContentCard(title = stringResource(Res.string.warnings_n, warnings.size)) {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         warnings.forEach { w ->
                             Text(
@@ -305,18 +321,18 @@ fun SplitterScreen(context: ViewContext?) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        "Fill First: ${ffdPlan?.splits?.size ?: 0} splits  ·  Balanced: ${balancedPlan?.splits?.size ?: 0} splits",
+                        stringResource(Res.string.plans_summary, ffdPlan?.splits?.size ?: 0, balancedPlan?.splits?.size ?: 0),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     if (charId != null && plan.splits.isNotEmpty()) {
                         Button(onClick = { confirmingPushAll = true }, enabled = !isPushing) {
-                            Text("Push all ${plan.splits.size} to ESI")
+                            Text(stringResource(Res.string.push_all_n, plan.splits.size))
                         }
                     }
                 }
                 if (charId == null) {
                     Text(
-                        "Select a character (not a corporation) to push fittings to ESI.",
+                        stringResource(Res.string.select_char_push),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -325,7 +341,7 @@ fun SplitterScreen(context: ViewContext?) {
 
             if (plan.unplaced.isNotEmpty()) {
                 item {
-                    ContentCard(title = "Could not fit (${plan.unplaced.size})") {
+                    ContentCard(title = stringResource(Res.string.could_not_fit_n, plan.unplaced.size)) {
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             plan.unplaced.forEach { u ->
                                 Text(
@@ -342,11 +358,17 @@ fun SplitterScreen(context: ViewContext?) {
             items(plan.splits, key = { it.index }) { split ->
                 val pushResult = pushResults[split.index]
                 ContentCard(
-                    title = "Split ${split.index} — ${formatIsk(split.totalValue)} ISK, ${formatVolume(split.totalVolume)}",
+                    title =
+                        stringResource(
+                            Res.string.split_title,
+                            split.index,
+                            formatIsk(split.totalValue),
+                            formatVolume(split.totalVolume),
+                        ),
                     actions = {
                         when {
                             pushResult?.success == true -> {
-                                Icon(Icons.Default.CheckCircle, "Pushed", tint = positiveColor)
+                                Icon(Icons.Default.CheckCircle, stringResource(Res.string.pushed), tint = positiveColor)
                             }
 
                             pushResult?.success == false -> {
@@ -359,14 +381,14 @@ fun SplitterScreen(context: ViewContext?) {
 
                             charId != null -> {
                                 TextButton(onClick = { confirmingSplit = split }, enabled = !isPushing) {
-                                    Text("Push to ESI")
+                                    Text(stringResource(Res.string.push_to_esi))
                                 }
                             }
                         }
                     },
                 ) {
                     Text(
-                        "${split.itemTypeCount} item types",
+                        pluralStringResource(Res.plurals.item_types_n, split.itemTypeCount, split.itemTypeCount),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -385,7 +407,7 @@ fun SplitterScreen(context: ViewContext?) {
                     if (pushResult?.success == false) {
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "Push failed: ${pushResult.error}",
+                            stringResource(Res.string.push_failed, pushResult.error.orEmpty()),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error,
                         )
@@ -397,23 +419,22 @@ fun SplitterScreen(context: ViewContext?) {
 
     confirmingSplit?.let { split ->
         ConfirmDialog(
-            title = "Push split to ESI",
+            title = stringResource(Res.string.push_split_title),
             message =
-                "This creates a real saved fitting in-game (\"Split ${split.index} - ${formatIsk(split.totalValue)} ISK\", " +
-                    "${split.itemTypeCount} item types). Continue?",
+                stringResource(Res.string.push_split_msg, split.index, formatIsk(split.totalValue), split.itemTypeCount),
             onDismiss = { confirmingSplit = null },
             onConfirm = { pushSplits(listOf(split)) },
-            confirmText = "Push",
+            confirmText = stringResource(Res.string.push),
         )
     }
     if (confirmingPushAll) {
         val splits = activePlan?.splits ?: emptyList()
         ConfirmDialog(
-            title = "Push all splits to ESI",
-            message = "This creates ${splits.size} real saved fittings in-game. Continue?",
+            title = stringResource(Res.string.push_all_title),
+            message = stringResource(Res.string.push_all_msg, splits.size),
             onDismiss = { confirmingPushAll = false },
             onConfirm = { pushSplits(splits) },
-            confirmText = "Push all",
+            confirmText = stringResource(Res.string.push_all),
         )
     }
 }

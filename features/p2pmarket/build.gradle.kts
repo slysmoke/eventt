@@ -16,5 +16,6 @@ dependencies {
     implementation(project(":ui:common"))
     implementation(compose.desktop.currentOs)
     implementation(compose.material3)
+    implementation(compose.components.resources)
     implementation(compose.materialIconsExtended)
 }

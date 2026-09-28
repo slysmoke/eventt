@@ -53,6 +53,7 @@ import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.TransactionAttribution
 import org.eventt.core.model.StaticRegionModel
 import org.eventt.core.model.StaticTypeModel
+import org.eventt.core.model.stringBlocking
 import org.eventt.core.nostr.MinLotUnit
 import org.eventt.core.nostr.NostrIdentityService
 import org.eventt.core.nostr.OrderDraft
@@ -60,7 +61,11 @@ import org.eventt.core.nostr.OrderFilter
 import org.eventt.core.nostr.OrderRepository
 import org.eventt.core.nostr.OrderSide
 import org.eventt.core.nostr.PostOrderResult
+import org.eventt.p2pmarket.generated.resources.*
 import org.eventt.ui.common.SearchField
+import org.eventt.ui.common.Tip
+import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.stringResource
 import java.util.Locale
 
 private data class MyOrderRowData(
@@ -124,7 +129,12 @@ fun MyOrdersScreen() {
     LaunchedEffect(myOrders) {
         myOrderRows =
             withContext(Dispatchers.IO) {
-                myOrders.map { order -> MyOrderRowData(order, StaticDataDao.getTypeById(order.typeId)?.name ?: "Type #${order.typeId}") }
+                myOrders.map { order ->
+                    MyOrderRowData(
+                        order,
+                        StaticDataDao.getTypeById(order.typeId)?.name ?: stringBlocking(Res.string.type_n, order.typeId),
+                    )
+                }
             }
     }
 
@@ -163,12 +173,12 @@ fun MyOrdersScreen() {
             withContext(Dispatchers.Main) {
                 if (recommended != null) {
                     priceText = String.format(Locale.US, "%.2f", recommended.price)
-                    val feeLabel = if (side == OrderSide.SELL) "sales tax" else "broker fee"
+                    val feeLabel = stringBlocking(if (side == OrderSide.SELL) Res.string.fee_sales_tax else Res.string.fee_broker)
                     val basePrice = String.format(Locale.US, "%,.2f", recommended.basePrice)
                     val adjustmentPct = String.format(Locale.US, "%.1f", recommended.adjustmentPct)
-                    priceSuggestionNote = "Based on $basePrice ISK (The Forge) − $adjustmentPct% ($feeLabel)"
+                    priceSuggestionNote = stringBlocking(Res.string.based_on, basePrice, adjustmentPct, feeLabel)
                 } else {
-                    priceSuggestionNote = "No Forge market data for this item yet"
+                    priceSuggestionNote = stringBlocking(Res.string.no_forge_data)
                 }
                 isSuggestingPrice = false
             }
@@ -184,11 +194,11 @@ fun MyOrdersScreen() {
 
         formError =
             when {
-                type == null -> "Pick an item from the suggestions"
-                region == null -> "Pick a region"
-                price == null || price <= 0 -> "Invalid price"
-                qty == null || qty <= 0 -> "Invalid quantity"
-                minLot == null || minLot <= 0 -> "Invalid min lot"
+                type == null -> stringBlocking(Res.string.err_pick_item)
+                region == null -> stringBlocking(Res.string.err_pick_region)
+                price == null || price <= 0 -> stringBlocking(Res.string.err_invalid_price)
+                qty == null || qty <= 0 -> stringBlocking(Res.string.err_invalid_qty)
+                minLot == null || minLot <= 0 -> stringBlocking(Res.string.err_invalid_min_lot)
                 else -> null
             }
         if (formError != null) return
@@ -198,7 +208,7 @@ fun MyOrdersScreen() {
             val identity = NostrIdentityService.getActiveIdentity()
             if (identity == null) {
                 withContext(Dispatchers.Main) {
-                    formError = "No P2P Market identity set up yet — pick a character in Settings first."
+                    formError = getString(Res.string.err_no_identity)
                     isPosting = false
                 }
                 return@launch
@@ -231,11 +241,11 @@ fun MyOrdersScreen() {
                     }
 
                     PostOrderResult.NoIdentity -> {
-                        formError = "No P2P Market identity set up yet — pick a character in Settings first."
+                        formError = getString(Res.string.err_no_identity)
                     }
 
                     PostOrderResult.RateLimited -> {
-                        formError = "You've posted too many new orders recently — try again in a bit."
+                        formError = getString(Res.string.err_rate_limited)
                     }
                 }
             }
@@ -245,7 +255,7 @@ fun MyOrdersScreen() {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
-                "Attribute new trades to:",
+                stringResource(Res.string.attribute_new_trades),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -262,7 +272,7 @@ fun MyOrdersScreen() {
             OutlinedButton(onClick = { showPostForm = true }, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.Add, null, Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Post new order")
+                Text(stringResource(Res.string.post_new_order))
             }
         } else {
             Card(modifier = Modifier.fillMaxWidth()) {
@@ -272,12 +282,22 @@ fun MyOrdersScreen() {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("Post a new order", style = MaterialTheme.typography.titleMedium)
-                        IconButton(onClick = { showPostForm = false }) { Icon(Icons.Default.Close, "Collapse", Modifier.size(18.dp)) }
+                        Text(stringResource(Res.string.post_a_new_order), style = MaterialTheme.typography.titleMedium)
+                        IconButton(
+                            onClick = { showPostForm = false },
+                        ) { Icon(Icons.Default.Close, stringResource(Res.string.collapse), Modifier.size(18.dp)) }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(selected = side == OrderSide.SELL, onClick = { side = OrderSide.SELL }, label = { Text("Selling") })
-                        FilterChip(selected = side == OrderSide.BUY, onClick = { side = OrderSide.BUY }, label = { Text("Buying") })
+                        FilterChip(
+                            selected = side == OrderSide.SELL,
+                            onClick = { side = OrderSide.SELL },
+                            label = { Text(stringResource(Res.string.selling)) },
+                        )
+                        FilterChip(
+                            selected = side == OrderSide.BUY,
+                            onClick = { side = OrderSide.BUY },
+                            label = { Text(stringResource(Res.string.buying)) },
+                        )
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Column(modifier = Modifier.weight(1f)) {
@@ -294,7 +314,7 @@ fun MyOrdersScreen() {
                                         itemSearchResults = emptyList()
                                     }
                                 },
-                                placeholder = "Search item...",
+                                placeholder = stringResource(Res.string.search_item),
                             )
                             if (itemSearchResults.isNotEmpty()) {
                                 LazyColumn(modifier = Modifier.heightIn(max = 140.dp)) {
@@ -328,7 +348,7 @@ fun MyOrdersScreen() {
                                         regionSearchResults = emptyList()
                                     }
                                 },
-                                placeholder = "Search region...",
+                                placeholder = stringResource(Res.string.search_region),
                             )
                             if (regionSearchResults.isNotEmpty()) {
                                 LazyColumn(modifier = Modifier.heightIn(max = 140.dp)) {
@@ -360,7 +380,7 @@ fun MyOrdersScreen() {
                                 priceText = it
                                 priceSuggestionNote = null
                             },
-                            label = { Text("Price / unit (ISK)") },
+                            label = { Tip(stringResource(Res.string.tip_p_price)) { Text(stringResource(Res.string.price_per_unit)) } },
                             singleLine = true,
                             trailingIcon = {
                                 IconButton(onClick = ::suggestPrice, enabled = selectedType != null && !isSuggestingPrice) {
@@ -369,7 +389,7 @@ fun MyOrdersScreen() {
                                     } else {
                                         Icon(
                                             Icons.Default.Lightbulb,
-                                            contentDescription = "Suggest price (The Forge, minus sales tax/broker fee)",
+                                            contentDescription = stringResource(Res.string.suggest_price),
                                         )
                                     }
                                 }
@@ -379,7 +399,7 @@ fun MyOrdersScreen() {
                         OutlinedTextField(
                             value = qtyText,
                             onValueChange = { qtyText = it },
-                            label = { Text("Total quantity") },
+                            label = { Text(stringResource(Res.string.total_quantity)) },
                             singleLine = true,
                             modifier = Modifier.weight(1f),
                         )
@@ -391,14 +411,14 @@ fun MyOrdersScreen() {
                         OutlinedTextField(
                             value = minLotText,
                             onValueChange = { minLotText = it },
-                            label = { Text("Min lot") },
+                            label = { Tip(stringResource(Res.string.tip_p_min_lot)) { Text(stringResource(Res.string.min_lot)) } },
                             singleLine = true,
                             modifier = Modifier.weight(1f),
                         )
                         FilterChip(
                             selected = minLotUnit == MinLotUnit.UNITS,
                             onClick = { minLotUnit = MinLotUnit.UNITS },
-                            label = { Text("units") },
+                            label = { Text(stringResource(Res.string.units)) },
                         )
                         FilterChip(
                             selected = minLotUnit == MinLotUnit.ISK,
@@ -407,7 +427,12 @@ fun MyOrdersScreen() {
                         )
                     }
                     Text(
-                        tradingAs?.let { "Trading as: $it" } ?: "No character selected — pick one in Settings first.",
+                        tradingAs?.let {
+                            stringResource(
+                                Res.string.trading_as,
+                                it,
+                            )
+                        } ?: stringResource(Res.string.no_char_selected_settings),
                         style = MaterialTheme.typography.bodySmall,
                         color = if (tradingAs != null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
                     )
@@ -417,18 +442,18 @@ fun MyOrdersScreen() {
                             CircularProgressIndicator(Modifier.height(16.dp), strokeWidth = 2.dp)
                             Spacer(Modifier.height(4.dp))
                         }
-                        Text(if (isPosting) "Posting…" else "Post order")
+                        Text(if (isPosting) stringResource(Res.string.posting) else stringResource(Res.string.post_order))
                     }
                 }
             }
         }
 
         Spacer(Modifier.height(16.dp))
-        Text("My active orders", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(Res.string.my_active_orders), style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))
         if (myOrderRows.isEmpty()) {
             Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                Text("No active orders yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(Res.string.no_active_orders_yet), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
             val sortedRows =
@@ -470,26 +495,44 @@ private fun MyOrdersTableHeader(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("Side", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(60.dp))
-        Text("Item", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        Text(
+            stringResource(Res.string.h_side),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.width(60.dp),
+        )
+        Text(
+            stringResource(Res.string.h_item),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f),
+        )
         SortHeaderCell(
-            "Price",
+            stringResource(Res.string.h_price),
             Modifier.width(130.dp),
             active = sortColumn == MyOrdersSortColumn.PRICE,
             direction = sortDirection,
         ) { onSort(MyOrdersSortColumn.PRICE, SortDirection.DESC) }
         SortHeaderCell(
-            "Qty",
+            stringResource(Res.string.h_qty),
             Modifier.width(90.dp),
             active = sortColumn == MyOrdersSortColumn.QTY,
             direction = sortDirection,
         ) { onSort(MyOrdersSortColumn.QTY, SortDirection.DESC) }
-        Text("Value", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(130.dp))
+        Tip(stringResource(Res.string.tip_p_value)) {
+            Text(
+                stringResource(Res.string.h_value),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.width(130.dp),
+            )
+        }
         SortHeaderCell(
-            "Expires",
+            stringResource(Res.string.h_expires),
             Modifier.width(110.dp),
             active = sortColumn == MyOrdersSortColumn.EXPIRY,
             direction = sortDirection,
+            tooltip = stringResource(Res.string.tip_p_my_expires),
         ) { onSort(MyOrdersSortColumn.EXPIRY, SortDirection.ASC) }
         Spacer(Modifier.width(270.dp))
     }
@@ -542,15 +585,18 @@ private fun MyOrderTableRow(
             modifier = Modifier.width(130.dp),
         )
         Text(
-            formatDurationShort(order.expiration - System.currentTimeMillis() / 1000) + " left",
+            stringResource(Res.string.time_left, formatDurationShort(order.expiration - System.currentTimeMillis() / 1000)),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.width(110.dp),
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(270.dp)) {
-            OutlinedButton(onClick = { showEditDialog = true }, contentPadding = COMPACT_BUTTON_PADDING) { Text("Edit") }
-            OutlinedButton(onClick = onRenew, contentPadding = COMPACT_BUTTON_PADDING) { Text("Renew") }
-            OutlinedButton(onClick = onCancel, contentPadding = COMPACT_BUTTON_PADDING) { Text("Cancel") }
+            OutlinedButton(
+                onClick = { showEditDialog = true },
+                contentPadding = COMPACT_BUTTON_PADDING,
+            ) { Text(stringResource(Res.string.edit)) }
+            OutlinedButton(onClick = onRenew, contentPadding = COMPACT_BUTTON_PADDING) { Text(stringResource(Res.string.renew)) }
+            OutlinedButton(onClick = onCancel, contentPadding = COMPACT_BUTTON_PADDING) { Text(stringResource(Res.string.cancel)) }
         }
     }
 }
@@ -572,36 +618,36 @@ private fun EditOrderDialog(
     val qty = qtyText.toLongOrNull()
     val error =
         when {
-            price == null || price <= 0 -> "Invalid price"
-            qty == null || qty <= 0 -> "Invalid quantity"
+            price == null || price <= 0 -> stringResource(Res.string.err_invalid_price)
+            qty == null || qty <= 0 -> stringResource(Res.string.err_invalid_qty)
             else -> null
         }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit order") },
+        title = { Text(stringResource(Res.string.edit_order)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = priceText,
                     onValueChange = { priceText = it },
-                    label = { Text("Price / unit (ISK)") },
+                    label = { Tip(stringResource(Res.string.tip_p_price)) { Text(stringResource(Res.string.price_per_unit)) } },
                     singleLine = true,
                 )
                 OutlinedTextField(
                     value = qtyText,
                     onValueChange = { qtyText = it },
-                    label = { Text("Quantity available") },
+                    label = { Text(stringResource(Res.string.quantity_available)) },
                     singleLine = true,
                 )
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             }
         },
         confirmButton = {
-            Button(onClick = { onSave(price!!, qty!!) }, enabled = error == null) { Text("Save") }
+            Button(onClick = { onSave(price!!, qty!!) }, enabled = error == null) { Text(stringResource(Res.string.save)) }
         },
         dismissButton = {
-            OutlinedButton(onClick = onDismiss) { Text("Cancel") }
+            OutlinedButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) }
         },
     )
 }

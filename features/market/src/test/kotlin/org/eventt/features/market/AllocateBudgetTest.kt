@@ -62,12 +62,29 @@ class AllocateBudgetTest {
         val result = allocateBudget(listOf(c), totalBudget = 1_000_000.0, maxItems = 1, 100.0, 30.0, ladderLevels = 3, ladderStepPct = 5.0)
 
         val ladder = result.first().ladder
-        // Level 1 must be priced off the 10 ISK cost basis, not the 8 ISK live price -- otherwise
-        // the ladder resets to a fresh "8 and down" on every re-scan instead of measuring further
-        // downside from where the position was actually opened.
-        ladder.first().triggerPrice shouldBe 10.0
-        // That level sits above the live price, so it's already effectively crossed.
+        // Rungs are spaced off the 10 ISK cost basis (10, 9.5, 9), not a fresh "8 and down" on
+        // every re-scan -- but all three sit above the live 8 bid, and bidding above the market
+        // only overpays, so they collapse into one rung at the live price with all the ISK.
+        ladder.size shouldBe 1
+        ladder.first().triggerPrice shouldBe 8.0
         ladder.first().alreadyTriggered shouldBe true
+        ladder.first().iskAmount shouldBe result.first().toBuyIsk
+    }
+
+    @Test
+    fun `rungs still below the live price stay as future targets after the crossed ones merge`() {
+        // Cost basis 10, live bid 9.6: rung 10 is crossed, 9.5 and 9.0 are still ahead.
+        val held = MaterialPosition(qtyHeld = 100, avgBuyPrice = 10.0)
+        val c = candidate(typeId = 1, currentPrice = 9.6, vsAvgPct = -20.0, dailyVolume = 1000, position = held)
+
+        val ladder =
+            allocateBudget(listOf(c), totalBudget = 1_000_000.0, maxItems = 1, 100.0, 30.0, ladderLevels = 3, ladderStepPct = 5.0)
+                .first()
+                .ladder
+
+        ladder.map { it.triggerPrice } shouldBe listOf(9.6, 9.5, 9.0)
+        ladder.map { it.alreadyTriggered } shouldBe listOf(true, false, false)
+        ladder.map { it.level } shouldBe listOf(1, 2, 3)
     }
 
     @Test

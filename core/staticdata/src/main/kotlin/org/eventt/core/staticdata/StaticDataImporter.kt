@@ -17,6 +17,8 @@ import org.eventt.core.database.StaticDataDao
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.http.EveHttpClient
 import org.eventt.core.model.*
+import org.eventt.core.model.stringBlocking
+import org.eventt.staticdata.generated.resources.*
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.util.concurrent.atomic.AtomicInteger
@@ -56,10 +58,10 @@ object StaticDataImporter {
         withContext(Dispatchers.IO) {
             if (_state.value.isRunning) return@withContext
             try {
-                setState(0.01f, "Checking latest SDE version…")
+                setState(0.01f, stringBlocking(Res.string.sde_checking))
                 val buildNumber = fetchLatestBuildNumber()
 
-                setState(0.02f, "Downloading SDE build $buildNumber…")
+                setState(0.02f, stringBlocking(Res.string.sde_downloading, buildNumber))
                 val zipUrl = ZIP_URL_TEMPLATE.format(buildNumber)
                 downloadAndParse(zipUrl)
 
@@ -67,14 +69,19 @@ object StaticDataImporter {
                 StaticDataDao.setSetting("sde_import_date", System.currentTimeMillis().toString())
 
                 val count = StaticDataDao.countTypes()
-                _state.value = ImportState(isDone = true, progress = 1f, status = "Done — $count types loaded")
+                _state.value = ImportState(isDone = true, progress = 1f, status = stringBlocking(Res.string.sde_done, count))
             } catch (e: CancellationException) {
-                _state.value = ImportState(status = "Import cancelled")
+                _state.value = ImportState(status = stringBlocking(Res.string.sde_cancelled))
                 throw e
             } catch (e: Exception) {
                 println("[SDE] Import failed: ${e.message}")
                 e.printStackTrace()
-                _state.value = ImportState(isRunning = false, error = e.message ?: "Unknown error", status = "Import failed: ${e.message}")
+                _state.value =
+                    ImportState(
+                        isRunning = false,
+                        error = e.message ?: stringBlocking(Res.string.unknown_error),
+                        status = stringBlocking(Res.string.sde_failed, e.message.orEmpty()),
+                    )
             }
         }
 
@@ -116,7 +123,10 @@ object StaticDataImporter {
                                     types.add(it)
                                     typeCount++
                                     if (typeCount % 5000 == 0 && typeCount > 0) {
-                                        setState(0.10f + (typeCount.toFloat() / 55000f) * 0.25f, "Parsing types: $typeCount…")
+                                        setState(
+                                            0.10f + (typeCount.toFloat() / 55000f) * 0.25f,
+                                            stringBlocking(Res.string.sde_parsing_types, typeCount),
+                                        )
                                     }
                                 }
                             }
@@ -283,36 +293,36 @@ object StaticDataImporter {
         val groupCategoryMap = groups.associate { it.groupId to it.categoryId }
         val typesWithCategory = types.map { it.copy(categoryId = groupCategoryMap[it.groupId] ?: 0) }
 
-        setState(0.35f, "Saving ${typesWithCategory.size} types…")
+        setState(0.35f, stringBlocking(Res.string.sde_saving_types, typesWithCategory.size))
         typesWithCategory.chunked(5000).forEachIndexed { idx, chunk ->
             StaticDataDao.bulkInsertTypes(chunk)
             setState(
                 0.35f + (idx.toFloat() / (typesWithCategory.size / 5000 + 1)) * 0.10f,
-                "Saved ${minOf((idx + 1) * 5000, typesWithCategory.size)} / ${typesWithCategory.size} types",
+                stringBlocking(Res.string.sde_saved_types, minOf((idx + 1) * 5000, typesWithCategory.size), typesWithCategory.size),
             )
         }
 
-        setState(0.46f, "Saving ${groups.size} groups…")
+        setState(0.46f, stringBlocking(Res.string.sde_saving_groups, groups.size))
         groups.chunked(5000).forEach { chunk ->
             StaticDataDao.bulkInsertGroups(chunk)
         }
 
-        setState(0.50f, "Saving ${categories.size} categories…")
+        setState(0.50f, stringBlocking(Res.string.sde_saving_categories, categories.size))
         categories.chunked(5000).forEach { chunk ->
             StaticDataDao.bulkInsertCategories(chunk)
         }
 
-        setState(0.53f, "Saving ${marketGroups.size} market groups…")
+        setState(0.53f, stringBlocking(Res.string.sde_saving_market_groups, marketGroups.size))
         marketGroups.chunked(5000).forEach { chunk ->
             StaticDataDao.bulkInsertMarketGroups(chunk)
         }
 
-        setState(0.60f, "Saving ${regions.size} regions…")
+        setState(0.60f, stringBlocking(Res.string.sde_saving_regions, regions.size))
         regions.chunked(2000).forEach { chunk ->
             StaticDataDao.bulkInsertRegions(chunk)
         }
 
-        setState(0.65f, "Saving ${systems.size} systems…")
+        setState(0.65f, stringBlocking(Res.string.sde_saving_systems, systems.size))
         systems.chunked(2000).forEach { chunk ->
             StaticDataDao.bulkInsertSystems(chunk)
         }
@@ -323,7 +333,7 @@ object StaticDataImporter {
         val regionNameById = regions.associate { it.regionId to it.name }
 
         // Resolve NPC station names via ESI /universe/names/ (batches of 1000)
-        setState(0.70f, "Resolving ${rawNpcStations.size} NPC station names from ESI…")
+        setState(0.70f, stringBlocking(Res.string.sde_resolving_stations, rawNpcStations.size))
         val nameMap = EsiClient.resolveNames(rawNpcStations.map { it.stationId.toInt() })
 
         val npcStations =
@@ -339,7 +349,7 @@ object StaticDataImporter {
                     typeId = raw.typeId,
                 )
             }
-        setState(0.78f, "Saving ${npcStations.size} NPC stations…")
+        setState(0.78f, stringBlocking(Res.string.sde_saving_stations, npcStations.size))
         npcStations.chunked(2000).forEach { chunk ->
             StaticDataDao.bulkInsertStations(chunk)
         }
@@ -351,7 +361,7 @@ object StaticDataImporter {
         // than what it takes up crated in a hauler's hold), and a small enough subset (low
         // thousands) that fetching it individually here is reasonable for a one-time import step.
         val shipTypeIds = typesWithCategory.filter { it.categoryId == SHIP_CATEGORY_ID }.map { it.typeId }
-        setState(0.85f, "Resolving ${shipTypeIds.size} ship packaged volumes from ESI…")
+        setState(0.85f, stringBlocking(Res.string.sde_resolving_ships, shipTypeIds.size))
         val resolved = AtomicInteger(0)
         val semaphore = Semaphore(4)
         coroutineScope {
@@ -369,7 +379,7 @@ object StaticDataImporter {
                             if (done % 100 == 0) {
                                 setState(
                                     0.85f + (done.toFloat() / shipTypeIds.size) * 0.08f,
-                                    "Resolved $done/${shipTypeIds.size} ship volumes…",
+                                    stringBlocking(Res.string.sde_resolved_ships, done, shipTypeIds.size),
                                 )
                             }
                         }

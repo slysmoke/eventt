@@ -33,10 +33,13 @@ import org.eventt.core.database.NostrOrderDao
 import org.eventt.core.database.NostrReservationDao
 import org.eventt.core.database.NostrReservationModel
 import org.eventt.core.database.StaticDataDao
+import org.eventt.core.model.stringBlocking
 import org.eventt.core.nostr.NostrRelayEvent
 import org.eventt.core.nostr.NostrRelayManager
 import org.eventt.core.nostr.OrderSide
 import org.eventt.core.nostr.ReservationService
+import org.eventt.p2pmarket.generated.resources.*
+import org.jetbrains.compose.resources.stringResource
 import java.time.Instant
 import java.util.Locale
 
@@ -93,7 +96,7 @@ fun MyRequestsScreen() {
                         reservation = reservation,
                         typeName =
                             order?.let { StaticDataDao.getTypeById(it.typeId)?.name }
-                                ?: "Order ${reservation.orderUuid.take(8)}… (expired/purged)",
+                                ?: stringBlocking(Res.string.order_expired, reservation.orderUuid.take(8)),
                         regionName = order?.let { StaticDataDao.getRegionById(it.regionId)?.name },
                         price = order?.price,
                         counterpartyLabel = counterpartyCharacterName ?: "${reservation.sellerPubkey.take(12)}…",
@@ -122,7 +125,7 @@ fun MyRequestsScreen() {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         if (displayedRequests.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No requests sent yet — request a reservation from Browse", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(Res.string.no_requests_sent), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
             MyRequestsTableHeader(sortColumn, sortDirection, onSort = ::toggleSort)
@@ -161,29 +164,44 @@ private fun MyRequestsTableHeader(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("Item", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-        Text("Region", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(130.dp))
+        Text(
+            stringResource(Res.string.h_item),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            stringResource(Res.string.h_region),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.width(130.dp),
+        )
         SortHeaderCell(
-            "Price",
+            stringResource(Res.string.h_price),
             Modifier.width(130.dp),
             active = sortColumn == MyRequestsSortColumn.PRICE,
             direction = sortDirection,
         ) { onSort(MyRequestsSortColumn.PRICE, SortDirection.DESC) }
         SortHeaderCell(
-            "Qty",
+            stringResource(Res.string.h_qty),
             Modifier.width(70.dp),
             active = sortColumn == MyRequestsSortColumn.QTY,
             direction = sortDirection,
         ) { onSort(MyRequestsSortColumn.QTY, SortDirection.DESC) }
         Text(
-            "Counterparty",
+            stringResource(Res.string.h_counterparty),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.width(160.dp),
         )
-        Text("Status", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(150.dp))
+        Text(
+            stringResource(Res.string.h_status),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.width(150.dp),
+        )
         SortHeaderCell(
-            "Requested",
+            stringResource(Res.string.h_requested),
             Modifier.width(110.dp),
             active = sortColumn == MyRequestsSortColumn.REQUESTED,
             direction = sortDirection,
@@ -203,13 +221,13 @@ private fun RequestTableRow(
     val isStale = reservation.status == "sent" && nowSec - reservation.requestedAt > STALE_AFTER_SECONDS
     val statusLabel =
         when {
-            reservation.status == "sent" && isStale -> "Stale (no response yet)"
-            reservation.status == "sent" -> "Sent — awaiting response"
-            reservation.status == "accepted" -> "Accepted"
-            reservation.status == "declined" -> "Declined"
-            reservation.status == "completed" -> "Completed"
-            reservation.status == "released" -> "Released by seller"
-            reservation.status == "cancelled" -> "Cancelled"
+            reservation.status == "sent" && isStale -> stringResource(Res.string.st_stale)
+            reservation.status == "sent" -> stringResource(Res.string.st_sent)
+            reservation.status == "accepted" -> stringResource(Res.string.st_accepted)
+            reservation.status == "declined" -> stringResource(Res.string.st_declined)
+            reservation.status == "completed" -> stringResource(Res.string.st_completed)
+            reservation.status == "released" -> stringResource(Res.string.st_released)
+            reservation.status == "cancelled" -> stringResource(Res.string.st_cancelled)
             else -> reservation.status
         }
     Row(
@@ -224,7 +242,7 @@ private fun RequestTableRow(
             }
             row.orderSide?.let {
                 Text(
-                    "You're ${if (requesterRole(it) == "Buyer") "buying" else "selling"}",
+                    stringResource(if (it == OrderSide.SELL) Res.string.youre_buying else Res.string.youre_selling),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -240,10 +258,13 @@ private fun RequestTableRow(
             }
             if (reservation.status == "accepted") {
                 reservation.holdUntil?.let {
-                    Text("Held until ${Instant.ofEpochSecond(it)}", style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        stringResource(Res.string.held_until, Instant.ofEpochSecond(it).toString()),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
                 }
                 if (reservation.contactChar.isNotBlank()) {
-                    Text("Contact in-game: ${reservation.contactChar}", style = MaterialTheme.typography.labelSmall)
+                    Text(stringResource(Res.string.contact_ingame, reservation.contactChar), style = MaterialTheme.typography.labelSmall)
                 }
             }
         }
@@ -283,7 +304,7 @@ private fun RequestTableRow(
             modifier = Modifier.width(150.dp),
         )
         Text(
-            "${formatDurationShort(nowSec - reservation.requestedAt)} ago",
+            stringResource(Res.string.time_ago, formatDurationShort(nowSec - reservation.requestedAt)),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
@@ -292,9 +313,9 @@ private fun RequestTableRow(
         )
         Box(modifier = Modifier.width(150.dp)) {
             if (reservation.status == "accepted") {
-                OutlinedButton(onClick = onMarkCompleted) { Text("Mark completed") }
+                OutlinedButton(onClick = onMarkCompleted) { Text(stringResource(Res.string.mark_completed)) }
             } else if (reservation.status == "sent") {
-                OutlinedButton(onClick = onCancel) { Text("Cancel request") }
+                OutlinedButton(onClick = onCancel) { Text(stringResource(Res.string.cancel_request)) }
             }
         }
     }

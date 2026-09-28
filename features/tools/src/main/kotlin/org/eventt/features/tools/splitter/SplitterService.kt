@@ -1,5 +1,7 @@
 package org.eventt.features.tools.splitter
 
+import org.eventt.core.model.stringBlocking
+import org.eventt.tools.generated.resources.*
 import kotlin.math.ceil
 
 /**
@@ -43,7 +45,8 @@ object SplitterService {
                 .filterNot { item ->
                     val stuck = exceedsCapsAlone(item, c)
                     if (stuck) {
-                        unplaced += UnplacedRemainder(item.typeId, item.name, item.quantity, "single unit exceeds max ISK/volume per split")
+                        unplaced +=
+                            UnplacedRemainder(item.typeId, item.name, item.quantity, stringBlocking(Res.string.warn_single_unit_exceeds))
                     }
                     stuck
                 }.sortedByDescending { it.unitPrice }
@@ -76,7 +79,7 @@ object SplitterService {
         }
 
         remaining.filter { it.qty > 0 }.forEach {
-            unplaced += UnplacedRemainder(it.item.typeId, it.item.name, it.qty, "could not fit in any split")
+            unplaced += UnplacedRemainder(it.item.typeId, it.item.name, it.qty, stringBlocking(Res.string.warn_could_not_fit))
         }
 
         return SplitPlan(SplitAlgorithm.FILL_FIRST, splits, unplaced)
@@ -93,7 +96,8 @@ object SplitterService {
                 .filterNot { item ->
                     val stuck = exceedsCapsAlone(item, c)
                     if (stuck) {
-                        unplaced += UnplacedRemainder(item.typeId, item.name, item.quantity, "single unit exceeds max ISK/volume per split")
+                        unplaced +=
+                            UnplacedRemainder(item.typeId, item.name, item.quantity, stringBlocking(Res.string.warn_single_unit_exceeds))
                     }
                     stuck
                 }.sortedByDescending { if (it.unitVolume > 0) it.unitPrice / it.unitVolume else Double.MAX_VALUE }

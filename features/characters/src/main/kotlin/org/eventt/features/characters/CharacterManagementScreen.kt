@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.eventt.characters.generated.resources.*
 import org.eventt.core.auth.SsoAuthManager
 import org.eventt.core.database.AppState
 import org.eventt.core.database.CharacterDao
@@ -24,6 +25,7 @@ import org.eventt.ui.common.EmptyState
 import org.eventt.ui.common.LoadingOverlay
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 fun CharacterManagementScreen() {
@@ -56,11 +58,11 @@ fun CharacterManagementScreen() {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Characters & Corporations", style = MaterialTheme.typography.headlineMedium)
+                Text(stringResource(Res.string.chars_corps_title), style = MaterialTheme.typography.headlineMedium)
                 Button(onClick = { showAuthDialog = true }) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Add Character")
+                    Text(stringResource(Res.string.add_character))
                 }
             }
 
@@ -69,8 +71,8 @@ fun CharacterManagementScreen() {
             if (characters.isEmpty() && corporations.isEmpty()) {
                 EmptyState(
                     icon = Icons.Default.Person,
-                    title = "No Characters Added",
-                    description = "Click 'Add Character' to authenticate with EVE Online SSO.",
+                    title = stringResource(Res.string.no_characters_added),
+                    description = stringResource(Res.string.no_characters_desc),
                     modifier = Modifier.fillMaxWidth().weight(1f),
                 )
             } else {
@@ -93,10 +95,9 @@ fun CharacterManagementScreen() {
                     if (corporations.isNotEmpty()) {
                         item {
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text("Corporations", style = MaterialTheme.typography.titleLarge)
+                            Text(stringResource(Res.string.corporations), style = MaterialTheme.typography.titleLarge)
                             Text(
-                                "Only tracked corporations show up in the character switcher and get synced — " +
-                                    "track a corp you actually manage trades for, leave the rest alone.",
+                                stringResource(Res.string.corporations_desc),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                             )
@@ -124,17 +125,17 @@ fun CharacterManagementScreen() {
             }
         }
 
-        LoadingOverlay(isLoading = isLoading, message = "Authenticating...")
+        LoadingOverlay(isLoading = isLoading, message = stringResource(Res.string.authenticating))
     }
 
     // Auth dialog
     if (showAuthDialog) {
         AlertDialog(
             onDismissRequest = { showAuthDialog = false },
-            title = { Text("Add Character") },
+            title = { Text(stringResource(Res.string.add_character)) },
             text = {
                 Column {
-                    Text("This will open your browser to authenticate with EVE Online SSO.")
+                    Text(stringResource(Res.string.sso_browser_hint))
                     if (authError != null) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(authError!!, color = negativeColor, style = MaterialTheme.typography.bodySmall)
@@ -172,11 +173,11 @@ fun CharacterManagementScreen() {
                     },
                     enabled = !isLoading,
                 ) {
-                    Text("Open Browser")
+                    Text(stringResource(Res.string.open_browser))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showAuthDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showAuthDialog = false }) { Text(stringResource(Res.string.cancel)) }
             },
         )
     }
@@ -184,8 +185,8 @@ fun CharacterManagementScreen() {
     // Remove confirmation
     characterToRemove?.let { char ->
         ConfirmDialog(
-            title = "Remove Character",
-            message = "Remove '${char.name}'? This will also remove associated cached data.",
+            title = stringResource(Res.string.remove_character),
+            message = stringResource(Res.string.remove_character_msg, char.name),
             onDismiss = { characterToRemove = null },
             onConfirm = {
                 scope.launch(Dispatchers.IO) {
@@ -247,7 +248,7 @@ private fun CharacterCard(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = if (tokenExpired) "Token expired" else "Token valid",
+                        text = if (tokenExpired) stringResource(Res.string.token_expired) else stringResource(Res.string.token_valid),
                         style = MaterialTheme.typography.bodySmall,
                         color = if (tokenExpired) negativeColor else positiveColor,
                     )
@@ -257,7 +258,7 @@ private fun CharacterCard(
                 character.corporationName?.let {
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "Corporation: $it",
+                        text = stringResource(Res.string.corporation_label, it),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
@@ -266,10 +267,10 @@ private fun CharacterCard(
 
             // Actions
             IconButton(onClick = onRefresh) {
-                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                Icon(Icons.Default.Refresh, contentDescription = stringResource(Res.string.refresh))
             }
             IconButton(onClick = onRemove) {
-                Icon(Icons.Default.Delete, contentDescription = "Remove", tint = negativeColor)
+                Icon(Icons.Default.Delete, contentDescription = stringResource(Res.string.remove), tint = negativeColor)
             }
         }
     }
@@ -307,7 +308,7 @@ private fun CorporationCard(
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(data["name"]?.toString() ?: "Unknown", style = MaterialTheme.typography.titleSmall)
+                Text(data["name"]?.toString() ?: stringResource(Res.string.unknown), style = MaterialTheme.typography.titleSmall)
                 Text(
                     text = data["ticker"]?.toString() ?: "",
                     style = MaterialTheme.typography.bodySmall,
@@ -327,13 +328,13 @@ private fun CorporationCard(
                 OutlinedButton(onClick = onToggleTrack) {
                     Icon(Icons.Default.VisibilityOff, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Untrack")
+                    Text(stringResource(Res.string.untrack))
                 }
             } else {
                 Button(onClick = onToggleTrack) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Track")
+                    Text(stringResource(Res.string.track))
                 }
             }
         }

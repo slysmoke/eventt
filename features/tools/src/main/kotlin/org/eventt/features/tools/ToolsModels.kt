@@ -2,6 +2,8 @@ package org.eventt.features.tools
 
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.model.StaticTypeModel
+import org.eventt.core.model.stringBlocking
+import org.eventt.tools.generated.resources.*
 
 data class ParsedItemLine(
     val rawName: String,
@@ -36,17 +38,17 @@ object ToolsInputParser {
             if (line.isBlank()) return@forEach
             val cols = line.split("\t")
             if (cols.size < 2) {
-                warnings += ParseWarning(line, "expected 2 tab-separated columns (name, quantity)")
+                warnings += ParseWarning(line, stringBlocking(Res.string.warn_expected_columns))
                 return@forEach
             }
             val qty = cols[1].trim().replace(",", "").toIntOrNull()
             if (qty == null) {
-                warnings += ParseWarning(line, "quantity '${cols[1].trim()}' is not a whole number")
+                warnings += ParseWarning(line, stringBlocking(Res.string.warn_qty_not_whole, cols[1].trim()))
                 return@forEach
             }
             val name = cols[0].trim()
             if (name.isEmpty()) {
-                warnings += ParseWarning(line, "item name is empty")
+                warnings += ParseWarning(line, stringBlocking(Res.string.warn_name_empty))
                 return@forEach
             }
             items += ParsedItemLine(name, qty)
@@ -63,7 +65,7 @@ object ToolsInputParser {
         parsed.forEach { line ->
             val type = StaticDataDao.getTypeByExactName(line.rawName)
             if (type == null) {
-                warnings += ParseWarning("${line.rawName}\t${line.quantity}", "item name not found in static data")
+                warnings += ParseWarning("${line.rawName}\t${line.quantity}", stringBlocking(Res.string.warn_name_not_found))
                 return@forEach
             }
             resolved += ResolvedItem(type.typeId, type.name, line.quantity, volumeSelector(type), type.categoryId)

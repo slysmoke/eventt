@@ -1,5 +1,7 @@
 plugins {
     id("org.jetbrains.kotlin.jvm")
+    id("org.jetbrains.compose")
+    id("org.jetbrains.kotlin.plugin.compose")
     kotlin("plugin.serialization") version "2.4.10"
 }
 
@@ -13,6 +15,8 @@ dependencies {
     implementation(libs.okhttp.core)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.core)
+    implementation(compose.runtime)
+    implementation(compose.components.resources)
     implementation(libs.commons.compress)
     testImplementation(libs.okhttp.mockwebserver)
 }

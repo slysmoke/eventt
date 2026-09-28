@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="triggered_alerts">Triggered alerts</string>
+    <string name="alert_center_empty">Nothing new. Alerts that fire while the app is open show up here.</string>
+    <string name="close">Close</string>
+    <string name="clear_all">Clear all</string>
+    <string name="alert_rose_to">%1$s rose to %2$s</string>
+    <string name="alert_fell_to">%1$s fell to %2$s</string>
+    <string name="bid">Bid</string>
+    <string name="ask">Ask</string>
+    <string name="long_term">Long-Term</string>
+    <string name="general">General</string>
+    <string name="dismiss">Dismiss</string>
+    <string name="filter_all">All</string>
+    <string name="filter_active">Active</string>
+    <string name="filter_triggered">Triggered</string>
+    <string name="filter_disabled">Disabled</string>
+    <string name="long_term_investment">Long-Term Investment</string>
+    <string name="price_alerts">Price Alerts</string>
+    <string name="pill_active">%1$s active</string>
+    <string name="pill_triggered">%1$s triggered</string>
+    <string name="pill_disabled">%1$s disabled</string>
+    <string name="filter_items">Filter items…</string>
+    <string name="check_alerts_now">Check alerts now</string>
+    <string name="add_alert">Add Alert</string>
+    <string name="no_alerts">No Alerts</string>
+    <string name="no_alerts_desc">Create a price alert here, from Market Browser, or in bulk from Long-Term Investment.</string>
+    <plurals name="delete_triggered_confirm">
+        <item quantity="one">Delete %1$s triggered alert in %2$s?</item>
+        <item quantity="other">Delete %1$s triggered alerts in %2$s?</item>
+    </plurals>
+    <plurals name="delete_all_confirm">
+        <item quantity="one">Delete all %1$s alert shown in %2$s?</item>
+        <item quantity="other">Delete all %1$s alerts shown in %2$s?</item>
+    </plurals>
+    <string name="nothing_for_filter">Nothing here for the current filter.</string>
+    <string name="delete_alerts">Delete alerts</string>
+    <string name="delete">Delete</string>
+    <string name="cancel">Cancel</string>
+    <string name="col_item">Item</string>
+    <string name="col_alerts">Alerts</string>
+    <string name="col_next_trigger">Next trigger</string>
+    <string name="col_bid_ask">Bid / Ask now</string>
+    <string name="col_to_go">To go</string>
+    <string name="col_status">Status</string>
+    <plurals name="items_n">
+        <item quantity="one">%1$s item</item>
+        <item quantity="other">%1$s items</item>
+    </plurals>
+    <plurals name="alerts_n">
+        <item quantity="one">%1$s alert</item>
+        <item quantity="other">%1$s alerts</item>
+    </plurals>
+    <string name="delete_triggered">Delete triggered</string>
+    <string name="delete_all">Delete all</string>
+    <string name="status_triggered_at">Triggered%1$s</string>
+    <string name="status_disabled">Disabled</string>
+    <string name="status_active">Active</string>
+    <string name="edit_alert">Edit alert</string>
+    <string name="delete_alert">Delete alert</string>
+    <string name="open_chart">Open chart</string>
+    <string name="group_active">%1$s active</string>
+    <string name="group_triggered">%1$s triggered</string>
+    <string name="group_disabled">disabled</string>
+    <string name="created_at">created %1$s</string>
+    <string name="new_price_alert">New Price Alert</string>
+    <string name="edit_price_alert">Edit Price Alert</string>
+    <string name="search_item">Search item...</string>
+    <string name="price_type">Price type:</string>
+    <string name="sell">Sell</string>
+    <string name="buy">Buy</string>
+    <string name="fetching_price">Fetching price…</string>
+    <string name="sell_price">Sell: %1$s</string>
+    <string name="buy_price">Buy: %1$s</string>
+    <string name="below">Below</string>
+    <string name="above">Above</string>
+    <string name="target_price_isk">Target Price (ISK)</string>
+    <string name="create_alert">Create Alert</string>
+    <string name="save">Save</string>
+    <string name="tip_a_alerts">How many alerts are set for this item.</string>
+    <string name="tip_a_next">The closest active alert: Buy/Sell price side, ≥ or ≤, and the target price.</string>
+    <string name="tip_a_quote">Current best buy / best sell price in the alert's region.</string>
+    <string name="tip_a_to_go">How far (in %) the price still has to move to trigger the next alert. Yellow = within 2%.</string>
+    <string name="tip_a_status">Active = being checked every 5 minutes; Triggered = the price reached the target; Disabled = paused.</string>
+    <string name="tip_al_price_type">Which price to watch: Sell = the lowest sell order (what you'd pay to buy now), Buy = the highest buy order (what you'd get selling now).</string>
+    <string name="tip_al_target">The alert fires once the watched price goes below (or above) this value. Checked every 5 minutes while the app is running.</string>
+</resources>

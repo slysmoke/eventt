@@ -20,22 +20,25 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.sample
+import org.eventt.common.generated.resources.*
 import org.eventt.core.model.QueuedRequest
 import org.eventt.core.model.RequestSource
 import org.eventt.core.model.RequestStatus
 import org.eventt.core.queue.RequestQueueManager
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.stringResource
 
 val EventtBlue = Color(0xFF4A90D9)
 
 private enum class RequestFilter(
-    val label: String,
+    val label: StringResource,
 ) {
-    PENDING("Active & failed"),
-    SERVER("Server"),
-    CACHE("Cache"),
-    ALL("All"),
+    PENDING(Res.string.filter_active_failed),
+    SERVER(Res.string.filter_server),
+    CACHE(Res.string.filter_cache),
+    ALL(Res.string.filter_all),
 }
 
 private val timeFormat =
@@ -78,7 +81,7 @@ fun RequestProgressDialog(onDismiss: () -> Unit) {
                 } else {
                     Icon(Icons.Default.CheckCircle, null, tint = positiveColor, modifier = Modifier.size(20.dp))
                 }
-                Text("ESI Requests")
+                Text(stringResource(Res.string.esi_requests))
             }
         },
         text = {
@@ -88,11 +91,11 @@ fun RequestProgressDialog(onDismiss: () -> Unit) {
 
                 // Summary line
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    SummaryChip("${active.size} active", if (active.isNotEmpty()) EventtBlue else Color.Gray)
-                    SummaryChip("$completed done", positiveColor)
-                    if (cacheHits > 0) SummaryChip("$cacheHits from cache", Color.Gray)
+                    SummaryChip(stringResource(Res.string.req_active, active.size), if (active.isNotEmpty()) EventtBlue else Color.Gray)
+                    SummaryChip(stringResource(Res.string.req_done, completed), positiveColor)
+                    if (cacheHits > 0) SummaryChip(stringResource(Res.string.req_from_cache, cacheHits), Color.Gray)
                     if (failed.isNotEmpty()) {
-                        SummaryChip("${failed.size} failed", negativeColor)
+                        SummaryChip(stringResource(Res.string.req_failed, failed.size), negativeColor)
                     }
                     if (total > 0) {
                         Text(
@@ -109,7 +112,7 @@ fun RequestProgressDialog(onDismiss: () -> Unit) {
                         FilterChip(
                             selected = filter == f,
                             onClick = { filter = f },
-                            label = { Text(f.label, style = MaterialTheme.typography.labelSmall) },
+                            label = { Text(stringResource(f.label), style = MaterialTheme.typography.labelSmall) },
                         )
                     }
                 }
@@ -134,7 +137,7 @@ fun RequestProgressDialog(onDismiss: () -> Unit) {
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Icon(Icons.Default.CheckCircle, null, tint = positiveColor, modifier = Modifier.size(16.dp))
-                            Text("All requests completed", style = MaterialTheme.typography.bodySmall)
+                            Text(stringResource(Res.string.all_requests_completed), style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 } else if (visible.isNotEmpty()) {
@@ -156,7 +159,7 @@ fun RequestProgressDialog(onDismiss: () -> Unit) {
                     }
                 } else {
                     Text(
-                        "No requests",
+                        stringResource(Res.string.no_requests),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                     )
@@ -164,17 +167,17 @@ fun RequestProgressDialog(onDismiss: () -> Unit) {
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
+            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.close)) }
         },
         dismissButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (requests.isNotEmpty()) {
                     TextButton(onClick = { RequestQueueManager.clearAll() }) {
-                        Text("Clear All", color = MaterialTheme.colorScheme.error)
+                        Text(stringResource(Res.string.clear_all), color = MaterialTheme.colorScheme.error)
                     }
                 }
                 TextButton(onClick = { RequestQueueManager.clearCompleted() }) {
-                    Text("Clear Completed")
+                    Text(stringResource(Res.string.clear_completed))
                 }
             }
         },
@@ -285,17 +288,17 @@ private fun RequestDetails(request: QueuedRequest) {
         ) {
             DetailLine("URL", request.endpoint)
             request.httpCode?.let { DetailLine("HTTP", "$it") }
-            duration?.let { DetailLine("Time", it) }
-            request.error?.let { DetailLine("Error", it, negativeColor) }
+            duration?.let { DetailLine(stringResource(Res.string.detail_time), it) }
+            request.error?.let { DetailLine(stringResource(Res.string.detail_error), it, negativeColor) }
             request.responseBody?.let { body ->
-                Text("Response body", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium)
+                Text(stringResource(Res.string.response_body), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium)
                 Surface(
                     color = MaterialTheme.colorScheme.surfaceVariant,
                     shape = MaterialTheme.shapes.extraSmall,
                     modifier = Modifier.fillMaxWidth().heightIn(max = 160.dp),
                 ) {
                     Text(
-                        body.ifEmpty { "(empty)" },
+                        body.ifEmpty { stringResource(Res.string.empty_paren) },
                         style = MaterialTheme.typography.labelSmall,
                         fontFamily = FontFamily.Monospace,
                         modifier = Modifier.verticalScroll(rememberScrollState()).padding(6.dp),

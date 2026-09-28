@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="search_placeholder">Search...</string>
+    <string name="clear">Clear</string>
+    <string name="corp_access_notice">No corp access to %1$s — this character is missing the required corp role.</string>
+    <string name="corp_feature_wallet">wallet</string>
+    <string name="corp_feature_assets">assets</string>
+    <string name="corp_feature_orders">orders</string>
+    <string name="corp_feature_contracts">contracts</string>
+    <string name="retry">Retry</string>
+    <string name="no_data">No Data</string>
+    <string name="nothing_to_display">Nothing to display yet.</string>
+    <string name="loading">Loading...</string>
+    <string name="confirm">Confirm</string>
+    <string name="cancel">Cancel</string>
+    <string name="cooldown_min_sec">%1$sm %2$ss</string>
+    <string name="cooldown_sec">%1$ss</string>
+    <string name="refresh">Refresh</string>
+    <string name="filter_active_failed">Active &amp; failed</string>
+    <string name="filter_server">Server</string>
+    <string name="filter_cache">Cache</string>
+    <string name="filter_all">All</string>
+    <string name="esi_requests">ESI Requests</string>
+    <string name="req_active">%1$s active</string>
+    <string name="req_done">%1$s done</string>
+    <string name="req_from_cache">%1$s from cache</string>
+    <string name="req_failed">%1$s failed</string>
+    <string name="all_requests_completed">All requests completed</string>
+    <string name="no_requests">No requests</string>
+    <string name="close">Close</string>
+    <string name="clear_all">Clear All</string>
+    <string name="clear_completed">Clear Completed</string>
+    <string name="detail_time">Time</string>
+    <string name="detail_error">Error</string>
+    <string name="response_body">Response body</string>
+    <string name="empty_paren">(empty)</string>
+</resources>

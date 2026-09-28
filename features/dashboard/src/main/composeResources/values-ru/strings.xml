@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="type_n">Тип %1$s</string>
+    <string name="no_character_selected">Персонаж не выбран</string>
+    <string name="dashboard_all">Сводка — все персонажи и корпорации</string>
+    <string name="dashboard_corp">Сводка — %1$s</string>
+    <string name="dashboard">Сводка</string>
+    <string name="combine_all">Объединить всё</string>
+    <string name="wallet_balance">Баланс кошелька</string>
+    <string name="asset_value">Стоимость имущества</string>
+    <string name="cash_flow_30d">Денежный поток, 30 дн.</string>
+    <string name="cash_flow">Денежный поток</string>
+    <string name="cash_flow_today">Денежный поток сегодня</string>
+    <string name="cash_flow_7d">Денежный поток, 7 дн.</string>
+    <string name="income_30d">Доход, 30 дн.</string>
+    <string name="expenses_30d">Расходы, 30 дн.</string>
+    <string name="realized_pnl_fifo">Реализованная прибыль (FIFO по себестоимости)</string>
+    <string name="realized_today">Реализовано сегодня</string>
+    <string name="realized_7d">Реализовано, 7 дн.</string>
+    <string name="realized_30d">Реализовано, 30 дн.</string>
+    <string name="realized_all">Реализовано за всё время</string>
+    <string name="daily_realized_pnl_30d">Реализованная прибыль по дням — 30 дн.</string>
+    <string name="no_realized_sales_30d">Нет реализованных продаж за последние 30 дней</string>
+    <string name="recent_transactions">Последние сделки</string>
+    <string name="no_transactions_recorded">Сделок не зафиксировано</string>
+    <string name="top_items_realized">Топ предметов — реализовано за 30 дн.</string>
+    <string name="no_realized_sells_30d">Нет реализованных продаж за последние 30 дней</string>
+    <string name="top_counterparties">Топ покупателей и продавцов</string>
+    <string name="sellers">Продавцы</string>
+    <string name="no_purchases">Покупок не зафиксировано</string>
+    <string name="buyers">Покупатели</string>
+    <string name="no_sales">Продаж не зафиксировано</string>
+    <string name="unknown">Неизвестно</string>
+    <string name="buy_badge">BUY</string>
+    <string name="sell_badge">SELL</string>
+    <string name="qty_at_price">%1$s шт. по %2$s</string>
+    <string name="qty_sold">продано %1$s</string>
+    <plurals name="trades_count">
+        <item quantity="one">%1$s сделка</item>
+        <item quantity="few">%1$s сделки</item>
+        <item quantity="many">%1$s сделок</item>
+        <item quantity="other">%1$s сделки</item>
+    </plurals>
+    <string name="tip_cash_flow">Реальное движение ISK по кошельку: продажи минус покупки, налоги и комиссии. Закупка товара здесь выглядит как минус, даже если потом вы продадите его с прибылью.</string>
+    <string name="tip_realized_pnl">Прибыль с того, что вы реально продали: цена продажи минус стоимость именно этих единиц (FIFO — первыми продаются первые купленные), после комиссий. Непроданный товар не учитывается.</string>
+</resources>

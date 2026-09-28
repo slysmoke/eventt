@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="so_session">Сессия</string>
+    <string name="so_trades">Сделки</string>
+    <string name="so_profit">Прибыль</string>
+    <string name="so_relists">Перевыставления</string>
+    <string name="so_sell_orders">Ордера на продажу</string>
+    <string name="so_buy_orders">Ордера на покупку</string>
+    <string name="so_beaten">Перебиты</string>
+    <string name="so_isk_in_orders">ISK в ордерах</string>
+    <string name="so_expected_profit">Ожидаемая прибыль</string>
+    <string name="so_relist_fees">Комиссии за перевыставление</string>
+    <string name="overlay_window_title">Торговый оверлей EVE</string>
+    <string name="global_market">Глобальный рынок</string>
+    <string name="unknown_type_id">Неизвестно (%1$s)</string>
+    <string name="price_sell">SELL</string>
+    <string name="price_buy">BUY </string>
+    <string name="auto_copy">Автокопирование</string>
+    <string name="ac_off">ВЫКЛ</string>
+    <string name="ac_sell">SELL−</string>
+    <string name="ac_buy">BUY+</string>
+    <string name="calc_broker_buy">Брокер (покупка)</string>
+    <string name="calc_broker_sell">Брокер (продажа)</string>
+    <string name="calc_sales_tax">Налог с продаж</string>
+    <string name="calc_profit_unit">Прибыль/ед.</string>
+    <string name="calc_margin">Маржа</string>
+    <string name="sell_wall_buyout">Стена продаж: выкупить (%1$s ед.)</string>
+    <string name="sell_wall_avg">Стена продаж: средняя (топ 5%)</string>
+    <string name="buy_wall_sellout">Стена покупок: распродать (%1$s ед.)</string>
+    <string name="buy_wall_avg">Стена покупок: средняя (топ 5%)</string>
+    <string name="inventory_value">Стоимость груза</string>
+    <string name="auto_copy_caps">АВТОКОПИЯ</string>
+    <string name="manifest_total">Итого (предметов: %1$s)</string>
+    <string name="unresolved">Не распознано: %1$s</string>
+    <string name="copy_order_row">—  скопируйте строку ордера</string>
+    <string name="set">УСТ.</string>
+    <string name="beat_price">перебить: %1$s</string>
+    <string name="src_auto">авто</string>
+    <string name="src_manual">вручную</string>
+    <string name="src_jita">jita</string>
+</resources>

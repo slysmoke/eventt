@@ -45,6 +45,9 @@ import org.eventt.core.nostr.NostrIdentity
 import org.eventt.core.nostr.NostrIdentityService
 import org.eventt.core.nostr.NostrRelayEvent
 import org.eventt.core.nostr.NostrRelayManager
+import org.eventt.settings.generated.resources.*
+import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.stringResource
 import java.io.File
 import javax.swing.JFileChooser
 
@@ -77,26 +80,31 @@ internal fun NostrIdentityCard() {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Default.Key, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text("P2P Market Identity (Nostr)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    stringResource(Res.string.p2p_identity_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
             Text(
-                "Each character gets its own P2P Market identity automatically. The active one always follows whichever " +
-                    "character you have selected in the app (even via a corporation) — export/import moves a key to another machine.",
+                stringResource(Res.string.p2p_identity_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             HorizontalDivider()
 
             if (characters.isEmpty()) {
-                Text("No EVE characters added yet — add one in the Characters tab first.", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(Res.string.no_characters_yet), style = MaterialTheme.typography.bodySmall)
             } else {
                 characters.forEach { character ->
                     val characterIdentity = identitiesByCharacter[character.id]
                     val isActive = characterIdentity != null && characterIdentity.pubkey == activePubkey
+                    val exportTitle = stringResource(Res.string.export_key_for, character.name)
+                    val importTitle = stringResource(Res.string.import_key_for, character.name)
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             Icons.Default.Podcasts,
-                            contentDescription = if (isActive) "Currently active" else null,
+                            contentDescription = if (isActive) stringResource(Res.string.currently_active) else null,
                             modifier = Modifier.size(18.dp),
                             tint = if (isActive) MaterialTheme.colorScheme.tertiary else Color.Transparent,
                         )
@@ -112,7 +120,7 @@ internal fun NostrIdentityCard() {
                             val pubkey = characterIdentity?.pubkey ?: return@IconButton
                             val chooser =
                                 JFileChooser().apply {
-                                    dialogTitle = "Export Nostr key for ${character.name}"
+                                    dialogTitle = exportTitle
                                     fileSelectionMode = JFileChooser.FILES_ONLY
                                     selectedFile = File("${character.name.replace(" ", "_")}_nostr_key.txt")
                                 }
@@ -125,11 +133,11 @@ internal fun NostrIdentityCard() {
                                     }
                                 }
                             }
-                        }) { Icon(Icons.Default.Download, "Export key", Modifier.size(16.dp)) }
+                        }) { Icon(Icons.Default.Download, stringResource(Res.string.export_key), Modifier.size(16.dp)) }
                         IconButton(onClick = {
                             val chooser =
                                 JFileChooser().apply {
-                                    dialogTitle = "Import Nostr key for ${character.name}"
+                                    dialogTitle = importTitle
                                     fileSelectionMode = JFileChooser.FILES_ONLY
                                 }
                             if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
@@ -140,7 +148,7 @@ internal fun NostrIdentityCard() {
                                     withContext(Dispatchers.Main) {
                                         importError =
                                             if (imported == null) {
-                                                "Couldn't import key for ${character.name} — file unreadable or not a valid key."
+                                                getString(Res.string.import_key_failed, character.name)
                                             } else {
                                                 null
                                             }
@@ -148,7 +156,7 @@ internal fun NostrIdentityCard() {
                                     reload()
                                 }
                             }
-                        }) { Icon(Icons.Default.Upload, "Import key", Modifier.size(16.dp)) }
+                        }) { Icon(Icons.Default.Upload, stringResource(Res.string.import_key), Modifier.size(16.dp)) }
                     }
                 }
             }
@@ -176,10 +184,14 @@ internal fun NostrRelaysCard() {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Default.Podcasts, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text("P2P Market Relays", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    stringResource(Res.string.p2p_relays_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
             Text(
-                "Public Nostr relays the app publishes/reads orders through — no relay of your own required.",
+                stringResource(Res.string.p2p_relays_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -206,7 +218,7 @@ internal fun NostrRelaysCard() {
                             NostrRelayDao.remove(relay.url)
                             reload()
                         }
-                    }) { Icon(Icons.Default.Delete, "Remove", Modifier.size(16.dp)) }
+                    }) { Icon(Icons.Default.Delete, stringResource(Res.string.remove), Modifier.size(16.dp)) }
                 }
             }
 
@@ -229,7 +241,7 @@ internal fun NostrRelaysCard() {
                     }
                 }) {
                     Icon(Icons.Default.Add, null, Modifier.size(16.dp))
-                    Text("Add")
+                    Text(stringResource(Res.string.add))
                 }
             }
         }
@@ -247,8 +259,8 @@ private fun RelayNipWarningLabel(relay: NostrRelayModel) {
     if (relay.nip11FetchedAt == null) return
     val warning =
         when {
-            relay.restrictedWrites -> "Paid/restricted writes — this relay likely rejects your orders"
-            40 !in relay.supportedNips -> "No NIP-40 expiration — may store nothing or serve expired orders"
+            relay.restrictedWrites -> stringResource(Res.string.relay_restricted_writes)
+            40 !in relay.supportedNips -> stringResource(Res.string.relay_no_nip40)
             else -> return
         }
     Text("⚠ $warning", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
@@ -258,10 +270,22 @@ private fun RelayNipWarningLabel(relay: NostrRelayModel) {
 private fun RelayStatusLabel(relay: NostrRelayModel) {
     val (label, color) =
         when (relay.lastStatus) {
-            "connected" -> "Connected" to MaterialTheme.colorScheme.tertiary
-            "error" -> (relay.lastError?.let { "Error: $it" } ?: "Error") to MaterialTheme.colorScheme.error
-            "disconnected" -> "Disconnected" to MaterialTheme.colorScheme.onSurfaceVariant
-            else -> "Not yet connected" to MaterialTheme.colorScheme.onSurfaceVariant
+            "connected" -> {
+                stringResource(Res.string.relay_connected) to MaterialTheme.colorScheme.tertiary
+            }
+
+            "error" -> {
+                (relay.lastError?.let { stringResource(Res.string.relay_error_detail, it) } ?: stringResource(Res.string.relay_error)) to
+                    MaterialTheme.colorScheme.error
+            }
+
+            "disconnected" -> {
+                stringResource(Res.string.relay_disconnected) to MaterialTheme.colorScheme.onSurfaceVariant
+            }
+
+            else -> {
+                stringResource(Res.string.relay_not_connected) to MaterialTheme.colorScheme.onSurfaceVariant
+            }
         }
     Text(label, style = MaterialTheme.typography.labelSmall, color = color)
 }

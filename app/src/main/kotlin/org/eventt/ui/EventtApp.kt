@@ -38,6 +38,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.AppVersion
 import org.eventt.GlobalHotkeyService
+import org.eventt.app.generated.resources.*
 import org.eventt.core.cache.EsiCacheManager
 import org.eventt.core.database.AppState
 import org.eventt.core.database.CharacterDao
@@ -86,27 +87,30 @@ import org.eventt.ui.theme.*
 import org.eventt.update.UpdateChecker
 import org.eventt.update.UpdateInfo
 import org.eventt.update.UpdateProgress
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.stringResource
 import java.awt.Desktop
 import java.net.URI
 import kotlin.math.roundToInt
 
 enum class AppScreen(
-    val label: String,
+    val label: StringResource,
     val icon: ImageVector,
 ) {
-    DASHBOARD("Dashboard", Icons.Default.Dashboard),
-    LEADERBOARD("Leaderboard", Icons.Default.Leaderboard),
-    CHARACTERS("Characters", Icons.Default.Person),
-    MARKET("Market", Icons.Default.Store),
-    P2P_MARKET("P2P Market", Icons.AutoMirrored.Filled.CompareArrows),
-    ANALYSIS("Analysis", Icons.Default.Analytics),
-    ASSETS("Assets", Icons.Default.Inventory),
-    WALLET("Wallet", Icons.Default.AccountBalance),
-    ORDERS("Orders", Icons.Default.ShoppingCart),
-    ALERTS("Alerts", Icons.Default.Notifications),
-    CONTRACTS("Contracts", Icons.Default.Description),
-    TOOLS("Tools", Icons.Default.Build),
-    SETTINGS("Settings", Icons.Default.Settings),
+    DASHBOARD(Res.string.screen_dashboard, Icons.Default.Dashboard),
+    LEADERBOARD(Res.string.screen_leaderboard, Icons.Default.Leaderboard),
+    CHARACTERS(Res.string.screen_characters, Icons.Default.Person),
+    MARKET(Res.string.screen_market, Icons.Default.Store),
+    P2P_MARKET(Res.string.screen_p2p_market, Icons.AutoMirrored.Filled.CompareArrows),
+    ANALYSIS(Res.string.screen_analysis, Icons.Default.Analytics),
+    ASSETS(Res.string.screen_assets, Icons.Default.Inventory),
+    WALLET(Res.string.screen_wallet, Icons.Default.AccountBalance),
+    ORDERS(Res.string.screen_orders, Icons.Default.ShoppingCart),
+    ALERTS(Res.string.screen_alerts, Icons.Default.Notifications),
+    CONTRACTS(Res.string.screen_contracts, Icons.Default.Description),
+    TOOLS(Res.string.screen_tools, Icons.Default.Build),
+    SETTINGS(Res.string.screen_settings, Icons.Default.Settings),
 }
 
 private const val THEME_SETTING_KEY = "app.theme"
@@ -227,7 +231,7 @@ fun EventtApp() {
                 val typeName =
                     withContext(Dispatchers.IO) {
                         val order = NostrOrderDao.getByCoordinate(reservation.orderUuid, reservation.sellerPubkey)
-                        order?.let { StaticDataDao.getTypeById(it.typeId)?.name } ?: "an order"
+                        order?.let { StaticDataDao.getTypeById(it.typeId)?.name } ?: getString(Res.string.an_order)
                     }
                 incomingRequestNotices = incomingRequestNotices + IncomingRequestNotice(reservation, typeName)
             }
@@ -359,7 +363,7 @@ private fun UpdateBanner(
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "Version ${info.version} available  (current: ${AppVersion.NAME})",
+                        stringResource(Res.string.version_available, info.version, AppVersion.NAME),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -372,7 +376,7 @@ private fun UpdateBanner(
                         )
                     } else if (progress is UpdateProgress.Restarting) {
                         Text(
-                            "Restarting…",
+                            stringResource(Res.string.restarting),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f),
                         )
@@ -396,7 +400,7 @@ private fun UpdateBanner(
                     ) {
                         Icon(Icons.Default.Download, null, Modifier.size(15.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Update", style = MaterialTheme.typography.labelMedium)
+                        Text(stringResource(Res.string.update), style = MaterialTheme.typography.labelMedium)
                     }
                     IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
                         Icon(
@@ -457,7 +461,7 @@ private fun TopBar(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = currentScreen.label,
+                        text = stringResource(currentScreen.label),
                         style = MaterialTheme.typography.headlineMedium,
                     )
                 }
@@ -481,7 +485,7 @@ private fun TopBar(
                         BadgedBox(badge = { Badge { Text("${logEntries.size}") } }) {
                             Icon(
                                 imageVector = Icons.Default.WarningAmber,
-                                contentDescription = "Recent errors",
+                                contentDescription = stringResource(Res.string.recent_errors),
                                 tint = warningColor,
                             )
                         }
@@ -491,7 +495,7 @@ private fun TopBar(
                 IconButton(onClick = onShowProgress) {
                     Icon(
                         imageVector = Icons.Default.Sync,
-                        contentDescription = "Show request progress",
+                        contentDescription = stringResource(Res.string.show_request_progress),
                         tint =
                             when {
                                 esiFailed > 0 -> negativeColor
@@ -504,7 +508,7 @@ private fun TopBar(
                 IconButton(onClick = onToggleOverlay) {
                     Icon(
                         imageVector = Icons.Default.Calculate,
-                        contentDescription = "Trade overlay",
+                        contentDescription = stringResource(Res.string.trade_overlay),
                         tint = if (overlayActive) eveColors.accentColor else MaterialTheme.colorScheme.onSurface,
                     )
                 }
@@ -514,7 +518,7 @@ private fun TopBar(
                     IconButton(onClick = { themeMenuExpanded = true }) {
                         Icon(
                             imageVector = Icons.Default.Palette,
-                            contentDescription = "Change theme",
+                            contentDescription = stringResource(Res.string.change_theme),
                             tint = MaterialTheme.colorScheme.onSurface,
                         )
                     }
@@ -548,7 +552,7 @@ private fun TopBar(
                                         ) {
                                             Icon(
                                                 Icons.Default.Edit,
-                                                contentDescription = "Edit custom theme",
+                                                contentDescription = stringResource(Res.string.edit_custom_theme),
                                                 modifier = Modifier.size(14.dp),
                                                 tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                                             )
@@ -576,7 +580,7 @@ private fun TopBar(
                     IconButton(onClick = { fontMenuExpanded = true }) {
                         Icon(
                             imageVector = Icons.Default.FontDownload,
-                            contentDescription = "Change font",
+                            contentDescription = stringResource(Res.string.change_font),
                             tint = MaterialTheme.colorScheme.onSurface,
                         )
                     }
@@ -702,7 +706,7 @@ private fun AppOnlineCounter() {
     val online = appPresence.values.count { it.isOnline(nowSec) }
     if (online > 0) {
         Text(
-            "● $online online",
+            stringResource(Res.string.online_count, online),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.tertiary,
         )
@@ -766,7 +770,7 @@ private fun Sidebar(
         when {
             selectedCorp != null -> "${selectedCorp.corporationName} (${selectedCorpActingChar?.name ?: "?"})"
             selectedChar != null -> selectedChar.name
-            else -> "Select character"
+            else -> stringResource(Res.string.select_character)
         }
     val headerIcon = if (selectedCorp != null) Icons.Default.Business else Icons.Default.Person
 
@@ -843,7 +847,7 @@ private fun Sidebar(
                         if (corporations.isNotEmpty()) {
                             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                             Text(
-                                "Corporations",
+                                stringResource(Res.string.corporations),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
@@ -902,7 +906,7 @@ private fun Sidebar(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = screen.label,
+                            text = stringResource(screen.label),
                             color = contentColor,
                             style = MaterialTheme.typography.labelMedium,
                             modifier = Modifier.weight(1f),
@@ -965,14 +969,14 @@ private fun SidebarFeedbackButton(eveColors: EveColors) {
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                "Feedback",
+                stringResource(Res.string.feedback),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 modifier = Modifier.weight(1f),
             )
             Icon(
                 Icons.AutoMirrored.Filled.OpenInNew,
-                contentDescription = "Open GitHub issues",
+                contentDescription = stringResource(Res.string.open_github_issues),
                 tint = eveColors.accentColor.copy(alpha = 0.6f),
                 modifier = Modifier.size(12.dp),
             )
@@ -1010,7 +1014,7 @@ private fun SidebarVersionFooter(eveColors: EveColors) {
             )
             Icon(
                 Icons.AutoMirrored.Filled.OpenInNew,
-                contentDescription = "View release notes on GitHub",
+                contentDescription = stringResource(Res.string.view_release_notes),
                 tint = eveColors.accentColor.copy(alpha = 0.6f),
                 modifier = Modifier.size(12.dp),
             )
@@ -1039,9 +1043,9 @@ private fun SdeImportOverlay(state: StaticDataImporter.ImportState) {
                     modifier = Modifier.size(40.dp),
                     tint = MaterialTheme.colorScheme.primary,
                 )
-                Text("Loading Game Data", style = MaterialTheme.typography.headlineSmall)
+                Text(stringResource(Res.string.loading_game_data), style = MaterialTheme.typography.headlineSmall)
                 Text(
-                    "Downloading static data from EVE Online ESI.\nThis takes a few minutes on first run.",
+                    stringResource(Res.string.loading_game_data_desc),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -1058,7 +1062,7 @@ private fun SdeImportOverlay(state: StaticDataImporter.ImportState) {
                 )
                 state.error?.let { error ->
                     Text(
-                        "Error: $error",
+                        stringResource(Res.string.error_prefix, error),
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -1075,10 +1079,10 @@ private fun ErrorLogDialog(onDismiss: () -> Unit) {
     val entries by AppLog.entries.collectAsState()
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Recent errors") },
+        title = { Text(stringResource(Res.string.recent_errors)) },
         text = {
             if (entries.isEmpty()) {
-                Text("No errors recorded", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                Text(stringResource(Res.string.no_errors_recorded), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
             } else {
                 LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
                     items(entries.size) { i ->
@@ -1099,24 +1103,24 @@ private fun ErrorLogDialog(onDismiss: () -> Unit) {
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
-        dismissButton = { TextButton(onClick = { AppLog.clear() }) { Text("Clear") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.close)) } },
+        dismissButton = { TextButton(onClick = { AppLog.clear() }) { Text(stringResource(Res.string.clear)) } },
     )
 }
 
 // The 6 colors CustomThemeColors exposes, each with a getter/setter against it — lets the dialog
 // below share one row of sliders across all of them instead of repeating per-role UI code.
 private enum class ThemeRole(
-    val label: String,
+    val label: StringResource,
     val get: (CustomThemeColors) -> Color,
     val with: (CustomThemeColors, Color) -> CustomThemeColors,
 ) {
-    PRIMARY("Primary", { it.primary }, { c, v -> c.copy(primary = v) }),
-    SECONDARY("Secondary", { it.secondary }, { c, v -> c.copy(secondary = v) }),
-    TERTIARY("Tertiary", { it.tertiary }, { c, v -> c.copy(tertiary = v) }),
-    BACKGROUND("Background", { it.background }, { c, v -> c.copy(background = v) }),
-    SURFACE("Surface", { it.surface }, { c, v -> c.copy(surface = v) }),
-    HEADER("Header", { it.headerColor }, { c, v -> c.copy(headerColor = v) }),
+    PRIMARY(Res.string.role_primary, { it.primary }, { c, v -> c.copy(primary = v) }),
+    SECONDARY(Res.string.role_secondary, { it.secondary }, { c, v -> c.copy(secondary = v) }),
+    TERTIARY(Res.string.role_tertiary, { it.tertiary }, { c, v -> c.copy(tertiary = v) }),
+    BACKGROUND(Res.string.role_background, { it.background }, { c, v -> c.copy(background = v) }),
+    SURFACE(Res.string.role_surface, { it.surface }, { c, v -> c.copy(surface = v) }),
+    HEADER(Res.string.role_header, { it.headerColor }, { c, v -> c.copy(headerColor = v) }),
 }
 
 // One role edited at a time via RGB sliders. onColorsChange fires on every drag tick (cheap
@@ -1138,7 +1142,7 @@ private fun CustomThemeEditorDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Custom theme") },
+        title = { Text(stringResource(Res.string.custom_theme)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1146,7 +1150,7 @@ private fun CustomThemeEditorDialog(
                         FilterChip(
                             selected = role == selectedRole,
                             onClick = { selectedRole = role },
-                            label = { Text(role.label, style = MaterialTheme.typography.labelSmall) },
+                            label = { Text(stringResource(role.label), style = MaterialTheme.typography.labelSmall) },
                         )
                     }
                 }
@@ -1162,7 +1166,7 @@ private fun CustomThemeEditorDialog(
                 ColorChannelSlider("B", currentColor.blue, onValueChange = updateChannel { c, v -> c.copy(blue = v) }, onCommit)
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.done)) } },
     )
 }
 
@@ -1211,18 +1215,23 @@ private fun IncomingRequestBanner(
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    "New P2P Market buy request",
+                    stringResource(Res.string.new_p2p_request),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White,
                 )
                 Text(
-                    "${notice.reservation.buyerChar.ifBlank { "Someone" }} wants ${notice.reservation.qty}x ${notice.typeName}",
+                    stringResource(
+                        Res.string.p2p_wants,
+                        notice.reservation.buyerChar.ifBlank { stringResource(Res.string.someone) },
+                        notice.reservation.qty,
+                        notice.typeName,
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White.copy(alpha = 0.75f),
                 )
             }
-            TextButton(onClick = onView) { Text("View") }
+            TextButton(onClick = onView) { Text(stringResource(Res.string.view)) }
             IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
                 Icon(Icons.Default.Close, null, Modifier.size(14.dp), tint = Color.White.copy(alpha = 0.6f))
             }
@@ -1249,17 +1258,18 @@ private fun EveRefSyncBanner(state: EveRefService.SyncState) {
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "Syncing market history (EveRef)…",
+                        stringResource(Res.string.syncing_everef),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                     )
                     if (state.status.isNotEmpty()) {
+                        val filesProgress = stringResource(Res.string.files_progress, state.filesDownloaded, state.totalFiles)
                         Text(
                             buildString {
                                 append(state.status)
                                 if (state.totalFiles > 0) {
-                                    append("  •  ${state.filesDownloaded}/${state.totalFiles} files")
+                                    append("  •  " + filesProgress)
                                 }
                             },
                             style = MaterialTheme.typography.labelSmall,

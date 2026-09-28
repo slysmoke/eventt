@@ -18,6 +18,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.eventt.p2pmarket.generated.resources.*
+import org.jetbrains.compose.resources.stringResource
 
 private const val FAILURE_TINT_MILLIS = 3000L
 
@@ -49,7 +51,7 @@ fun TraderInfoButton(
     ) {
         Icon(
             Icons.AutoMirrored.Filled.OpenInNew,
-            contentDescription = "Open $characterName in EVE client",
+            contentDescription = stringResource(Res.string.open_in_eve, characterName),
             modifier = Modifier.size(14.dp),
             tint = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
         )

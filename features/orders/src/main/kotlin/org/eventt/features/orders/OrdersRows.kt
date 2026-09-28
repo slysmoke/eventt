@@ -22,11 +22,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.eventt.core.database.AppState
 import org.eventt.core.database.OrderHistoryDao
+import org.eventt.orders.generated.resources.*
 import org.eventt.ui.common.formatIsk
 import org.eventt.ui.common.onRightClick
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.eventt.ui.theme.warningColor
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 
 // ── Rows ──────────────────────────────────────────────────────────────────
 
@@ -75,7 +78,12 @@ internal fun SellOrderRow(
         ) {
             StatusDot(order.state)
             if (isBeaten) {
-                Icon(Icons.Default.ArrowDownward, contentDescription = "Undercut", modifier = Modifier.size(11.dp), tint = UNDERCUT_COLOR)
+                Icon(
+                    Icons.Default.ArrowDownward,
+                    contentDescription = stringResource(Res.string.undercut),
+                    modifier = Modifier.size(11.dp),
+                    tint = UNDERCUT_COLOR,
+                )
             }
             Text(
                 order.typeName,
@@ -118,7 +126,7 @@ internal fun SellOrderRow(
             val bestSell = comparison?.bestSell
             if (isBeaten && bestSell != null) {
                 Text(
-                    "Best: ${formatIsk(bestSell)}",
+                    stringResource(Res.string.best_price, formatIsk(bestSell)),
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                     color = UNDERCUT_COLOR.copy(alpha = 0.8f),
                 )
@@ -160,7 +168,7 @@ internal fun SellOrderRow(
         IconButton(modifier = Modifier.size(36.dp), onClick = onAction) {
             Icon(
                 Icons.Default.OpenInBrowser,
-                contentDescription = "Open in game & copy price",
+                contentDescription = stringResource(Res.string.open_in_game),
                 modifier = Modifier.size(16.dp),
                 tint =
                     when {
@@ -191,10 +199,22 @@ private fun CompetitionCell(
     }
     val (label, color) =
         when (stats.level) {
-            CompetitionService.Level.COLLECTING -> "collecting…" to MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-            CompetitionService.Level.CALM -> "Calm" to PROFIT_COLOR
-            CompetitionService.Level.CONTESTED -> "Contested" to UNDERCUT_COLOR
-            CompetitionService.Level.BOT_WAR -> "Bot war" to LOSS_COLOR
+            CompetitionService.Level.COLLECTING -> {
+                stringResource(Res.string.comp_collecting) to
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            }
+
+            CompetitionService.Level.CALM -> {
+                stringResource(Res.string.comp_calm) to PROFIT_COLOR
+            }
+
+            CompetitionService.Level.CONTESTED -> {
+                stringResource(Res.string.comp_contested) to UNDERCUT_COLOR
+            }
+
+            CompetitionService.Level.BOT_WAR -> {
+                stringResource(Res.string.comp_bot_war) to LOSS_COLOR
+            }
         }
     TooltipArea(
         tooltip = { CompetitionTooltip(stats, label) },
@@ -205,10 +225,10 @@ private fun CompetitionCell(
             if (stats.level != CompetitionService.Level.COLLECTING) {
                 val details =
                     buildList {
-                        add("top ${(stats.timeOnTopPct * 100).toInt()}%")
-                        if (stats.competitors > 0) add("${stats.competitors} ${if (stats.competitors == 1) "rival" else "rivals"}")
+                        add(stringResource(Res.string.top_pct, (stats.timeOnTopPct * 100).toInt()))
+                        if (stats.competitors > 0) add(pluralStringResource(Res.plurals.rivals_n, stats.competitors, stats.competitors))
                         // Median ticks I survive on top, in wall-clock terms (one tick ≈ 5 min).
-                        stats.medianBeatTicks?.let { add("~${(it * 5).toInt()}m") }
+                        stats.medianBeatTicks?.let { add(stringResource(Res.string.minutes_approx, (it * 5).toInt())) }
                     }.joinToString(" · ")
                 Text(
                     details,
@@ -244,7 +264,7 @@ internal fun ItemDetailButton(target: ItemDetailTarget) {
     IconButton(modifier = Modifier.size(20.dp), onClick = { ItemDetailRequest.target = target }) {
         Icon(
             Icons.AutoMirrored.Filled.ShowChart,
-            contentDescription = "Open chart",
+            contentDescription = stringResource(Res.string.open_chart),
             modifier = Modifier.size(14.dp),
             tint = MaterialTheme.colorScheme.primary,
         )
@@ -256,7 +276,7 @@ private fun ViewInMarketButton(typeId: Int) {
     IconButton(modifier = Modifier.size(20.dp), onClick = { AppState.openInMarket(typeId) }) {
         Icon(
             Icons.AutoMirrored.Filled.OpenInNew,
-            contentDescription = "View in Market",
+            contentDescription = stringResource(Res.string.view_in_market),
             modifier = Modifier.size(13.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -273,56 +293,56 @@ private fun CompetitionTooltip(
         color = MaterialTheme.colorScheme.surfaceVariant,
         shadowElevation = 4.dp,
     ) {
-        Column(modifier = Modifier.padding(10.dp).widthIn(max = 340.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Column(modifier = Modifier.padding(10.dp).widthIn(max = 440.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             val levelHint =
                 when (stats.level) {
                     CompetitionService.Level.COLLECTING -> {
-                        "Collecting data — under an hour of snapshots so far. Stats build up while the app is running."
+                        stringResource(Res.string.hint_collecting)
                     }
 
                     CompetitionService.Level.CALM -> {
-                        "Calm — you hold the top most of the time, or nobody competes at all."
+                        stringResource(Res.string.hint_calm)
                     }
 
                     CompetitionService.Level.CONTESTED -> {
-                        "Contested — you're being undercut at a human pace."
+                        stringResource(Res.string.hint_contested)
                     }
 
                     CompetitionService.Level.BOT_WAR -> {
-                        "Bot war — near-instant re-undercuts around the clock. Fighting this with relists mostly burns fees."
+                        stringResource(Res.string.hint_bot_war)
                     }
                 }
             Text(
-                "$levelLabel — snapshots of this order book are taken every ~5 min (ESI tick), kept for 7 days.",
+                stringResource(Res.string.tooltip_head, levelLabel),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(levelHint, style = MaterialTheme.typography.bodySmall)
             HorizontalDivider()
             TooltipStatLine(
-                "top ${(stats.timeOnTopPct * 100).toInt()}%",
-                "share of time your order was the best price — i.e. the one actually selling",
+                stringResource(Res.string.top_pct, (stats.timeOnTopPct * 100).toInt()),
+                stringResource(Res.string.tt_top_desc),
             )
             TooltipStatLine(
-                "${stats.competitors} ${if (stats.competitors == 1) "rival" else "rivals"}",
-                "distinct competing orders seen at the top (price edits keep an order's id, so this ≈ people)",
+                pluralStringResource(Res.plurals.rivals_n, stats.competitors, stats.competitors),
+                stringResource(Res.string.tt_rivals_desc),
             )
             stats.medianBeatTicks?.let {
-                TooltipStatLine("~${(it * 5).toInt()}m", "median time you keep the top before someone retakes it")
+                TooltipStatLine(stringResource(Res.string.minutes_approx, (it * 5).toInt()), stringResource(Res.string.tt_median_desc))
             }
             stats.fastBeatShare?.let {
                 TooltipStatLine(
-                    "${(it * 100).toInt()}% instant",
-                    "of the times you were beaten, this share happened by the very next 5-min tick",
+                    stringResource(Res.string.instant_pct, (it * 100).toInt()),
+                    stringResource(Res.string.tt_instant_desc),
                 )
             }
             if (stats.beatHourCoverage > 0) {
                 TooltipStatLine(
-                    "${stats.beatHourCoverage}/24 hours",
-                    "distinct UTC hours of day with a beat — 16+ with instant beats means a bot, humans sleep",
+                    stringResource(Res.string.hours_24, stats.beatHourCoverage),
+                    stringResource(Res.string.tt_hours_desc),
                 )
             }
-            TooltipStatLine("${stats.ticks} ticks", "sample size behind all of the above (~${stats.ticks * 5 / 60}h observed)")
+            TooltipStatLine(stringResource(Res.string.ticks_n, stats.ticks), stringResource(Res.string.tt_ticks_desc, stats.ticks * 5 / 60))
         }
     }
 }
@@ -333,7 +353,7 @@ private fun TooltipStatLine(
     explanation: String,
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(value, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(80.dp))
+        Text(value, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(110.dp))
         Text(explanation, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -356,7 +376,7 @@ private fun RelistCell(
         )
         if (updatesRemaining != null) {
             Text(
-                "~$updatesRemaining left",
+                stringResource(Res.string.left_approx, updatesRemaining),
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             )
@@ -405,7 +425,12 @@ internal fun BuyOrderRow(
         ) {
             StatusDot(order.state)
             if (isOverbid) {
-                Icon(Icons.Default.ArrowUpward, contentDescription = "Overbid", modifier = Modifier.size(11.dp), tint = UNDERCUT_COLOR)
+                Icon(
+                    Icons.Default.ArrowUpward,
+                    contentDescription = stringResource(Res.string.overbid),
+                    modifier = Modifier.size(11.dp),
+                    tint = UNDERCUT_COLOR,
+                )
             }
             Text(
                 order.typeName,
@@ -432,7 +457,7 @@ internal fun BuyOrderRow(
             val bestBuy = comparison?.bestBuy
             if (isOverbid && bestBuy != null) {
                 Text(
-                    "Best: ${formatIsk(bestBuy)}",
+                    stringResource(Res.string.best_price, formatIsk(bestBuy)),
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                     color = UNDERCUT_COLOR.copy(alpha = 0.8f),
                 )
@@ -475,7 +500,7 @@ internal fun BuyOrderRow(
         IconButton(modifier = Modifier.size(36.dp), onClick = onAction) {
             Icon(
                 Icons.Default.OpenInBrowser,
-                contentDescription = "Open in game & copy price",
+                contentDescription = stringResource(Res.string.open_in_game),
                 modifier = Modifier.size(16.dp),
                 tint =
                     when {
@@ -523,13 +548,13 @@ internal fun OrderHistoryRow(
             ItemDetailButton(ItemDetailTarget(order.typeId, order.typeName))
         }
         Text(
-            if (order.isBuyOrder) "Buy" else "Sell",
+            if (order.isBuyOrder) stringResource(Res.string.buy) else stringResource(Res.string.sell),
             modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.bodySmall,
             color = if (order.isBuyOrder) BUY_COLOR else SELL_COLOR,
         )
         Text(
-            effectiveState.split("_").joinToString(" ") { it.replaceFirstChar(Char::uppercase) },
+            orderStateLabel(effectiveState),
             modifier = Modifier.weight(1.5f),
             style = MaterialTheme.typography.bodySmall,
             color = stateColor,
@@ -607,7 +632,7 @@ internal fun InventoryRow(
         Text(formatNumber(item.remainingQty), modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.bodyMedium)
         val daysHeld = item.daysHeld
         Text(
-            daysHeld?.let { "${it}d" } ?: "—",
+            daysHeld?.let { stringResource(Res.string.days_short, it) } ?: "—",
             modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.bodySmall,
             // Stale stock: capital stuck for over 30 days gets the same orange as beaten orders.
@@ -650,10 +675,21 @@ internal fun InventoryRow(
         IconButton(modifier = Modifier.size(28.dp), onClick = onWriteOff) {
             Icon(
                 Icons.Default.RemoveShoppingCart,
-                contentDescription = "Write off",
+                contentDescription = stringResource(Res.string.write_off),
                 modifier = Modifier.size(16.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
 }
+
+@Composable
+private fun orderStateLabel(state: String): String =
+    when (state) {
+        "fulfilled" -> stringResource(Res.string.st_fulfilled)
+        "partially_filled" -> stringResource(Res.string.st_partially_filled)
+        "cancelled" -> stringResource(Res.string.st_cancelled)
+        "expired" -> stringResource(Res.string.st_expired)
+        "active" -> stringResource(Res.string.st_active)
+        else -> state.split("_").joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
+    }

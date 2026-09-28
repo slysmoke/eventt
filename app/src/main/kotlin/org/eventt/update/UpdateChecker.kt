@@ -4,7 +4,9 @@ import kotlinx.serialization.json.*
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.eventt.AppVersion
+import org.eventt.app.generated.resources.*
 import org.eventt.core.model.AppPaths
+import org.eventt.core.model.stringBlocking
 import java.io.File
 import java.util.concurrent.TimeUnit
 import java.util.zip.ZipInputStream
@@ -127,6 +129,7 @@ object UpdateChecker {
         onProgress: (UpdateProgress) -> Unit,
     ) {
         val updateDir = File(AppPaths.appDataDir, "update").also { it.mkdirs() }
+        val downloadingText = stringBlocking(Res.string.upd_downloading)
         try {
             val jar = jarPath
             if (jar != null) {
@@ -140,9 +143,11 @@ object UpdateChecker {
             if (installDir == null || !installDir.canWrite()) {
                 onProgress(
                     UpdateProgress.Error(
-                        "Can't write to the install folder" +
-                            (installDir?.let { " (${it.absolutePath})" } ?: "") +
-                            ". If this was installed system-wide (e.g. a .deb package), update it manually: ${info.releaseUrl}",
+                        stringBlocking(
+                            Res.string.upd_cant_write_install,
+                            installDir?.let { " (${it.absolutePath})" } ?: "",
+                            info.releaseUrl,
+                        ),
                     ),
                 )
                 return
@@ -151,10 +156,10 @@ object UpdateChecker {
             val zipFile = File(updateDir, "update.zip")
 
             // 1. Download
-            onProgress(UpdateProgress.Downloading(0f, "Downloading ${info.version}…"))
+            onProgress(UpdateProgress.Downloading(0f, stringBlocking(Res.string.upd_downloading_version, info.version)))
             val response = client.newCall(Request.Builder().url(info.downloadUrl).build()).execute()
             if (!response.isSuccessful) {
-                onProgress(UpdateProgress.Error("Download failed: HTTP ${response.code}"))
+                onProgress(UpdateProgress.Error(stringBlocking(Res.string.upd_download_failed, response.code)))
                 return
             }
             val total = response.body.contentLength()
@@ -168,7 +173,7 @@ object UpdateChecker {
                         received += n
                         if (total > 0) {
                             onProgress(
-                                UpdateProgress.Downloading(received.toFloat() / total * 0.8f, "Downloading…"),
+                                UpdateProgress.Downloading(received.toFloat() / total * 0.8f, downloadingText),
                             )
                         }
                     }
@@ -176,7 +181,7 @@ object UpdateChecker {
             }
 
             // 2. Extract
-            onProgress(UpdateProgress.Downloading(0.85f, "Extracting…"))
+            onProgress(UpdateProgress.Downloading(0.85f, stringBlocking(Res.string.upd_extracting)))
             val extractDir =
                 File(updateDir, "extracted").also {
                     it.deleteRecursively()
@@ -203,7 +208,7 @@ object UpdateChecker {
             }
 
             // 3. Write restart script and exec
-            onProgress(UpdateProgress.Downloading(0.95f, "Preparing restart…"))
+            onProgress(UpdateProgress.Downloading(0.95f, stringBlocking(Res.string.upd_preparing_restart)))
             val newAppDir = extractDir.listFiles()?.firstOrNull { it.isDirectory }
 
             onProgress(UpdateProgress.Restarting)
@@ -214,7 +219,7 @@ object UpdateChecker {
                 restartUnix(newAppDir, installDir, updateDir)
             }
         } catch (e: Exception) {
-            onProgress(UpdateProgress.Error("Update failed: ${e.message}"))
+            onProgress(UpdateProgress.Error(stringBlocking(Res.string.upd_failed, e.message.orEmpty())))
         }
     }
 
@@ -225,19 +230,20 @@ object UpdateChecker {
         updateDir: File,
         onProgress: (UpdateProgress) -> Unit,
     ) {
+        val downloadingText = stringBlocking(Res.string.upd_downloading)
         if (currentJar.parentFile?.canWrite() != true) {
             onProgress(
                 UpdateProgress.Error(
-                    "Can't write to ${currentJar.parentFile}. Download the update manually: ${info.releaseUrl}",
+                    stringBlocking(Res.string.upd_cant_write_jar, currentJar.parentFile.toString(), info.releaseUrl),
                 ),
             )
             return
         }
 
-        onProgress(UpdateProgress.Downloading(0f, "Downloading ${info.version}…"))
+        onProgress(UpdateProgress.Downloading(0f, stringBlocking(Res.string.upd_downloading_version, info.version)))
         val response = client.newCall(Request.Builder().url(info.downloadUrl).build()).execute()
         if (!response.isSuccessful) {
-            onProgress(UpdateProgress.Error("Download failed: HTTP ${response.code}"))
+            onProgress(UpdateProgress.Error(stringBlocking(Res.string.upd_download_failed, response.code)))
             return
         }
         val newJar = File(updateDir, "update.jar")
@@ -252,14 +258,14 @@ object UpdateChecker {
                     received += n
                     if (total > 0) {
                         onProgress(
-                            UpdateProgress.Downloading(received.toFloat() / total * 0.9f, "Downloading…"),
+                            UpdateProgress.Downloading(received.toFloat() / total * 0.9f, downloadingText),
                         )
                     }
                 }
             }
         }
 
-        onProgress(UpdateProgress.Downloading(0.95f, "Preparing restart…"))
+        onProgress(UpdateProgress.Downloading(0.95f, stringBlocking(Res.string.upd_preparing_restart)))
         onProgress(UpdateProgress.Restarting)
 
         if (platform == "windows") {

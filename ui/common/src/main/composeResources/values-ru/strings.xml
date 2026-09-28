@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="search_placeholder">Поиск...</string>
+    <string name="clear">Очистить</string>
+    <string name="corp_access_notice">Нет доступа к корпоративным данным (%1$s) — у персонажа нет нужной корпоративной роли.</string>
+    <string name="corp_feature_wallet">кошелёк</string>
+    <string name="corp_feature_assets">имущество</string>
+    <string name="corp_feature_orders">ордера</string>
+    <string name="corp_feature_contracts">контракты</string>
+    <string name="retry">Повторить</string>
+    <string name="no_data">Нет данных</string>
+    <string name="nothing_to_display">Пока нечего показать.</string>
+    <string name="loading">Загрузка...</string>
+    <string name="confirm">Подтвердить</string>
+    <string name="cancel">Отмена</string>
+    <string name="cooldown_min_sec">%1$s мин %2$s с</string>
+    <string name="cooldown_sec">%1$s с</string>
+    <string name="refresh">Обновить</string>
+    <string name="filter_active_failed">Активные и с ошибкой</string>
+    <string name="filter_server">Сервер</string>
+    <string name="filter_cache">Кэш</string>
+    <string name="filter_all">Все</string>
+    <string name="esi_requests">Запросы ESI</string>
+    <string name="req_active">активных: %1$s</string>
+    <string name="req_done">готово: %1$s</string>
+    <string name="req_from_cache">из кэша: %1$s</string>
+    <string name="req_failed">ошибок: %1$s</string>
+    <string name="all_requests_completed">Все запросы выполнены</string>
+    <string name="no_requests">Нет запросов</string>
+    <string name="close">Закрыть</string>
+    <string name="clear_all">Очистить всё</string>
+    <string name="clear_completed">Очистить выполненные</string>
+    <string name="detail_time">Время</string>
+    <string name="detail_error">Ошибка</string>
+    <string name="response_body">Тело ответа</string>
+    <string name="empty_paren">(пусто)</string>
+</resources>

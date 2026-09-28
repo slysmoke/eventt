@@ -5,8 +5,10 @@ import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.PLEX_MARKET_REGION_ID
 import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.eveSigFigStep
+import org.eventt.core.model.stringBlocking
 import org.eventt.features.orders.CostBasisService
 import org.eventt.features.tools.ResolvedItem
+import org.eventt.tools.generated.resources.*
 import kotlin.math.round
 
 // Where a character is currently docked — sell prices are scoped to this exact location (not the
@@ -44,8 +46,8 @@ object PricingService {
         if (location == null) {
             warnings +=
                 PricingWarning(
-                    "(location)",
-                    "could not determine your character's current docked station from ESI — market lookups skipped",
+                    stringBlocking(Res.string.location_paren),
+                    stringBlocking(Res.string.warn_no_station),
                 )
         }
 
@@ -96,15 +98,15 @@ object PricingService {
                 val marketUndercut = marketLow?.let { undercutPrice(it) }
                 if (marketLow == null) {
                     if (item.typeId == PLEX_TYPE_ID) {
-                        warnings += PricingWarning(item.name, "no sell orders found on the PLEX market")
+                        warnings += PricingWarning(item.name, stringBlocking(Res.string.warn_no_plex_sells))
                     } else if (location != null) {
-                        warnings += PricingWarning(item.name, "no sell orders found at ${location.locationName}")
+                        warnings += PricingWarning(item.name, stringBlocking(Res.string.warn_no_sells_at, location.locationName))
                     }
                 }
 
                 val cb = fifo?.avgCostBasisForType(item.typeId)
                 if (fifo != null && cb == null) {
-                    warnings += PricingWarning(item.name, "no purchase history found — cannot compute cost basis")
+                    warnings += PricingWarning(item.name, stringBlocking(Res.string.warn_no_purchase_history))
                 }
                 // Grossed up so the requested margin is realized net of sales tax + broker fee, not
                 // before it, then rounded to a real EVE price tick like the market undercut is —
@@ -171,7 +173,7 @@ object PricingService {
                 else -> {
                     null
                 }
-            } ?: "Unknown location ($locationId)"
+            } ?: stringBlocking(Res.string.unknown_location_id, locationId)
         return ActingLocation(regionId, locationId, name)
     }
 

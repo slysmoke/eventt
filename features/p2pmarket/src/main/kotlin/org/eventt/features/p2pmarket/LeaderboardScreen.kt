@@ -37,21 +37,24 @@ import org.eventt.core.model.CharacterModel
 import org.eventt.core.nostr.LeaderboardEntry
 import org.eventt.core.nostr.LeaderboardService
 import org.eventt.core.nostr.NostrIdentityService
+import org.eventt.p2pmarket.generated.resources.*
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.stringResource
 
 private enum class LeaderboardWindow(
-    val label: String,
+    val label: StringResource,
     val pnl: (LeaderboardEntry) -> Double,
 ) {
-    WEEK("7 days", LeaderboardEntry::pnl7d),
-    MONTH("30 days", LeaderboardEntry::pnl30d),
-    YEAR("365 days", LeaderboardEntry::pnl365d),
+    WEEK(Res.string.lb_7_days, LeaderboardEntry::pnl7d),
+    MONTH(Res.string.lb_30_days, LeaderboardEntry::pnl30d),
+    YEAR(Res.string.lb_365_days, LeaderboardEntry::pnl365d),
 }
 
 /**
  * Opt-in trader leaderboard (issue #17), its own top-level page. Two independent halves:
- * "Publish as" below picks which single local character's identity signs and publishes *this
+ * stringResource(Res.string.publish_as) below picks which single local character's identity signs and publishes *this
  * machine's* combined P&L (every local character + corp, see LeaderboardPublisher in
  * features/orders); the ranked list below that is a pure view over every trader's published entry
  * ([LeaderboardService.entries]), including everyone else's, regardless of what's picked here.
@@ -90,31 +93,37 @@ fun LeaderboardScreen() {
     val entries by LeaderboardService.entries.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Trader Leaderboard", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+        Text(
+            stringResource(Res.string.trader_leaderboard),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
 
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    "Shares your combined realized profit — week/30-day/365-day totals across every local " +
-                        "character and corporation, never balance, inventory, or open orders — self-reported like the " +
-                        "rest of P2P Market's reputation. Off by default; republishes roughly every 2 hours once picked.",
+                    stringResource(Res.string.lb_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (characters.isEmpty()) {
                     Text(
-                        "No EVE characters added yet — add one in the Characters tab first.",
+                        stringResource(Res.string.no_characters_yet),
                         style = MaterialTheme.typography.bodySmall,
                     )
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("Publish as", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            stringResource(Res.string.publish_as),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         Box {
                             OutlinedButton(onClick = { menuExpanded = true }) {
-                                Text(characters.find { it.id == publisherCharId }?.name ?: "Off")
+                                Text(characters.find { it.id == publisherCharId }?.name ?: stringResource(Res.string.off))
                             }
                             DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                                DropdownMenuItem(text = { Text("Off") }, onClick = { select(null) })
+                                DropdownMenuItem(text = { Text(stringResource(Res.string.off)) }, onClick = { select(null) })
                                 characters.forEach { character ->
                                     DropdownMenuItem(text = { Text(character.name) }, onClick = { select(character.id) })
                                 }
@@ -126,14 +135,14 @@ fun LeaderboardScreen() {
         }
 
         Text(
-            "Self-reported — never independently verified against ESI data.",
+            stringResource(Res.string.self_reported),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         if (entries.isEmpty()) {
             Text(
-                "No one has opted in yet.",
+                stringResource(Res.string.no_one_opted),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -156,7 +165,7 @@ private fun LeaderboardTable(
     Card(modifier = modifier) {
         Column {
             Text(
-                window.label,
+                stringResource(window.label),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(16.dp),

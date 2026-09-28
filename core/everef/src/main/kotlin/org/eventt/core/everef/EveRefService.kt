@@ -18,6 +18,8 @@ import org.eventt.core.database.MarketDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.http.EveHttpClient
 import org.eventt.core.model.MarketHistoryModel
+import org.eventt.core.model.stringBlocking
+import org.eventt.everef.generated.resources.*
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.time.LocalDate
@@ -69,7 +71,7 @@ object EveRefService {
     suspend fun sync() =
         withContext(Dispatchers.IO) {
             if (_state.value.isRunning) return@withContext
-            _state.value = SyncState(isRunning = true, progress = 0.01f, status = "Starting sync…")
+            _state.value = SyncState(isRunning = true, progress = 0.01f, status = stringBlocking(Res.string.er_starting))
 
             try {
                 val periodMonths = getHistoryPeriodMonths()
@@ -77,11 +79,11 @@ object EveRefService {
                 val cutoffDate = today.minusMonths(periodMonths.toLong())
                 val endDate = today.minusDays(DATA_DELAY_DAYS)
 
-                setState(0.02f, "Cleaning old data outside period…")
+                setState(0.02f, stringBlocking(Res.string.er_cleaning))
                 EveRefDao.deleteBeforeDate(cutoffDate.toString())
                 MarketDao.deleteEveRefBeforeDate(cutoffDate.toString())
 
-                setState(0.05f, "Fetching file index…")
+                setState(0.05f, stringBlocking(Res.string.er_fetching_index))
                 val filesToDownload = findMissingFiles(cutoffDate, endDate)
 
                 if (filesToDownload.isEmpty()) {
@@ -90,7 +92,7 @@ object EveRefService {
                         SyncState(
                             isRunning = false,
                             progress = 1f,
-                            status = "Already up to date",
+                            status = stringBlocking(Res.string.er_up_to_date),
                         )
                     return@withContext
                 }
@@ -99,7 +101,7 @@ object EveRefService {
                 _state.value =
                     _state.value.copy(
                         progress = 0.07f,
-                        status = "Downloading $total file(s) ($PARALLEL_DOWNLOADS parallel)…",
+                        status = stringBlocking(Res.string.er_downloading, total, PARALLEL_DOWNLOADS),
                         totalFiles = total,
                     )
 
@@ -119,7 +121,7 @@ object EveRefService {
                                         _state.value =
                                             _state.value.copy(
                                                 progress = progress,
-                                                status = "$done/$total downloaded…",
+                                                status = stringBlocking(Res.string.er_progress, done, total),
                                                 filesDownloaded = done,
                                             )
                                     } catch (e: CancellationException) {
@@ -142,22 +144,22 @@ object EveRefService {
                         progress = 1f,
                         status =
                             if (failCount == 0) {
-                                "Sync complete — $doneCount files downloaded"
+                                stringBlocking(Res.string.er_complete, doneCount)
                             } else {
-                                "Sync complete — $doneCount downloaded, $failCount failed"
+                                stringBlocking(Res.string.er_complete_failed, doneCount, failCount)
                             },
                         filesDownloaded = doneCount,
                         totalFiles = total,
                     )
             } catch (e: CancellationException) {
-                _state.value = SyncState(isRunning = false, status = "Sync cancelled")
+                _state.value = SyncState(isRunning = false, status = stringBlocking(Res.string.er_cancelled))
                 throw e
             } catch (e: Exception) {
                 _state.value =
                     SyncState(
                         isRunning = false,
                         error = e.message,
-                        status = "Sync failed: ${e.message}",
+                        status = stringBlocking(Res.string.er_failed, e.message.orEmpty()),
                     )
             }
         }

@@ -16,20 +16,32 @@ A desktop trading toolkit for [EVE Online](https://www.eveonline.com/), built wi
 - **Dashboard** — wallet/asset/P&L KPIs, a 30-day daily P&L chart, top winners/losers by realized FIFO P&L, and a "Combine all" mode aggregating every character and corporation
 - **Characters** — manage linked EVE characters via SSO; act as a character or a corporation
 - **Market** — browse regional market orders and price history (PLEX handled via its global market region)
-- **Analysis** — station-trading and inter-region opportunity scanners with hotkey-driven buy queues
+- **Item chart** — a per-item trading terminal: candles with SMA 20/50, Bollinger bands and RSI, your own buys/sells plotted on the chart, a year of real per-station Adam4EVE fills, your position with break-even, and the live order book; right-click a row in Analysis, Orders or Alerts to open it
+- **Analysis** — station-trading and inter-region opportunity scanners with hotkey-driven buy queues, plus **Long-Term Investment**: finds items trading well below their own normal price, splits a budget across them and builds a backtested buy-order ladder with sell targets and alerts (see the in-app Guide)
 - **Assets** — inventory viewer across stations/structures
 - **Wallet** — transaction journal and P&L
 - **Orders** — active buy/sell orders with market comparison, beaten-order highlighting and desktop notifications, relist-fee tracking, order history, and a FIFO-costed inventory view with stock age
-- **Alerts** — price alerts with in-app notifications
+- **Alerts** — price alerts grouped into Long-Term and General sections, checked every 5 minutes, with an alert center in the top bar
 - **Contracts** — contract tracker
 - **Tools** — cargo splitter (with fitting push into the game) and a sell-pricing calculator that scopes prices to your character's current docked station
 - **P2P Market** — peer-to-peer OTC trading over [Nostr](https://nostr.com/): post buy/sell orders, negotiate reservations over encrypted DMs, and settle in-game outside the ESI market
 - **Trade Calc** — a small always-on-top overlay: reads SELL/BUY prices from a copied order row, an EVE order-book export, or a copied item name (Jita lookup); writes the beat price straight back to the clipboard and shows fees, margin, and real buy-out/sell-out totals walked from the actual order book
-- **Settings** — tax rates, data source, and app preferences
+- **Settings** — tax rates, data source, interface language (English / Russian), hotkeys, and app preferences
 
 Two global hotkeys work even when EVE has focus: **Ctrl+Z** cycles through your queued orders, opens the in-game market window, and copies an overbid/undercut price to your clipboard; **Ctrl+M** opens the Trade Calc overlay at your cursor.
 
+Hover a column header or a filter to see what it means — every non-obvious one has a tooltip.
+
 See the **[User Wiki](docs/WIKI.md)** for a screen-by-screen guide and typical workflows.
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Dashboard](Screenshot/dashboard.png) | ![Analysis](Screenshot/analysis.png) |
+| ![Orders](Screenshot/orders.png) | ![Market browser](Screenshot/market_browser.png) |
+
+![Item chart](Screenshot/item_chart.png)
 
 ## Requirements
 

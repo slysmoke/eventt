@@ -50,13 +50,17 @@ import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.PriceAlertModel
 import org.eventt.core.model.StaticMarketGroupModel
 import org.eventt.core.model.StaticTypeModel
+import org.eventt.core.model.stringBlocking
 import org.eventt.core.staticdata.StaticDataImporter
+import org.eventt.market.generated.resources.*
 import org.eventt.ui.common.*
+import org.eventt.ui.common.Tip
 import org.eventt.ui.common.formatPriceAbbr
 import org.eventt.ui.common.formatVolume
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.eventt.ui.theme.warningColor
+import org.jetbrains.compose.resources.stringResource
 import java.util.Locale
 import kotlin.math.floor
 import kotlin.math.log10
@@ -143,11 +147,15 @@ fun MarketBrowserScreen() {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Market Browser", style = MaterialTheme.typography.headlineMedium)
+                    Text(stringResource(Res.string.market_browser), style = MaterialTheme.typography.headlineMedium)
 
                     // Region selector
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Region:", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(end = 6.dp))
+                        Text(
+                            stringResource(Res.string.region_colon),
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.padding(end = 6.dp),
+                        )
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             items(TRADE_HUBS) { (id, name) ->
                                 FilterChip(
@@ -192,7 +200,7 @@ fun MarketBrowserScreen() {
                             searchResults = emptyList()
                         }
                     },
-                    placeholder = "Search items...",
+                    placeholder = stringResource(Res.string.search_items),
                     modifier = Modifier.fillMaxWidth(0.5f),
                 )
 
@@ -235,7 +243,7 @@ fun MarketBrowserScreen() {
             ) {
                 Column(modifier = Modifier.padding(4.dp)) {
                     Text(
-                        "Categories",
+                        stringResource(Res.string.categories),
                         style = MaterialTheme.typography.labelMedium,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                     )
@@ -282,8 +290,8 @@ fun MarketBrowserScreen() {
                     } else {
                         EmptyState(
                             icon = Icons.Default.Store,
-                            title = "Browse the Market",
-                            description = "Select a category from the sidebar or search for an item.",
+                            title = stringResource(Res.string.browse_market),
+                            description = stringResource(Res.string.browse_market_desc),
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -292,7 +300,7 @@ fun MarketBrowserScreen() {
         }
     }
 
-    LoadingOverlay(isLoading = isLoading, message = "Loading market data...")
+    LoadingOverlay(isLoading = isLoading, message = stringResource(Res.string.loading_market_data))
 
     // SDE Import overlay
     if (isSdeImporting) {
@@ -317,10 +325,10 @@ fun MarketBrowserScreen() {
                         tint = MaterialTheme.colorScheme.primary,
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("Importing SDE Data", style = MaterialTheme.typography.titleLarge)
+                    Text(stringResource(Res.string.importing_sde), style = MaterialTheme.typography.titleLarge)
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Downloading EVE Static Data Export…\nThis may take a minute.",
+                        text = stringResource(Res.string.downloading_sde),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
@@ -516,7 +524,7 @@ private fun TypeMarketHeader(
             Column {
                 Text(type.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Text(
-                    "Region: ${TRADE_HUBS.find { it.first == 10000002 }?.second ?: "The Forge"}",
+                    stringResource(Res.string.region_label, TRADE_HUBS.find { it.first == 10000002 }?.second ?: "The Forge"),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.Gray,
                 )
@@ -524,14 +532,14 @@ private fun TypeMarketHeader(
         }
 
         Row {
-            FilterChip(selected = showOrderBook, onClick = onToggleView, label = { Text("Orders") })
+            FilterChip(selected = showOrderBook, onClick = onToggleView, label = { Text(stringResource(Res.string.orders)) })
             Spacer(modifier = Modifier.width(4.dp))
-            FilterChip(selected = !showOrderBook, onClick = onToggleView, label = { Text("History") })
+            FilterChip(selected = !showOrderBook, onClick = onToggleView, label = { Text(stringResource(Res.string.history)) })
             Spacer(modifier = Modifier.width(8.dp))
             OutlinedButton(onClick = onAddToAlert, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
                 Icon(Icons.Default.Notifications, null, modifier = Modifier.size(14.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Alert", style = MaterialTheme.typography.labelSmall)
+                Text(stringResource(Res.string.alert), style = MaterialTheme.typography.labelSmall)
             }
         }
     }
@@ -548,11 +556,16 @@ private fun TypeMarketHeader(
                 modifier = Modifier.padding(10.dp),
                 horizontalArrangement = Arrangement.spacedBy(24.dp),
             ) {
-                SpreadItem("Best Sell", formatPriceAbbr(bestSell), negativeColor)
-                SpreadItem("Best Buy", formatPriceAbbr(bestBuy), positiveColor)
-                SpreadItem("Spread", "${String.format(Locale.US, "%.2f", spread ?: 0.0)}%", warningColor)
-                SpreadItem("Sell Orders", sellOrders.size.toString(), MaterialTheme.colorScheme.onSurface)
-                SpreadItem("Buy Orders", buyOrders.size.toString(), MaterialTheme.colorScheme.onSurface)
+                SpreadItem(stringResource(Res.string.best_sell), formatPriceAbbr(bestSell), negativeColor)
+                SpreadItem(stringResource(Res.string.best_buy), formatPriceAbbr(bestBuy), positiveColor)
+                SpreadItem(
+                    stringResource(Res.string.spread),
+                    "${String.format(Locale.US, "%.2f", spread ?: 0.0)}%",
+                    warningColor,
+                    tooltip = stringResource(Res.string.tip_spread),
+                )
+                SpreadItem(stringResource(Res.string.sell_orders), sellOrders.size.toString(), MaterialTheme.colorScheme.onSurface)
+                SpreadItem(stringResource(Res.string.buy_orders), buyOrders.size.toString(), MaterialTheme.colorScheme.onSurface)
             }
         }
     }
@@ -565,10 +578,13 @@ private fun SpreadItem(
     label: String,
     value: String,
     color: Color,
+    tooltip: String? = null,
 ) {
-    Column {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = color)
+    Tip(tooltip) {
+        Column {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = color)
+        }
     }
 }
 
@@ -653,7 +669,7 @@ private fun OrderBookView(
 
     Column(modifier = Modifier.fillMaxSize()) {
         OrderTable(
-            title = "Sell Orders",
+            title = stringResource(Res.string.sell_orders),
             count = sellOrders.size,
             titleColor = negativeColor,
             orders = sellOrders,
@@ -673,7 +689,7 @@ private fun OrderBookView(
         )
         HorizontalDivider(thickness = 2.dp)
         OrderTable(
-            title = "Buy Orders",
+            title = stringResource(Res.string.buy_orders),
             count = buyOrders.size,
             titleColor = positiveColor,
             orders = buyOrders,
@@ -734,20 +750,75 @@ private fun OrderTable(
                     .padding(horizontal = 10.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SortableCol("Price", OrderSortColumn.PRICE, sortCol, ascending, onSort, Modifier.width(90.dp))
-            SortableCol("Remain / Total", OrderSortColumn.REMAIN, sortCol, ascending, onSort, Modifier.width(120.dp))
-            SortableCol("ISK Total", OrderSortColumn.TOTAL_ISK, sortCol, ascending, onSort, Modifier.width(90.dp))
-            SortableCol("Min", OrderSortColumn.MIN_VOL, sortCol, ascending, onSort, Modifier.width(50.dp))
-            if (isBuy) SortableCol("Range", OrderSortColumn.RANGE, sortCol, ascending, onSort, Modifier.width(80.dp))
-            SortableCol("Location", OrderSortColumn.LOCATION, sortCol, ascending, onSort, Modifier.weight(1f))
-            SortableCol("Issued", OrderSortColumn.ISSUED, sortCol, ascending, onSort, Modifier.width(82.dp))
-            SortableCol("Expires", OrderSortColumn.EXPIRES, sortCol, ascending, onSort, Modifier.width(56.dp))
+            SortableCol(stringResource(Res.string.c_price), OrderSortColumn.PRICE, sortCol, ascending, onSort, Modifier.width(90.dp))
+            SortableCol(
+                stringResource(Res.string.c_remain_total),
+                OrderSortColumn.REMAIN,
+                sortCol,
+                ascending,
+                onSort,
+                Modifier.width(120.dp),
+                tooltip = stringResource(Res.string.tip_c_remain),
+            )
+            SortableCol(
+                stringResource(Res.string.c_isk_total),
+                OrderSortColumn.TOTAL_ISK,
+                sortCol,
+                ascending,
+                onSort,
+                Modifier.width(90.dp),
+                tooltip = stringResource(Res.string.tip_c_isk_total),
+            )
+            SortableCol(
+                stringResource(Res.string.c_min),
+                OrderSortColumn.MIN_VOL,
+                sortCol,
+                ascending,
+                onSort,
+                Modifier.width(50.dp),
+                tooltip = stringResource(Res.string.tip_c_min),
+            )
+            if (isBuy) {
+                SortableCol(
+                    stringResource(Res.string.c_range),
+                    OrderSortColumn.RANGE,
+                    sortCol,
+                    ascending,
+                    onSort,
+                    Modifier.width(80.dp),
+                    tooltip = stringResource(Res.string.tip_c_range),
+                )
+            }
+            SortableCol(stringResource(Res.string.c_location), OrderSortColumn.LOCATION, sortCol, ascending, onSort, Modifier.weight(1f))
+            SortableCol(
+                stringResource(Res.string.c_issued),
+                OrderSortColumn.ISSUED,
+                sortCol,
+                ascending,
+                onSort,
+                Modifier.width(82.dp),
+                tooltip = stringResource(Res.string.tip_c_issued),
+            )
+            SortableCol(
+                stringResource(Res.string.c_expires),
+                OrderSortColumn.EXPIRES,
+                sortCol,
+                ascending,
+                onSort,
+                Modifier.width(56.dp),
+                tooltip = stringResource(Res.string.tip_c_expires),
+            )
         }
 
         // Rows
         Column(modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
             if (orders.isEmpty()) {
-                Text("No orders", style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.padding(12.dp))
+                Text(
+                    stringResource(Res.string.no_orders),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(12.dp),
+                )
             } else {
                 orders.forEachIndexed { index, order ->
                     OrderRow(order = order, isBuy = isBuy, index = index, onCreateAlert = onCreateAlert)
@@ -765,35 +836,39 @@ private fun SortableCol(
     ascending: Boolean,
     onSort: (OrderSortColumn) -> Unit,
     modifier: Modifier = Modifier,
+    tooltip: String? = null,
 ) {
-    val active = col == current
-    Row(
-        modifier =
-            modifier
-                .clickable { onSort(col) }
-                .padding(end = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-            color =
-                if (active) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                },
-            maxLines = 1,
-        )
-        if (active) {
-            Icon(
-                imageVector = if (ascending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                contentDescription = null,
-                modifier = Modifier.size(10.dp),
-                tint = MaterialTheme.colorScheme.primary,
+    Tip(tooltip, modifier) {
+        val active = col == current
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { onSort(col) }
+                    .padding(end = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                color =
+                    if (active) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    },
+                maxLines = 1,
             )
+            if (active) {
+                Icon(
+                    imageVector = if (ascending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                    contentDescription = null,
+                    modifier = Modifier.size(10.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
     }
 }
@@ -898,7 +973,7 @@ private fun OrderRow(
         }
         DropdownMenu(expanded = showContextMenu, onDismissRequest = { showContextMenu = false }) {
             DropdownMenuItem(
-                text = { Text("Create Price Alert") },
+                text = { Text(stringResource(Res.string.create_price_alert)) },
                 leadingIcon = { Icon(Icons.Default.Notifications, null, modifier = Modifier.size(16.dp)) },
                 onClick = {
                     showContextMenu = false
@@ -922,8 +997,8 @@ private fun HistoryChartView(
     if (history.isEmpty()) {
         EmptyState(
             icon = Icons.AutoMirrored.Filled.ShowChart,
-            title = "No History Data",
-            description = "History will be loaded when you select a type.",
+            title = stringResource(Res.string.no_history_data),
+            description = stringResource(Res.string.history_hint),
         )
         return
     }
@@ -964,12 +1039,12 @@ private fun HistoryChartView(
         val recent = sorted.filter { it.date.take(10) >= cutoff }
         val totalVolume = recent.sumOf { it.volume }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard("Avg Price 30d", formatPriceAbbr(recent.averageOf { it.average }), Modifier.weight(1f))
-            StatCard("Highest 30d", formatPriceAbbr(recent.maxOfOrNull { it.highest } ?: 0.0), Modifier.weight(1f))
-            StatCard("Lowest 30d", formatPriceAbbr(recent.minOfOrNull { it.lowest } ?: 0.0), Modifier.weight(1f))
-            StatCard("Total Vol 30d", formatVolume(totalVolume), Modifier.weight(1f))
-            StatCard("Vol/Day", formatVolPerDay(totalVolume, 30), Modifier.weight(1f))
-            StatCard("Orders 30d", formatVolume(recent.sumOf { it.orderCount }), Modifier.weight(1f))
+            StatCard(stringResource(Res.string.avg_price_30d), formatPriceAbbr(recent.averageOf { it.average }), Modifier.weight(1f))
+            StatCard(stringResource(Res.string.highest_30d), formatPriceAbbr(recent.maxOfOrNull { it.highest } ?: 0.0), Modifier.weight(1f))
+            StatCard(stringResource(Res.string.lowest_30d), formatPriceAbbr(recent.minOfOrNull { it.lowest } ?: 0.0), Modifier.weight(1f))
+            StatCard(stringResource(Res.string.total_vol_30d), formatVolume(totalVolume), Modifier.weight(1f))
+            StatCard(stringResource(Res.string.vol_day), formatVolPerDay(totalVolume, 30), Modifier.weight(1f))
+            StatCard(stringResource(Res.string.orders_30d), formatVolume(recent.sumOf { it.orderCount }), Modifier.weight(1f))
         }
     }
 }
@@ -1061,7 +1136,7 @@ private suspend fun loadMarketData(
                 minVolume = (raw["min_volume"] as? Number)?.toInt() ?: 1,
                 isBuyOrder = isBuy,
                 locationId = locationId,
-                locationName = locationNames[locationId] ?: "Unknown Location",
+                locationName = locationNames[locationId] ?: stringBlocking(Res.string.unknown_location),
                 systemId = (raw["system_id"] as? Number)?.toInt() ?: 0,
                 issued = raw["issued"] as? String ?: "",
                 duration = (raw["duration"] as? Number)?.toInt() ?: 90,
@@ -1124,7 +1199,7 @@ private suspend fun resolveLocationNames(locationIds: Set<Long>): Map<Long, Stri
         }
         locationIds.filter { it > Int.MAX_VALUE }.forEach { id ->
             val name = StaticDataDao.getStationById(id)?.name
-            result[id] = name ?: "Unknown Structure ($id)"
+            result[id] = name ?: stringBlocking(Res.string.unknown_structure, id)
         }
         result
     }
@@ -1142,13 +1217,13 @@ private fun computeExpiry(
                     .now()
                     .epochSecond
         when {
-            secondsLeft <= 0 -> "Expired"
-            secondsLeft < 3600 -> "${secondsLeft / 60}m"
-            secondsLeft < 86400 -> "${secondsLeft / 3600}h"
-            else -> "${secondsLeft / 86400}d"
+            secondsLeft <= 0 -> stringBlocking(Res.string.expired)
+            secondsLeft < 3600 -> stringBlocking(Res.string.dur_m, secondsLeft / 60)
+            secondsLeft < 86400 -> stringBlocking(Res.string.dur_h, secondsLeft / 3600)
+            else -> stringBlocking(Res.string.dur_d, secondsLeft / 86400)
         }
     } catch (e: Exception) {
-        "${durationDays}d"
+        stringBlocking(Res.string.dur_d, durationDays)
     }
 
 private fun daysLeftUntilExpiry(
@@ -1211,7 +1286,7 @@ private fun AddToAlertDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Create Price Alert") },
+        title = { Text(stringResource(Res.string.create_price_alert)) },
         text = {
             Column {
                 Text(type.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -1223,7 +1298,7 @@ private fun AddToAlertDialog(
                             null
                         ) {
                             Text(
-                                "Best Sell: ${formatPriceAbbr(bestSell)}",
+                                stringResource(Res.string.best_sell_price, formatPriceAbbr(bestSell)),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = negativeColor,
                             )
@@ -1232,7 +1307,7 @@ private fun AddToAlertDialog(
                             null
                         ) {
                             Text(
-                                "Best Buy: ${formatPriceAbbr(bestBuy)}",
+                                stringResource(Res.string.best_buy_price, formatPriceAbbr(bestBuy)),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = positiveColor,
                             )
@@ -1242,15 +1317,23 @@ private fun AddToAlertDialog(
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    FilterChip(selected = condition == "below", onClick = { condition = "below" }, label = { Text("Below") })
-                    FilterChip(selected = condition == "above", onClick = { condition = "above" }, label = { Text("Above") })
+                    FilterChip(
+                        selected = condition == "below",
+                        onClick = { condition = "below" },
+                        label = { Text(stringResource(Res.string.below)) },
+                    )
+                    FilterChip(
+                        selected = condition == "above",
+                        onClick = { condition = "above" },
+                        label = { Text(stringResource(Res.string.above)) },
+                    )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
 
                 OutlinedTextField(
                     value = targetPrice,
                     onValueChange = { targetPrice = it },
-                    label = { Text("Target Price (ISK)") },
+                    label = { Tip(stringResource(Res.string.tip_al_target)) { Text(stringResource(Res.string.target_price_isk)) } },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -1274,8 +1357,8 @@ private fun AddToAlertDialog(
                     }
                 },
                 enabled = targetPrice.toDoubleOrNull() != null,
-            ) { Text("Create Alert") }
+            ) { Text(stringResource(Res.string.create_alert)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
     )
 }

@@ -23,8 +23,10 @@ These work even while the EVE client has focus.
 
 | Hotkey | Action |
 |---|---|
-| **Ctrl+Z** | Next item of the active queue: on the Orders screen — cycles your own orders, on Analysis — the buy queue (Station Trading or Inter-Region, per active tab) |
+| **Ctrl+Z** | Next item of the active queue: on the Orders screen — cycles your own orders, on Analysis — the buy queue of the active tab (Station Trading, Inter-Region, or the Long-Term Investment ladder) |
 | **Ctrl+M** | Open/close the Trade Calc overlay at the cursor |
+
+Both can be rebound in **Settings → Global Hotkeys** to any Ctrl/Alt/Shift combination with a letter or F1–F12.
 
 ---
 
@@ -57,10 +59,19 @@ Add characters via EVE SSO, manage tokens, and pick the active context — a cha
 
 - **Browser** — find an item via the market-group tree or by name; regional order book and price history. PLEX is special-cased: it trades in a single global virtual region (ID 19000001), not per-region.
 - Price alerts can be created from here as well.
+- The **History** tab is the item chart described below.
+
+### Item chart
+
+A trading terminal for one item. Opens from the chart icon next to an item name, or by right-clicking a row in Analysis, Orders or Alerts.
+
+- **Header**: best bid / ask, spread, and 1d / 7d / 30d change.
+- **Chart**: daily candles with range buttons (1M–All), mouse-wheel zoom and drag to pan, a crosshair with a value readout for the hovered day. Overlays you can toggle (remembered between sessions): average line, SMA 20, SMA 50, Bollinger bands, **My trades** (your buys ▲ and sells ▼ at the day's average price — hollow markers are fills in other regions), and **Adam4EVE** (a year of real per-side fills at the station). Volume bars and RSI 14 below. Solid lines mark the live bid/ask; dashed ones your cost basis and your open orders.
+- **Side panel**: market stats (median volume, 1-year high/low, 30-day volatility, order counts and depth), Adam4EVE fills per day, **My Position** (held quantity, average buy, P&L at the current ask, break-even ask, realized P&L, your open orders) and the live order book with your own orders starred.
 
 ### Analysis
 
-Two opportunity scanners:
+Three tabs — two opportunity scanners and a long-term strategy:
 
 - **Station Trading** — finds items with a healthy margin between buy and sell orders at one station. Filters: region/station, item category, margin, traded volume, volume modifier. Results support drag-select and feed the Ctrl+Z queue: the first press opens the item's market window in-game and copies the buy price, the second copies the quantity to buy.
 - **Inter-Region** — cross-region hauling: five trade types (Sell→Buy instant, Sell→Sell Order, Buy Order→Buy, Buy→Sell, and Safe Buy→Sell with an "unattractive to outbid" source price). Computes shipping cost per m³, real profit by walking the order book (not just the single best price), the 7-day trend, and the deviation from the weekly average.
@@ -68,6 +79,21 @@ Two opportunity scanners:
 **Margin is net everywhere**: after broker fees and sales tax (Inter-Region also nets out shipping), relative to the sell price — the same figure the Trade Calc overlay shows, and what the "Margin %" filter compares against. The separate **ROI** column is the same net profit relative to the capital outlaid (buy price, plus shipping for Inter-Region).
 
 With many candidates (>1000) the scanner switches to a bulk fetch of the whole region's order book — faster than thousands of per-type requests.
+
+**Presets**: Inter-Region saves buy/sell routes, Station Trading and Long-Term save region + station pairs — one click instead of searching for the station every time. Every non-obvious column header and filter has a hover tooltip.
+
+#### Long-Term Investment
+
+A slow strategy (weeks to months): buy items while they are unusually cheap compared with their own recent price, hold, and sell once the price recovers. The **Guide** button in the tab explains it in full; in short:
+
+1. Pick the region and, ideally, the **station** where you'll hold the stock — prices, holdings, your orders and your purchase history are then counted only there. Pick a category (Manufacture & Research › Materials is the default).
+2. Filters decide what counts as a dip: **Lookback d** (what "normal" means), **Min Discount %**, **Min/Max Volatility %**, **Exclude 1y Lows** (skip items in structural decline), and the price-spike filter.
+3. Money: **Budget** is your total target exposure including what you already hold; **Max Items**, **Max %/Item** and **Liquidity d** cap how much any one item can take.
+4. **Analyze** ranks items by real ISK opportunity. Each row shows an action (Buy / Buying / Wait / Sell / On sale), a **buy ladder** (price → ISK per rung; rungs the price has already fallen through merge into one at the live top bid, never above the market), a **sell target** (cost + take-profit, net of fees) and a **Backtest** of this exact strategy on the item's own history.
+5. Tick rows and press **Ctrl+Z** to place the ladder: first press opens the market window and copies the rung price, second copies the quantity. **Alerts** creates price alerts for the rungs and sell targets.
+6. Items you hold always stay in the list, even when they no longer pass the filters.
+
+**Don't mix it with quick trading on the same item.** The tab averages the cost of *all* your buys and sells of an item, so a flip leaks into the investment: the average cost and sell target shift, flip stock counts as held and shrinks To Buy, and the Orders tab's FIFO attributes investment gains to the flip. Keep them apart with a separate character (best), a separate station selected here, or simply by not flipping what you invest in.
 
 ### Orders
 
@@ -92,7 +118,11 @@ Character/corporation assets by location with estimated value.
 
 ### Alerts
 
-Price alerts: above/below a price (buy or sell side), checked against Jita (PLEX — against the global market). Triggered alerts show as in-app banners.
+Price alerts: the best buy or sell price in a region (The Forge by default; PLEX — its global market) rising above or falling below a target. Checked every 5 minutes while the app runs.
+
+- Grouped into **Long-Term** (created from Long-Term Investment ladders and sell targets) and **General** sections, one row per item with all its alerts; filter by Active / Triggered / Disabled or by name, bulk-delete per section.
+- Columns show the next trigger, the live bid / ask and how far the price still has to move (**To go**, highlighted within 2%).
+- Triggered alerts land in the **alert center** — the bell in the top bar with a badge.
 
 ### Contracts
 
@@ -114,7 +144,7 @@ Direct player-to-player trading over the **Nostr** protocol (decentralized relay
 
 ### Settings
 
-Character fees (Sales Tax / Broker Fee / relist skill), Marketlogs folder, SDE static-data import, EveRef price sync, P2P Market settings, Stream Overlay (accent color, autostart), database maintenance.
+**Language** (English / Russian, applied on restart), character fees (Sales Tax / Broker Fee / relist skill), global hotkeys, Marketlogs folder, SDE static-data import, EveRef price sync, P2P Market settings, Stream Overlay (accent color, autostart), database maintenance.
 
 ---
 
@@ -165,3 +195,6 @@ Analysis → Inter-Region → pick the trade type and regions → sort by Net Pr
 
 **A quick price check**
 Ctrl+M → copy an item name or an order row → prices, walls, and the beat price are on screen (and on the clipboard).
+
+**Long-term investing**
+Analysis → Long-Term Investment → pick a station preset and category → Analyze → tick the Buy rows → Ctrl+Z through the ladder in-game → Alerts for the rungs and sell targets → re-run Analyze every few days → when a row turns Sell, list the whole stack at or above the target.

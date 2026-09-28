@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cit_downloading">Downloading citadel list…</string>
+    <string name="parsing">Parsing…</string>
+    <string name="cit_saving">Saving %1$s citadels…</string>
+    <string name="cit_synced">Synced %1$s citadels</string>
+    <string name="unknown_error">Unknown error</string>
+    <string name="sde_checking">Checking latest SDE version…</string>
+    <string name="sde_downloading">Downloading SDE build %1$s…</string>
+    <string name="sde_done">Done — %1$s types loaded</string>
+    <string name="sde_cancelled">Import cancelled</string>
+    <string name="sde_failed">Import failed: %1$s</string>
+    <string name="sde_parsing_types">Parsing types: %1$s…</string>
+    <string name="sde_saving_types">Saving %1$s types…</string>
+    <string name="sde_saved_types">Saved %1$s / %2$s types</string>
+    <string name="sde_saving_groups">Saving %1$s groups…</string>
+    <string name="sde_saving_categories">Saving %1$s categories…</string>
+    <string name="sde_saving_market_groups">Saving %1$s market groups…</string>
+    <string name="sde_saving_regions">Saving %1$s regions…</string>
+    <string name="sde_saving_systems">Saving %1$s systems…</string>
+    <string name="sde_resolving_stations">Resolving %1$s NPC station names from ESI…</string>
+    <string name="sde_saving_stations">Saving %1$s NPC stations…</string>
+    <string name="sde_resolving_ships">Resolving %1$s ship packaged volumes from ESI…</string>
+    <string name="sde_resolved_ships">Resolved %1$s/%2$s ship volumes…</string>
+</resources>
