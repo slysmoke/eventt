@@ -80,6 +80,9 @@ private val WICK_COLOR = Color(0xFFE0E0E0)
 private val AXIS_COLOR = Color(0xFF777777)
 private val GRID_COLOR = Color(0x22FFFFFF)
 
+private const val THE_FORGE = 10000002
+private const val JITA_44 = 60003760L
+
 private enum class ChartRange(
     val label: String,
     val days: Int,
@@ -344,6 +347,10 @@ internal fun ItemPriceChart(
     var showA4e by remember { mutableStateOf(true) }
     var a4e by remember { mutableStateOf<Map<String, A4eDay>>(emptyMap()) }
     val a4eSync by A4eHistorySync.state.collectAsState()
+    // ponytail: test override — region-wide Adam4EVE in The Forge sums ~350 stations/structures,
+    // and the outliers make the wicks pure noise; Jita 4-4 only. Generalise (per-region hub pick,
+    // or a toggle) if it proves out.
+    val a4eStation = stationId ?: JITA_44.takeIf { regionId == THE_FORGE }
 
     fun save(
         key: String,
@@ -366,14 +373,14 @@ internal fun ItemPriceChart(
     }
 
     // Local Adam4EVE history — re-read as the background sync lands more files.
-    LaunchedEffect(typeId, regionId, stationId, a4eSync.revision) {
+    LaunchedEffect(typeId, regionId, a4eStation, a4eSync.revision) {
         a4e =
             withContext(Dispatchers.IO) {
                 runCatching {
                     val today = LocalDate.now().toEpochDay().toInt()
                     aggregateA4e(
                         A4eHistorySync.store.query(typeId, today - ChartRange.ALL.days, today),
-                        stationId,
+                        a4eStation,
                         regionId,
                     )
                 }.getOrDefault(emptyMap())
@@ -422,7 +429,9 @@ internal fun ItemPriceChart(
                 when {
                     a4eSync.running -> "Adam4EVE syncing ${a4eSync.filesDone}/${a4eSync.filesTotal}…"
                     a4e.isEmpty() -> "Adam4EVE: no fills tracked here"
-                    else -> "Adam4EVE: ${if (stationId != null) "this station" else "tracked hubs in region"}"
+                    stationId != null -> "Adam4EVE: this station"
+                    a4eStation == JITA_44 -> "Adam4EVE: Jita 4-4 only"
+                    else -> "Adam4EVE: all stations in region"
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = AXIS_COLOR,
