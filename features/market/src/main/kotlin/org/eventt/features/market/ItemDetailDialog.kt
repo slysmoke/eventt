@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -129,8 +130,8 @@ private data class MyTrades(
     val sellFeePct: Double,
     val transactions: List<WalletDao.RawTxRecord>,
     val openOrders: List<ActiveOrderDao.ActiveOrderRecord>,
-    // Just the fills/orders in the charted region — trading between regions would otherwise put
-    // e.g. Amarr sells on the Jita chart at Amarr prices. Position figures still use everything.
+    // Fills/orders in the charted region. Fills elsewhere (inter-region trading) are still plotted,
+    // but hollow — their price is another market's, not a point on this chart's book.
     val regionTransactions: List<WalletDao.RawTxRecord>,
     val regionOrders: List<ActiveOrderDao.ActiveOrderRecord>,
 )
@@ -402,7 +403,7 @@ fun ItemDetailDialog(
                                 remember(secondaryOrders, effSecondaryStation) { BookSide.of(secondaryOrders, effSecondaryStation) }
                             OrderBookCard(secondaryLabel ?: "", secondaryBook, myTrades?.openOrders.orEmpty())
                         }
-                        myTrades?.takeIf { it.regionTransactions.isNotEmpty() }?.let { TradesCard(it.regionTransactions) }
+                        myTrades?.takeIf { it.transactions.isNotEmpty() }?.let { TradesCard(it.transactions, it.regionTransactions) }
                     }
                 }
             }
@@ -655,6 +656,9 @@ private fun TradingChart(
     val data = remember(history, secondaryHistory) { buildChartData(history, secondaryHistory) }
     val buyFills = remember(trades) { trades?.let { fillsByDay(it.regionTransactions, buy = true) }.orEmpty() }
     val sellFills = remember(trades) { trades?.let { fillsByDay(it.regionTransactions, buy = false) }.orEmpty() }
+    val elsewhere = remember(trades) { trades?.let { t -> t.transactions - t.regionTransactions.toSet() }.orEmpty() }
+    val otherBuyFills = remember(elsewhere) { fillsByDay(elsewhere, buy = true) }
+    val otherSellFills = remember(elsewhere) { fillsByDay(elsewhere, buy = false) }
     var hoverX by remember { mutableStateOf<Float?>(null) }
     var hoverY by remember { mutableStateOf<Float?>(null) }
     val priceColor = MaterialTheme.colorScheme.primary
@@ -686,7 +690,16 @@ private fun TradingChart(
 
     Column(modifier = modifier) {
         // Legend strip: follows the crosshair, or shows the latest day when not hovering.
-        HoverLegend(data, hoverIndex ?: data.rows.indexOfLast { it != null }.takeIf { it >= 0 }, buyFills, sellFills, a4e, secondaryLabel)
+        HoverLegend(
+            data,
+            hoverIndex ?: data.rows.indexOfLast { it != null }.takeIf { it >= 0 },
+            buyFills,
+            sellFills,
+            otherBuyFills.takeIf { trades != null }.orEmpty(),
+            otherSellFills.takeIf { trades != null }.orEmpty(),
+            a4e,
+            secondaryLabel,
+        )
         Spacer(Modifier.height(4.dp))
 
         Canvas(
@@ -897,18 +910,23 @@ private fun TradingChart(
                 level(o.price, if (o.isBuyOrder) upColor else downColor, "my ${if (o.isBuyOrder) "B" else "S"}", dashed = true)
             }
 
-            // Your fills: ▲ buys / ▼ sells at the day's VWAP, sized by quantity.
+            // Your fills: ▲ buys / ▼ sells at the day's VWAP, sized by quantity — solid in this
+            // region, hollow for fills in another region (their price is that market's).
             if (trades != null) {
-                val maxQty = (buyFills.values + sellFills.values).maxOfOrNull { it.qty }?.toDouble() ?: 1.0
+                val maxQty =
+                    (buyFills.values + sellFills.values + otherBuyFills.values + otherSellFills.values)
+                        .maxOfOrNull { it.qty }
+                        ?.toDouble() ?: 1.0
                 val dayIndex = data.days.withIndex().associate { (i, d) -> d to i }
 
                 fun marker(
                     fills: Map<String, DayFill>,
                     up: Boolean,
+                    hollow: Boolean = false,
                 ) = fills.forEach { (day, f) ->
                     val i = dayIndex[day]?.takeIf { visible(it) } ?: return@forEach
                     val r = (3.dp.toPx() + 5.dp.toPx() * sqrt(f.qty / maxQty)).toFloat()
-                    val c = Offset(xFor(i), yP(f.price))
+                    val c = Offset(xFor(i), yClamped(f.price))
                     val path =
                         Path().apply {
                             if (up) {
@@ -922,9 +940,15 @@ private fun TradingChart(
                             }
                             close()
                         }
-                    drawPath(path, if (up) upColor else downColor)
-                    drawPath(path, Color.Black.copy(alpha = 0.6f), style = Stroke(1f))
+                    if (hollow) {
+                        drawPath(path, if (up) upColor else downColor, style = Stroke(1.5.dp.toPx()))
+                    } else {
+                        drawPath(path, if (up) upColor else downColor)
+                        drawPath(path, Color.Black.copy(alpha = 0.6f), style = Stroke(1f))
+                    }
                 }
+                marker(otherBuyFills, up = true, hollow = true)
+                marker(otherSellFills, up = false, hollow = true)
                 marker(buyFills, up = true)
                 marker(sellFills, up = false)
             }
@@ -1060,6 +1084,8 @@ private fun HoverLegend(
     index: Int?,
     buyFills: Map<String, DayFill>,
     sellFills: Map<String, DayFill>,
+    otherBuyFills: Map<String, DayFill>,
+    otherSellFills: Map<String, DayFill>,
     a4e: Map<String, A4eDay>,
     secondaryLabel: String?,
 ) {
@@ -1087,6 +1113,12 @@ private fun HoverLegend(
         }
         buyFills[day]?.let { Text("▲ bought ${formatVolume(it.qty)} @ ${formatPriceAbbr(it.price)}", style = style, color = positiveColor) }
         sellFills[day]?.let { Text("▼ sold ${formatVolume(it.qty)} @ ${formatPriceAbbr(it.price)}", style = style, color = negativeColor) }
+        otherBuyFills[day]?.let {
+            Text("△ bought ${formatVolume(it.qty)} @ ${formatPriceAbbr(it.price)} (other region)", style = style, color = positiveColor)
+        }
+        otherSellFills[day]?.let {
+            Text("▽ sold ${formatVolume(it.qty)} @ ${formatPriceAbbr(it.price)} (other region)", style = style, color = negativeColor)
+        }
         a4e[day]?.let { d ->
             d.bid?.let {
                 Text(
@@ -1278,10 +1310,16 @@ private fun BookRow(
 }
 
 @Composable
-private fun TradesCard(txs: List<WalletDao.RawTxRecord>) {
+private fun TradesCard(
+    txs: List<WalletDao.RawTxRecord>,
+    here: List<WalletDao.RawTxRecord>,
+) {
+    val inRegion = here.toSet()
     ContentCard("My Trades") {
         txs.takeLast(15).reversed().forEach { t ->
-            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
+            // Fills in another region: dimmed, hollow marker — matches the chart.
+            val other = t !in inRegion
+            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp).alpha(if (other) 0.55f else 1f)) {
                 Text(
                     t.date.take(16).replace('T', ' '),
                     style = MaterialTheme.typography.labelSmall,
@@ -1289,7 +1327,15 @@ private fun TradesCard(txs: List<WalletDao.RawTxRecord>) {
                     modifier = Modifier.width(110.dp),
                 )
                 Text(
-                    if (t.isBuy) "▲ BUY" else "▼ SELL",
+                    (
+                        if (t.isBuy) {
+                            (if (other) "△ BUY" else "▲ BUY")
+                        } else if (other) {
+                            "▽ SELL"
+                        } else {
+                            "▼ SELL"
+                        }
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = if (t.isBuy) positiveColor else negativeColor,
                     modifier = Modifier.width(52.dp),
