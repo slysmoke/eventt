@@ -11,6 +11,7 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:database"))
     implementation(project(":core:esi"))
+    implementation(project(":features:market")) // ItemDetailDialog, opened from an alert
     implementation(project(":ui:theme"))
     implementation(project(":ui:common"))
     implementation(compose.desktop.currentOs)

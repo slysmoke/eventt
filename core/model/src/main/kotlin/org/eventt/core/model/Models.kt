@@ -232,7 +232,12 @@ data class PriceAlertModel(
     val triggeredAt: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val characterId: Int? = null,
+    // Which tool created it — the Alerts screen groups by this. See ALERT_CATEGORY_*.
+    val category: String = ALERT_CATEGORY_GENERAL,
 )
+
+const val ALERT_CATEGORY_GENERAL = "general"
+const val ALERT_CATEGORY_INVESTMENT = "investment"
 
 // ─── ESI Response Metadata ─────────────────────────────────────────────────
 

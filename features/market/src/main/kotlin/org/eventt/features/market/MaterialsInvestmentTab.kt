@@ -37,6 +37,7 @@ import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.WalletDao
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.everef.EveRefService
+import org.eventt.core.model.ALERT_CATEGORY_INVESTMENT
 import org.eventt.core.model.HotkeyBindings
 import org.eventt.core.model.PLEX_MARKET_REGION_ID
 import org.eventt.core.model.PLEX_TYPE_ID
@@ -1118,6 +1119,7 @@ private fun ladderAlerts(
                     // competitive), not that you could instant-sell into a buyer at that price.
                     orderType = "buy",
                     characterId = charId,
+                    category = ALERT_CATEGORY_INVESTMENT,
                 )
         }
     }
@@ -1139,6 +1141,7 @@ private fun ladderAlerts(
                     regionId = effRegion,
                     orderType = "sell",
                     characterId = charId,
+                    category = ALERT_CATEGORY_INVESTMENT,
                 )
         }
     }

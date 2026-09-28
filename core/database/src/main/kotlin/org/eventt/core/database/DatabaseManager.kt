@@ -177,6 +177,25 @@ object DatabaseManager {
                 }
             }
         }
+        addAlertCategoryOnce(conn)
+    }
+
+    // Alerts gained a category (the Alerts screen groups by it). Before that, only Materials
+    // Investment set character_id on the alerts it created, so the one time the column is added
+    // that's enough to file existing ones — guarded, unlike the list above, because re-running the
+    // UPDATE on every start would override whatever a later alert was actually created as.
+    private fun addAlertCategoryOnce(conn: Connection) {
+        val has =
+            conn.createStatement().use { st ->
+                st.executeQuery("PRAGMA table_info(price_alerts)").use { rs ->
+                    generateSequence { if (rs.next()) rs.getString("name") else null }.any { it == "category" }
+                }
+            }
+        if (has) return
+        conn.createStatement().use { st ->
+            st.execute("ALTER TABLE price_alerts ADD COLUMN category TEXT NOT NULL DEFAULT 'general'")
+            st.execute("UPDATE price_alerts SET category = 'investment' WHERE character_id IS NOT NULL")
+        }
     }
 
     // ─── Table Creation ─────────────────────────────────────────────────

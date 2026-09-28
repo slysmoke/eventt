@@ -4,6 +4,8 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import org.eventt.core.model.ALERT_CATEGORY_GENERAL
+import org.eventt.core.model.ALERT_CATEGORY_INVESTMENT
 import org.eventt.core.model.PriceAlertModel
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeAll
@@ -28,6 +30,19 @@ class AlertDaoTest {
         typeId: Int = 34,
         enabled: Boolean = true,
     ) = PriceAlertModel(typeId = typeId, targetPrice = 5.0, condition = "above", enabled = enabled)
+
+    @Test
+    fun `category round-trips and deleteAll removes exactly the given ids`() {
+        val a = AlertDao.insert(alert(typeId = 1).copy(category = ALERT_CATEGORY_INVESTMENT))
+        val b = AlertDao.insert(alert(typeId = 2))
+        val c = AlertDao.insert(alert(typeId = 3))
+
+        AlertDao.getAll().single { it.id == a }.category shouldBe ALERT_CATEGORY_INVESTMENT
+        AlertDao.getAll().single { it.id == b }.category shouldBe ALERT_CATEGORY_GENERAL
+
+        AlertDao.deleteAll(listOf(a, c))
+        AlertDao.getAll().map { it.id } shouldBe listOf(b)
+    }
 
     @Test
     fun `insert generates an id and getAll reads it back`() {
