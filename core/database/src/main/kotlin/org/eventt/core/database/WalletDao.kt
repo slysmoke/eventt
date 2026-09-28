@@ -121,6 +121,7 @@ object WalletDao {
         // p2pTransactionId). A P2P trade is a direct item/ISK exchange outside the market, so
         // unlike a real transaction it never carries sales tax or a broker fee.
         val isP2p: Boolean = false,
+        val locationId: Long = 0,
     )
 
     fun getAllTransactions(
@@ -130,7 +131,8 @@ object WalletDao {
         DatabaseManager.transaction {
             val where = buildWhereClause(characterId, corporationId)
             prepareStatement(
-                "SELECT transaction_id, date, type_id, type_name, quantity, unit_price, is_buy FROM transactions ${where.sql} ORDER BY date ASC",
+                "SELECT transaction_id, date, type_id, type_name, quantity, unit_price, is_buy, location_id FROM transactions " +
+                    "${where.sql} ORDER BY date ASC",
             ).use { stmt ->
                 where.params.forEachIndexed { i, param -> stmt.setObject(i + 1, param) }
                 stmt.executeQuery().use { rs ->
@@ -145,6 +147,7 @@ object WalletDao {
                                 unitPrice = rs.getDouble("unit_price"),
                                 isBuy = rs.getInt("is_buy") == 1,
                                 isP2p = rs.getLong("transaction_id") < 0,
+                                locationId = rs.getLong("location_id"),
                             ),
                         )
                     }

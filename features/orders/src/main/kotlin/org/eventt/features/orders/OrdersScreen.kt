@@ -1164,8 +1164,9 @@ fun OrdersScreen(context: ViewContext?) {
             primaryRegionId = regionId,
             primaryRegionName = regionName,
             primaryStationId = t.stationId,
-            // Personal fills/orders/assets are per character; in corp view this is the acting member.
+            // Corp view shows the corporation's fills/orders/assets; fees come from the acting member.
             charId = actingCharId,
+            corporationId = corpId,
             onDismiss = { ItemDetailRequest.target = null },
         )
     }

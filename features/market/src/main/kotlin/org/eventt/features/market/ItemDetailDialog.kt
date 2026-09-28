@@ -129,26 +129,37 @@ private data class MyTrades(
     val sellFeePct: Double,
     val transactions: List<WalletDao.RawTxRecord>,
     val openOrders: List<ActiveOrderDao.ActiveOrderRecord>,
+    // Just the fills/orders in the charted region — trading between regions would otherwise put
+    // e.g. Amarr sells on the Jita chart at Amarr prices. Position figures still use everything.
+    val regionTransactions: List<WalletDao.RawTxRecord>,
+    val regionOrders: List<ActiveOrderDao.ActiveOrderRecord>,
 )
 
+// In corp view (corpId set) everything comes from the corporation's wallet, orders and hangars —
+// corp transactions are stored without a character_id — while fees stay the acting member's.
 private fun loadMyTrades(
     charId: Int,
+    corpId: Int?,
     typeId: Int,
+    regionId: Int,
 ): MyTrades {
-    val txs = WalletDao.getAllTransactions(characterId = charId).filter { it.typeId == typeId }
+    val txs =
+        (if (corpId != null) WalletDao.getAllTransactions(corporationId = corpId) else WalletDao.getAllTransactions(characterId = charId))
+            .filter { it.typeId == typeId }
     val bought = txs.filter { it.isBuy }
     val sold = txs.filter { !it.isBuy }
     val boughtQty = bought.sumOf { it.quantity.toLong() }
     val soldQty = sold.sumOf { it.quantity.toLong() }
     val avgBuy = if (boughtQty > 0) bought.sumOf { it.unitPrice * it.quantity } / boughtQty else null
     val avgSell = if (soldQty > 0) sold.sumOf { it.unitPrice * it.quantity } / soldQty else null
-    val openOrders = ActiveOrderDao.getAll(characterId = charId).filter { it.typeId == typeId && it.state == "active" }
+    val openOrders =
+        (if (corpId != null) ActiveOrderDao.getAll(corporationId = corpId) else ActiveOrderDao.getAll(characterId = charId))
+            .filter { it.typeId == typeId && it.state == "active" }
     // Physical stock, not net(buys - sells): materials often arrive via mining/reprocessing with no
     // transaction at all (same reasoning as MaterialPosition.qtyHeld). Plus whatever's listed in
     // sell orders, which EVE escrows out of the hangar.
     val held =
-        AssetDao
-            .getByCharacter(charId)
+        (if (corpId != null) AssetDao.getByCorporation(corpId) else AssetDao.getByCharacter(charId))
             .filter { it.typeId == typeId }
             .sumOf { it.quantity.toLong() } +
             openOrders.filter { !it.isBuyOrder }.sumOf { it.volumeRemaining.toLong() }
@@ -159,8 +170,17 @@ private fun loadMyTrades(
         sellFeePct = StaticDataDao.getCharSalesTax(charId) + StaticDataDao.getCharBrokersFee(charId),
         transactions = txs,
         openOrders = openOrders,
+        regionTransactions = txs.filter { regionOf(it.locationId).let { r -> r == null || r == regionId } },
+        regionOrders = openOrders.filter { it.regionId <= 0 || it.regionId == regionId },
     )
 }
+
+// Station -> region from static data; null for player structures, which aren't in it — those
+// fills are kept rather than dropped, since their region can't be ruled out.
+private val stationRegions = java.util.concurrent.ConcurrentHashMap<Long, Int>()
+
+private fun regionOf(locationId: Long): Int? =
+    stationRegions[locationId] ?: StaticDataDao.getStationById(locationId)?.regionId?.also { stationRegions[locationId] = it }
 
 private fun Map<String, Any?>.price() = (get("price") as? Number)?.toDouble() ?: 0.0
 
@@ -191,6 +211,8 @@ fun ItemDetailDialog(
     secondaryRegionName: String? = null,
     secondaryStationId: Long? = null,
     charId: Int?,
+    // Corp view: show the corporation's fills/orders/assets (charId is then the acting member).
+    corporationId: Int? = null,
     onDismiss: () -> Unit,
 ) {
     var isLoading by remember { mutableStateOf(true) }
@@ -252,7 +274,7 @@ fun ItemDetailDialog(
                 secondaryOrders = emptyList()
                 secondaryHistory = emptyList()
             }
-            myTrades = charId?.let { runCatching { loadMyTrades(it, typeId) }.getOrNull() }
+            myTrades = charId?.let { runCatching { loadMyTrades(it, corporationId, typeId, effPrimaryRegion) }.getOrNull() }
         }
         isLoading = false
     }
@@ -380,7 +402,7 @@ fun ItemDetailDialog(
                                 remember(secondaryOrders, effSecondaryStation) { BookSide.of(secondaryOrders, effSecondaryStation) }
                             OrderBookCard(secondaryLabel ?: "", secondaryBook, myTrades?.openOrders.orEmpty())
                         }
-                        myTrades?.takeIf { it.transactions.isNotEmpty() }?.let { TradesCard(it.transactions) }
+                        myTrades?.takeIf { it.regionTransactions.isNotEmpty() }?.let { TradesCard(it.regionTransactions) }
                     }
                 }
             }
@@ -631,8 +653,8 @@ private fun TradingChart(
         return
     }
     val data = remember(history, secondaryHistory) { buildChartData(history, secondaryHistory) }
-    val buyFills = remember(trades) { trades?.let { fillsByDay(it.transactions, buy = true) }.orEmpty() }
-    val sellFills = remember(trades) { trades?.let { fillsByDay(it.transactions, buy = false) }.orEmpty() }
+    val buyFills = remember(trades) { trades?.let { fillsByDay(it.regionTransactions, buy = true) }.orEmpty() }
+    val sellFills = remember(trades) { trades?.let { fillsByDay(it.regionTransactions, buy = false) }.orEmpty() }
     var hoverX by remember { mutableStateOf<Float?>(null) }
     var hoverY by remember { mutableStateOf<Float?>(null) }
     val priceColor = MaterialTheme.colorScheme.primary
@@ -744,7 +766,7 @@ private fun TradingChart(
                     book.bestBid?.let { add(it) }
                     book.bestAsk?.let { add(it) }
                     trades?.avgBuyPrice?.let { add(it) }
-                    trades?.openOrders?.forEach { add(it.price) }
+                    trades?.regionOrders?.forEach { add(it.price) }
                     data.days.subList(iFrom, iTo + 1).forEach { d ->
                         a4e[d]?.let { day ->
                             day.low?.let { add(it) }
@@ -871,7 +893,7 @@ private fun TradingChart(
             book.bestBid?.let { level(it, upColor, formatPriceAbbr(it), dashed = false) }
             book.bestAsk?.let { level(it, downColor, formatPriceAbbr(it), dashed = false) }
             trades?.avgBuyPrice?.takeIf { trades.qtyHeld > 0 }?.let { level(it, COST_COLOR, "cost ${formatPriceAbbr(it)}", dashed = true) }
-            trades?.openOrders?.forEach { o ->
+            trades?.regionOrders?.forEach { o ->
                 level(o.price, if (o.isBuyOrder) upColor else downColor, "my ${if (o.isBuyOrder) "B" else "S"}", dashed = true)
             }
 
