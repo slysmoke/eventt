@@ -82,14 +82,43 @@ internal data class MaterialPosition(
     val hasOrders get() = listedQty > 0 || buyOrderQty > 0
 }
 
+internal data class TxCostBasis(
+    // Moving-average cost of what's still held from tracked buys; null when that's nothing.
+    val avgCost: Double?,
+    // Gross (pre-fee) profit of every sell against the moving average at the time — all cycles.
+    val realized: Double,
+)
+
+/**
+ * Moving-average cost basis, reset whenever the position goes flat. A plain average of every buy
+ * ever made kept counting lots long since sold — rebuy an item cheaper after a closed round trip
+ * and its "avg buy" (and so break-even, sell target, realized) stayed anchored to the old price.
+ * Sells beyond the tracked quantity (e.g. mined stock) don't touch the average.
+ */
+internal fun txCostBasis(transactions: List<WalletDao.RawTxRecord>): TxCostBasis {
+    var qty = 0L
+    var avg = 0.0
+    var realized = 0.0
+    for (t in transactions.sortedBy { it.date }) {
+        if (t.isBuy) {
+            avg = (avg * qty + t.unitPrice * t.quantity) / (qty + t.quantity)
+            qty += t.quantity
+        } else {
+            val matched = minOf(qty, t.quantity.toLong())
+            realized += (t.unitPrice - avg) * matched
+            qty -= matched
+            if (qty == 0L) avg = 0.0
+        }
+    }
+    return TxCostBasis(avg.takeIf { qty > 0 }, realized)
+}
+
 internal fun computeMaterialPosition(
     transactions: List<WalletDao.RawTxRecord>,
     assetQty: Long,
     orders: List<ActiveOrderDao.ActiveOrderRecord> = emptyList(),
 ): MaterialPosition {
-    val bought = transactions.filter { it.isBuy }
-    val boughtQty = bought.sumOf { it.quantity }
-    val avgBuy = if (boughtQty > 0) bought.sumOf { it.unitPrice * it.quantity } / boughtQty else null
+    val avgBuy = txCostBasis(transactions).avgCost
     val sells = orders.filter { !it.isBuyOrder }
     val buys = orders.filter { it.isBuyOrder }
     val listed = sells.sumOf { it.volumeRemaining.toLong() }

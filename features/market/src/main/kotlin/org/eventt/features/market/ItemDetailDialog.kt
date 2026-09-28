@@ -150,12 +150,7 @@ internal fun loadMyTrades(
     val txs =
         (if (corpId != null) WalletDao.getAllTransactions(corporationId = corpId) else WalletDao.getAllTransactions(characterId = charId))
             .filter { it.typeId == typeId }
-    val bought = txs.filter { it.isBuy }
-    val sold = txs.filter { !it.isBuy }
-    val boughtQty = bought.sumOf { it.quantity.toLong() }
-    val soldQty = sold.sumOf { it.quantity.toLong() }
-    val avgBuy = if (boughtQty > 0) bought.sumOf { it.unitPrice * it.quantity } / boughtQty else null
-    val avgSell = if (soldQty > 0) sold.sumOf { it.unitPrice * it.quantity } / soldQty else null
+    val basis = txCostBasis(txs)
     val openOrders =
         (if (corpId != null) ActiveOrderDao.getAll(corporationId = corpId) else ActiveOrderDao.getAll(characterId = charId))
             .filter { it.typeId == typeId && it.state == "active" }
@@ -169,8 +164,8 @@ internal fun loadMyTrades(
             openOrders.filter { !it.isBuyOrder }.sumOf { it.volumeRemaining.toLong() }
     return MyTrades(
         qtyHeld = held,
-        avgBuyPrice = avgBuy,
-        realizedPnl = if (avgBuy != null && avgSell != null) (avgSell - avgBuy) * soldQty else null,
+        avgBuyPrice = basis.avgCost,
+        realizedPnl = basis.realized.takeIf { txs.any { !it.isBuy } },
         sellFeePct = StaticDataDao.getCharSalesTax(charId) + StaticDataDao.getCharBrokersFee(charId),
         transactions = txs,
         openOrders = openOrders,
@@ -1283,7 +1278,7 @@ private fun PositionCard(
             }
             KV("Break-even ask", formatIsk(cost / keep))
         }
-        t.realizedPnl?.let { KV("Realized*", formatIsk(it), if (it >= 0) positiveColor else negativeColor) }
+        t.realizedPnl?.let { KV("Realized, all time*", formatIsk(it), if (it >= 0) positiveColor else negativeColor) }
         if (t.openOrders.isNotEmpty()) {
             Spacer(Modifier.height(4.dp))
             t.openOrders.forEach { o ->
@@ -1297,7 +1292,9 @@ private fun PositionCard(
             }
         }
         Text(
-            "* average-cost estimate, not FIFO. Fees: ${pct(t.sellFeePct)} (tax + broker).",
+            "* moving-average cost (resets when the position closes), before fees; the Orders tab has exact FIFO. Fees: ${pct(
+                t.sellFeePct,
+            )} (tax + broker).",
             style = MaterialTheme.typography.labelSmall,
             color = AXIS_COLOR,
         )
