@@ -8,7 +8,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.filled.*
@@ -45,6 +48,7 @@ import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.PriceAlertModel
 import org.eventt.core.model.StaticMarketGroupModel
 import org.eventt.core.model.StaticRegionModel
+import org.eventt.core.model.StaticStationModel
 import org.eventt.core.model.eveSigFigStep
 import org.eventt.core.model.stringBlocking
 import org.eventt.market.generated.resources.*
@@ -78,6 +82,12 @@ internal fun MaterialsInvestmentTab(
     val scope = rememberCoroutineScope()
 
     var regionId by remember { mutableStateOf(10000002) }
+    // Optional: scopes prices, holdings, your orders and your transactions to one station.
+    var stationId by remember { mutableStateOf<Long?>(null) }
+    var stations by remember { mutableStateOf<List<StaticStationModel>>(emptyList()) }
+    var stationPresets by remember { mutableStateOf<List<StationPreset>>(emptyList()) }
+    var showSavePresetDialog by remember { mutableStateOf(false) }
+    var showGuide by remember { mutableStateOf(false) }
     var selectedTopGroup by remember { mutableStateOf<StaticMarketGroupModel?>(null) }
     var selectedSubGroup by remember { mutableStateOf<StaticMarketGroupModel?>(null) }
     var subGroups by remember { mutableStateOf<List<StaticMarketGroupModel>>(emptyList()) }
@@ -112,6 +122,8 @@ internal fun MaterialsInvestmentTab(
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             S.get(S.MI_REGION)?.toIntOrNull()?.let { regionId = it }
+            S.get(S.MI_STATION)?.toLongOrNull()?.let { stationId = it }
+            stationPresets = decodeStationPresets(S.get(S.MI_PRESETS))
             S.get(S.MI_LOOKBACK_DAYS)?.let { lookbackDays = it }
             S.get(S.MI_MIN_VOL)?.let { minDailyVol = it }
             S.get(S.MI_MIN_DISCOUNT)?.let { minDiscountPct = it }
@@ -130,6 +142,36 @@ internal fun MaterialsInvestmentTab(
             S.get(S.MI_COPY_VOLUME)?.let { copyVolumeEnabled = it == "true" }
             settingsLoaded = true
         }
+    }
+
+    // Same keep-or-clear rule as Station Trading when the region changes.
+    LaunchedEffect(regionId, settingsLoaded) {
+        val loaded = withContext(Dispatchers.IO) { StaticDataDao.getStationsByRegion(regionId) }
+        stations = loaded
+        if (settingsLoaded && stationId != null && loaded.none { it.stationId == stationId }) {
+            stationId = null
+            scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_STATION, "") } }
+        }
+    }
+
+    fun savePresets(updated: List<StationPreset>) {
+        stationPresets = updated
+        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_PRESETS, encodeStationPresets(updated)) } }
+    }
+
+    if (showGuide) MaterialsGuideDialog(onDismiss = { showGuide = false })
+
+    if (showSavePresetDialog) {
+        SavePresetDialog(
+            title = stringResource(Res.string.save_station_preset),
+            placeholder = stringResource(Res.string.eg_jita_station),
+            initialName = stations.find { it.stationId == stationId }?.name.orEmpty(),
+            onDismiss = { showSavePresetDialog = false },
+            onSave = { name ->
+                savePresets(stationPresets.filter { it.name != name } + StationPreset(name, regionId, stationId))
+                showSavePresetDialog = false
+            },
+        )
     }
 
     // Restore category selection after groups load -- on a first-ever run (nothing persisted yet)
@@ -215,135 +257,173 @@ internal fun MaterialsInvestmentTab(
 
     Column(modifier = Modifier.fillMaxSize()) {
         FilterBar {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                RegionPicker(allRegions, regionId, width = 180.dp, accentColor = MaterialTheme.colorScheme.primary) {
-                    regionId = it
-                    scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_REGION, it.toString()) } }
-                }
-                FilterDivider()
-                GroupDropdown(
-                    stringResource(Res.string.category),
-                    topGroups,
-                    selectedTopGroup,
-                    stringResource(Res.string.all_categories),
-                    170.dp,
-                ) { g ->
-                    selectedTopGroup = g
-                    selectedSubGroup = null
-                    scope.launch {
-                        withContext(Dispatchers.IO) {
-                            S.set(S.MI_CAT_TOP, g?.marketGroupId?.toString() ?: "")
-                            S.set(S.MI_CAT_SUB, "")
+            // Row 1: where + what + which price histories to distrust; the guide sits at the far right.
+            Row(verticalAlignment = Alignment.Top) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    RegionPicker(allRegions, regionId, width = 160.dp, accentColor = MaterialTheme.colorScheme.primary) {
+                        regionId = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_REGION, it.toString()) } }
+                    }
+                    StationPicker(stations, stationId, width = 190.dp, tooltip = stringResource(Res.string.tip_mi_station)) {
+                        stationId = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_STATION, it?.toString() ?: "") } }
+                    }
+                    PresetPicker(
+                        presets = stationPresets.map { it.name },
+                        saveCurrentLabel = stringResource(Res.string.save_current_station),
+                        tooltip = stringResource(Res.string.tip_station_presets),
+                        onApply = { name ->
+                            stationPresets.find { it.name == name }?.let { p ->
+                                regionId = p.regionId
+                                stationId = p.stationId
+                                scope.launch {
+                                    withContext(Dispatchers.IO) {
+                                        S.set(S.MI_REGION, p.regionId.toString())
+                                        S.set(S.MI_STATION, p.stationId?.toString() ?: "")
+                                    }
+                                }
+                            }
+                        },
+                        onDelete = { name -> savePresets(stationPresets.filter { it.name != name }) },
+                        onSaveCurrent = { showSavePresetDialog = true },
+                    )
+                    FilterDivider()
+                    GroupDropdown(
+                        stringResource(Res.string.category),
+                        topGroups,
+                        selectedTopGroup,
+                        stringResource(Res.string.all_categories),
+                        170.dp,
+                    ) { g ->
+                        selectedTopGroup = g
+                        selectedSubGroup = null
+                        scope.launch {
+                            withContext(Dispatchers.IO) {
+                                S.set(S.MI_CAT_TOP, g?.marketGroupId?.toString() ?: "")
+                                S.set(S.MI_CAT_SUB, "")
+                            }
+                        }
+                    }
+                    if (subGroups.isNotEmpty()) {
+                        GroupDropdown(
+                            stringResource(Res.string.subcategory),
+                            subGroups,
+                            selectedSubGroup,
+                            stringResource(Res.string.all_short),
+                            140.dp,
+                        ) { g ->
+                            selectedSubGroup = g
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_CAT_SUB, g?.marketGroupId?.toString() ?: "") } }
+                        }
+                    }
+                    FilterDivider()
+                    Tip(
+                        stringResource(Res.string.mi_tip_1y_lows),
+                    ) {
+                        FilterControl(stringResource(Res.string.exclude_1y_lows)) {
+                            Checkbox(
+                                checked = excludeStructuralBreak,
+                                onCheckedChange = {
+                                    excludeStructuralBreak = it
+                                    scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_EXCLUDE_STRUCTURAL_BREAK, it.toString()) } }
+                                },
+                                modifier = Modifier.size(24.dp),
+                            )
+                        }
+                    }
+                    Tip(stringResource(Res.string.mi_tip_spike)) {
+                        SpikeFilterChip(spikeFilter) {
+                            spikeFilter = it
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_SPIKE_FILTER, it.name) } }
+                        }
+                    }
+                    Tip(stringResource(Res.string.mi_tip_price_mult)) {
+                        ParamField(
+                            stringResource(Res.string.price_mult),
+                            spikePriceMultiplier,
+                            50.dp,
+                            enabled = spikeFilter != SpikeFilter.ANY,
+                        ) {
+                            spikePriceMultiplier = it
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_SPIKE_PRICE_MULTIPLIER, it) } }
+                        }
+                    }
+                    Tip(stringResource(Res.string.mi_tip_vol_mult)) {
+                        ParamField(
+                            stringResource(Res.string.volume_mult),
+                            spikeVolumeMultiplier,
+                            50.dp,
+                            enabled =
+                                spikeFilter != SpikeFilter.ANY,
+                        ) {
+                            spikeVolumeMultiplier = it
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_SPIKE_VOLUME_MULTIPLIER, it) } }
                         }
                     }
                 }
-                if (subGroups.isNotEmpty()) {
-                    GroupDropdown(
-                        stringResource(Res.string.subcategory),
-                        subGroups,
-                        selectedSubGroup,
-                        stringResource(Res.string.all_short),
-                        140.dp,
-                    ) { g ->
-                        selectedSubGroup = g
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_CAT_SUB, g?.marketGroupId?.toString() ?: "") } }
-                    }
-                }
-                FilterDivider()
-                Tip(
-                    stringResource(Res.string.mi_tip_lookback),
-                ) {
-                    ParamField(stringResource(Res.string.lookback_d), lookbackDays, 65.dp) {
-                        lookbackDays = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_LOOKBACK_DAYS, it) } }
-                    }
-                }
-                Tip(stringResource(Res.string.mi_tip_min_vol)) {
-                    ParamField(stringResource(Res.string.min_vol), minDailyVol, 65.dp) {
-                        minDailyVol = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MIN_VOL, it) } }
-                    }
-                }
-                Tip(
-                    stringResource(Res.string.mi_tip_min_discount),
-                ) {
-                    ParamField(stringResource(Res.string.min_discount_pct), minDiscountPct, 90.dp) {
-                        minDiscountPct = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MIN_DISCOUNT, it) } }
-                    }
-                }
-                Tip(
-                    stringResource(Res.string.mi_tip_min_volatility),
-                ) {
-                    ParamField(stringResource(Res.string.min_volatility_pct), minVolatilityPct, 95.dp) {
-                        minVolatilityPct = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MIN_VOLATILITY, it) } }
-                    }
-                }
-                Tip(stringResource(Res.string.mi_tip_max_volatility)) {
-                    ParamField(stringResource(Res.string.max_volatility_pct), maxVolatilityPct, 95.dp) {
-                        maxVolatilityPct = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MAX_VOLATILITY, it) } }
-                    }
-                }
-                Tip(
-                    stringResource(Res.string.mi_tip_1y_lows),
-                ) {
-                    FilterControl(stringResource(Res.string.exclude_1y_lows)) {
-                        Checkbox(
-                            checked = excludeStructuralBreak,
-                            onCheckedChange = {
-                                excludeStructuralBreak = it
-                                scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_EXCLUDE_STRUCTURAL_BREAK, it.toString()) } }
-                            },
-                            modifier = Modifier.size(24.dp),
-                        )
-                    }
-                }
-                Tip(stringResource(Res.string.mi_tip_spike)) {
-                    SpikeFilterChip(spikeFilter) {
-                        spikeFilter = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_SPIKE_FILTER, it.name) } }
-                    }
-                }
-                Tip(stringResource(Res.string.mi_tip_price_mult)) {
-                    ParamField(
-                        stringResource(Res.string.price_mult),
-                        spikePriceMultiplier,
-                        50.dp,
-                        enabled = spikeFilter != SpikeFilter.ANY,
+                FilterActionSlot {
+                    OutlinedButton(
+                        onClick = { showGuide = true },
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                        modifier = Modifier.height(FilterFieldHeight),
                     ) {
-                        spikePriceMultiplier = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_SPIKE_PRICE_MULTIPLIER, it) } }
-                    }
-                }
-                Tip(stringResource(Res.string.mi_tip_vol_mult)) {
-                    ParamField(
-                        stringResource(Res.string.volume_mult),
-                        spikeVolumeMultiplier,
-                        50.dp,
-                        enabled =
-                            spikeFilter != SpikeFilter.ANY,
-                    ) {
-                        spikeVolumeMultiplier = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_SPIKE_VOLUME_MULTIPLIER, it) } }
+                        Icon(Icons.AutoMirrored.Filled.HelpOutline, null, Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(Res.string.mi_guide_button), style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
             Row(verticalAlignment = Alignment.Top) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.weight(1f),
                 ) {
                     Tip(
+                        stringResource(Res.string.mi_tip_lookback),
+                    ) {
+                        ParamField(stringResource(Res.string.lookback_d), lookbackDays, 60.dp) {
+                            lookbackDays = it
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_LOOKBACK_DAYS, it) } }
+                        }
+                    }
+                    Tip(stringResource(Res.string.mi_tip_min_vol)) {
+                        ParamField(stringResource(Res.string.min_vol), minDailyVol, 60.dp) {
+                            minDailyVol = it
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MIN_VOL, it) } }
+                        }
+                    }
+                    Tip(
+                        stringResource(Res.string.mi_tip_min_discount),
+                    ) {
+                        ParamField(stringResource(Res.string.min_discount_pct), minDiscountPct, 60.dp) {
+                            minDiscountPct = it
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MIN_DISCOUNT, it) } }
+                        }
+                    }
+                    Tip(
+                        stringResource(Res.string.mi_tip_min_volatility),
+                    ) {
+                        ParamField(stringResource(Res.string.min_volatility_pct), minVolatilityPct, 60.dp) {
+                            minVolatilityPct = it
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MIN_VOLATILITY, it) } }
+                        }
+                    }
+                    Tip(stringResource(Res.string.mi_tip_max_volatility)) {
+                        ParamField(stringResource(Res.string.max_volatility_pct), maxVolatilityPct, 60.dp) {
+                            maxVolatilityPct = it
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MAX_VOLATILITY, it) } }
+                        }
+                    }
+                    FilterDivider()
+                    Tip(
                         stringResource(Res.string.mi_tip_budget),
                     ) {
-                        ParamField(stringResource(Res.string.budget_isk), totalBudget, 120.dp) {
+                        ParamField(stringResource(Res.string.budget_isk), totalBudget, 110.dp) {
                             totalBudget = it
                             scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_TOTAL_BUDGET, it) } }
                         }
@@ -351,13 +431,13 @@ internal fun MaterialsInvestmentTab(
                     Tip(
                         stringResource(Res.string.mi_tip_max_items),
                     ) {
-                        ParamField(stringResource(Res.string.max_items), maxItems, 65.dp) {
+                        ParamField(stringResource(Res.string.max_items), maxItems, 50.dp) {
                             maxItems = it
                             scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MAX_ITEMS, it) } }
                         }
                     }
                     Tip(stringResource(Res.string.mi_tip_max_per_item)) {
-                        ParamField(stringResource(Res.string.max_pct_item), maxPerItemPct, 75.dp) {
+                        ParamField(stringResource(Res.string.max_pct_item), maxPerItemPct, 55.dp) {
                             maxPerItemPct = it
                             scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MAX_PER_ITEM_PCT, it) } }
                         }
@@ -365,7 +445,7 @@ internal fun MaterialsInvestmentTab(
                     Tip(
                         stringResource(Res.string.mi_tip_liquidity),
                     ) {
-                        ParamField(stringResource(Res.string.liquidity_d), liquidityDays, 75.dp) {
+                        ParamField(stringResource(Res.string.liquidity_d), liquidityDays, 55.dp) {
                             liquidityDays = it
                             scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_LIQUIDITY_DAYS, it) } }
                         }
@@ -374,7 +454,7 @@ internal fun MaterialsInvestmentTab(
                     Tip(
                         stringResource(Res.string.mi_tip_ladder_levels),
                     ) {
-                        ParamField(stringResource(Res.string.ladder_levels), ladderLevels, 80.dp) {
+                        ParamField(stringResource(Res.string.ladder_levels), ladderLevels, 55.dp) {
                             ladderLevels = it
                             scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_LADDER_LEVELS, it) } }
                         }
@@ -382,7 +462,7 @@ internal fun MaterialsInvestmentTab(
                     Tip(
                         stringResource(Res.string.mi_tip_ladder_step),
                     ) {
-                        ParamField(stringResource(Res.string.ladder_step_pct), ladderStepPct, 85.dp) {
+                        ParamField(stringResource(Res.string.ladder_step_pct), ladderStepPct, 55.dp) {
                             ladderStepPct = it
                             scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_LADDER_STEP_PCT, it) } }
                         }
@@ -412,13 +492,13 @@ internal fun MaterialsInvestmentTab(
                     }
                     Tip(stringResource(Res.string.mi_tip_copy_vol)) {
                         FilterControl(stringResource(Res.string.copy_vol)) {
-                            Switch(
+                            Checkbox(
                                 checked = copyVolumeEnabled,
                                 onCheckedChange = {
                                     copyVolumeEnabled = it
                                     scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_COPY_VOLUME, it.toString()) } }
                                 },
-                                modifier = Modifier.height(FilterFieldHeight),
+                                modifier = Modifier.size(24.dp),
                             )
                         }
                     }
@@ -516,15 +596,19 @@ internal fun MaterialsInvestmentTab(
                                         val histSrc = withContext(Dispatchers.IO) { EveRefService.getSelectedSource() }
 
                                         statusMsg = stringBlocking(Res.string.mi_fetching_region_orders)
+                                        val stationSnap = stationId
                                         val ordersByType =
                                             withContext(Dispatchers.IO) { EsiClient.getMarketRegionOrders(regionId) }
-                                                .groupBy { (it["type_id"] as? Number)?.toInt() ?: 0 }
+                                                .filter { o ->
+                                                    stationSnap == null || (o["location_id"] as? Number)?.toLong() == stationSnap
+                                                }.groupBy { (it["type_id"] as? Number)?.toInt() ?: 0 }
 
                                         // One wallet-transactions read for the whole scan (not per item) -- see
                                         // computeMaterialPosition/computeMaterialCandidate in MaterialsInvestmentCompute.kt.
                                         val myTransactionsByType =
                                             charId?.let { id ->
                                                 withContext(Dispatchers.IO) { WalletDao.getAllTransactions(characterId = id) }
+                                                    .filter { stationSnap == null || it.locationId == stationSnap }
                                                     .groupBy { it.typeId }
                                             }
                                         // Real physical stock, not net(buys - sells) -- materials routinely arrive via mining
@@ -533,6 +617,7 @@ internal fun MaterialsInvestmentTab(
                                         val myAssetQtyByType =
                                             charId?.let { id ->
                                                 withContext(Dispatchers.IO) { AssetDao.getByCharacter(id) }
+                                                    .filter { stationSnap == null || it.stationId == stationSnap }
                                                     .groupBy { it.typeId }
                                                     .mapValues { (_, assets) -> assets.sumOf { it.quantity }.toLong() }
                                             }
@@ -540,8 +625,9 @@ internal fun MaterialsInvestmentTab(
                                         val myOrdersByType =
                                             charId?.let { id ->
                                                 withContext(Dispatchers.IO) { ActiveOrderDao.getAll(characterId = id) }
-                                                    .filter { it.state == "active" }
-                                                    .groupBy { it.typeId }
+                                                    .filter {
+                                                        it.state == "active" && (stationSnap == null || it.locationId == stationSnap)
+                                                    }.groupBy { it.typeId }
                                             }
                                         fees =
                                             charId?.let { id ->
@@ -1157,4 +1243,40 @@ private fun createAlerts(
     val alerts = allocs.flatMap { ladderAlerts(it, regionId, charId, existing) }
     AlertDao.insertAll(alerts)
     return alerts.size
+}
+
+private val GUIDE_SECTIONS =
+    listOf(
+        Res.string.mi_guide_what_title to Res.string.mi_guide_what,
+        Res.string.mi_guide_steps_title to Res.string.mi_guide_steps,
+        Res.string.mi_guide_columns_title to Res.string.mi_guide_columns,
+        Res.string.mi_guide_mix_title to Res.string.mi_guide_mix,
+        Res.string.mi_guide_separate_title to Res.string.mi_guide_separate,
+        Res.string.mi_guide_risks_title to Res.string.mi_guide_risks,
+    )
+
+@Composable
+private fun MaterialsGuideDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(Res.string.mi_guide_title)) },
+        text = {
+            Column(
+                modifier = Modifier.widthIn(max = 620.dp).heightIn(max = 560.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                GUIDE_SECTIONS.forEach { (title, body) ->
+                    Text(
+                        stringResource(title),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                    Text(stringResource(body), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.mi_guide_close)) } },
+    )
 }

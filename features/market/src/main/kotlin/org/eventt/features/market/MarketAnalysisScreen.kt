@@ -336,6 +336,8 @@ internal object S {
 
     // Materials investment (DCA) keys
     const val MI_REGION = "analysis.m.region"
+    const val MI_STATION = "analysis.m.station"
+    const val MI_PRESETS = "analysis.m.presets"
     const val MI_CAT_TOP = "analysis.m.catTop"
     const val MI_CAT_SUB = "analysis.m.catSub"
     const val MI_LOOKBACK_DAYS = "analysis.m.lookbackDays"

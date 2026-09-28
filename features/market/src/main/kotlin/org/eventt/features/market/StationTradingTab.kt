@@ -184,7 +184,7 @@ internal fun StationTradingTab(
             // Row 1: location + category on the left, read-only fees info pinned right.
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 RegionPicker(allRegions, regionId, width = 180.dp, accentColor = MaterialTheme.colorScheme.primary) {
@@ -264,7 +264,7 @@ internal fun StationTradingTab(
             Row(verticalAlignment = Alignment.Top) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.weight(1f),
                 ) {
                     ParamField(
@@ -367,13 +367,13 @@ internal fun StationTradingTab(
                     // Toggles whether the hotkey's second press copies the suggested volume, or just
                     // advances straight to the next item after copying the price.
                     FilterControl(stringResource(Res.string.copy_vol), tooltip = stringResource(Res.string.tip_copy_vol)) {
-                        Switch(
+                        Checkbox(
                             checked = copyVolumeEnabled,
                             onCheckedChange = {
                                 copyVolumeEnabled = it
                                 scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_COPY_VOLUME, it.toString()) } }
                             },
-                            modifier = Modifier.height(FilterFieldHeight),
+                            modifier = Modifier.size(24.dp),
                         )
                     }
                 }

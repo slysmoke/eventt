@@ -35,10 +35,10 @@ import org.jetbrains.compose.resources.stringResource
 // row of mixed controls (pickers, numeric inputs, checkboxes) lines up pixel-for-pixel instead
 // of drifting like Material's default OutlinedTextField (56.dp) vs. a hand-rolled chip (~38.dp).
 
-internal val FilterFieldHeight = 36.dp
-private val FilterFieldShape = RoundedCornerShape(8.dp)
+internal val FilterFieldHeight = 30.dp
+private val FilterFieldShape = RoundedCornerShape(6.dp)
 private val FilterLabelHeight = 16.dp
-private val FilterLabelGap = 4.dp
+private val FilterLabelGap = 2.dp
 
 // ─── Filter bar container ─────────────────────────────────────────────────
 
@@ -51,8 +51,8 @@ internal fun FilterBar(content: @Composable ColumnScope.() -> Unit) {
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
                 content = content,
             )
         }
@@ -386,6 +386,7 @@ internal fun StationPicker(
     selectedStationId: Long?,
     width: Dp = 200.dp,
     label: String = stringResource(Res.string.station),
+    tooltip: String? = null,
     onSelect: (Long?) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -405,7 +406,7 @@ internal fun StationPicker(
             }
         }
 
-    FilterControl(label) {
+    FilterControl(label, tooltip) {
         Box {
             ChipSurface(onClick = {
                 expanded = true
