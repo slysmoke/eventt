@@ -387,6 +387,30 @@ internal fun MaterialsInvestmentTab(
                             )
                         }
                     }
+                    Tip(
+                        "Create alerts for every checked row at once (all rows if none are checked): buy-ladder rungs " +
+                            "plus sell targets for held positions. Existing identical alerts are skipped. AlertMonitor " +
+                            "fetches each item's order book once, however many alerts it has.",
+                    ) {
+                        FilterControl("Alerts") {
+                            val targets = sorted.filter { selectedTypeIds.isEmpty() || it.candidate.typeId in selectedTypeIds }
+                            OutlinedButton(
+                                onClick = {
+                                    scope.launch {
+                                        val n = withContext(Dispatchers.IO) { createAlerts(targets, regionId, charId) }
+                                        statusMsg = "$n alert(s) set for ${targets.size} item(s)"
+                                    }
+                                },
+                                enabled = targets.isNotEmpty(),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                modifier = Modifier.height(FilterFieldHeight),
+                            ) {
+                                Icon(Icons.Default.NotificationsActive, null, Modifier.size(14.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(if (selectedTypeIds.isEmpty()) "All (${targets.size})" else "Checked (${targets.size})")
+                            }
+                        }
+                    }
                 }
                 if (statusMsg.isNotEmpty()) {
                     FilterActionSlot {
