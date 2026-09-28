@@ -611,7 +611,8 @@ internal fun InventoryRow(
             color = if (isOwnListing) SELL_COLOR else MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-            profitPerUnit?.let { formatIsk(it) } ?: "—",
+            // Whole stack at this sell price, net of tax/broker fee.
+            profitPerUnit?.let { formatIsk(it * item.remainingQty) } ?: "—",
             modifier = Modifier.weight(2f),
             style = MaterialTheme.typography.bodySmall,
             color = profitColor,

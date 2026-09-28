@@ -487,7 +487,7 @@ private fun sortInventoryMetrics(
             InventorySortCol.AVG_COST -> list.sortedBy { it.item.avgCostBasis }
             InventorySortCol.TOTAL_COST -> list.sortedBy { it.item.totalCostBasis }
             InventorySortCol.SELL_PRICE -> list.sortedBy { it.sellPrice ?: Double.NEGATIVE_INFINITY }
-            InventorySortCol.PROFIT -> list.sortedBy { it.profitPerUnit ?: Double.NEGATIVE_INFINITY }
+            InventorySortCol.PROFIT -> list.sortedBy { m -> m.profitPerUnit?.let { it * m.item.remainingQty } ?: Double.NEGATIVE_INFINITY }
             InventorySortCol.MARGIN -> list.sortedBy { it.marginPct ?: Double.NEGATIVE_INFINITY }
             InventorySortCol.REALIZED_PNL -> list.sortedBy { it.realizedPnl ?: Double.NEGATIVE_INFINITY }
         }
@@ -597,7 +597,7 @@ internal fun InventoryTable(
             SortHeader("Avg Cost", InventorySortCol.AVG_COST, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
             SortHeader("Total Cost", InventorySortCol.TOTAL_COST, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
             SortHeader("Sell Price", InventorySortCol.SELL_PRICE, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
-            SortHeader("Profit/unit", InventorySortCol.PROFIT, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
+            SortHeader("Total Profit", InventorySortCol.PROFIT, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
             SortHeader("Margin", InventorySortCol.MARGIN, sortCol, sortDir, ::toggleSort, Modifier.weight(1.2f))
             SortHeader("Realized P&L", InventorySortCol.REALIZED_PNL, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
             Spacer(Modifier.width(28.dp))
