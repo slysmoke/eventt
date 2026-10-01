@@ -131,11 +131,8 @@ fun EventtApp() {
     val everefState by EveRefService.state.collectAsState()
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
-            when {
-                StaticDataImporter.isImportNeeded() -> StaticDataImporter.importAll()
-                StaticDataImporter.checkVersionChanged() -> StaticDataImporter.importAll()
-            }
-            AppState.init()
+            // Appearance first — the static-data import below can take minutes, and the
+            // loading screen should already be drawn in the user's theme.
             StaticDataDao.getSetting(THEME_SETTING_KEY)?.let { saved ->
                 ThemeVariant.entries.firstOrNull { it.name == saved }?.let { themeVariant = it }
             }
@@ -145,6 +142,11 @@ fun EventtApp() {
             StaticDataDao.getSetting(CUSTOM_THEME_SETTING_KEY)?.let { saved ->
                 customThemeColors = decodeCustomThemeColors(saved)
             }
+            when {
+                StaticDataImporter.isImportNeeded() -> StaticDataImporter.importAll()
+                StaticDataImporter.checkVersionChanged() -> StaticDataImporter.importAll()
+            }
+            AppState.init()
         }
         // EveRef sync runs in parallel — does not block UI or AppState init
         launch(Dispatchers.IO) {
