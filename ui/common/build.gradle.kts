@@ -13,8 +13,8 @@ dependencies {
     implementation(project(":core:queue"))
     implementation(project(":ui:theme"))
     implementation(compose.desktop.currentOs)
-    implementation(compose.material3)
-    implementation(compose.components.resources)
-    implementation(compose.materialIconsExtended)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.components.resources)
+    implementation(libs.compose.materialIcons)
     implementation(libs.kotlinx.coroutines.core)
 }

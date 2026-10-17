@@ -9,8 +9,8 @@ plugins {
     kotlin("plugin.serialization") version "2.4.10"
 }
 
-val appVersion: String = rootProject.properties["app.version"] as? String ?: "0.0.0"
-val githubRepo: String = rootProject.properties["github.repo"] as? String ?: ""
+val appVersion: String = rootProject.findProperty("app.version") as? String ?: "0.0.0"
+val githubRepo: String = rootProject.findProperty("github.repo") as? String ?: ""
 
 group = "org.eventt"
 version = appVersion
@@ -91,9 +91,9 @@ dependencies {
 
     // Compose
     implementation(compose.desktop.currentOs)
-    implementation(compose.material3)
-    implementation(compose.materialIconsExtended)
-    implementation(compose.components.resources)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.materialIcons)
+    implementation(libs.compose.components.resources)
 
     // Update checker
     implementation(libs.okhttp.core)

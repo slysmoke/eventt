@@ -1,6 +1,9 @@
 [versions]
 kotlin = "2.4.10"
 compose = "1.11.1"
+# Since Compose 1.8 these no longer track the plugin version.
+compose-material3 = "1.9.0"
+compose-material-icons = "1.7.3"
 okhttp = "5.4.0"
 kotlinx-serialization = "1.11.0"
 kotlinx-coroutines = "1.11.0"
@@ -22,9 +25,11 @@ quartz = "1.13.1"
 quartz-jvm = { module = "com.vitorpamplona.quartz:quartz-jvm", version.ref = "quartz" }
 # Compose
 compose-desktop = { module = "org.jetbrains.compose.desktop:desktop", version.ref = "compose" }
-compose-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "compose" }
+compose-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "compose-material3" }
+compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "compose" }
 compose-components-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "compose" }
-compose-materialIcons = { module = "org.jetbrains.compose.material-icons-extended:material-icons-extended", version.ref = "compose" }
+compose-materialIcons = { module = "org.jetbrains.compose.material:material-icons-extended", version.ref = "compose-material-icons" }
+compose-ui-test = { module = "org.jetbrains.compose.ui:ui-test", version.ref = "compose" }
 
 # HTTP
 okhttp-core = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }

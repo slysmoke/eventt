@@ -16,6 +16,6 @@ dependencies {
     implementation(libs.okhttp.core)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.core)
-    implementation(compose.runtime)
-    implementation(compose.components.resources)
+    implementation(libs.compose.runtime)
+    implementation(libs.compose.components.resources)
 }
