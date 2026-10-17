@@ -18,6 +18,5 @@ dependencies {
     implementation(compose.desktop.currentOs)
     implementation(libs.compose.material3)
     implementation(libs.compose.components.resources)
-    implementation(libs.compose.materialIcons)
     implementation(libs.kotlinx.serialization.json)
 }

@@ -12,6 +12,10 @@ plugins {
     id("io.gitlab.arturbosch.detekt") version "1.23.8" apply false
 }
 
+// Material icons copied verbatim from material-icons-extended 1.7.3 (Apache 2.0) into :ui:theme --
+// only the ones we use, instead of the 37 MB jar. Generated code, not ours to lint.
+val VENDORED_ICONS = "androidx/compose/material/icons"
+
 subprojects {
     apply(plugin = "org.jlleitschuh.gradle.ktlint")
     apply(plugin = "io.gitlab.arturbosch.detekt")
@@ -32,6 +36,7 @@ subprojects {
         // etc.) under build/ to their Kotlin source sets — those aren't ours to style-check.
         filter {
             exclude { entry -> entry.file.path.contains("${layout.buildDirectory.get()}") }
+            exclude { entry -> entry.file.path.contains(VENDORED_ICONS) }
         }
     }
 
@@ -39,6 +44,9 @@ subprojects {
         buildUponDefaultConfig = true
         parallel = true
         config.setFrom(files("$rootDir/detekt.yml"))
+    }
+    tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
+        exclude { it.file.path.contains(VENDORED_ICONS) }
     }
 
     tasks.withType<Test> {

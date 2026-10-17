@@ -12,5 +12,5 @@ version = "1.0.0"
 dependencies {
     implementation(compose.desktop.currentOs)
     implementation(libs.compose.material3)
-    implementation(libs.compose.materialIcons)
+    api(libs.compose.materialIconsCore)
 }

@@ -21,6 +21,5 @@ dependencies {
     implementation(compose.desktop.currentOs)
     implementation(libs.compose.material3)
     implementation(libs.compose.components.resources)
-    implementation(libs.compose.materialIcons)
     testImplementation(libs.compose.ui.test) // headless render of the orders panels
 }
