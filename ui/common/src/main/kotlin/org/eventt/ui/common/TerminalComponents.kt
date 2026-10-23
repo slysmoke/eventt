@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -15,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -216,8 +218,10 @@ fun <T> Table(
     highlight: (T) -> Boolean = { false },
     cells: @Composable (T) -> List<Cell>,
 ) {
-    var sortCol by remember { mutableStateOf(defaultSort) }
-    var desc by remember { mutableStateOf(defaultDesc) }
+    // Keyed on the column set: a column shown or hidden shifts the indices under the old choice.
+    val colKey = cols.map { it.title }
+    var sortCol by remember(colKey) { mutableStateOf(defaultSort) }
+    var desc by remember(colKey) { mutableStateOf(defaultDesc) }
     val sorted =
         remember(rows, sortCol, desc) {
             val sel = cols[sortCol].sort ?: return@remember rows
@@ -287,6 +291,41 @@ fun <T> Table(
         footer?.let {
             HorizontalDivider(color = outline())
             line(it)
+        }
+    }
+}
+
+// One-line filter box, as dense as the tables it filters.
+@Composable
+fun TerminalSearch(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+) {
+    val ink = MaterialTheme.colorScheme.onSurface
+    Row(
+        modifier
+            .height(28.dp)
+            .border(1.dp, outline(), MaterialTheme.shapes.extraSmall)
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text("⌕", color = AXIS_COLOR, style = MaterialTheme.typography.bodySmall)
+        Box(Modifier.weight(1f)) {
+            if (query.isEmpty()) Text(placeholder, color = AXIS_COLOR, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+            BasicTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodySmall.copy(color = ink),
+                cursorBrush = SolidColor(ink),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (query.isNotEmpty()) {
+            Text("✕", color = AXIS_COLOR, style = MaterialTheme.typography.bodySmall, modifier = Modifier.clickable { onQueryChange("") })
         }
     }
 }

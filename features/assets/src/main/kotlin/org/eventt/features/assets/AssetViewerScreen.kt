@@ -1,5 +1,7 @@
 package org.eventt.features.assets
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -25,17 +28,22 @@ import kotlinx.coroutines.withContext
 import org.eventt.assets.generated.resources.*
 import org.eventt.core.database.AssetDao
 import org.eventt.core.database.CharacterDao
+import org.eventt.core.database.CorporationDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.ViewContext
 import org.eventt.core.esi.EsiClient
+import org.eventt.core.model.AppLog
 import org.eventt.core.model.AssetModel
 import org.eventt.core.model.CorpFeature
 import org.eventt.core.model.PLEX_MARKET_REGION_ID
 import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.StaticStationModel
+import org.eventt.features.market.ItemDetailDialog
 import org.eventt.ui.common.*
-import org.jetbrains.compose.resources.pluralStringResource
+import org.eventt.ui.theme.warningColor
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
+import java.util.Locale
 
 private const val THE_FORGE_REGION_ID = 10000002
 private const val JITA_44_STATION_ID = 60003760L
@@ -85,18 +93,30 @@ private suspend fun jitaSellPricesByType(typeIds: Set<Int>): Map<Int, Double> =
             .toMap()
     }
 
+private const val COMBINE_ALL_SETTING = "assets.combine_all"
+
+private enum class AssetTab(
+    val label: StringResource,
+) {
+    ITEMS(Res.string.tab_items),
+    CATEGORIES(Res.string.tab_categories),
+}
+
 @Composable
 fun AssetViewerScreen(context: ViewContext?) {
     val scope = rememberCoroutineScope()
     val charId = (context as? ViewContext.Character)?.charId
     val corpId = (context as? ViewContext.Corporation)?.corporationId
     val actingCharId = context?.actingCharId
-    var assets by remember { mutableStateOf<List<AssetModel>>(emptyList()) }
+    var combined by remember { mutableStateOf(false) }
+    var assetLines by remember { mutableStateOf<List<AssetLine>?>(null) }
     var isLoading by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
     var deniedFeatures by remember { mutableStateOf<Set<CorpFeature>>(emptySet()) }
     var autoRefresh by remember { mutableStateOf(false) }
     var refreshAvailableAt by remember { mutableStateOf<Long?>(null) }
+    // Bumped after an ESI refresh so the lines are rebuilt from the fresh rows.
+    var reloadNonce by remember { mutableStateOf(0) }
+    val unknownPlace = stringResource(Res.string.unknown_location)
 
     fun assetsEndpoint(): String? =
         when {
@@ -108,12 +128,18 @@ fun AssetViewerScreen(context: ViewContext?) {
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             autoRefresh = StaticDataDao.getSetting(ASSETS_AUTO_REFRESH_SETTING) == "true"
+            combined = StaticDataDao.getSetting(COMBINE_ALL_SETTING) == "true"
         }
     }
 
-    LaunchedEffect(context) {
-        loadAssets(charId, corpId) { list -> assets = list }
-        deniedFeatures = actingCharId?.let { CharacterDao.getDeniedCorpFeatures(it) } ?: emptySet()
+    LaunchedEffect(context, combined, reloadNonce) {
+        assetLines =
+            withContext(Dispatchers.IO) {
+                runCatching { loadLines(if (combined) null else charId, if (combined) null else corpId, combined, unknownPlace) }
+                    .onFailure { AppLog.warn("Assets", it) }
+                    .getOrDefault(emptyList())
+            }
+        deniedFeatures = withContext(Dispatchers.IO) { actingCharId?.let { CharacterDao.getDeniedCorpFeatures(it) } ?: emptySet() }
         refreshAvailableAt = withContext(Dispatchers.IO) { assetsEndpoint()?.let { EsiClient.getEndpointExpiry(it) } }
     }
 
@@ -130,14 +156,9 @@ fun AssetViewerScreen(context: ViewContext?) {
                 } else if (charId != null) {
                     fetchCharacterAssets(charId)
                 }
-                val expiry = assetsEndpoint()?.let { EsiClient.getEndpointExpiry(it) }
-                withContext(Dispatchers.Main) {
-                    loadAssets(charId, corpId) { list -> assets = list }
-                    deniedFeatures = CharacterDao.getDeniedCorpFeatures(acting)
-                    refreshAvailableAt = expiry
-                }
+                withContext(Dispatchers.Main) { reloadNonce++ }
             } catch (e: Exception) {
-                println("[Assets] Error fetching assets: ${e.message}")
+                AppLog.warn("Assets", "fetch", e)
             } finally {
                 withContext(Dispatchers.Main) { isLoading = false }
             }
@@ -154,254 +175,350 @@ fun AssetViewerScreen(context: ViewContext?) {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        // Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(stringResource(Res.string.asset_viewer), style = MaterialTheme.typography.headlineMedium)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = autoRefresh,
-                    onClick = {
-                        autoRefresh = !autoRefresh
-                        scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(ASSETS_AUTO_REFRESH_SETTING, autoRefresh.toString()) }
-                    },
-                    label = { Text(stringResource(Res.string.auto_refresh), style = MaterialTheme.typography.bodySmall) },
-                )
-                // The character/corp switcher already decided which of the two to fetch —
-                // no per-click choice needed, unlike the old dual-button dialog.
-                EsiRefreshButton(
-                    isLoading = isLoading,
-                    expiresAtMs = refreshAvailableAt,
-                    enabled = actingCharId != null,
-                    onClick = { refreshFromEsi(clearDenied = false) },
-                )
+    var chartLine by remember { mutableStateOf<AssetLine?>(null) }
+
+    Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(Res.string.asset_viewer), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.weight(1f))
+            Segment(stringResource(Res.string.combine_all), combined) {
+                combined = !combined
+                scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(COMBINE_ALL_SETTING, combined.toString()) }
             }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Controls
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            SearchField(
-                query = searchQuery,
-                onQueryChange = { searchQuery = it },
-                onClear = { searchQuery = "" },
-                placeholder = stringResource(Res.string.search_assets),
-                modifier = Modifier.weight(1f),
+            Segment(stringResource(Res.string.auto_refresh), autoRefresh) {
+                autoRefresh = !autoRefresh
+                scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(ASSETS_AUTO_REFRESH_SETTING, autoRefresh.toString()) }
+            }
+            // The character/corp switcher already decided which of the two to fetch.
+            EsiRefreshButton(
+                isLoading = isLoading,
+                expiresAtMs = refreshAvailableAt,
+                enabled = actingCharId != null && !combined,
+                onClick = { refreshFromEsi(clearDenied = false) },
             )
         }
 
-        if (corpId != null && deniedFeatures.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(8.dp))
+        if (corpId != null && !combined && deniedFeatures.isNotEmpty()) {
             CorpAccessNotice(deniedFeatures, onRetry = { refreshFromEsi(clearDenied = true) })
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Summary bar
-        val filteredAssets =
-            if (searchQuery.isBlank()) {
-                assets
-            } else {
-                assets.filter { it.typeName.contains(searchQuery, ignoreCase = true) }
+        val all = assetLines
+        when {
+            all == null -> {
+                Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+                }
             }
-        val totalValue = filteredAssets.sumOf { it.estimatedPrice * it.quantity }
 
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            shape = MaterialTheme.shapes.small,
-        ) {
-            Row(
-                modifier = Modifier.padding(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(24.dp),
-            ) {
-                Text(
-                    text = pluralStringResource(Res.plurals.items_count, filteredAssets.size, filteredAssets.size),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                )
-                Text(
-                    text = stringResource(Res.string.total_isk, formatIsk(totalValue)),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.primary,
+            all.isEmpty() -> {
+                EmptyState(
+                    icon = Icons.Default.Inventory,
+                    title = stringResource(Res.string.no_assets_found),
+                    description = stringResource(Res.string.assets_click_refresh),
+                    modifier = Modifier.fillMaxWidth().weight(1f),
                 )
             }
-        }
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Content
-        if (filteredAssets.isEmpty()) {
-            EmptyState(
-                icon = Icons.Default.Inventory,
-                title = stringResource(Res.string.no_assets_found),
-                description =
-                    if (assets.isEmpty()) {
-                        stringResource(
-                            Res.string.assets_click_refresh,
-                        )
-                    } else {
-                        stringResource(Res.string.assets_no_match)
-                    },
-                modifier = Modifier.fillMaxWidth().weight(1f),
-            )
-        } else {
-            AssetByLocationView(filteredAssets)
+            else -> {
+                AssetsBody(all, showOwner = combined, modifier = Modifier.weight(1f)) { chartLine = it }
+            }
         }
     }
 
     LoadingOverlay(isLoading = isLoading, message = stringResource(Res.string.fetching_assets))
-}
 
-@Composable
-private fun AssetByLocationView(assets: List<AssetModel>) {
-    val groupedByLocation =
-        assets
-            .groupBy {
-                val locationLabel =
-                    if (it.stationName.isNotEmpty()) {
-                        it.stationName
-                    } else if (it.systemName.isNotEmpty()) {
-                        it.systemName
-                    } else {
-                        stringResource(Res.string.unknown_location)
-                    }
-                "${it.regionName} → $locationLabel"
-            }.entries
-            .sortedByDescending { (_, items) -> items.sumOf { it.estimatedPrice * it.quantity } }
-
-    // Groups start collapsed — only entries explicitly toggled to `true` are expanded.
-    val expanded = remember { mutableStateMapOf<String, Boolean>() }
-
-    LazyColumn(
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        groupedByLocation.forEach { (location, locationAssets) ->
-            val isExpanded = expanded[location] == true
-            val sortedAssets = locationAssets.sortedByDescending { it.estimatedPrice * it.quantity }
-            item(key = "header:$location") {
-                AssetGroupHeader(
-                    title = location,
-                    count = locationAssets.size,
-                    totalValue = locationAssets.sumOf { it.estimatedPrice * it.quantity },
-                    collapsed = !isExpanded,
-                    onClick = { expanded[location] = !isExpanded },
-                )
-            }
-            if (isExpanded) {
-                items(sortedAssets, key = { it.itemId }) { asset ->
-                    AssetRow(asset)
-                }
-            }
+    chartLine?.let { l ->
+        val regionId = l.place.regionId.takeIf { it > 0 } ?: THE_FORGE_REGION_ID
+        val regionName by produceState("", regionId) {
+            value = withContext(Dispatchers.IO) { StaticDataDao.getRegionById(regionId)?.name ?: "" }
         }
+        ItemDetailDialog(
+            typeId = l.typeId,
+            typeName = l.name,
+            primaryRegionId = regionId,
+            primaryRegionName = regionName,
+            primaryStationId = l.place.stationId,
+            charId = actingCharId,
+            corporationId = corpId.takeIf { !combined },
+            onDismiss = { chartLine = null },
+        )
     }
 }
 
+// Reads the scope's assets (null ids + combined = everyone's) and folds them into table lines.
+internal fun loadLines(
+    characterId: Int?,
+    corporationId: Int?,
+    combined: Boolean,
+    unknownPlace: String,
+): List<AssetLine> {
+    val assets =
+        when {
+            combined -> AssetDao.getAll()
+            characterId != null -> AssetDao.getByCharacter(characterId)
+            corporationId != null -> AssetDao.getByCorporation(corporationId)
+            else -> emptyList()
+        }
+    val chars = if (combined) CharacterDao.getAll().associate { it.id to it.name } else emptyMap()
+    val corps = if (combined) CorporationDao.getAll().associate { (it["id"] as Int) to (it["name"] as? String ?: "") } else emptyMap()
+    val owner: (AssetModel) -> String? = { a ->
+        if (!combined) null else a.corporationId?.let { corps[it] ?: "#$it" } ?: a.characterId?.let { chars[it] ?: "#$it" }
+    }
+    return lines(assets, StaticDataDao.getTypeInfo(assets.map { it.typeId }), owner, unknownPlace)
+}
+
+/** Everything under the header for already-built lines — no DB or ESI here. */
 @Composable
-private fun AssetGroupHeader(
-    title: String,
-    count: Int,
-    totalValue: Double,
-    collapsed: Boolean,
-    onClick: () -> Unit,
+internal fun AssetsBody(
+    all: List<AssetLine>,
+    showOwner: Boolean,
+    modifier: Modifier = Modifier,
+    onOpen: (AssetLine) -> Unit,
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(
-                    if (collapsed) Icons.Default.ChevronRight else Icons.Default.ExpandMore,
-                    contentDescription = if (collapsed) stringResource(Res.string.expand) else stringResource(Res.string.collapse),
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                Text(
-                    "($count)",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                )
+    var placeKey by remember { mutableStateOf<String?>(null) }
+    var category by remember { mutableStateOf<String?>(null) }
+    var tab by remember { mutableStateOf(AssetTab.ITEMS) }
+    var query by remember { mutableStateOf("") }
+    val other = stringResource(Res.string.other)
+    val inPlace = remember(all, placeKey) { if (placeKey == null) all else all.filter { it.place.key == placeKey } }
+    val shown =
+        remember(inPlace, category, query) {
+            inPlace.filter { l ->
+                (category == null || l.category.ifEmpty { other } == category) &&
+                    (
+                        query.isBlank() ||
+                            listOf(l.name, l.group, l.place.name, l.owner.orEmpty()).any { it.contains(query.trim(), ignoreCase = true) }
+                    )
             }
-            Text(formatIsk(totalValue), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
         }
-    }
-}
 
-@Composable
-private fun AssetRow(asset: AssetModel) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(
-            modifier = Modifier.weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TypeIcon(asset.typeId, size = 24.dp)
-
-            Column {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(asset.typeName, style = MaterialTheme.typography.bodyMedium)
-                    if (asset.isBlueprintCopy) {
-                        Text(
-                            stringResource(Res.string.copy_suffix),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        TotalsStrip(totals(all))
+        Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Panel(stringResource(Res.string.panel_locations), Modifier.weight(0.3f).fillMaxHeight()) {
+                SliceList(
+                    slices = remember(all) { byPlace(all) },
+                    allLabel = stringResource(Res.string.all_locations),
+                    allValue = all.sumOf { it.value },
+                    selected = placeKey,
+                    color = MaterialTheme.colorScheme.primary,
+                    showM3 = true,
+                ) { placeKey = it }
+            }
+            Panel(
+                null,
+                Modifier.weight(0.7f).fillMaxHeight(),
+                header = {
+                    AssetTab.entries.forEach { t -> TabLabel(stringResource(t.label), t == tab) { tab = t } }
+                    Spacer(Modifier.weight(1f))
+                    placeKey?.let { k ->
+                        Segment("${all.first { it.place.key == k }.place.name}  ✕", true) { placeKey = null }
+                    }
+                    category?.let { c -> Segment("$c  ✕", true) { category = null } }
+                },
+            ) {
+                when (tab) {
+                    AssetTab.ITEMS -> {
+                        TerminalSearch(query, { query = it }, stringResource(Res.string.search_assets), Modifier.fillMaxWidth())
+                        Spacer(Modifier.height(4.dp))
+                        ItemsTable(
+                            shown,
+                            showPlace = placeKey == null,
+                            showOwner = showOwner,
+                            total = all.sumOf { it.value },
+                            onOpen = onOpen,
                         )
                     }
-                }
-                if (asset.locationName.isNotEmpty() && asset.stationName.isEmpty()) {
-                    Text(asset.locationName, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                }
-            }
-        }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("×${asset.quantity}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-            if (asset.estimatedPrice > 0) {
-                Text(
-                    formatIsk(asset.estimatedPrice * asset.quantity),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+                    AssetTab.CATEGORIES -> {
+                        SliceList(
+                            slices = remember(inPlace) { byCategory(inPlace, other) },
+                            allLabel = stringResource(Res.string.all_categories),
+                            allValue = inPlace.sumOf { it.value },
+                            selected = category,
+                            color = STOCK_BAR,
+                            showM3 = false,
+                        ) {
+                            category = it
+                            if (it != null) tab = AssetTab.ITEMS
+                        }
+                    }
+                }
             }
         }
     }
 }
 
-private fun loadAssets(
-    characterId: Int? = null,
-    corporationId: Int? = null,
-    callback: (List<AssetModel>) -> Unit,
+private val STOCK_BAR =
+    androidx.compose.ui.graphics
+        .Color(0xFF4DB6AC)
+
+@Composable
+private fun TotalsStrip(t: AssetTotals) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), MaterialTheme.shapes.extraSmall),
+    ) {
+        Kpi(stringResource(Res.string.kpi_value), formatIsk(t.value), stringResource(Res.string.kpi_types, t.types.toString()), null, null)
+        Kpi(stringResource(Res.string.kpi_lines), t.lines.toString(), null, null, null)
+        Kpi(stringResource(Res.string.kpi_places), t.places.toString(), null, null, null)
+        Kpi(
+            stringResource(Res.string.kpi_in_jita),
+            formatIsk(t.jitaValue),
+            if (t.value > 0) String.format(Locale.US, "%.0f%%", t.jitaValue / t.value * 100) else null,
+            null,
+            null,
+        )
+        Kpi(
+            stringResource(Res.string.kpi_outside_jita),
+            formatIsk(t.outsideValue),
+            stringResource(Res.string.kpi_m3, formatVolume(t.outsideM3)),
+            null,
+            null,
+            Res.string.tip_outside_jita,
+        )
+        Kpi(stringResource(Res.string.kpi_bpcs), t.bpcs.toString(), null, null, null, Res.string.tip_bpcs)
+        Kpi(
+            stringResource(Res.string.kpi_unpriced),
+            t.unpriced.toString(),
+            null,
+            null,
+            null,
+            Res.string.tip_unpriced,
+            valueColor = warningColor.takeIf { t.unpriced > 0 },
+            last = true,
+        )
+    }
+}
+
+// "All" plus one row per slice with its share bar; clicking a row selects it, clicking it again
+// (or "All") clears the selection.
+@Composable
+private fun SliceList(
+    slices: List<Slice>,
+    allLabel: String,
+    allValue: Double,
+    selected: String?,
+    color: androidx.compose.ui.graphics.Color,
+    showM3: Boolean,
+    onSelect: (String?) -> Unit,
 ) {
-    try {
-        val list =
-            when {
-                characterId != null -> AssetDao.getByCharacter(characterId)
-                corporationId != null -> AssetDao.getByCorporation(corporationId)
-                else -> emptyList()
+    val highlight = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+    LazyColumn {
+        item(key = "__all") {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .then(if (selected == null) Modifier.background(highlight) else Modifier)
+                    .clickable { onSelect(null) }
+                    .padding(vertical = 4.dp, horizontal = 4.dp),
+            ) {
+                Text(allLabel, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text(formatIsk(allValue), style = MaterialTheme.typography.bodySmall, fontFamily = Mono)
             }
-        callback(list)
-    } catch (e: Exception) {
-        println("Error loading assets: ${e.message}")
+        }
+        items(slices, key = { it.key }) { s ->
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .then(if (selected == s.key) Modifier.background(highlight) else Modifier)
+                    .clickable { onSelect(if (selected == s.key) null else s.key) }
+                    .padding(vertical = 3.dp, horizontal = 4.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        s.label,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(formatIsk(s.value), style = MaterialTheme.typography.bodySmall, fontFamily = Mono)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box(Modifier.weight(1f).height(4.dp)) {
+                        Box(
+                            Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(
+                                    (s.sharePct / 100).toFloat().coerceIn(0.005f, 1f),
+                                ).background(color.copy(alpha = 0.7f)),
+                        )
+                    }
+                    Text(
+                        listOfNotNull(
+                            s.sub.takeIf { it.isNotEmpty() },
+                            String.format(Locale.US, "%.1f%%", s.sharePct),
+                            if (showM3) formatVolume(s.m3) + " m³" else null,
+                        ).joinToString(" · "),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = Mono,
+                        color = AXIS_COLOR,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ItemsTable(
+    lines: List<AssetLine>,
+    showPlace: Boolean,
+    showOwner: Boolean,
+    total: Double,
+    onOpen: (AssetLine) -> Unit,
+) {
+    val copy = stringResource(Res.string.copy_suffix)
+    val cols =
+        buildList<Col<AssetLine>> {
+            add(Col(stringResource(Res.string.col_item), 2.6f, end = false) { it.name.lowercase() })
+            add(Col(stringResource(Res.string.col_group), 1.3f, end = false) { it.group.lowercase() })
+            if (showPlace) add(Col(stringResource(Res.string.col_location), 1.6f, end = false) { it.place.name.lowercase() })
+            add(Col(stringResource(Res.string.col_placement), 0.9f, end = false) { it.placement.ordinal })
+            if (showOwner) add(Col(stringResource(Res.string.col_owner), 1.1f, end = false) { it.owner?.lowercase() })
+            add(Col(stringResource(Res.string.col_qty), 0.7f) { it.qty })
+            add(Col(stringResource(Res.string.col_price), 0.8f) { it.unitPrice })
+            add(Col(stringResource(Res.string.col_value), 0.9f) { it.value })
+            add(Col("%", 0.5f) { it.value })
+            add(Col("m³", 0.7f) { it.m3 })
+            add(Col(stringResource(Res.string.col_isk_m3), 0.8f) { it.iskPerM3 })
+        }
+    Table(
+        cols = cols,
+        rows = lines,
+        empty = stringResource(Res.string.assets_no_match),
+        defaultSort = cols.indexOfFirst { it.title == stringResource(Res.string.col_value) },
+        onClick = onOpen,
+    ) { l ->
+        buildList {
+            add(
+                Cell(l.name) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        TypeIcon(l.typeId, size = 18.dp)
+                        Text(
+                            l.name + if (l.isBpc) " $copy" else "",
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                },
+            )
+            add(Cell(l.group, AXIS_COLOR))
+            if (showPlace) add(Cell(l.place.shortName, AXIS_COLOR))
+            add(Cell(stringResource(l.placement.label), AXIS_COLOR))
+            if (showOwner) add(Cell(l.owner.orEmpty(), AXIS_COLOR))
+            add(Cell(formatVolume(l.qty)))
+            add(Cell(if (l.unitPrice > 0) formatPriceAbbr(l.unitPrice) else "—", warningColor.takeIf { l.unitPrice <= 0 && !l.isBpc }))
+            add(Cell(formatIsk(l.value)))
+            add(Cell(if (total > 0) String.format(Locale.US, "%.1f", l.value / total * 100) else ""))
+            add(Cell(formatVolume(l.m3)))
+            add(Cell(l.iskPerM3?.let(::formatIsk) ?: "—", AXIS_COLOR))
+        }
     }
 }
 

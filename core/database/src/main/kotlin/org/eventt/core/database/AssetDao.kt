@@ -91,6 +91,12 @@ object AssetDao {
             }
         }
 
+    // Every character's and corporation's assets — the Assets screen's "Combine all" view.
+    fun getAll(): List<AssetModel> =
+        DatabaseManager.transaction {
+            prepareStatement("SELECT * FROM assets ORDER BY location_id, type_name").use { it.executeQuery().mapResultSetToAssets() }
+        }
+
     fun getByCorporation(corporationId: Int): List<AssetModel> =
         DatabaseManager.transaction {
             prepareStatement("SELECT * FROM assets WHERE corporation_id = ? ORDER BY location_id, type_name").use { stmt ->

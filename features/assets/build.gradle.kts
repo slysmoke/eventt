@@ -15,8 +15,10 @@ dependencies {
     implementation(project(":core:image"))
     implementation(project(":ui:theme"))
     implementation(project(":ui:common"))
+    implementation(project(":features:market")) // ItemDetailDialog, opened from any asset row
     implementation(compose.desktop.currentOs)
     implementation(compose.material3)
     implementation(compose.components.resources)
     implementation(compose.materialIconsExtended)
+    testImplementation("org.jetbrains.compose.ui:ui-test:${libs.versions.compose.get()}") // headless render test of the assets body
 }

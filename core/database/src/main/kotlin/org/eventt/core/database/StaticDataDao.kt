@@ -227,6 +227,44 @@ object StaticDataDao {
             }
         }
 
+    data class TypeInfo(
+        val groupName: String,
+        val categoryName: String,
+        // m³ one unit takes in a hangar — the packaged volume where the SDE has one (ships,
+        // containers), the plain volume otherwise.
+        val packagedVolume: Double,
+        val volume: Double,
+    )
+
+    // Group, category and volume for many types in one query, for screens that list thousands.
+    fun getTypeInfo(typeIds: Collection<Int>): Map<Int, TypeInfo> {
+        if (typeIds.isEmpty()) return emptyMap()
+        return DatabaseManager.transaction {
+            val result = mutableMapOf<Int, TypeInfo>()
+            // Chunked: SQLite caps bound parameters per statement.
+            typeIds.distinct().chunked(900).forEach { chunk ->
+                prepareStatement(
+                    "SELECT t.type_id, COALESCE(g.name, '') AS g, COALESCE(c.name, '') AS c, t.volume, t.packaged_volume " +
+                        "FROM static_types t " +
+                        "LEFT JOIN static_groups g ON t.group_id = g.group_id " +
+                        "LEFT JOIN static_categories c ON t.category_id = c.category_id " +
+                        "WHERE t.type_id IN (${chunk.joinToString(",") { "?" }})",
+                ).use { stmt ->
+                    chunk.forEachIndexed { i, id -> stmt.setInt(i + 1, id) }
+                    stmt.executeQuery().use { rs ->
+                        while (rs.next()) {
+                            val packaged = rs.getDouble("packaged_volume")
+                            val volume = rs.getDouble("volume")
+                            result[rs.getInt("type_id")] =
+                                TypeInfo(rs.getString("g"), rs.getString("c"), if (packaged > 0) packaged else volume, volume)
+                        }
+                    }
+                }
+            }
+            result
+        }
+    }
+
     fun getGroupNameForType(typeId: Int): String? =
         DatabaseManager.transaction {
             prepareStatement(
