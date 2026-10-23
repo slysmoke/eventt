@@ -21,8 +21,8 @@ import org.eventt.core.nostr.NostrIdentityService
 import org.eventt.core.nostr.NostrRelayManager
 import org.eventt.features.assets.AssetWatchService
 import org.eventt.features.contracts.ContractWatchService
+import org.eventt.features.dashboard.LeaderboardPublisher
 import org.eventt.features.market.A4eHistorySync
-import org.eventt.features.orders.LeaderboardPublisher
 import org.eventt.features.orders.MarketWatchService
 import org.eventt.features.orders.PendingOrdersQueue
 import org.eventt.features.overlay.StreamOverlayServer

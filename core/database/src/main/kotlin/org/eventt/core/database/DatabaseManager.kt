@@ -709,6 +709,18 @@ object DatabaseManager {
                     PRIMARY KEY (scope, day)
                 )
                 """.trimIndent(),
+                // Leaderboard place of every trader seen, per day and window ("7d"/"30d"/"365d") — the
+                // board itself is only the latest entry per trader, so this is what the ▲▼ change
+                // since the previous day is measured against.
+                """
+                CREATE TABLE IF NOT EXISTS leaderboard_ranks (
+                    day TEXT NOT NULL,
+                    window TEXT NOT NULL,
+                    pubkey TEXT NOT NULL,
+                    rank INTEGER NOT NULL,
+                    PRIMARY KEY (day, window, pubkey)
+                )
+                """.trimIndent(),
                 // Earlier shapes of the above, only ever created by unreleased dashboard builds.
                 "DROP TABLE IF EXISTS escrow_snapshots",
                 "DROP TABLE IF EXISTS net_worth_snapshots",

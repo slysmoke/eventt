@@ -4,6 +4,7 @@ import io.kotest.matchers.doubles.plusOrMinus
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 import org.eventt.core.database.WalletDao.BalanceRow
+import org.eventt.features.orders.CostBasisService
 import org.eventt.features.orders.CostBasisService.RealizedSellTx
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
@@ -134,5 +135,39 @@ class DashboardDataTest {
         a.map { it.group to it.value } shouldBe listOf("Other" to 600.0, "Minerals" to 400.0)
         a.first().sharePct should (60.0 plusOrMinus 1e-9)
         top5SharePct(p)!! should (100.0 plusOrMinus 1e-9)
+    }
+
+    @Test
+    fun `leaderboardStats publishes the dashboard's own windows and net worth only on opt-in`() {
+        val days =
+            (0 until 40).map {
+                Day(
+                    today.minusDays(39L - it).toString(),
+                    wallet = 100.0,
+                    escrow = 0.0,
+                    stock = 100.0,
+                    realized = 1.0,
+                )
+            }
+        val sells = days.map { sell("${it.day}T12:00:00", 1.0) }
+        val snap =
+            Snapshot(
+                days,
+                CostBasisService.FifoResult(emptyMap(), sells, CostBasisService.TaxConfig()),
+                emptyMap(),
+                emptyList(),
+                emptyList(),
+                emptyMap(),
+                emptyMap(),
+            )
+
+        val shared = leaderboardStats(snap, shareNetWorth = true)
+        val private = leaderboardStats(snap, shareNetWorth = false)
+
+        listOf(shared.pnl7d, shared.pnl30d, shared.pnl365d) shouldBe listOf(7.0, 30.0, 40.0)
+        shared.roi30dPct!! should (30.0 plusOrMinus 1e-9)
+        shared.daily30d.size shouldBe 30
+        shared.netWorth shouldBe 200.0
+        private.netWorth shouldBe null
     }
 }

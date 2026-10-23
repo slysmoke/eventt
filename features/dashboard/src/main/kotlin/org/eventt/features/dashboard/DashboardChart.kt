@@ -33,7 +33,10 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.eventt.dashboard.generated.resources.*
+import org.eventt.ui.common.AXIS_COLOR
+import org.eventt.ui.common.Mono
 import org.eventt.ui.common.formatIsk
+import org.eventt.ui.common.signed
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.jetbrains.compose.resources.StringResource
@@ -48,7 +51,6 @@ internal val ESCROW_COLOR = Color(0xFFFFB74D)
 internal val STOCK_COLOR = Color(0xFF4DB6AC)
 internal val ITEMS_COLOR = Color(0xFF81C784)
 internal val NET_COLOR = Color(0xFFB39DDB)
-internal val AXIS_COLOR = Color(0xFF808080)
 
 internal enum class Range(
     val label: StringResource,

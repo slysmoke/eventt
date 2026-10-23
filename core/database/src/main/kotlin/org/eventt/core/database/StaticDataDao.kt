@@ -743,6 +743,12 @@ object StaticDataDao {
 
     fun setLeaderboardPublisherCharId(charId: Int?) = setSetting("leaderboard.publisher_char_id", charId?.toString() ?: "")
 
+    // Whether the published entry includes net worth — it reveals how rich the trader is, so it's
+    // a separate opt-in on top of publishing at all. Off by default.
+    fun getLeaderboardShareNetWorth(): Boolean = getSetting("leaderboard.share_net_worth") == "true"
+
+    fun setLeaderboardShareNetWorth(share: Boolean) = setSetting("leaderboard.share_net_worth", share.toString())
+
     // ─── Helpers ──────────────────────────────────────────────────────────
 
     private fun java.sql.ResultSet.mapResultSetToType(): StaticTypeModel =

@@ -31,11 +31,7 @@ import org.eventt.features.market.ItemDetailDialog
 import org.eventt.features.orders.ActiveOrdersSyncService
 import org.eventt.features.orders.CostBasisService
 import org.eventt.features.orders.WalletSyncService
-import org.eventt.ui.common.CorpAccessNotice
-import org.eventt.ui.common.Tip
-import org.eventt.ui.common.formatIsk
-import org.eventt.ui.common.formatPriceAbbr
-import org.eventt.ui.common.formatVolume
+import org.eventt.ui.common.*
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.eventt.ui.theme.warningColor
@@ -55,14 +51,8 @@ private const val JITA_44 = 60003760L
 // Orders this close to expiring are flagged.
 private val EXPIRY_WARN = Duration.ofHours(48)
 
-internal val Mono = FontFamily.Monospace
-
-internal fun signed(v: Double) = (if (v > 0) "+" else "") + formatIsk(v)
-
 // yyyy-MM-dd… → MM-dd.
 private fun shortDate(date: String) = date.take(10).drop(5)
-
-private fun pct(v: Double) = String.format(Locale.US, "%+.1f%%", v)
 
 internal enum class Tab(
     val label: StringResource,
@@ -391,93 +381,6 @@ private fun Header(
     }
 }
 
-// Compact toggle button, terminal style.
-@Composable
-private fun Segment(
-    text: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    val primary = MaterialTheme.colorScheme.primary
-    Text(
-        text,
-        style = MaterialTheme.typography.labelMedium,
-        fontFamily = Mono,
-        color = if (selected) primary else AXIS_COLOR,
-        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-        modifier =
-            Modifier
-                .border(1.dp, if (selected) primary else outline(), MaterialTheme.shapes.extraSmall)
-                .clickable(onClick = onClick)
-                .padding(horizontal = 8.dp, vertical = 3.dp),
-    )
-}
-
-@Composable
-private fun outline() = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-
-// Bordered box with a thin title bar — the dashboard's one container.
-@Composable
-private fun Panel(
-    title: String?,
-    modifier: Modifier = Modifier,
-    header: @Composable RowScope.() -> Unit = {},
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Column(
-        modifier
-            .border(1.dp, outline(), MaterialTheme.shapes.extraSmall)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-    ) {
-        Row(
-            Modifier.fillMaxWidth().height(22.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            if (title != null) {
-                Text(
-                    title.uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = AXIS_COLOR,
-                )
-            }
-            header()
-        }
-        HorizontalDivider(thickness = 1.dp, color = outline())
-        Spacer(Modifier.height(4.dp))
-        content()
-    }
-}
-
-@Composable
-private fun TabLabel(
-    text: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    Text(
-        text.uppercase(),
-        style = MaterialTheme.typography.labelSmall,
-        fontWeight = FontWeight.Bold,
-        color = if (selected) MaterialTheme.colorScheme.primary else AXIS_COLOR,
-        modifier = Modifier.clickable(onClick = onClick).padding(vertical = 2.dp),
-    )
-}
-
-@Composable
-private fun Hint(text: String) {
-    Text(text, style = MaterialTheme.typography.bodySmall, color = AXIS_COLOR, modifier = Modifier.padding(vertical = 8.dp))
-}
-
-@Composable
-private fun pnlColor(v: Double?): Color? =
-    when {
-        v == null || v == 0.0 -> null
-        v > 0 -> positiveColor
-        else -> negativeColor
-    }
-
 // ─── KPI strip ────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -561,66 +464,7 @@ private fun KpiStrip(
     }
 }
 
-@Composable
-private fun RowScope.Kpi(
-    label: String,
-    value: String,
-    sub: String?,
-    subColor: Color?,
-    dot: Color?,
-    tip: StringResource? = null,
-    valueColor: Color? = null,
-    last: Boolean = false,
-) {
-    Row(Modifier.weight(1f)) {
-        Column(Modifier.weight(1f).padding(horizontal = 10.dp, vertical = 6.dp)) {
-            val title = @Composable {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    dot?.let { Box(Modifier.size(6.dp).background(it, CircleShape)) }
-                    Text(
-                        label.uppercase(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = AXIS_COLOR,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            if (tip != null) Tip(stringResource(tip)) { title() } else title()
-            Text(
-                value,
-                style = MaterialTheme.typography.titleMedium,
-                fontFamily = Mono,
-                fontWeight = FontWeight.SemiBold,
-                color = valueColor ?: MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-            )
-            Text(
-                sub ?: " ",
-                style = MaterialTheme.typography.labelSmall,
-                fontFamily = Mono,
-                color = subColor ?: AXIS_COLOR,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        if (!last) VerticalDivider(color = outline())
-    }
-}
-
 // ─── Stats ────────────────────────────────────────────────────────────────────────────────
-
-@Composable
-private fun KV(
-    label: String,
-    value: String,
-    color: Color? = null,
-) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-        Text(label, style = MaterialTheme.typography.bodySmall, color = AXIS_COLOR, modifier = Modifier.weight(1f), maxLines = 1)
-        Text(value, style = MaterialTheme.typography.bodySmall, fontFamily = Mono, color = color ?: MaterialTheme.colorScheme.onSurface)
-    }
-}
 
 @Composable
 private fun StatsPanel(st: RangeStats) {
@@ -779,96 +623,6 @@ private fun SideBadge(isBuy: Boolean) {
 }
 
 // ─── Tables ───────────────────────────────────────────────────────────────────────────────
-
-private class Col<T>(
-    val title: String,
-    val weight: Float,
-    val end: Boolean = true,
-    // Clicking the header sorts by this; null = not sortable.
-    val sort: ((T) -> Comparable<*>?)? = null,
-)
-
-private class Cell(
-    val text: String,
-    val color: Color? = null,
-)
-
-@Composable
-private fun <T> Table(
-    cols: List<Col<T>>,
-    rows: List<T>,
-    empty: String,
-    // Column sorted by on open, newest/biggest first. Not remembered across tab switches.
-    defaultSort: Int,
-    key: ((T) -> Any)? = null,
-    onClick: ((T) -> Unit)? = null,
-    footer: List<Cell>? = null,
-    cells: @Composable (T) -> List<Cell>,
-) {
-    var sortCol by remember { mutableStateOf(defaultSort) }
-    var desc by remember { mutableStateOf(true) }
-    val sorted =
-        remember(rows, sortCol, desc) {
-            val sel = cols[sortCol].sort ?: return@remember rows
-            val cmp = compareBy(sel)
-            rows.sortedWith(if (desc) cmp.reversed() else cmp)
-        }
-
-    @Composable
-    fun line(
-        values: List<Cell>,
-        header: Boolean = false,
-        modifier: Modifier = Modifier,
-    ) = Row(modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        cols.forEachIndexed { i, c ->
-            val sortable = header && c.sort != null
-            Text(
-                values[i].text + if (header && i == sortCol) (if (desc) " ▼" else " ▲") else "",
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = if (header || !c.end) null else Mono,
-                fontWeight = if (header) FontWeight.Bold else null,
-                color =
-                    values[i].color ?: when {
-                        header && i == sortCol -> MaterialTheme.colorScheme.primary
-                        header -> AXIS_COLOR
-                        else -> MaterialTheme.colorScheme.onSurface
-                    },
-                textAlign = if (c.end) TextAlign.End else TextAlign.Start,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier =
-                    Modifier.weight(c.weight).then(
-                        if (sortable) {
-                            Modifier.clickable {
-                                // Same column flips the order; a new one starts descending.
-                                desc = if (sortCol == i) !desc else true
-                                sortCol = i
-                            }
-                        } else {
-                            Modifier
-                        },
-                    ),
-            )
-        }
-    }
-    line(cols.map { Cell(it.title) }, header = true)
-    HorizontalDivider(color = outline())
-    if (rows.isEmpty()) {
-        Hint(empty)
-        return
-    }
-    Column(Modifier.fillMaxSize()) {
-        LazyColumn(Modifier.weight(1f)) {
-            items(sorted, key = key) { r ->
-                line(cells(r), modifier = if (onClick != null) Modifier.clickable { onClick(r) } else Modifier)
-            }
-        }
-        footer?.let {
-            HorizontalDivider(color = outline())
-            line(it)
-        }
-    }
-}
 
 @Composable
 private fun PositionsTable(

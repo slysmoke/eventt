@@ -12,6 +12,7 @@ dependencies {
     implementation(project(":core:database"))
     implementation(project(":core:auth"))
     implementation(project(":core:esi"))
+    implementation(project(":core:nostr")) // LeaderboardService, for LeaderboardPublisher
     implementation(project(":features:orders"))
     implementation(project(":features:market")) // ItemDetailDialog, opened from any item row
     implementation(project(":ui:theme"))

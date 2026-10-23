@@ -67,3 +67,31 @@ fun TypeIcon(
         }
     }
 }
+
+/** A character's portrait from images.evetech.net (same caching as [TypeIcon]); a blank tile while loading or without an id. */
+@Composable
+fun CharacterPortrait(
+    characterId: Int?,
+    size: Dp = 24.dp,
+    modifier: Modifier = Modifier,
+) {
+    val px = if (size <= 32.dp) 32 else 64
+    val bitmap by produceState<ImageBitmap?>(initialValue = null, characterId, px) {
+        value =
+            characterId?.let { id ->
+                withContext(
+                    Dispatchers.IO,
+                ) { runCatching { EveImageServer.getCharacterPortrait(id, px)?.toComposeImageBitmap() }.getOrNull() }
+            }
+    }
+    val bmp = bitmap
+    if (bmp != null) {
+        Image(bitmap = bmp, contentDescription = null, modifier = modifier.size(size).clip(MaterialTheme.shapes.extraSmall))
+    } else {
+        Surface(
+            modifier = modifier.size(size),
+            shape = MaterialTheme.shapes.extraSmall,
+            color = MaterialTheme.colorScheme.surfaceVariant,
+        ) {}
+    }
+}

@@ -11,7 +11,7 @@ import org.eventt.core.model.AppLog
  * Pulls wallet journal + transactions from ESI into the local DB for one character/corp, or every
  * local character/corp at once. Factored out of DashboardScreen's own per-context ESI sync (which
  * still calls [syncCharacter]/[syncCorporation] for whichever context is on screen) so
- * [org.eventt.features.orders.LeaderboardPublisher] can run the same sync for *everyone* before
+ * [org.eventt.features.dashboard.LeaderboardPublisher] can run the same sync for *everyone* before
  * computing the combined P&L it publishes — a leaderboard number is only as fresh as the local DB
  * it's computed from, so publishing against whatever happened to be cached already would silently
  * lag behind reality between app launches.
