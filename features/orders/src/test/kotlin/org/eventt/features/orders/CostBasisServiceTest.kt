@@ -83,6 +83,22 @@ class CostBasisServiceTest {
     }
 
     @Test
+    fun `heldDays is the quantity-weighted age of the lots a sale consumed`() {
+        stubTransactions(
+            buy("2026-01-01T10:00", 10, 100.0),
+            buy("2026-01-05T10:00", 10, 100.0),
+            sell("2026-01-11T09:00", 15, 300.0),
+        )
+
+        // 10 units held 10 days, 5 units held 6 days.
+        CostBasisService
+            .compute(characterId = 1)
+            .realizedSells
+            .single()
+            .heldDays should (130.0 / 15 plusOrMinus TOLERANCE)
+    }
+
+    @Test
     fun `stockCostByDay tracks open lot cost at the end of each day`() {
         stubTransactions(
             buy("2026-01-01T10:00", 10, 100.0),

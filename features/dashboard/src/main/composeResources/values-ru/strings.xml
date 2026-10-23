@@ -92,4 +92,14 @@
     <string name="no_realized_sales">Нет реализованных продаж за период</string>
     <string name="no_transactions_recorded">Сделок не зафиксировано</string>
     <string name="unknown">Неизвестно</string>
+    <string name="tab_allocation">Аллокация</string>
+    <string name="top5_share">Доля топ-5 позиций</string>
+    <string name="other">Прочее</string>
+    <string name="day_filter">День %1$s</string>
+    <string name="col_held">Держали, дн.</string>
+    <string name="st_held">Ср. срок удержания, дн.</string>
+    <string name="st_capital">Капитал в сделках (ср.)</string>
+    <string name="st_roi">ROI</string>
+    <string name="st_roi_year">ROI, годовых</string>
+    <string name="tip_roi">Реализованная прибыль за период, делённая на средние ISK, занятые в торговле (эскроу buy-ордеров + сток по себестоимости), — насколько эффективно работает торговый капитал. «Годовых» — то же, приведённое к 365 дням.</string>
 </resources>

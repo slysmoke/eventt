@@ -60,7 +60,8 @@ class DashboardDataTest {
         date: String,
         profit: Double,
         cost: Double = 100.0,
-    ) = RealizedSellTx(date, 1, 1, sellPrice = cost + profit, costBasis = cost, profit = profit, marginPct = 0.0)
+        held: Double = 0.0,
+    ) = RealizedSellTx(date, 1, 1, sellPrice = cost + profit, costBasis = cost, profit = profit, marginPct = 0.0, heldDays = held)
 
     @Test
     fun `rangeStats counts only the range and measures drawdown from the running peak`() {
@@ -95,5 +96,43 @@ class DashboardDataTest {
         st.bestDay?.day shouldBe "2026-10-01"
         st.worstDay?.day shouldBe "2026-10-02"
         st.netWorthChangePct!! should (10.0 plusOrMinus 1e-9)
+    }
+
+    @Test
+    fun `rangeStats ROI is realized profit over average escrow plus stock`() {
+        val days =
+            listOf(
+                Day("2026-10-01", 0.0, escrow = 100.0, stock = 300.0, realized = 0.0),
+                Day("2026-10-02", 0.0, escrow = 0.0, stock = 600.0, realized = 0.0),
+            )
+        val st =
+            rangeStats(
+                days,
+                listOf(sell("2026-10-02T12:00:00", 50.0, held = 4.0), sell("2026-10-02T13:00:00", 0.0, held = 10.0)),
+                emptyList(),
+                emptyMap(),
+            )
+
+        st.avgCapital shouldBe 500.0
+        st.roiPct!! should (10.0 plusOrMinus 1e-9)
+        st.roiYearPct!! should (10.0 * 365 / 2 plusOrMinus 1e-9)
+        st.avgHeldDays!! should (7.0 plusOrMinus 1e-9)
+    }
+
+    private fun pos(
+        typeId: Int,
+        cost: Double,
+        net: Double? = null,
+    ) = Position(typeId, "t$typeId", 1, cost, cost, null, net, null, null)
+
+    @Test
+    fun `allocation groups stock by market group at net value, falling back to cost`() {
+        val p = listOf(pos(1, 100.0, net = 300.0), pos(2, 100.0), pos(3, 600.0))
+
+        val a = allocation(p, mapOf(1 to "Minerals", 2 to "Minerals"), other = "Other")
+
+        a.map { it.group to it.value } shouldBe listOf("Other" to 600.0, "Minerals" to 400.0)
+        a.first().sharePct should (60.0 plusOrMinus 1e-9)
+        top5SharePct(p)!! should (100.0 plusOrMinus 1e-9)
     }
 }

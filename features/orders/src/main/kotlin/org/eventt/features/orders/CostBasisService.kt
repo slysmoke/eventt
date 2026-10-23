@@ -73,6 +73,8 @@ object CostBasisService {
         val costBasis: Double, // FIFO cost per unit (includes buy broker fee)
         val profit: Double, // net profit = (sellPrice×sellMult − costBasis) × qty
         val marginPct: Double, // net profit / total cost × 100
+        // Quantity-weighted days between buying the matched lots and this sale.
+        val heldDays: Double = 0.0,
     )
 
     data class FifoResult(
@@ -124,6 +126,15 @@ object CostBasisService {
                 if (filled <= 0) null else typeId to orders.sumOf { it.relistFeesPaid } / filled
             }.toMap()
 
+    private fun daysBetween(
+        from: String,
+        to: String,
+    ): Long =
+        runCatching {
+            java.time.temporal.ChronoUnit.DAYS
+                .between(LocalDate.parse(from.take(10)), LocalDate.parse(to.take(10)))
+        }.getOrDefault(0L)
+
     fun compute(
         characterId: Int? = null,
         corporationId: Int? = null,
@@ -167,12 +178,14 @@ object CostBasisService {
                         var remaining = tx.quantity
                         var costConsumed = 0.0
                         var qtyMatched = 0
+                        var heldDaySum = 0.0
 
                         while (remaining > 0 && queue.isNotEmpty()) {
                             val lot = queue.removeFirst()
                             val consume = minOf(remaining, lot.qty)
                             costConsumed += consume * lot.cost
                             qtyMatched += consume
+                            heldDaySum += consume * daysBetween(lot.date, tx.date)
                             if (consume < lot.qty) queue.addFirst(lot.copy(qty = lot.qty - consume))
                             remaining -= consume
                         }
@@ -191,7 +204,18 @@ object CostBasisService {
                                 }
                             val profit = qtyMatched * (netSellPrice - cb)
                             val margin = if (cb > 0) (netSellPrice - cb) / cb * 100.0 else 0.0
-                            realized.add(RealizedSellTx(tx.date, tx.typeId, qtyMatched, tx.unitPrice, cb, profit, margin))
+                            realized.add(
+                                RealizedSellTx(
+                                    tx.date,
+                                    tx.typeId,
+                                    qtyMatched,
+                                    tx.unitPrice,
+                                    cb,
+                                    profit,
+                                    margin,
+                                    heldDaySum / qtyMatched,
+                                ),
+                            )
                         }
                     }
                 }

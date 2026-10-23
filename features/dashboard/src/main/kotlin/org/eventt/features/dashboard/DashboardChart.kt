@@ -112,11 +112,14 @@ internal fun NetWorthChart(
     range: Range,
     stacked: Boolean,
     modifier: Modifier = Modifier,
+    // A click (not a drag) on a day.
+    onDayClick: (String) -> Unit = {},
 ) {
     val n = days.size
     var view by remember(days, range) { mutableStateOf(View.preset(n, range.days.coerceAtLeast(MIN_VIEW_DAYS.toInt()).coerceAtMost(n))) }
     var hoverX by remember { mutableStateOf<Float?>(null) }
     var dragX by remember { mutableStateOf<Float?>(null) }
+    var pressX by remember { mutableStateOf<Float?>(null) }
     var lastPress by remember { mutableStateOf(0L) }
     var canvasWidth by remember { mutableStateOf(0) }
     val density = LocalDensity.current
@@ -176,8 +179,20 @@ internal fun NetWorthChart(
                         it.changes
                             .first()
                             .position.x
-                }.onPointerEvent(PointerEventType.Release) { dragX = null }
-                .onPointerEvent(PointerEventType.Scroll) {
+                    pressX = dragX
+                }.onPointerEvent(PointerEventType.Release) {
+                    val px = pressX
+                    val x =
+                        it.changes
+                            .first()
+                            .position.x
+                    // From the release point itself: hoverIndex is only as fresh as the last frame.
+                    if (px != null && kotlin.math.abs(x - px) < 4f && plotWidth() > 0 && n >= 2) {
+                        onDayClick(days[(view.start + anchorOf(x) * view.span).roundToInt().coerceIn(0, n - 1)].day)
+                    }
+                    dragX = null
+                    pressX = null
+                }.onPointerEvent(PointerEventType.Scroll) {
                     val c = it.changes.first()
                     view = view.zoomed(1.15f.pow(c.scrollDelta.y), anchorOf(c.position.x), n)
                 }.onPointerEvent(PointerEventType.Exit) {
@@ -256,7 +271,9 @@ internal fun NetWorthChart(
 
             fun yC(v: Double) = (pnlTop + pnlH * (1 - (v - (cMin - cPad)) / (cMax - cMin + 2 * cPad))).toFloat()
             drawLine(grid, Offset(lPad, pnlTop - gap / 2), Offset(lPad + chartW, pnlTop - gap / 2), 1f)
-            listOf(cMin, 0.0, cMax).distinct().forEach { v ->
+            // Zero first, so a min/max sitting right next to it is the label that gets dropped.
+            val labelled = mutableListOf<Float>()
+            listOf(0.0, cMin, cMax).distinct().forEach { v ->
                 drawLine(
                     if (v == 0.0) ink.copy(alpha = 0.25f) else grid,
                     Offset(lPad, yC(v)),
@@ -264,7 +281,10 @@ internal fun NetWorthChart(
                     1f,
                     pathEffect = if (v == 0.0) null else PathEffect.dashPathEffect(floatArrayOf(4f, 4f)),
                 )
-                label(tm, formatIsk(v), Offset(lPad + chartW + 6.dp.toPx(), yC(v) - 6.dp.toPx()), AXIS_COLOR)
+                if (labelled.none { y -> kotlin.math.abs(y - yC(v)) < 12.dp.toPx() }) {
+                    label(tm, formatIsk(v), Offset(lPad + chartW + 6.dp.toPx(), yC(v) - 6.dp.toPx()), AXIS_COLOR)
+                    labelled += yC(v)
+                }
             }
             val barMax = visible.maxOf { kotlin.math.abs(it.realized) }.coerceAtLeast(1.0)
             val barZero = yC(0.0)
@@ -316,7 +336,8 @@ private fun Legend(
     index: Int?,
 ) {
     val style = MaterialTheme.typography.labelSmall.copy(fontFamily = Mono)
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth().height(18.dp)) {
+    // Fixed two-line height so hovering doesn't make the chart jump when the row wraps.
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth().height(34.dp)) {
         if (index == null) return@FlowRow
         val d = days[index]
         val prev = days.getOrNull(index - 1)

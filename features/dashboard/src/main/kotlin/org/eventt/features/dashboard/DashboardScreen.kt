@@ -64,19 +64,11 @@ private fun shortDate(date: String) = date.take(10).drop(5)
 
 private fun pct(v: Double) = String.format(Locale.US, "%+.1f%%", v)
 
-// Everything the dashboard shows, read from the local DB in one go.
-private class Snapshot(
-    val days: List<Day>,
-    val fifo: CostBasisService.FifoResult,
-    val feesByDay: Map<String, Double>,
-    val txs: List<Map<String, Any?>>,
-    val orders: List<OrderRow>,
-)
-
-private enum class Tab(
+internal enum class Tab(
     val label: StringResource,
 ) {
     POSITIONS(Res.string.tab_positions),
+    ALLOCATION(Res.string.tab_allocation),
     ITEMS(Res.string.tab_items),
     COUNTERPARTIES(Res.string.tab_counterparties),
     TRADES(Res.string.tab_trades),
@@ -145,32 +137,7 @@ fun DashboardScreen(
                     else -> "char:$charId"
                 }
 
-            fun load(walletNow: Double?): Snapshot {
-                val taxConfig =
-                    actingCharId?.let {
-                        CostBasisService.TaxConfig(StaticDataDao.getCharSalesTax(it), StaticDataDao.getCharBrokersFee(it))
-                    } ?: CostBasisService.TaxConfig()
-                val fifo = CostBasisService.compute(qChar, qCorp, taxConfig)
-                val orders = loadOrderRows(qChar, qCorp)
-                // Assets come from AssetWatchService's background refresh, already priced at Jita sell.
-                ItemValueSnapshotDao.upsert(
-                    scopeKey,
-                    LocalDate.now().toString(),
-                    AssetDao.getTotalValue(qChar, qCorp) + orders.filter { !it.order.isBuyOrder }.sumOf { it.isk },
-                )
-                val days =
-                    buildDays(
-                        WalletDao.getBalanceHistory(qChar, qCorp),
-                        fifo.stockCostByDay,
-                        WalletDao.getEscrowFlowByDay(qChar, qCorp),
-                        ItemValueSnapshotDao.getAll(scopeKey),
-                        fifo.realizedSells.groupBy { it.date.take(10) }.mapValues { (_, s) -> s.sumOf { it.profit } },
-                        walletNow,
-                    )
-                // limit = -1 is SQLite for "no limit" — counterparties rank over the whole range.
-                val txs = WalletSyncService.resolveMissingClientNames(WalletDao.getTransactions(qChar, qCorp, limit = -1))
-                return Snapshot(days, fifo, WalletDao.getFeesByDay(qChar, qCorp), txs, orders)
-            }
+            fun load(walletNow: Double?) = loadSnapshot(qChar, qCorp, scopeKey, actingCharId, walletNow)
 
             try {
                 snap = load(null)
@@ -222,12 +189,6 @@ fun DashboardScreen(
         return
     }
 
-    val s = snap
-    val rangeDays = s?.days?.takeLast(range.days.coerceAtMost(s.days.size)).orEmpty()
-    val from = rangeDays.firstOrNull()?.day ?: LocalDate.now().toString()
-    val stats = remember(s, range) { s?.let { rangeStats(rangeDays, it.fifo.realizedSells, it.txs, it.feesByDay) } }
-    val pos = remember(s, prices) { s?.let { positions(it.fifo, prices) }.orEmpty() }
-
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Header(
             title =
@@ -269,74 +230,25 @@ fun DashboardScreen(
             )
         }
 
+        val s = snap
         if (s == null) {
             Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
             }
-            return@Column
-        }
-
-        KpiStrip(s, stats, pos)
-
-        Row(Modifier.fillMaxWidth().height(400.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Panel(stringResource(Res.string.panel_chart), Modifier.weight(0.72f).fillMaxHeight()) {
-                if (s.days.size < 2) {
-                    Hint(stringResource(Res.string.no_history))
-                } else {
-                    NetWorthChart(s.days, range, stacked, Modifier.fillMaxSize())
-                }
-            }
-            Panel(stringResource(Res.string.panel_stats, stringResource(range.label)), Modifier.weight(0.28f).fillMaxHeight()) {
-                stats?.let { StatsPanel(it) }
-            }
-        }
-
-        Row(Modifier.fillMaxWidth().height(340.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Panel(stringResource(Res.string.panel_orders), Modifier.weight(0.36f).fillMaxHeight()) {
-                OrdersPanel(s.orders, fills24h(s.txs)) { o ->
-                    chartTarget = ChartTarget(o.typeId, o.typeName, o.regionId, o.locationId.takeIf { !o.isBuyOrder })
-                }
-            }
-            Panel(
-                null,
-                Modifier.weight(0.64f).fillMaxHeight(),
-                header = {
-                    Tab.entries.forEach { t ->
-                        TabLabel(stringResource(t.label), t == tab) {
-                            tab = t
-                            save(TAB_SETTING, t.name)
-                        }
-                    }
+        } else {
+            DashboardBody(
+                s,
+                prices,
+                range,
+                stacked,
+                tab,
+                onTab = {
+                    tab = it
+                    save(TAB_SETTING, it.name)
                 },
-            ) {
-                val unknown = stringResource(Res.string.unknown)
-                val open = { typeId: Int, name: String -> chartTarget = ChartTarget(typeId, name, THE_FORGE, JITA_44) }
-                when (tab) {
-                    Tab.POSITIONS -> {
-                        PositionsTable(pos, prices.isEmpty() && pos.isNotEmpty(), open)
-                    }
-
-                    Tab.ITEMS -> {
-                        val items =
-                            remember(s, from) {
-                                itemPnl(s.fifo.realizedSells, from) { id ->
-                                    s.fifo.inventory[id]
-                                        ?.typeName
-                                        ?.ifEmpty { null } ?: StaticDataDao.getTypeName(id) ?: "#$id"
-                                }
-                            }
-                        ItemsTable(items, open)
-                    }
-
-                    Tab.COUNTERPARTIES -> {
-                        CounterpartiesTable(remember(s) { counterparties(s.txs, unknown) }, unknown)
-                    }
-
-                    Tab.TRADES -> {
-                        TradesTable(s.txs, unknown, open)
-                    }
-                }
-            }
+                onOpenItem = { typeId, name -> chartTarget = ChartTarget(typeId, name, THE_FORGE, JITA_44) },
+                onOpenOrder = { o -> chartTarget = ChartTarget(o.typeId, o.typeName, o.regionId, o.locationId.takeIf { !o.isBuyOrder }) },
+            )
         }
     }
 
@@ -354,6 +266,100 @@ fun DashboardScreen(
             corporationId = corpId.takeIf { !combined },
             onDismiss = { chartTarget = null },
         )
+    }
+}
+
+/** Everything under the header, drawn from an already-loaded [Snapshot] — no DB or ESI here. */
+@Composable
+internal fun DashboardBody(
+    s: Snapshot,
+    prices: Map<Int, Double>,
+    range: Range,
+    stacked: Boolean,
+    tab: Tab,
+    onTab: (Tab) -> Unit,
+    onOpenItem: (Int, String) -> Unit,
+    onOpenOrder: (ActiveOrderDao.ActiveOrderRecord) -> Unit,
+) {
+    // A day clicked on the chart narrows the Trades tab to that day.
+    var tradeDay by remember { mutableStateOf<String?>(null) }
+    val rangeDays = s.days.takeLast(range.days.coerceAtMost(s.days.size))
+    val from = rangeDays.firstOrNull()?.day ?: LocalDate.now().toString()
+    val stats = remember(s, range) { rangeStats(rangeDays, s.fifo.realizedSells, s.txs, s.feesByDay) }
+    val pos = remember(s, prices) { positions(s.fifo, prices) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        KpiStrip(s, stats, pos)
+
+        Row(Modifier.fillMaxWidth().height(400.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Panel(stringResource(Res.string.panel_chart), Modifier.weight(0.72f).fillMaxHeight()) {
+                if (s.days.size < 2) {
+                    Hint(stringResource(Res.string.no_history))
+                } else {
+                    NetWorthChart(s.days, range, stacked, Modifier.fillMaxSize()) { day ->
+                        tradeDay = day
+                        onTab(Tab.TRADES)
+                    }
+                }
+            }
+            Panel(stringResource(Res.string.panel_stats, stringResource(range.label)), Modifier.weight(0.28f).fillMaxHeight()) {
+                StatsPanel(stats)
+            }
+        }
+
+        Row(Modifier.fillMaxWidth().height(340.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Panel(stringResource(Res.string.panel_orders), Modifier.weight(0.36f).fillMaxHeight()) {
+                OrdersPanel(s.orders, fills24h(s.txs), onOpenOrder)
+            }
+            Panel(
+                null,
+                Modifier.weight(0.64f).fillMaxHeight(),
+                header = {
+                    Tab.entries.forEach { t -> TabLabel(stringResource(t.label), t == tab) { onTab(t) } }
+                    if (tab == Tab.TRADES) {
+                        tradeDay?.let { d ->
+                            Spacer(Modifier.weight(1f))
+                            Segment("${stringResource(Res.string.day_filter, d)}  ✕", selected = true) { tradeDay = null }
+                        }
+                    }
+                },
+            ) {
+                val unknown = stringResource(Res.string.unknown)
+                when (tab) {
+                    Tab.POSITIONS -> {
+                        PositionsTable(pos, prices.isEmpty() && pos.isNotEmpty(), onOpenItem)
+                    }
+
+                    Tab.ALLOCATION -> {
+                        val other = stringResource(Res.string.other)
+                        AllocationPanel(remember(pos, s) { allocation(pos, s.groups, other) }, top5SharePct(pos))
+                    }
+
+                    Tab.ITEMS -> {
+                        ItemsTable(remember(s, from) { itemPnl(s.fifo.realizedSells, from) { s.names[it] ?: "#$it" } }, onOpenItem)
+                    }
+
+                    Tab.COUNTERPARTIES -> {
+                        CounterpartiesTable(remember(s) { counterparties(s.txs, unknown) }, unknown)
+                    }
+
+                    Tab.TRADES -> {
+                        val day = tradeDay
+                        val txs =
+                            remember(s, day) {
+                                if (day ==
+                                    null
+                                ) {
+                                    s.txs
+                                } else {
+                                    s.txs.filter { (it["date"] as? String ?: "").startsWith(day) }
+                                }
+                            }
+                        TradesTable(txs, unknown, onOpenItem)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -508,7 +514,7 @@ private fun KpiStrip(
         Kpi(
             stringResource(Res.string.items),
             today?.items?.let(::formatIsk) ?: "—",
-            stringResource(Res.string.in_sell_orders, formatIsk(s.orders.filter { !it.order.isBuyOrder }.sumOf { it.isk })),
+            stringResource(Res.string.in_sell_orders, formatIsk(s.sellOrdersNet)),
             null,
             ITEMS_COLOR,
             Res.string.tip_items,
@@ -628,6 +634,15 @@ private fun StatsPanel(st: RangeStats) {
             st.profitFactor?.let { String.format(Locale.US, "%.2f", it) } ?: "∞".takeIf { st.realized > 0 } ?: "—",
         )
         KV(stringResource(Res.string.st_margin), st.marginPct?.let(::pct) ?: "—", pnlColor(st.marginPct))
+        KV(stringResource(Res.string.st_held), st.avgHeldDays?.let { String.format(Locale.US, "%.1f", it) } ?: "—")
+        Spacer(Modifier.height(6.dp))
+        Tip(stringResource(Res.string.tip_roi)) {
+            Column {
+                KV(stringResource(Res.string.st_capital), formatIsk(st.avgCapital))
+                KV(stringResource(Res.string.st_roi), st.roiPct?.let(::pct) ?: "—", pnlColor(st.roiPct))
+                KV(stringResource(Res.string.st_roi_year), st.roiYearPct?.let(::pct) ?: "—", pnlColor(st.roiYearPct))
+            }
+        }
         Spacer(Modifier.height(6.dp))
         KV(stringResource(Res.string.st_turnover), formatIsk(st.turnover))
         KV(stringResource(Res.string.st_fees), formatIsk(st.fees), negativeColor.takeIf { st.fees > 0 })
@@ -921,10 +936,11 @@ private fun ItemsTable(
                 Col(stringResource(Res.string.col_sold), 1f) { it.qty },
                 Col(stringResource(Res.string.col_profit), 1.2f) { it.profit },
                 Col(stringResource(Res.string.col_margin), 0.9f) { it.marginPct },
+                Col(stringResource(Res.string.col_held), 0.8f) { it.avgHeldDays },
                 Col(stringResource(Res.string.col_last), 0.9f) { it.lastSold },
             ),
         rows = items,
-        defaultSort = 4,
+        defaultSort = 5,
         empty = stringResource(Res.string.no_realized_sales),
         key = { it.typeId },
         onClick = { onOpen(it.typeId, it.name) },
@@ -934,8 +950,82 @@ private fun ItemsTable(
             Cell(formatVolume(i.qty.toLong())),
             Cell(signed(i.profit), pnlColor(i.profit)),
             Cell(i.marginPct?.let(::pct) ?: "—", pnlColor(i.marginPct)),
+            Cell(String.format(Locale.US, "%.1f", i.avgHeldDays), warningColor.takeIf { i.avgHeldDays > 30 }),
             Cell(shortDate(i.lastSold), AXIS_COLOR),
         )
+    }
+}
+
+// Stock by market group: a share bar per group, biggest first, and how concentrated it is.
+@Composable
+private fun AllocationPanel(
+    rows: List<Allocation>,
+    top5Pct: Double?,
+) {
+    if (rows.isEmpty()) {
+        Hint(stringResource(Res.string.no_positions))
+        return
+    }
+    KV(
+        stringResource(Res.string.top5_share),
+        top5Pct?.let { String.format(Locale.US, "%.0f%%", it) } ?: "—",
+        warningColor.takeIf {
+            (
+                top5Pct
+                    ?: 0.0
+            ) >
+                60
+        },
+    )
+    Spacer(Modifier.height(4.dp))
+    val bar = STOCK_COLOR
+    LazyColumn {
+        items(rows, key = { it.group }) { a ->
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    a.group,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(2f),
+                )
+                Box(Modifier.weight(3f).height(10.dp)) {
+                    Box(
+                        Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(
+                                (a.sharePct / 100).toFloat().coerceIn(0.005f, 1f),
+                            ).background(bar.copy(alpha = 0.7f)),
+                    )
+                }
+                Text(
+                    String.format(Locale.US, "%5.1f%%", a.sharePct),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = Mono,
+                    modifier = Modifier.width(52.dp),
+                    textAlign = TextAlign.End,
+                )
+                Text(
+                    formatIsk(a.value),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = Mono,
+                    modifier = Modifier.width(72.dp),
+                    textAlign = TextAlign.End,
+                )
+                Text(
+                    "${a.types}",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = Mono,
+                    color = AXIS_COLOR,
+                    modifier = Modifier.width(28.dp),
+                    textAlign = TextAlign.End,
+                )
+            }
+        }
     }
 }
 

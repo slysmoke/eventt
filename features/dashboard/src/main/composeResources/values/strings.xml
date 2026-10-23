@@ -28,7 +28,7 @@
     <string name="n_buy_orders">%1$s buy orders</string>
     <string name="n_types">%1$s types</string>
     <string name="margin_n">margin %1$s</string>
-    <string name="tip_net_worth">Wallet + buy-order escrow + items (assets at Jita sell + items listed in sell orders). Change is over the selected range. Escrow history is rebuilt from the wallet journal; items are recorded once a day from the dashboard\'s first run, before that they\'re estimated as stock at FIFO cost plus the difference seen on that first day.</string>
+    <string name="tip_net_worth">Wallet + buy-order escrow + items (assets at Jita sell + items listed in sell orders). Change is over the selected range. Escrow history is rebuilt from the wallet journal; items are recorded once a day from the dashboard's first run, before that they're estimated as stock at FIFO cost plus the difference seen on that first day.</string>
     <string name="items">Items</string>
     <string name="in_sell_orders">%1$s in sell orders</string>
     <string name="tip_items">Everything you own besides ISK: assets from the background refresh, valued at Jita sell, plus items listed in sell orders (listed items leave the asset list) at their order price.</string>
@@ -36,7 +36,7 @@
     <string name="tip_stock">Unsold items at what they cost you (FIFO, including the buy broker fee) — includes items listed in sell orders.</string>
     <string name="tip_stock_market">The same stock at the lowest Jita 4-4 sell, after sales tax and broker fee; below it, the unrealized profit.</string>
     <string name="tip_cash_flow">ISK actually in and out of the wallet over the range: sales minus purchases, taxes and fees. Buying stock shows as a loss here even if you'll sell it at a profit later.</string>
-    <string name="tip_realized_pnl">Profit on what you actually sold over the range: sale price minus what those same units cost you (FIFO — first bought, first sold), after fees. Unsold stock doesn\'t count.</string>
+    <string name="tip_realized_pnl">Profit on what you actually sold over the range: sale price minus what those same units cost you (FIFO — first bought, first sold), after fees. Unsold stock doesn't count.</string>
     <string name="st_realized">Realized P&amp;L</string>
     <string name="st_avg_day">Average per day</string>
     <string name="st_sells">Sell fills</string>
@@ -92,4 +92,14 @@
     <string name="no_realized_sales">No realized sales in this range</string>
     <string name="no_transactions_recorded">No transactions recorded</string>
     <string name="unknown">Unknown</string>
+    <string name="tab_allocation">Allocation</string>
+    <string name="top5_share">Top 5 positions' share</string>
+    <string name="other">Other</string>
+    <string name="day_filter">Day %1$s</string>
+    <string name="col_held">Held, d</string>
+    <string name="st_held">Avg days held</string>
+    <string name="st_capital">Capital in trades (avg)</string>
+    <string name="st_roi">ROI</string>
+    <string name="st_roi_year">ROI, annualized</string>
+    <string name="tip_roi">Realized profit over the range divided by the average ISK tied up in trading (buy-order escrow + stock at cost) — how hard the trading capital works. Annualized scales it to 365 days.</string>
 </resources>

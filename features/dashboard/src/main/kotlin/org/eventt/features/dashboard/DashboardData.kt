@@ -5,10 +5,14 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import org.eventt.core.database.ActiveOrderDao
+import org.eventt.core.database.AssetDao
+import org.eventt.core.database.ItemValueSnapshotDao
 import org.eventt.core.database.MarketTopSnapshotDao
+import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.WalletDao
 import org.eventt.core.esi.EsiClient
 import org.eventt.features.orders.CostBasisService
+import org.eventt.features.orders.WalletSyncService
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -193,6 +197,13 @@ internal data class RangeStats(
     val maxDrawdown: Double,
     val netWorthChange: Double,
     val netWorthChangePct: Double?,
+    // Quantity-weighted days a sold unit was held.
+    val avgHeldDays: Double?,
+    // Average ISK tied up in trading (escrow + stock at cost) over the range, and realized
+    // profit on it — plain and scaled to a year.
+    val avgCapital: Double,
+    val roiPct: Double?,
+    val roiYearPct: Double?,
 )
 
 internal fun rangeStats(
@@ -224,6 +235,9 @@ internal fun rangeStats(
     val active = days.filter { it.realized != 0.0 }
     val start = days.firstOrNull()?.netWorth ?: 0.0
     val change = (days.lastOrNull()?.netWorth ?: 0.0) - start
+    val qty = s.sumOf { it.qty }
+    val capital = if (days.isEmpty()) 0.0 else days.sumOf { it.escrow + it.stock } / days.size
+    val roi = if (capital > 0) s.sumOf { it.profit } / capital * 100 else null
     return RangeStats(
         realized = s.sumOf { it.profit },
         sells = s.size,
@@ -239,6 +253,10 @@ internal fun rangeStats(
         maxDrawdown = drawdown,
         netWorthChange = change,
         netWorthChangePct = if (start > 0) change / start * 100 else null,
+        avgHeldDays = if (qty > 0) s.sumOf { it.heldDays * it.qty } / qty else null,
+        avgCapital = capital,
+        roiPct = roi,
+        roiYearPct = roi?.let { it * 365 / days.size },
     )
 }
 
@@ -249,6 +267,7 @@ internal data class ItemPnl(
     val profit: Double,
     val marginPct: Double?,
     val lastSold: String,
+    val avgHeldDays: Double,
 )
 
 internal fun itemPnl(
@@ -269,8 +288,62 @@ internal fun itemPnl(
                 profit,
                 if (cost > 0) profit / cost * 100 else null,
                 list.maxOf { it.date },
+                list.sumOf { it.heldDays * it.qty } / list.sumOf { it.qty },
             )
         }.sortedByDescending { it.profit }
+
+// One slice of the stock: a group's share of what open positions are worth (Jita net value where
+// known, cost otherwise).
+internal data class Allocation(
+    val group: String,
+    val value: Double,
+    val sharePct: Double,
+    val types: Int,
+)
+
+internal fun allocation(
+    pos: List<Position>,
+    groupOf: Map<Int, String>,
+    other: String,
+): List<Allocation> {
+    fun value(p: Position) = p.netValue ?: p.cost
+    val total = pos.sumOf(::value).takeIf { it > 0 } ?: return emptyList()
+    return pos
+        .groupBy { groupOf[it.typeId] ?: other }
+        .map { (g, list) -> Allocation(g, list.sumOf(::value), list.sumOf(::value) / total * 100, list.size) }
+        .sortedByDescending { it.value }
+}
+
+// Share of the stock's value in its five biggest positions.
+internal fun top5SharePct(pos: List<Position>): Double? {
+    fun value(p: Position) = p.netValue ?: p.cost
+    val total = pos.sumOf(::value).takeIf { it > 0 } ?: return null
+    return pos
+        .map(::value)
+        .sortedDescending()
+        .take(5)
+        .sum() / total * 100
+}
+
+// Everything the dashboard shows, read from the local DB in one go. Names and market groups are
+// resolved here too, so drawing never touches the DB.
+internal class Snapshot(
+    val days: List<Day>,
+    val fifo: CostBasisService.FifoResult,
+    val feesByDay: Map<String, Double>,
+    val txs: List<Map<String, Any?>>,
+    val orders: List<OrderRow>,
+    val names: Map<Int, String>,
+    val groups: Map<Int, String>,
+) {
+    val sellOrdersNet get() = sellOrdersNet(orders, fifo.taxConfig)
+}
+
+// What the listed items would bring in: the broker fee was paid when listing, so only sales tax.
+internal fun sellOrdersNet(
+    orders: List<OrderRow>,
+    tax: CostBasisService.TaxConfig,
+) = orders.filter { !it.order.isBuyOrder }.sumOf { it.isk } * (1 - tax.salesTaxPct / 100)
 
 // Everything ever traded with one client. A transaction's client is whoever was on the other side
 // of it: is_buy=true means we bought, so the client sold to us; is_buy=false means they bought.
@@ -316,4 +389,45 @@ internal fun fills24h(
     val recent = txs.filter { (it["date"] as? String ?: "") >= since }
     val (b, s) = recent.partition { it["is_buy"] == true }
     return Fills24h(b.size, b.sumOf(::txTotal), s.size, s.sumOf(::txTotal))
+}
+
+// Reads everything the dashboard shows for one scope (null ids = every character and corp) and
+// records today's item value. [walletNow] is the live ESI balance when there is one.
+internal fun loadSnapshot(
+    qChar: Int?,
+    qCorp: Int?,
+    scopeKey: String,
+    actingCharId: Int?,
+    walletNow: Double?,
+): Snapshot {
+    val taxConfig =
+        actingCharId?.let {
+            CostBasisService.TaxConfig(StaticDataDao.getCharSalesTax(it), StaticDataDao.getCharBrokersFee(it))
+        } ?: CostBasisService.TaxConfig()
+    val fifo = CostBasisService.compute(qChar, qCorp, taxConfig)
+    val orders = loadOrderRows(qChar, qCorp)
+    val typeIds = fifo.inventory.keys + fifo.realizedSells.map { it.typeId }
+    // limit = -1 is SQLite for "no limit" — counterparties rank over the whole history.
+    val txs = WalletSyncService.resolveMissingClientNames(WalletDao.getTransactions(qChar, qCorp, limit = -1))
+    val names = typeIds.associateWith { id -> fifo.inventory[id]?.typeName?.ifEmpty { null } ?: StaticDataDao.getTypeName(id) ?: "#$id" }
+    val groups =
+        fifo.inventory.keys
+            .mapNotNull { id -> StaticDataDao.getGroupNameForType(id)?.let { id to it } }
+            .toMap()
+    // Assets come from AssetWatchService's background refresh, already priced at Jita sell.
+    ItemValueSnapshotDao.upsert(
+        scopeKey,
+        LocalDate.now().toString(),
+        AssetDao.getTotalValue(qChar, qCorp) + sellOrdersNet(orders, taxConfig),
+    )
+    val days =
+        buildDays(
+            WalletDao.getBalanceHistory(qChar, qCorp),
+            fifo.stockCostByDay,
+            WalletDao.getEscrowFlowByDay(qChar, qCorp),
+            ItemValueSnapshotDao.getAll(scopeKey),
+            fifo.realizedSells.groupBy { it.date.take(10) }.mapValues { (_, s) -> s.sumOf { it.profit } },
+            walletNow,
+        )
+    return Snapshot(days, fifo, WalletDao.getFeesByDay(qChar, qCorp), txs, orders, names, groups)
 }
