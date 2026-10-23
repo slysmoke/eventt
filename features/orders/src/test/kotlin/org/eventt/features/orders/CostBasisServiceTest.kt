@@ -83,6 +83,22 @@ class CostBasisServiceTest {
     }
 
     @Test
+    fun `stockCostByDay tracks open lot cost at the end of each day`() {
+        stubTransactions(
+            buy("2026-01-01T10:00", 10, 100.0),
+            buy("2026-01-01T12:00", 10, 200.0),
+            sell("2026-01-03T09:00", 15, 300.0),
+        )
+
+        val byDay = CostBasisService.compute(characterId = 1).stockCostByDay
+
+        byDay.keys.toList() shouldBe listOf("2026-01-01", "2026-01-03")
+        byDay.getValue("2026-01-01") should (3000.0 * 1.03 plusOrMinus TOLERANCE)
+        // 15 sold: all 10 of the first lot and 5 of the second -- 5 × 200 left.
+        byDay.getValue("2026-01-03") should (1000.0 * 1.03 plusOrMinus TOLERANCE)
+    }
+
+    @Test
     fun `a full sell of a single buy lot computes cost basis net of tax and broker fee`() {
         stubTransactions(
             buy("2024-01-01", 10, 100.0),

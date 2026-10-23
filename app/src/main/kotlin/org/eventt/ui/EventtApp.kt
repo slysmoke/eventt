@@ -220,6 +220,10 @@ fun EventtApp() {
         LaunchedEffect(pendingMarketTypeId) {
             if (pendingMarketTypeId != null) selectedScreen = AppScreen.MARKET
         }
+        val pendingWalletSearch by AppState.pendingWalletSearch.collectAsState()
+        LaunchedEffect(pendingWalletSearch) {
+            if (pendingWalletSearch != null) selectedScreen = AppScreen.WALLET
+        }
 
         // P2P Market incoming-request notifications — shown regardless of which tab is currently
         // open, since a new buy request otherwise stays invisible until you happen to check My

@@ -1,24 +1,22 @@
 package org.eventt.features.dashboard
 
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.TrendingUp
-import androidx.compose.material.icons.filled.*
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
@@ -28,23 +26,68 @@ import org.eventt.core.database.*
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.AppLog
 import org.eventt.core.model.CorpFeature
-import org.eventt.core.model.stringBlocking
-import org.eventt.core.model.toPnlWindow
 import org.eventt.dashboard.generated.resources.*
+import org.eventt.features.market.ItemDetailDialog
+import org.eventt.features.orders.ActiveOrdersSyncService
 import org.eventt.features.orders.CostBasisService
 import org.eventt.features.orders.WalletSyncService
-import org.eventt.features.orders.realizedPnlWindow
 import org.eventt.ui.common.CorpAccessNotice
 import org.eventt.ui.common.Tip
+import org.eventt.ui.common.formatIsk
+import org.eventt.ui.common.formatPriceAbbr
+import org.eventt.ui.common.formatVolume
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
-import org.jetbrains.compose.resources.pluralStringResource
+import org.eventt.ui.theme.warningColor
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
+import java.time.Duration
 import java.time.LocalDate
+import java.util.Locale
 
 private const val COMBINE_ALL_SETTING = "dashboard.combine_all"
+private const val RANGE_SETTING = "dashboard.range"
+private const val STACKED_SETTING = "dashboard.stacked"
+private const val TAB_SETTING = "dashboard.tab"
+private const val THE_FORGE = 10000002
+private const val JITA_44 = 60003760L
 
-private val ACCENT = Color(0xFF4A90D9)
+// Orders this close to expiring are flagged.
+private val EXPIRY_WARN = Duration.ofHours(48)
+
+internal val Mono = FontFamily.Monospace
+
+internal fun signed(v: Double) = (if (v > 0) "+" else "") + formatIsk(v)
+
+// yyyy-MM-dd… → MM-dd.
+private fun shortDate(date: String) = date.take(10).drop(5)
+
+private fun pct(v: Double) = String.format(Locale.US, "%+.1f%%", v)
+
+// Everything the dashboard shows, read from the local DB in one go.
+private class Snapshot(
+    val days: List<Day>,
+    val fifo: CostBasisService.FifoResult,
+    val feesByDay: Map<String, Double>,
+    val txs: List<Map<String, Any?>>,
+    val orders: List<OrderRow>,
+)
+
+private enum class Tab(
+    val label: StringResource,
+) {
+    POSITIONS(Res.string.tab_positions),
+    ITEMS(Res.string.tab_items),
+    COUNTERPARTIES(Res.string.tab_counterparties),
+    TRADES(Res.string.tab_trades),
+}
+
+private data class ChartTarget(
+    val typeId: Int,
+    val name: String,
+    val regionId: Int,
+    val stationId: Long?,
+)
 
 @Composable
 fun DashboardScreen(
@@ -59,137 +102,115 @@ fun DashboardScreen(
     // with no character/corporation filter) instead of the selected context. ESI sync is skipped
     // there — it authorizes as one character; each context refreshes its own data when viewed.
     var combined by remember { mutableStateOf(false) }
+    var range by remember { mutableStateOf(Range.M1) }
+    var stacked by remember { mutableStateOf(false) }
+    var tab by remember { mutableStateOf(Tab.POSITIONS) }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(Unit) {
-        combined = withContext(Dispatchers.IO) { StaticDataDao.getSetting(COMBINE_ALL_SETTING) == "true" }
+
+    fun save(
+        key: String,
+        value: String,
+    ) {
+        scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(key, value) }
     }
-    var walletBalance by remember { mutableStateOf(0.0) }
-    var txBreakdown by remember { mutableStateOf<List<org.eventt.core.model.DailyWalletEntry>>(emptyList()) }
-    var fifoResult by remember { mutableStateOf<CostBasisService.FifoResult?>(null) }
-    var assetValue by remember { mutableStateOf(0.0) }
-    var recentTx by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
-    var topWinners by remember { mutableStateOf<List<ItemPnl>>(emptyList()) }
-    var topLosers by remember { mutableStateOf<List<ItemPnl>>(emptyList()) }
-    var topSellers by remember { mutableStateOf<List<CounterpartyStat>>(emptyList()) }
-    var topBuyers by remember { mutableStateOf<List<CounterpartyStat>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            combined = StaticDataDao.getSetting(COMBINE_ALL_SETTING) == "true"
+            StaticDataDao.getSetting(RANGE_SETTING)?.let { s -> Range.entries.find { it.name == s } }?.let { range = it }
+            stacked = StaticDataDao.getSetting(STACKED_SETTING) == "true"
+            StaticDataDao.getSetting(TAB_SETTING)?.let { s -> Tab.entries.find { it.name == s } }?.let { tab = it }
+        }
+    }
+
+    var snap by remember { mutableStateOf<Snapshot?>(null) }
+    var prices by remember { mutableStateOf<Map<Int, Double>>(emptyMap()) }
     var isLoading by remember { mutableStateOf(false) }
     var deniedCorpFeatures by remember { mutableStateOf<Set<CorpFeature>>(emptySet()) }
+    var chartTarget by remember { mutableStateOf<ChartTarget?>(null) }
     // Bumped by the "Retry" button on CorpAccessNotice after clearing the denied flags, so the
     // sync effect below re-runs and gives ESI another try — otherwise corpGuarded would just
     // keep skipping the call it already knows is denied.
     var retryNonce by remember { mutableStateOf(0) }
 
     LaunchedEffect(context, refreshTrigger, combined, retryNonce) {
+        if (context == null) return@LaunchedEffect
         isLoading = true
         withContext(Dispatchers.IO) {
-            val isCorp = corpId != null
-            val since90 = LocalDate.now().minusDays(90).toString()
-            val qCharId = if (combined) null else charId
-            val qCorpId = if (combined) null else corpId
-            try {
-                walletBalance =
-                    if (combined) {
-                        // The unfiltered journal's latest row is one wallet's balance, not a
-                        // total — sum each character's and each corporation's own latest balance.
-                        val chars = CharacterDao.getAll()
-                        chars.sumOf { WalletDao.getWalletSummary(characterId = it.id).balance } +
-                            CorporationDao.getTrackedIds().sumOf { WalletDao.getWalletSummary(corporationId = it).balance }
-                    } else {
-                        WalletDao.getWalletSummary(characterId = charId, corporationId = corpId).balance
-                    }
-                txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = qCharId, corporationId = qCorpId, since = since90)
-                assetValue = if (context != null) AssetDao.getTotalValue(characterId = qCharId, corporationId = qCorpId) else 0.0
-                // limit = -1 is SQLite for "no limit" — top buyers/sellers rank over the character's
-                // entire trading history, not just a recent window.
-                val txWindow =
-                    WalletSyncService.resolveMissingClientNames(
-                        WalletDao.getTransactions(characterId = qCharId, corporationId = qCorpId, limit = -1),
+            val qChar = if (combined) null else charId
+            val qCorp = if (combined) null else corpId
+            val scopeKey =
+                when {
+                    combined -> "all"
+                    corpId != null -> "corp:$corpId"
+                    else -> "char:$charId"
+                }
+
+            fun load(walletNow: Double?): Snapshot {
+                val taxConfig =
+                    actingCharId?.let {
+                        CostBasisService.TaxConfig(StaticDataDao.getCharSalesTax(it), StaticDataDao.getCharBrokersFee(it))
+                    } ?: CostBasisService.TaxConfig()
+                val fifo = CostBasisService.compute(qChar, qCorp, taxConfig)
+                val orders = loadOrderRows(qChar, qCorp)
+                // Assets come from AssetWatchService's background refresh, already priced at Jita sell.
+                ItemValueSnapshotDao.upsert(
+                    scopeKey,
+                    LocalDate.now().toString(),
+                    AssetDao.getTotalValue(qChar, qCorp) + orders.filter { !it.order.isBuyOrder }.sumOf { it.isk },
+                )
+                val days =
+                    buildDays(
+                        WalletDao.getBalanceHistory(qChar, qCorp),
+                        fifo.stockCostByDay,
+                        WalletDao.getEscrowFlowByDay(qChar, qCorp),
+                        ItemValueSnapshotDao.getAll(scopeKey),
+                        fifo.realizedSells.groupBy { it.date.take(10) }.mapValues { (_, s) -> s.sumOf { it.profit } },
+                        walletNow,
                     )
-                recentTx = txWindow.take(12)
-                val (sellers, buyers) = computeCounterpartyStats(txWindow)
-                topSellers = sellers
-                topBuyers = buyers
+                // limit = -1 is SQLite for "no limit" — counterparties rank over the whole range.
+                val txs = WalletSyncService.resolveMissingClientNames(WalletDao.getTransactions(qChar, qCorp, limit = -1))
+                return Snapshot(days, fifo, WalletDao.getFeesByDay(qChar, qCorp), txs, orders)
+            }
+
+            try {
+                snap = load(null)
             } catch (e: Exception) {
                 AppLog.warn("Dashboard", e)
             }
 
             val acting = actingCharId
             if (acting != null && !combined) {
-                try {
-                    walletBalance =
-                        if (isCorp) EsiClient.getCorporationWallet(corpId, acting).values.sum() else EsiClient.getCharacterWallet(acting)
-                } catch (e: Exception) {
-                    AppLog.warn("Dashboard", "wallet ESI", e)
-                }
-
-                // Journal + transactions fetch-and-insert is shared with WalletSyncService.syncAll()
-                // (the startup/pre-leaderboard-publish sweep across every character/corp) — this is
-                // just that same sync scoped to whichever context is on screen right now.
-                if (isCorp) WalletSyncService.syncCorporation(corpId, acting) else WalletSyncService.syncCharacter(acting)
-                walletBalance = WalletDao.getWalletSummary(characterId = charId, corporationId = corpId).balance
-                txBreakdown = WalletDao.getTradingPnlBreakdown(characterId = charId, corporationId = corpId, since = since90)
-                val txWindow =
-                    WalletSyncService.resolveMissingClientNames(
-                        WalletDao.getTransactions(characterId = charId, corporationId = corpId, limit = -1),
-                    )
-                recentTx = txWindow.take(12)
-                val (sellers, buyers) = computeCounterpartyStats(txWindow)
-                topSellers = sellers
-                topBuyers = buyers
-            }
-            deniedCorpFeatures = if (acting != null && isCorp) CharacterDao.getDeniedCorpFeatures(acting) else emptySet()
-
-            try {
-                val taxConfig =
-                    if (acting != null) {
-                        CostBasisService.TaxConfig(
-                            salesTaxPct = StaticDataDao.getCharSalesTax(acting),
-                            brokerFeePct = StaticDataDao.getCharBrokersFee(acting),
-                        )
+                // Journal + transactions + the active order book, the same per-context syncs the
+                // Wallet and Orders screens run, then reload with the live wallet balance on top.
+                val live =
+                    runCatching {
+                        if (corpId !=
+                            null
+                        ) {
+                            EsiClient.getCorporationWallet(corpId, acting).values.sum()
+                        } else {
+                            EsiClient.getCharacterWallet(acting)
+                        }
+                    }.onFailure { AppLog.warn("Dashboard", "wallet ESI", it) }.getOrNull()
+                if (corpId != null) WalletSyncService.syncCorporation(corpId, acting) else WalletSyncService.syncCharacter(acting)
+                runCatching {
+                    if (corpId !=
+                        null
+                    ) {
+                        ActiveOrdersSyncService.syncCorporation(corpId, acting)
                     } else {
-                        CostBasisService.TaxConfig()
+                        ActiveOrdersSyncService.syncCharacter(acting)
                     }
-                val fifo =
-                    CostBasisService.compute(
-                        characterId = if (combined) null else charId,
-                        corporationId = if (combined) null else corpId,
-                        taxConfig = taxConfig,
-                    )
-                fifoResult = fifo
-
-                // Realized P&L per item over the last 30 days, for the winners/losers lists.
-                val since30 = LocalDate.now().minusDays(30).toString()
-                val byType =
-                    fifo.realizedSells
-                        .filter { it.date.take(10) >= since30 }
-                        .groupBy { it.typeId }
-                        .map { (typeId, sells) -> Triple(typeId, sells.sumOf { it.profit }, sells.sumOf { it.qty }) }
-
-                fun toItemPnl(entry: Triple<Int, Double, Int>) =
-                    ItemPnl(
-                        typeId = entry.first,
-                        name =
-                            fifo.inventory[entry.first]?.typeName?.takeIf { it.isNotEmpty() }
-                                ?: StaticDataDao.getTypeName(entry.first)
-                                ?: stringBlocking(Res.string.type_n, entry.first),
-                        profit = entry.second,
-                        qty = entry.third,
-                    )
-                topWinners =
-                    byType
-                        .filter { it.second > 0 }
-                        .sortedByDescending { it.second }
-                        .take(5)
-                        .map(::toItemPnl)
-                topLosers =
-                    byType
-                        .filter { it.second < 0 }
-                        .sortedBy { it.second }
-                        .take(5)
-                        .map(::toItemPnl)
-            } catch (e: Exception) {
-                AppLog.warn("Dashboard", e)
+                }.onFailure { AppLog.warn("Dashboard", "orders ESI", it) }
+                try {
+                    snap = load(live)
+                } catch (e: Exception) {
+                    AppLog.warn("Dashboard", e)
+                }
             }
+            deniedCorpFeatures = if (acting != null && corpId != null) CharacterDao.getDeniedCorpFeatures(acting) else emptySet()
+            isLoading = false
+            snap?.let { prices = jitaSellPrices(it.fifo.inventory.keys) }
         }
         isLoading = false
     }
@@ -201,633 +222,787 @@ fun DashboardScreen(
         return
     }
 
-    val pnlWindow = txBreakdown.toPnlWindow()
-    // Wallet in minus wallet out — cash flow, deliberately NOT labeled P&L anywhere in the UI:
-    // buying stock shows up as a huge negative here even when the trade will be profitable.
-    // Real profit is the Realized (FIFO cost-basis) section below.
-    val todayCashFlow = pnlWindow.todayNet
-    val week7CashFlow = pnlWindow.net7d
-    val month30CashFlow = pnlWindow.net30d
-    val income30d = pnlWindow.income30d
-    val spend30d = pnlWindow.expenses30d
+    val s = snap
+    val rangeDays = s?.days?.takeLast(range.days.coerceAtMost(s.days.size)).orEmpty()
+    val from = rangeDays.firstOrNull()?.day ?: LocalDate.now().toString()
+    val stats = remember(s, range) { s?.let { rangeStats(rangeDays, it.fifo.realizedSells, it.txs, it.feesByDay) } }
+    val pos = remember(s, prices) { s?.let { positions(it.fifo, prices) }.orEmpty() }
 
-    val fifoWindow = fifoResult?.realizedPnlWindow()
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        // Header
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    when {
-                        combined -> stringResource(Res.string.dashboard_all)
-                        corpName != null -> stringResource(Res.string.dashboard_corp, corpName)
-                        else -> stringResource(Res.string.dashboard)
-                    },
-                    style = MaterialTheme.typography.headlineMedium,
-                )
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (isLoading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    Text(
-                        stringResource(Res.string.combine_all),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    )
-                    Switch(
-                        checked = combined,
-                        onCheckedChange = {
-                            combined = it
-                            scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(COMBINE_ALL_SETTING, it.toString()) }
-                        },
-                        modifier = Modifier.height(24.dp),
-                    )
-                }
-            }
-        }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Header(
+            title =
+                when {
+                    combined -> stringResource(Res.string.dashboard_all)
+                    corpName != null -> stringResource(Res.string.dashboard_corp, corpName)
+                    else -> stringResource(Res.string.dashboard)
+                },
+            range = range,
+            onRange = {
+                range = it
+                save(RANGE_SETTING, it.name)
+            },
+            stacked = stacked,
+            onStacked = {
+                stacked = it
+                save(STACKED_SETTING, it.toString())
+            },
+            combined = combined,
+            onCombined = {
+                combined = it
+                save(COMBINE_ALL_SETTING, it.toString())
+            },
+            isLoading = isLoading,
+        )
 
         if (deniedCorpFeatures.isNotEmpty()) {
-            item {
-                CorpAccessNotice(
-                    deniedCorpFeatures,
-                    onRetry = {
-                        val acting = actingCharId
-                        if (acting != null) {
-                            scope.launch(Dispatchers.IO) {
-                                deniedCorpFeatures.forEach { CharacterDao.setCorpFeatureDenied(acting, it, denied = false) }
-                                withContext(Dispatchers.Main) { retryNonce++ }
-                            }
+            CorpAccessNotice(
+                deniedCorpFeatures,
+                onRetry = {
+                    val acting = actingCharId
+                    if (acting != null) {
+                        scope.launch(Dispatchers.IO) {
+                            deniedCorpFeatures.forEach { CharacterDao.setCorpFeatureDenied(acting, it, denied = false) }
+                            withContext(Dispatchers.Main) { retryNonce++ }
                         }
-                    },
-                )
-            }
-        }
-
-        // Top KPI row
-        item {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                KpiCard(
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Default.AccountBalance,
-                    label = stringResource(Res.string.wallet_balance),
-                    value = formatIsk(walletBalance),
-                    color = ACCENT,
-                )
-                KpiCard(
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Default.Storage,
-                    label = stringResource(Res.string.asset_value),
-                    value = formatIsk(assetValue),
-                    color = Color(0xFF66D9E8),
-                )
-                KpiCard(
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.AutoMirrored.Filled.TrendingUp,
-                    label = stringResource(Res.string.cash_flow_30d),
-                    value = formatIsk(month30CashFlow, showSign = true),
-                    color = if (month30CashFlow >= 0) positiveColor else negativeColor,
-                    valueColor = if (month30CashFlow >= 0) positiveColor else negativeColor,
-                )
-            }
-        }
-
-        // P&L mini cards — cash flow (gross buy/sell + tax/fees actually paid, from the wallet)
-        item {
-            Tip(stringResource(Res.string.tip_cash_flow)) {
-                Text(
-                    stringResource(Res.string.cash_flow),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                )
-            }
-        }
-        item {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                PnlMiniCard(
-                    modifier = Modifier.weight(1f),
-                    label = stringResource(Res.string.cash_flow_today),
-                    value = todayCashFlow,
-                    showSign = true,
-                )
-                PnlMiniCard(
-                    modifier = Modifier.weight(1f),
-                    label = stringResource(Res.string.cash_flow_7d),
-                    value = week7CashFlow,
-                    showSign = true,
-                )
-                PnlMiniCard(
-                    modifier = Modifier.weight(1f),
-                    label = stringResource(Res.string.income_30d),
-                    value = income30d,
-                    forceColor = positiveColor,
-                )
-                PnlMiniCard(
-                    modifier = Modifier.weight(1f),
-                    label = stringResource(Res.string.expenses_30d),
-                    value = spend30d,
-                    forceColor = negativeColor,
-                )
-            }
-        }
-
-        // P&L mini cards — FIFO cost-basis (profit only counted once a lot is actually sold)
-        if (fifoWindow != null) {
-            item {
-                Tip(stringResource(Res.string.tip_realized_pnl)) {
-                    Text(
-                        stringResource(Res.string.realized_pnl_fifo),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                    )
-                }
-            }
-            item {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    PnlMiniCard(
-                        modifier = Modifier.weight(1f),
-                        label = stringResource(Res.string.realized_today),
-                        value = fifoWindow.todayPnl,
-                        showSign = true,
-                    )
-                    PnlMiniCard(
-                        modifier = Modifier.weight(1f),
-                        label = stringResource(Res.string.realized_7d),
-                        value = fifoWindow.pnl7d,
-                        showSign = true,
-                    )
-                    PnlMiniCard(
-                        modifier = Modifier.weight(1f),
-                        label = stringResource(Res.string.realized_30d),
-                        value = fifoWindow.pnl30d,
-                        showSign = true,
-                    )
-                    PnlMiniCard(
-                        modifier = Modifier.weight(1f),
-                        label = stringResource(Res.string.realized_all),
-                        value = fifoWindow.pnlAll,
-                        showSign = true,
-                    )
-                }
-            }
-            // Daily realized-P&L bars — profit per calendar day from the same FIFO matches as
-            // the cards above (each sale's profit lands on its sell date, not its buy date).
-            item {
-                val dailyRealized =
-                    remember(fifoResult) {
-                        fifoResult
-                            ?.realizedSells
-                            .orEmpty()
-                            .groupBy { it.date.substring(0, 10) }
-                            .mapValues { (_, sells) -> sells.sumOf { it.profit } }
                     }
-                PnlBarChart(
-                    dailyValues = dailyRealized,
-                    title = stringResource(Res.string.daily_realized_pnl_30d),
-                    emptyHint = stringResource(Res.string.no_realized_sales_30d),
-                )
+                },
+            )
+        }
+
+        if (s == null) {
+            Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+            }
+            return@Column
+        }
+
+        KpiStrip(s, stats, pos)
+
+        Row(Modifier.fillMaxWidth().height(400.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Panel(stringResource(Res.string.panel_chart), Modifier.weight(0.72f).fillMaxHeight()) {
+                if (s.days.size < 2) {
+                    Hint(stringResource(Res.string.no_history))
+                } else {
+                    NetWorthChart(s.days, range, stacked, Modifier.fillMaxSize())
+                }
+            }
+            Panel(stringResource(Res.string.panel_stats, stringResource(range.label)), Modifier.weight(0.28f).fillMaxHeight()) {
+                stats?.let { StatsPanel(it) }
             }
         }
 
-        // Transactions + Alerts
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.Top,
+        Row(Modifier.fillMaxWidth().height(340.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Panel(stringResource(Res.string.panel_orders), Modifier.weight(0.36f).fillMaxHeight()) {
+                OrdersPanel(s.orders, fills24h(s.txs)) { o ->
+                    chartTarget = ChartTarget(o.typeId, o.typeName, o.regionId, o.locationId.takeIf { !o.isBuyOrder })
+                }
+            }
+            Panel(
+                null,
+                Modifier.weight(0.64f).fillMaxHeight(),
+                header = {
+                    Tab.entries.forEach { t ->
+                        TabLabel(stringResource(t.label), t == tab) {
+                            tab = t
+                            save(TAB_SETTING, t.name)
+                        }
+                    }
+                },
             ) {
-                Card(
-                    modifier = Modifier.weight(1f),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        SectionHeader(stringResource(Res.string.recent_transactions), count = recentTx.size.takeIf { it > 0 })
-                        Spacer(Modifier.height(8.dp))
-                        if (recentTx.isEmpty()) {
-                            EmptyHint(stringResource(Res.string.no_transactions_recorded))
-                        } else {
-                            recentTx.forEachIndexed { i, tx ->
-                                TransactionRow(tx)
-                                if (i < recentTx.lastIndex) {
-                                    HorizontalDivider(
-                                        thickness = 0.5.dp,
-                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
-                                    )
+                val unknown = stringResource(Res.string.unknown)
+                val open = { typeId: Int, name: String -> chartTarget = ChartTarget(typeId, name, THE_FORGE, JITA_44) }
+                when (tab) {
+                    Tab.POSITIONS -> {
+                        PositionsTable(pos, prices.isEmpty() && pos.isNotEmpty(), open)
+                    }
+
+                    Tab.ITEMS -> {
+                        val items =
+                            remember(s, from) {
+                                itemPnl(s.fifo.realizedSells, from) { id ->
+                                    s.fifo.inventory[id]
+                                        ?.typeName
+                                        ?.ifEmpty { null } ?: StaticDataDao.getTypeName(id) ?: "#$id"
                                 }
                             }
-                        }
+                        ItemsTable(items, open)
                     }
-                }
 
-                Card(
-                    modifier = Modifier.weight(1f),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        SectionHeader(stringResource(Res.string.top_items_realized))
-                        Spacer(Modifier.height(8.dp))
-                        if (topWinners.isEmpty() && topLosers.isEmpty()) {
-                            EmptyHint(stringResource(Res.string.no_realized_sells_30d))
-                        } else {
-                            topWinners.forEach { ItemPnlRow(it) }
-                            if (topWinners.isNotEmpty() && topLosers.isNotEmpty()) {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(vertical = 4.dp),
-                                    thickness = 0.5.dp,
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
-                                )
-                            }
-                            topLosers.forEach { ItemPnlRow(it) }
-                        }
+                    Tab.COUNTERPARTIES -> {
+                        CounterpartiesTable(remember(s) { counterparties(s.txs, unknown) }, unknown)
                     }
-                }
 
-                Card(
-                    modifier = Modifier.weight(1f),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        SectionHeader(stringResource(Res.string.top_counterparties))
-                        Spacer(Modifier.height(8.dp))
-                        if (topSellers.isEmpty() && topBuyers.isEmpty()) {
-                            EmptyHint(stringResource(Res.string.no_transactions_recorded))
-                        } else {
-                            Text(
-                                stringResource(Res.string.sellers),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                            )
-                            if (topSellers.isEmpty()) {
-                                EmptyHint(stringResource(Res.string.no_purchases))
-                            } else {
-                                topSellers.forEach { CounterpartyRow(it) }
-                            }
-                            HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 4.dp),
-                                thickness = 0.5.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
-                            )
-                            Text(
-                                stringResource(Res.string.buyers),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                            )
-                            if (topBuyers.isEmpty()) {
-                                EmptyHint(stringResource(Res.string.no_sales))
-                            } else {
-                                topBuyers.forEach { CounterpartyRow(it) }
-                            }
-                        }
+                    Tab.TRADES -> {
+                        TradesTable(s.txs, unknown, open)
                     }
                 }
             }
         }
     }
+
+    chartTarget?.let { t ->
+        val regionName by produceState("", t.regionId) {
+            value = withContext(Dispatchers.IO) { StaticDataDao.getRegionById(t.regionId)?.name ?: "" }
+        }
+        ItemDetailDialog(
+            typeId = t.typeId,
+            typeName = t.name,
+            primaryRegionId = t.regionId,
+            primaryRegionName = regionName,
+            primaryStationId = t.stationId,
+            charId = actingCharId,
+            corporationId = corpId.takeIf { !combined },
+            onDismiss = { chartTarget = null },
+        )
+    }
 }
 
-// ─── Sub-composables ──────────────────────────────────────────────────────
+// ─── Layout pieces ────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun SectionHeader(
+private fun Header(
     title: String,
-    count: Int? = null,
-    badge: Int? = null,
+    range: Range,
+    onRange: (Range) -> Unit,
+    stacked: Boolean,
+    onStacked: (Boolean) -> Unit,
+    combined: Boolean,
+    onCombined: (Boolean) -> Unit,
+    isLoading: Boolean,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-        when {
-            badge != null -> {
-                Badge { Text("$badge") }
-            }
-
-            count != null -> {
-                Text(
-                    "$count",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                )
-            }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+        if (isLoading) CircularProgressIndicator(Modifier.padding(start = 6.dp).size(16.dp), strokeWidth = 2.dp)
+        Spacer(Modifier.weight(1f))
+        Range.entries.forEach { r -> Segment(stringResource(r.label), r == range) { onRange(r) } }
+        Spacer(Modifier.width(8.dp))
+        Tip(stringResource(Res.string.tip_stacked)) {
+            Segment(stringResource(Res.string.composition), stacked) { onStacked(!stacked) }
         }
+        Spacer(Modifier.width(8.dp))
+        Text(stringResource(Res.string.combine_all), style = MaterialTheme.typography.labelSmall, color = AXIS_COLOR)
+        Switch(checked = combined, onCheckedChange = onCombined, modifier = Modifier.height(24.dp))
     }
 }
 
+// Compact toggle button, terminal style.
 @Composable
-private fun EmptyHint(text: String) {
+private fun Segment(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val primary = MaterialTheme.colorScheme.primary
     Text(
         text,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+        style = MaterialTheme.typography.labelMedium,
+        fontFamily = Mono,
+        color = if (selected) primary else AXIS_COLOR,
+        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+        modifier =
+            Modifier
+                .border(1.dp, if (selected) primary else outline(), MaterialTheme.shapes.extraSmall)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 8.dp, vertical = 3.dp),
     )
 }
 
 @Composable
-private fun KpiCard(
+private fun outline() = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+
+// Bordered box with a thin title bar — the dashboard's one container.
+@Composable
+private fun Panel(
+    title: String?,
     modifier: Modifier = Modifier,
-    icon: ImageVector,
-    label: String,
-    value: String,
-    color: Color,
-    valueColor: Color = Color.Unspecified,
+    header: @Composable RowScope.() -> Unit = {},
+    content: @Composable ColumnScope.() -> Unit,
 ) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    Column(
+        modifier
+            .border(1.dp, outline(), MaterialTheme.shapes.extraSmall)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
     ) {
         Row(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            Modifier.fillMaxWidth().height(22.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Box(modifier = Modifier.size(44.dp), contentAlignment = Alignment.Center) {
-                Surface(
-                    color = color.copy(alpha = 0.12f),
-                    shape = MaterialTheme.shapes.medium,
-                    modifier = Modifier.fillMaxSize(),
-                ) {}
-                Icon(icon, null, tint = color, modifier = Modifier.size(24.dp))
-            }
-            Column {
+            if (title != null) {
                 Text(
-                    label,
+                    title.uppercase(),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                )
-                Text(
-                    value,
-                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = if (valueColor == Color.Unspecified) MaterialTheme.colorScheme.onSurface else valueColor,
+                    color = AXIS_COLOR,
                 )
             }
+            header()
         }
+        HorizontalDivider(thickness = 1.dp, color = outline())
+        Spacer(Modifier.height(4.dp))
+        content()
     }
 }
 
 @Composable
-private fun PnlMiniCard(
-    modifier: Modifier = Modifier,
-    label: String,
-    value: Double,
-    showSign: Boolean = false,
-    forceColor: Color? = null,
+private fun TabLabel(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
 ) {
-    val color =
-        forceColor ?: when {
-            value > 0 -> positiveColor
-            value < 0 -> negativeColor
-            else -> Color.Gray
-        }
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.08f)),
+    Text(
+        text.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Bold,
+        color = if (selected) MaterialTheme.colorScheme.primary else AXIS_COLOR,
+        modifier = Modifier.clickable(onClick = onClick).padding(vertical = 2.dp),
+    )
+}
+
+@Composable
+private fun Hint(text: String) {
+    Text(text, style = MaterialTheme.typography.bodySmall, color = AXIS_COLOR, modifier = Modifier.padding(vertical = 8.dp))
+}
+
+@Composable
+private fun pnlColor(v: Double?): Color? =
+    when {
+        v == null || v == 0.0 -> null
+        v > 0 -> positiveColor
+        else -> negativeColor
+    }
+
+// ─── KPI strip ────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun KpiStrip(
+    s: Snapshot,
+    stats: RangeStats?,
+    pos: List<Position>,
+) {
+    val today = s.days.lastOrNull()
+    val buys = s.orders.filter { it.order.isBuyOrder }
+    val priced = pos.filter { it.netValue != null }
+    val market = priced.sumOf { it.netValue ?: 0.0 }
+    val unrealized = priced.sumOf { it.unrealized ?: 0.0 }
+    Row(
+        Modifier.fillMaxWidth().height(IntrinsicSize.Min).border(1.dp, outline(), MaterialTheme.shapes.extraSmall),
     ) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth()) {
-            Text(
-                label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-            )
-            Text(
-                formatIsk(value, showSign = showSign),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = color,
-            )
-        }
+        Kpi(
+            stringResource(Res.string.net_worth),
+            formatIsk(today?.netWorth ?: 0.0),
+            stats?.let { st -> signed(st.netWorthChange) + (st.netWorthChangePct?.let { "  " + pct(it) } ?: "") },
+            pnlColor(stats?.netWorthChange),
+            NET_COLOR,
+            Res.string.tip_net_worth,
+        )
+        Kpi(stringResource(Res.string.wallet), formatIsk(today?.wallet ?: 0.0), null, null, WALLET_COLOR)
+        Kpi(
+            stringResource(Res.string.escrow),
+            formatIsk(today?.escrow ?: 0.0),
+            stringResource(Res.string.n_buy_orders, buys.size.toString()),
+            null,
+            ESCROW_COLOR,
+            Res.string.tip_escrow,
+        )
+        Kpi(
+            stringResource(Res.string.items),
+            today?.items?.let(::formatIsk) ?: "—",
+            stringResource(Res.string.in_sell_orders, formatIsk(s.orders.filter { !it.order.isBuyOrder }.sumOf { it.isk })),
+            null,
+            ITEMS_COLOR,
+            Res.string.tip_items,
+        )
+        Kpi(
+            stringResource(Res.string.stock_cost),
+            formatIsk(today?.stock ?: 0.0),
+            stringResource(
+                Res.string.n_types,
+                s.fifo.inventory.size
+                    .toString(),
+            ),
+            null,
+            STOCK_COLOR,
+            Res.string.tip_stock,
+        )
+        Kpi(
+            stringResource(Res.string.stock_market),
+            if (priced.isEmpty()) "—" else formatIsk(market),
+            if (priced.isEmpty()) null else signed(unrealized),
+            pnlColor(unrealized),
+            null,
+            Res.string.tip_stock_market,
+        )
+        Kpi(
+            stringResource(Res.string.realized),
+            stats?.let { signed(it.realized) } ?: "—",
+            stats?.marginPct?.let { stringResource(Res.string.margin_n, pct(it)) },
+            null,
+            null,
+            Res.string.tip_realized_pnl,
+            valueColor = pnlColor(stats?.realized),
+        )
+        Kpi(
+            stringResource(Res.string.cash_flow),
+            stats?.let { signed(it.cashFlow) } ?: "—",
+            null,
+            null,
+            null,
+            Res.string.tip_cash_flow,
+            valueColor = pnlColor(stats?.cashFlow),
+            last = true,
+        )
     }
 }
 
-// Diverging daily bars around a zero baseline. Scale is asymmetric (top = best day,
-// bottom = worst day) so an all-profit month uses the full height instead of half of it.
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun PnlBarChart(
-    dailyValues: Map<String, Double>,
-    title: String,
-    emptyHint: String,
+private fun RowScope.Kpi(
+    label: String,
+    value: String,
+    sub: String?,
+    subColor: Color?,
+    dot: Color?,
+    tip: StringResource? = null,
+    valueColor: Color? = null,
+    last: Boolean = false,
 ) {
-    // Zero-fill the last 30 calendar days — the data is sparse (active days only),
-    // and missing bars would silently compress time.
-    val days =
-        remember(dailyValues) {
-            val today = LocalDate.now()
-            (29 downTo 0).map { off ->
-                val d = today.minusDays(off.toLong()).toString()
-                d to (dailyValues[d] ?: 0.0)
-            }
-        }
-    var hovered by remember { mutableStateOf<Int?>(null) }
-    val positive = positiveColor
-    val negative = negativeColor
-
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                val h = hovered
-                Text(
-                    if (h != null) "${days[h].first}   ${formatIsk(days[h].second, showSign = true)}" else "",
-                    style = MaterialTheme.typography.labelSmall,
-                    color =
-                        when {
-                            h == null -> Color.Unspecified
-                            days[h].second >= 0 -> positive
-                            else -> negative
-                        },
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            if (days.all { it.second == 0.0 }) {
-                EmptyHint(emptyHint)
-            } else {
-                val baseline = MaterialTheme.colorScheme.outlineVariant
-                val maxPos = days.maxOf { it.second }.coerceAtLeast(0.0)
-                val maxNeg = -days.minOf { it.second }.coerceAtLeast(0.0)
-                val range = (maxPos + maxNeg).takeIf { it > 0 } ?: 1.0
-                Canvas(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .height(110.dp)
-                            .onPointerEvent(PointerEventType.Move) { event ->
-                                val x =
-                                    event.changes
-                                        .first()
-                                        .position.x
-                                hovered = (x / (size.width / days.size.toFloat())).toInt().coerceIn(0, days.lastIndex)
-                            }.onPointerEvent(PointerEventType.Exit) { hovered = null },
-                ) {
-                    val slot = size.width / days.size
-                    val barWidth = (slot - 2f).coerceAtLeast(1f)
-                    val zeroY = (size.height * (maxPos / range)).toFloat()
-                    days.forEachIndexed { i, (_, net) ->
-                        if (net == 0.0) return@forEachIndexed
-                        val h = (kotlin.math.abs(net) / range * size.height).toFloat()
-                        drawRoundRect(
-                            color = (if (net > 0) positive else negative).copy(alpha = if (hovered == i) 1f else 0.75f),
-                            topLeft = Offset(i * slot + 1f, if (net > 0) zeroY - h else zeroY),
-                            size = Size(barWidth, h),
-                            cornerRadius = CornerRadius(2f, 2f),
-                        )
-                    }
-                    drawLine(baseline, Offset(0f, zeroY), Offset(size.width, zeroY), strokeWidth = 1f)
+    Row(Modifier.weight(1f)) {
+        Column(Modifier.weight(1f).padding(horizontal = 10.dp, vertical = 6.dp)) {
+            val title = @Composable {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    dot?.let { Box(Modifier.size(6.dp).background(it, CircleShape)) }
+                    Text(
+                        label.uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AXIS_COLOR,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
+            if (tip != null) Tip(stringResource(tip)) { title() } else title()
+            Text(
+                value,
+                style = MaterialTheme.typography.titleMedium,
+                fontFamily = Mono,
+                fontWeight = FontWeight.SemiBold,
+                color = valueColor ?: MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+            )
+            Text(
+                sub ?: " ",
+                style = MaterialTheme.typography.labelSmall,
+                fontFamily = Mono,
+                color = subColor ?: AXIS_COLOR,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (!last) VerticalDivider(color = outline())
+    }
+}
+
+// ─── Stats ────────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun KV(
+    label: String,
+    value: String,
+    color: Color? = null,
+) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+        Text(label, style = MaterialTheme.typography.bodySmall, color = AXIS_COLOR, modifier = Modifier.weight(1f), maxLines = 1)
+        Text(value, style = MaterialTheme.typography.bodySmall, fontFamily = Mono, color = color ?: MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+@Composable
+private fun StatsPanel(st: RangeStats) {
+    Column(Modifier.verticalScroll(rememberScrollState())) {
+        KV(stringResource(Res.string.st_realized), signed(st.realized), pnlColor(st.realized))
+        KV(stringResource(Res.string.st_avg_day), signed(st.avgDay), pnlColor(st.avgDay))
+        KV(stringResource(Res.string.st_sells), st.sells.toString())
+        KV(stringResource(Res.string.st_win_rate), st.winRatePct?.let { String.format(Locale.US, "%.0f%%", it) } ?: "—")
+        KV(
+            stringResource(Res.string.st_profit_factor),
+            st.profitFactor?.let { String.format(Locale.US, "%.2f", it) } ?: "∞".takeIf { st.realized > 0 } ?: "—",
+        )
+        KV(stringResource(Res.string.st_margin), st.marginPct?.let(::pct) ?: "—", pnlColor(st.marginPct))
+        Spacer(Modifier.height(6.dp))
+        KV(stringResource(Res.string.st_turnover), formatIsk(st.turnover))
+        KV(stringResource(Res.string.st_fees), formatIsk(st.fees), negativeColor.takeIf { st.fees > 0 })
+        KV(
+            stringResource(Res.string.st_fees_share),
+            if (st.turnover >
+                0
+            ) {
+                String.format(Locale.US, "%.2f%%", st.fees / st.turnover * 100)
+            } else {
+                "—"
+            },
+        )
+        KV(stringResource(Res.string.cash_flow), signed(st.cashFlow), pnlColor(st.cashFlow))
+        Spacer(Modifier.height(6.dp))
+        KV(
+            stringResource(Res.string.st_best_day),
+            st.bestDay?.let { "${it.day.drop(5)}  ${signed(it.realized)}" } ?: "—",
+            positiveColor.takeIf {
+                st.bestDay !=
+                    null
+            },
+        )
+        KV(
+            stringResource(Res.string.st_worst_day),
+            st.worstDay?.let { "${it.day.drop(5)}  ${signed(it.realized)}" } ?: "—",
+            negativeColor.takeIf {
+                st.worstDay !=
+                    null
+            },
+        )
+        Tip(stringResource(Res.string.tip_drawdown)) {
+            KV(
+                stringResource(Res.string.st_drawdown),
+                if (st.maxDrawdown >
+                    0
+                ) {
+                    "-" + formatIsk(st.maxDrawdown)
+                } else {
+                    "0"
+                },
+                negativeColor.takeIf { st.maxDrawdown > 0 },
+            )
+        }
+        KV(
+            stringResource(Res.string.st_net_worth_change),
+            signed(st.netWorthChange) + (st.netWorthChangePct?.let { " (${pct(it)})" } ?: ""),
+            pnlColor(st.netWorthChange),
+        )
+    }
+}
+
+// ─── Orders ───────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun OrdersPanel(
+    orders: List<OrderRow>,
+    fills: Fills24h,
+    onOpen: (ActiveOrderDao.ActiveOrderRecord) -> Unit,
+) {
+    val (buys, sells) = orders.partition { it.order.isBuyOrder }
+    val expiring = orders.filter { it.expiresIn != null && it.expiresIn < EXPIRY_WARN }
+    val outbid = orders.filter { it.outbid }
+    KV(stringResource(Res.string.ord_buy), "${buys.size} · ${formatIsk(buys.sumOf { it.isk })}", positiveColor.takeIf { buys.isNotEmpty() })
+    KV(
+        stringResource(Res.string.ord_sell),
+        "${sells.size} · ${formatIsk(sells.sumOf { it.isk })}",
+        negativeColor.takeIf { sells.isNotEmpty() },
+    )
+    KV(
+        stringResource(Res.string.ord_outbid),
+        "${outbid.count { it.order.isBuyOrder }} / ${outbid.count { !it.order.isBuyOrder }}",
+        warningColor.takeIf { outbid.isNotEmpty() },
+    )
+    KV(stringResource(Res.string.ord_expiring), expiring.size.toString(), warningColor.takeIf { expiring.isNotEmpty() })
+    KV(stringResource(Res.string.ord_fills_24h), "${fills.buys} / ${fills.sells}")
+    KV(stringResource(Res.string.ord_volume_24h), "${formatIsk(fills.buyIsk)} / ${formatIsk(fills.sellIsk)}")
+    Spacer(Modifier.height(6.dp))
+    // Orders that need a hand: beaten first, then the ones about to expire, biggest first.
+    val attention = (outbid.sortedByDescending { it.isk } + expiring.sortedBy { it.expiresIn }).distinct()
+    Text(
+        stringResource(Res.string.attention).uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Bold,
+        color = AXIS_COLOR,
+    )
+    if (attention.isEmpty()) {
+        Hint(stringResource(if (orders.isEmpty()) Res.string.no_orders else Res.string.all_orders_fine))
+        return
+    }
+    val outbidWord = stringResource(Res.string.outbid_by)
+    val expiresWord = stringResource(Res.string.expires_in)
+    LazyColumn {
+        items(attention, key = { it.order.orderId }) { o ->
+            Row(
+                Modifier.fillMaxWidth().clickable { onOpen(o.order) }.padding(vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                SideBadge(o.order.isBuyOrder)
+                Text(
+                    o.order.typeName,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    if (o.outbid && o.best != null) {
+                        "$outbidWord ${formatPriceAbbr(o.best)}"
+                    } else {
+                        "$expiresWord ${o.expiresIn?.toHours()?.coerceAtLeast(0)}h"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    fontFamily = Mono,
+                    color = warningColor,
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun TransactionRow(tx: Map<String, Any?>) {
-    val isBuy = tx["is_buy"] as? Boolean ?: false
-    val typeName = tx["type_name"] as? String ?: stringResource(Res.string.unknown)
-    val qty = (tx["quantity"] as? Number)?.toInt() ?: 0
-    val unitPrice = (tx["unit_price"] as? Number)?.toDouble() ?: 0.0
-    val total = (tx["total"] as? Number)?.toDouble() ?: 0.0
-    val date = (tx["date"] as? String)?.take(10) ?: ""
-    val color = if (isBuy) negativeColor else positiveColor
+private fun SideBadge(isBuy: Boolean) {
+    val c = if (isBuy) positiveColor else negativeColor
+    Text(
+        stringResource(if (isBuy) Res.string.buy_badge else Res.string.sell_badge),
+        style = MaterialTheme.typography.labelSmall,
+        fontFamily = Mono,
+        fontWeight = FontWeight.Bold,
+        color = c,
+        modifier = Modifier.border(1.dp, c.copy(alpha = 0.6f), MaterialTheme.shapes.extraSmall).padding(horizontal = 3.dp),
+    )
+}
 
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Surface(color = color.copy(alpha = 0.15f), shape = MaterialTheme.shapes.extraSmall) {
-            Text(
-                if (isBuy) stringResource(Res.string.buy_badge) else stringResource(Res.string.sell_badge),
-                style = MaterialTheme.typography.labelSmall,
-                color = color,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
-            )
+// ─── Tables ───────────────────────────────────────────────────────────────────────────────
+
+private class Col<T>(
+    val title: String,
+    val weight: Float,
+    val end: Boolean = true,
+    // Clicking the header sorts by this; null = not sortable.
+    val sort: ((T) -> Comparable<*>?)? = null,
+)
+
+private class Cell(
+    val text: String,
+    val color: Color? = null,
+)
+
+@Composable
+private fun <T> Table(
+    cols: List<Col<T>>,
+    rows: List<T>,
+    empty: String,
+    // Column sorted by on open, newest/biggest first. Not remembered across tab switches.
+    defaultSort: Int,
+    key: ((T) -> Any)? = null,
+    onClick: ((T) -> Unit)? = null,
+    footer: List<Cell>? = null,
+    cells: @Composable (T) -> List<Cell>,
+) {
+    var sortCol by remember { mutableStateOf(defaultSort) }
+    var desc by remember { mutableStateOf(true) }
+    val sorted =
+        remember(rows, sortCol, desc) {
+            val sel = cols[sortCol].sort ?: return@remember rows
+            val cmp = compareBy(sel)
+            rows.sortedWith(if (desc) cmp.reversed() else cmp)
         }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(typeName, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+
+    @Composable
+    fun line(
+        values: List<Cell>,
+        header: Boolean = false,
+        modifier: Modifier = Modifier,
+    ) = Row(modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        cols.forEachIndexed { i, c ->
+            val sortable = header && c.sort != null
             Text(
-                stringResource(Res.string.qty_at_price, qty, formatIsk(unitPrice)),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-            )
-        }
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                formatIsk(total),
+                values[i].text + if (header && i == sortCol) (if (desc) " ▼" else " ▲") else "",
                 style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Medium,
-                color = color,
+                fontFamily = if (header || !c.end) null else Mono,
+                fontWeight = if (header) FontWeight.Bold else null,
+                color =
+                    values[i].color ?: when {
+                        header && i == sortCol -> MaterialTheme.colorScheme.primary
+                        header -> AXIS_COLOR
+                        else -> MaterialTheme.colorScheme.onSurface
+                    },
+                textAlign = if (c.end) TextAlign.End else TextAlign.Start,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier =
+                    Modifier.weight(c.weight).then(
+                        if (sortable) {
+                            Modifier.clickable {
+                                // Same column flips the order; a new one starts descending.
+                                desc = if (sortCol == i) !desc else true
+                                sortCol = i
+                            }
+                        } else {
+                            Modifier
+                        },
+                    ),
             )
-            Text(
-                date,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-            )
+        }
+    }
+    line(cols.map { Cell(it.title) }, header = true)
+    HorizontalDivider(color = outline())
+    if (rows.isEmpty()) {
+        Hint(empty)
+        return
+    }
+    Column(Modifier.fillMaxSize()) {
+        LazyColumn(Modifier.weight(1f)) {
+            items(sorted, key = key) { r ->
+                line(cells(r), modifier = if (onClick != null) Modifier.clickable { onClick(r) } else Modifier)
+            }
+        }
+        footer?.let {
+            HorizontalDivider(color = outline())
+            line(it)
         }
     }
 }
 
-// One item's realized FIFO P&L over the dashboard's 30-day window.
-private data class ItemPnl(
-    val typeId: Int,
-    val name: String,
-    val profit: Double,
-    val qty: Int,
-)
-
-// A trading counterparty ranked by ISK moved. A transaction's client is whoever was on the other
-// side of it: is_buy=true means we bought, so the client sold to us (a seller); is_buy=false means
-// we sold, so the client bought from us (a buyer).
-private data class CounterpartyStat(
-    val name: String,
-    val total: Double,
-    val count: Int,
-)
-
-private fun txTotal(tx: Map<String, Any?>): Double {
-    val unitPrice = (tx["unit_price"] as? Number)?.toDouble() ?: 0.0
-    val quantity = (tx["quantity"] as? Number)?.toInt() ?: 0
-    return (tx["total"] as? Number)?.toDouble()?.takeIf { it > 0 } ?: (unitPrice * quantity)
-}
-
-// Top 5 sellers (transactions where we bought) and top 5 buyers (where we sold), ranked by total
-// ISK traded with that client over whatever transaction window is passed in.
-private fun computeCounterpartyStats(transactions: List<Map<String, Any?>>): Pair<List<CounterpartyStat>, List<CounterpartyStat>> {
-    fun rank(isBuy: Boolean) =
-        transactions
-            .filter { (it["is_buy"] as? Boolean) == isBuy }
-            .groupBy { (it["client_name"] as? String)?.ifEmpty { null } ?: stringBlocking(Res.string.unknown) }
-            .map { (name, txs) -> CounterpartyStat(name, txs.sumOf(::txTotal), txs.size) }
-            .sortedByDescending { it.total }
-            .take(5)
-    return rank(isBuy = true) to rank(isBuy = false)
-}
-
 @Composable
-private fun ItemPnlRow(item: ItemPnl) {
-    val color = if (item.profit >= 0) positiveColor else negativeColor
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(item.name, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                stringResource(Res.string.qty_sold, item.qty),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-            )
-        }
-        Text(
-            formatIsk(item.profit, showSign = true),
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.Medium,
-            color = color,
+private fun PositionsTable(
+    pos: List<Position>,
+    pricesLoading: Boolean,
+    onOpen: (Int, String) -> Unit,
+) {
+    val cost = pos.sumOf { it.cost }
+    val priced = pos.filter { it.netValue != null }
+    val unrealized = priced.sumOf { it.unrealized ?: 0.0 }
+    val pending = if (pricesLoading) "…" else "—"
+    Table(
+        cols =
+            listOf(
+                Col<Position>(stringResource(Res.string.col_item), 2.6f, end = false) { it.name.lowercase() },
+                Col(stringResource(Res.string.col_qty), 0.8f) { it.qty },
+                Col(stringResource(Res.string.col_avg_cost), 1f) { it.avgCost },
+                Col(stringResource(Res.string.col_jita_sell), 1f) { it.price },
+                Col(stringResource(Res.string.col_cost), 1f) { it.cost },
+                Col(stringResource(Res.string.col_unrealized), 1.1f) { it.unrealized },
+                Col("%", 0.7f) { it.unrealizedPct },
+                // Sorts by when the position was opened: descending = freshest first.
+                Col(stringResource(Res.string.col_days), 0.5f) { it.since },
+            ),
+        rows = pos,
+        defaultSort = 5,
+        empty = stringResource(Res.string.no_positions),
+        key = { it.typeId },
+        onClick = { onOpen(it.typeId, it.name) },
+        footer =
+            listOf(
+                Cell(stringResource(Res.string.total)),
+                Cell(""),
+                Cell(""),
+                Cell(""),
+                Cell(formatIsk(cost)),
+                Cell(if (priced.isEmpty()) pending else signed(unrealized), pnlColor(unrealized)),
+                Cell(if (priced.isEmpty() || cost <= 0) "" else pct(unrealized / priced.sumOf { it.cost } * 100), pnlColor(unrealized)),
+                Cell(""),
+            ),
+    ) { p ->
+        val stale = p.daysHeld != null && p.daysHeld > 30
+        listOf(
+            Cell(p.name),
+            Cell(formatVolume(p.qty.toLong())),
+            Cell(formatPriceAbbr(p.avgCost)),
+            Cell(p.price?.let(::formatPriceAbbr) ?: pending),
+            Cell(formatIsk(p.cost)),
+            Cell(p.unrealized?.let(::signed) ?: pending, pnlColor(p.unrealized)),
+            Cell(p.unrealizedPct?.let(::pct) ?: "", pnlColor(p.unrealized)),
+            Cell(p.daysHeld?.toString() ?: "", warningColor.takeIf { stale }),
         )
     }
 }
 
 @Composable
-private fun CounterpartyRow(stat: CounterpartyStat) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(stat.name, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                pluralStringResource(Res.plurals.trades_count, stat.count, stat.count),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-            )
-        }
-        Text(
-            formatIsk(stat.total),
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface,
+private fun ItemsTable(
+    items: List<ItemPnl>,
+    onOpen: (Int, String) -> Unit,
+) {
+    Table(
+        cols =
+            listOf(
+                Col<ItemPnl>(stringResource(Res.string.col_item), 3f, end = false) { it.name.lowercase() },
+                Col(stringResource(Res.string.col_sold), 1f) { it.qty },
+                Col(stringResource(Res.string.col_profit), 1.2f) { it.profit },
+                Col(stringResource(Res.string.col_margin), 0.9f) { it.marginPct },
+                Col(stringResource(Res.string.col_last), 0.9f) { it.lastSold },
+            ),
+        rows = items,
+        defaultSort = 4,
+        empty = stringResource(Res.string.no_realized_sales),
+        key = { it.typeId },
+        onClick = { onOpen(it.typeId, it.name) },
+    ) { i ->
+        listOf(
+            Cell(i.name),
+            Cell(formatVolume(i.qty.toLong())),
+            Cell(signed(i.profit), pnlColor(i.profit)),
+            Cell(i.marginPct?.let(::pct) ?: "—", pnlColor(i.marginPct)),
+            Cell(shortDate(i.lastSold), AXIS_COLOR),
         )
     }
 }
 
-// ─── Formatting ───────────────────────────────────────────────────────────
+@Composable
+private fun CounterpartiesTable(
+    rows: List<Counterparty>,
+    unknown: String,
+) {
+    Table(
+        cols =
+            listOf(
+                Col<Counterparty>(stringResource(Res.string.col_counterparty), 3f, end = false) { it.name.lowercase() },
+                Col(stringResource(Res.string.col_bought_from_us), 1.2f) { it.boughtFromUs },
+                Col(stringResource(Res.string.col_sold_to_us), 1.2f) { it.soldToUs },
+                Col(stringResource(Res.string.col_trades), 0.7f) { it.count },
+                Col(stringResource(Res.string.total), 1.2f) { it.total },
+            ),
+        rows = rows,
+        defaultSort = 4,
+        empty = stringResource(Res.string.no_transactions_recorded),
+        key = { it.name },
+        // Wallet → Transactions filtered to this client: what exactly they bought and sold.
+        onClick = { if (it.name != unknown) AppState.openInWallet(it.name) },
+    ) { c ->
+        listOf(
+            Cell(c.name),
+            // Same colours as the Trades tab: our buys (they sold to us) green, our sells red.
+            Cell(if (c.boughtFromUs > 0) formatIsk(c.boughtFromUs) else "—", negativeColor.takeIf { c.boughtFromUs > 0 }),
+            Cell(if (c.soldToUs > 0) formatIsk(c.soldToUs) else "—", positiveColor.takeIf { c.soldToUs > 0 }),
+            Cell(c.count.toString()),
+            Cell(formatIsk(c.total)),
+        )
+    }
+}
 
-private fun formatIsk(
-    value: Double,
-    showSign: Boolean = false,
-): String =
-    (if (showSign && value > 0) "+" else "") +
-        org.eventt.ui.common
-            .formatIsk(value)
+@Composable
+private fun TradesTable(
+    txs: List<Map<String, Any?>>,
+    unknown: String,
+    onOpen: (Int, String) -> Unit,
+) {
+    Table(
+        cols =
+            listOf(
+                Col<Map<String, Any?>>(stringResource(Res.string.col_time), 1.2f, end = false) { it["date"] as? String },
+                Col(stringResource(Res.string.col_side), 0.6f, end = false) { it["is_buy"] == true },
+                Col(stringResource(Res.string.col_item), 2.4f, end = false) { (it["type_name"] as? String)?.lowercase() },
+                Col(stringResource(Res.string.col_qty), 0.8f) { (it["quantity"] as? Number)?.toLong() },
+                Col(stringResource(Res.string.col_price), 1f) { (it["unit_price"] as? Number)?.toDouble() },
+                Col(stringResource(Res.string.col_isk), 1f) { txTotal(it) },
+                Col(stringResource(Res.string.col_counterparty), 1.6f, end = false) { (it["client_name"] as? String)?.lowercase() },
+            ),
+        rows = txs,
+        defaultSort = 0,
+        empty = stringResource(Res.string.no_transactions_recorded),
+        onClick = { tx -> (tx["type_id"] as? Number)?.toInt()?.let { onOpen(it, tx["type_name"] as? String ?: "") } },
+    ) { tx ->
+        val isBuy = tx["is_buy"] == true
+        val c = if (isBuy) positiveColor else negativeColor
+        listOf(
+            Cell((tx["date"] as? String ?: "").drop(5).take(11).replace('T', ' '), AXIS_COLOR),
+            Cell(stringResource(if (isBuy) Res.string.buy_badge else Res.string.sell_badge), c),
+            Cell(tx["type_name"] as? String ?: unknown),
+            Cell(formatVolume(((tx["quantity"] as? Number)?.toLong() ?: 0L))),
+            Cell(formatPriceAbbr((tx["unit_price"] as? Number)?.toDouble() ?: 0.0)),
+            Cell(formatIsk(txTotal(tx)), c),
+            Cell((tx["client_name"] as? String)?.ifEmpty { null } ?: unknown, AXIS_COLOR),
+        )
+    }
+}

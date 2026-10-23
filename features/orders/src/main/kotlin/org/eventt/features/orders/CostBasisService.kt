@@ -87,6 +87,10 @@ object CostBasisService {
         // inventory but deliberately NOT in realizedSells/totalRealizedPnl, since a write-off has
         // no sale revenue behind it and shouldn't fabricate a profit/loss figure.
         val writtenOffCost: Double = 0.0,
+        // Cost basis of every open lot at the end of each day that had a ledger event (yyyy-MM-dd,
+        // ascending) -- the stock leg of the dashboard's net-worth history. Days in between hold
+        // the previous day's value.
+        val stockCostByDay: Map<String, Double> = emptyMap(),
     ) {
         val totalRealizedPnl: Double = realizedSells.sumOf { it.profit }
         val realizedByType: Map<Int, List<RealizedSellTx>> = realizedSells.groupBy { it.typeId }
@@ -135,6 +139,8 @@ object CostBasisService {
         val typeNames = mutableMapOf<Int, String>()
         val realized = mutableListOf<RealizedSellTx>()
         var writtenOffCost = 0.0
+        var openCost = 0.0
+        val stockCostByDay = linkedMapOf<String, Double>()
 
         val events =
             (transactions.map { LedgerEvent.Tx(it) } + adjustments.map { LedgerEvent.WriteOff(it) })
@@ -155,6 +161,7 @@ object CostBasisService {
                         val queue = lots.getOrPut(tx.typeId) { ArrayDeque() }
                         if (queue.isEmpty()) cycleStart[tx.typeId] = tx.date
                         queue.addLast(Lot(tx.quantity, adjustedCost, tx.date))
+                        openCost += tx.quantity * adjustedCost
                     } else {
                         val queue = lots.getOrPut(tx.typeId) { ArrayDeque() }
                         var remaining = tx.quantity
@@ -169,6 +176,7 @@ object CostBasisService {
                             if (consume < lot.qty) queue.addFirst(lot.copy(qty = lot.qty - consume))
                             remaining -= consume
                         }
+                        openCost -= costConsumed
 
                         if (qtyMatched > 0) {
                             val cb = costConsumed / qtyMatched
@@ -197,11 +205,13 @@ object CostBasisService {
                         val lot = queue.removeFirst()
                         val consume = minOf(remaining, lot.qty)
                         writtenOffCost += consume * lot.cost
+                        openCost -= consume * lot.cost
                         if (consume < lot.qty) queue.addFirst(lot.copy(qty = lot.qty - consume))
                         remaining -= consume
                     }
                 }
             }
+            stockCostByDay[event.date.take(10)] = openCost
         }
 
         val inventory =
@@ -220,7 +230,7 @@ object CostBasisService {
                     )
                 }.filter { it.value.remainingQty > 0 }
 
-        return FifoResult(inventory, realized, taxConfig, sellRelistPerUnit, writtenOffCost)
+        return FifoResult(inventory, realized, taxConfig, sellRelistPerUnit, writtenOffCost, stockCostByDay)
     }
 
     // Returns realized profit and cost-weighted margin % for a specific fulfilled sell order,

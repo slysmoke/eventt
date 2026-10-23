@@ -58,6 +58,20 @@ class WalletDaoTest {
     )
 
     @Test
+    fun `getEscrowFlowByDay adds deposits and takes off refunds and order fills, but not direct buys`() {
+        insertJournal(1, "2024-01-01T10:00:00Z", amount = -1000.0, balance = 0.0, refType = "market_escrow")
+        insertTx(1, "2024-01-02T10:00:00Z", isBuy = true, total = 300.0) // filled from escrow
+        insertJournal(2, "2024-01-02T11:00:00Z", amount = 200.0, balance = 0.0, refType = "market_escrow") // refund
+        // A direct buy from a sell order: in the journal and transactions, never in escrow.
+        insertTx(2, "2024-01-03T10:00:00Z", isBuy = true, total = 50.0)
+        insertJournal(3, "2024-01-03T10:00:00Z", amount = -50.0, balance = 0.0)
+        insertJournal(4, "2024-01-03T11:00:00Z", amount = -999.0, balance = 0.0, refType = "market_escrow", characterId = 2)
+
+        WalletDao.getEscrowFlowByDay(characterId = 1) shouldBe
+            mapOf("2024-01-01" to 1000.0, "2024-01-02" to -500.0, "2024-01-03" to 0.0)
+    }
+
+    @Test
     fun `getAllTransactions returns rows for the character sorted ascending by date`() {
         insertTx(2, "2024-01-02", isBuy = false, total = 200.0)
         insertTx(1, "2024-01-01", isBuy = true, total = 100.0)

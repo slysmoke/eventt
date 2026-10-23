@@ -696,6 +696,22 @@ object DatabaseManager {
                     posted_at INTEGER NOT NULL
                 )
                 """.trimIndent(),
+                // What everything owned besides ISK was worth, one row per day per dashboard scope
+                // ("char:<id>", "corp:<id>", "all"): assets at their stored Jita price + what's
+                // listed in sell orders (listed items leave /assets/). Assets and orders are kept
+                // only as the latest snapshot, so the dashboard's net-worth curve has items from the
+                // day first recorded here. (Escrow needs no table: it's rebuilt from the journal.)
+                """
+                CREATE TABLE IF NOT EXISTS item_value_snapshots (
+                    scope TEXT NOT NULL,
+                    day TEXT NOT NULL,
+                    items REAL NOT NULL,
+                    PRIMARY KEY (scope, day)
+                )
+                """.trimIndent(),
+                // Earlier shapes of the above, only ever created by unreleased dashboard builds.
+                "DROP TABLE IF EXISTS escrow_snapshots",
+                "DROP TABLE IF EXISTS net_worth_snapshots",
             )
 
         // using conn parameter

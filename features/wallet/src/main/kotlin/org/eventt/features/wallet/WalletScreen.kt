@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.eventt.core.database.AppState
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.ViewContext
 import org.eventt.core.database.WalletDao
@@ -66,6 +67,8 @@ fun WalletScreen(context: ViewContext?) {
     var isLoading by remember { mutableStateOf(false) }
     var refreshAvailableAt by remember { mutableStateOf<Long?>(null) }
     var activeTab by remember { mutableStateOf(0) }
+    val pendingSearch by AppState.pendingWalletSearch.collectAsState()
+    LaunchedEffect(pendingSearch) { if (pendingSearch != null) activeTab = 0 }
 
     LaunchedEffect(context) {
         val acting = actingCharId
@@ -170,7 +173,7 @@ fun WalletScreen(context: ViewContext?) {
         // Tab content
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             when (activeTab) {
-                0 -> TransactionList(transactions)
+                0 -> TransactionList(transactions, pendingSearch)
                 1 -> JournalList(journal)
                 2 -> PnlChart(pnlBreakdown, fifoResult)
             }
@@ -255,7 +258,10 @@ private fun txTotal(tx: Map<String, Any?>): Double {
 }
 
 @Composable
-private fun TransactionList(transactions: List<Map<String, Any?>>) {
+private fun TransactionList(
+    transactions: List<Map<String, Any?>>,
+    pendingSearch: String?,
+) {
     if (transactions.isEmpty()) {
         EmptyState(
             icon = Icons.Default.Receipt,
@@ -266,6 +272,12 @@ private fun TransactionList(transactions: List<Map<String, Any?>>) {
     }
 
     var searchQuery by remember { mutableStateOf("") }
+    LaunchedEffect(pendingSearch) {
+        if (pendingSearch != null) {
+            searchQuery = pendingSearch
+            AppState.clearPendingWalletSearch()
+        }
+    }
     var sortColumn by remember { mutableStateOf(TxSortColumn.DATE) }
     var sortDirection by remember { mutableStateOf(SortDirection.DESC) }
     var page by remember { mutableStateOf(0) }

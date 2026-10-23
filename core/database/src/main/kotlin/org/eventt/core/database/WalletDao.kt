@@ -495,6 +495,94 @@ object WalletDao {
             }
         }
 
+    // One wallet's balance after a journal entry. [wallet] tells wallets apart: a character's own,
+    // or one division of a corporation's — each journal row's balance is only that wallet's.
+    data class BalanceRow(
+        val date: String,
+        val wallet: String,
+        val balance: Double,
+    )
+
+    // Every journal balance in ledger order, for the dashboard's wallet history. Character scope
+    // leaves out corp-wallet rows, which carry no meaning for that character's own balance.
+    fun getBalanceHistory(
+        characterId: Int? = null,
+        corporationId: Int? = null,
+    ): List<BalanceRow> =
+        DatabaseManager.transaction {
+            val where =
+                when {
+                    characterId != null -> WhereClause("WHERE character_id = ? AND corporation_id IS NULL", listOf(characterId))
+                    else -> buildWhereClause(null, corporationId)
+                }
+            prepareStatement(
+                "SELECT date, character_id, corporation_id, division_id, balance FROM journal ${where.sql} ORDER BY date, entry_id",
+            ).use { stmt ->
+                where.params.forEachIndexed { i, p -> stmt.setObject(i + 1, p) }
+                stmt.executeQuery().use { rs ->
+                    val result = mutableListOf<BalanceRow>()
+                    while (rs.next()) {
+                        val corp = rs.getInt("corporation_id")
+                        val wallet = if (corp != 0) "corp:$corp:${rs.getInt("division_id")}" else "char:${rs.getInt("character_id")}"
+                        result.add(BalanceRow(rs.getString("date"), wallet, rs.getDouble("balance")))
+                    }
+                    result
+                }
+            }
+        }
+
+    // Net ISK moved into buy-order escrow per day (yyyy-MM-dd): market_escrow deposits minus refunds,
+    // minus market buys (a buy-order fill is paid out of escrow and leaves no journal entry of its
+    // own), plus any buy that did hit the journal (a direct buy from a sell order never touched
+    // escrow). Summed from the start this tracks the open buy orders' escrow — on real data within
+    // a fraction of a percent of price × remaining.
+    fun getEscrowFlowByDay(
+        characterId: Int? = null,
+        corporationId: Int? = null,
+    ): Map<String, Double> =
+        DatabaseManager.transaction {
+            val where = buildWhereClause(characterId, corporationId)
+
+            fun and(cond: String) = if (where.sql.isEmpty()) "WHERE $cond" else "${where.sql} AND $cond"
+            prepareStatement(
+                """
+                SELECT day, SUM(flow) AS flow FROM (
+                    SELECT substr(date, 1, 10) AS day, -amount AS flow FROM journal
+                    ${and("(ref_type = 'market_escrow' OR (ref_type = 'market_transaction' AND amount < 0))")}
+                    UNION ALL
+                    SELECT substr(date, 1, 10) AS day, -total AS flow FROM transactions
+                    ${and("is_buy = 1 AND transaction_id > 0")}
+                ) GROUP BY day
+                """.trimIndent(),
+            ).use { stmt ->
+                var i = 1
+                repeat(2) { where.params.forEach { p -> stmt.setObject(i++, p) } }
+                stmt.executeQuery().use { rs ->
+                    val result = mutableMapOf<String, Double>()
+                    while (rs.next()) result[rs.getString("day")] = rs.getDouble("flow")
+                    result
+                }
+            }
+        }
+
+    // Sales tax + broker fees paid per day (yyyy-MM-dd), as positive ISK.
+    fun getFeesByDay(
+        characterId: Int? = null,
+        corporationId: Int? = null,
+    ): Map<String, Double> =
+        DatabaseManager.transaction {
+            val where = buildWhereClause(characterId, corporationId)
+            val sql = (if (where.sql.isEmpty()) "WHERE" else "${where.sql} AND") + " ref_type IN ('transaction_tax', 'brokers_fee')"
+            prepareStatement("SELECT substr(date, 1, 10) AS day, SUM(ABS(amount)) AS fees FROM journal $sql GROUP BY day").use { stmt ->
+                where.params.forEachIndexed { i, p -> stmt.setObject(i + 1, p) }
+                stmt.executeQuery().use { rs ->
+                    val result = mutableMapOf<String, Double>()
+                    while (rs.next()) result[rs.getString("day")] = rs.getDouble("fees")
+                    result
+                }
+            }
+        }
+
     // ─── Helper ───────────────────────────────────────────────────────────
 
     private data class WhereClause(

@@ -54,6 +54,19 @@ object AppState {
         _pendingMarketTypeId.value = null
     }
 
+    // Same one-shot deep link into Wallet → Transactions, pre-filled with a search (e.g. a
+    // counterparty's name from the Dashboard). Cleared by the transaction list once applied.
+    private val _pendingWalletSearch = MutableStateFlow<String?>(null)
+    val pendingWalletSearch: StateFlow<String?> = _pendingWalletSearch.asStateFlow()
+
+    fun openInWallet(search: String) {
+        _pendingWalletSearch.value = search
+    }
+
+    fun clearPendingWalletSearch() {
+        _pendingWalletSearch.value = null
+    }
+
     private const val SETTING_KEY = "app.selected_context"
 
     fun init() {
