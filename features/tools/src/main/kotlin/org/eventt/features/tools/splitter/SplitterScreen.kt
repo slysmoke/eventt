@@ -1,5 +1,7 @@
 package org.eventt.features.tools.splitter
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -10,6 +12,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -26,24 +31,25 @@ import org.eventt.core.model.PLEX_MARKET_REGION_ID
 import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.stringBlocking
 import org.eventt.features.tools.ParseWarning
+import org.eventt.features.tools.PasteBox
 import org.eventt.features.tools.ToolsInputParser
 import org.eventt.features.tools.pricing.PricingService
 import org.eventt.tools.generated.resources.*
-import org.eventt.ui.common.ConfirmDialog
-import org.eventt.ui.common.ContentCard
-import org.eventt.ui.common.Tip
-import org.eventt.ui.common.formatIsk
+import org.eventt.ui.common.*
 import org.eventt.ui.theme.positiveColor
+import org.eventt.ui.theme.warningColor
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import java.awt.Toolkit
 import java.awt.datatransfer.DataFlavor
+import java.util.Locale
+import kotlin.math.roundToInt
 
 // EVE's SDE ship category — packaged_volume is only meaningfully populated for this category
 // by this app's static-data importer (see core/staticdata/StaticDataImporter.kt).
 private const val SHIP_CATEGORY_ID = 6
 
-private fun formatVolume(v: Double): String = "%.1f m³".format(v)
+private fun formatM3(v: Double): String = String.format(Locale.US, "%,.1f m³", v)
 
 // Persisted across restarts — constraints and ship choice are per-user setup, not per-paste, so
 // they shouldn't reset every time the app reopens.
@@ -179,238 +185,126 @@ fun SplitterScreen(context: ViewContext?) {
         }
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        item {
-            ContentCard(title = stringResource(Res.string.cargo_list)) {
-                OutlinedTextField(
-                    value = pasteText,
-                    onValueChange = { pasteText = it },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
-                    placeholder = { Text(stringResource(Res.string.paste_inventory)) },
-                    minLines = 5,
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = {
-                        val clip =
-                            try {
-                                Toolkit.getDefaultToolkit().systemClipboard.getData(DataFlavor.stringFlavor) as? String
-                            } catch (_: Exception) {
-                                null
+    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.width(380.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            PasteBox(stringResource(Res.string.cargo_list), pasteText, Modifier.weight(1f)) { pasteText = it }
+            Panel(stringResource(Res.string.constraints), Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = maxIskText,
+                            onValueChange = {
+                                maxIskText = it
+                                scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SplitterSettings.MAX_ISK, it) }
+                            },
+                            label = { Tip(stringResource(Res.string.tip_sp_max_isk)) { Text(stringResource(Res.string.max_isk_split)) } },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono),
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedTextField(
+                            value = maxVolumeText,
+                            onValueChange = {
+                                maxVolumeText = it
+                                scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SplitterSettings.MAX_VOLUME, it) }
+                            },
+                            label = { Tip(stringResource(Res.string.tip_sp_max_m3)) { Text(stringResource(Res.string.max_m3_split)) } },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono),
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Tip(stringResource(Res.string.tip_sp_algorithm)) {
+                            Text(stringResource(Res.string.algorithm), style = MaterialTheme.typography.bodySmall, color = AXIS_COLOR)
+                        }
+                        SplitAlgorithm.entries.forEach { alg ->
+                            val label = stringResource(if (alg == SplitAlgorithm.FILL_FIRST) Res.string.fill_first else Res.string.balanced)
+                            Segment(if (recommended == alg) "$label ★" else label, algorithm == alg) {
+                                algorithm = alg
+                                scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SplitterSettings.ALGORITHM, alg.name) }
                             }
-                        if (clip != null) pasteText = clip
-                    }) {
-                        Icon(Icons.Default.ContentPaste, null, Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(stringResource(Res.string.paste_from_clipboard))
-                    }
-                }
-            }
-        }
-
-        item {
-            ContentCard(title = stringResource(Res.string.constraints)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    OutlinedTextField(
-                        value = maxIskText,
-                        onValueChange = {
-                            maxIskText = it
-                            scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SplitterSettings.MAX_ISK, it) }
-                        },
-                        label = { Tip(stringResource(Res.string.tip_sp_max_isk)) { Text(stringResource(Res.string.max_isk_split)) } },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                    OutlinedTextField(
-                        value = maxVolumeText,
-                        onValueChange = {
-                            maxVolumeText = it
-                            scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SplitterSettings.MAX_VOLUME, it) }
-                        },
-                        label = { Tip(stringResource(Res.string.tip_sp_max_m3)) { Text(stringResource(Res.string.max_m3_split)) } },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-                Tip(stringResource(Res.string.tip_sp_algorithm)) {
-                    Text(stringResource(Res.string.algorithm), style = MaterialTheme.typography.labelMedium)
-                }
-                Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = algorithm == SplitAlgorithm.FILL_FIRST,
-                        onClick = {
-                            algorithm = SplitAlgorithm.FILL_FIRST
-                            scope.launch(
-                                Dispatchers.IO,
-                            ) { StaticDataDao.setSetting(SplitterSettings.ALGORITHM, SplitAlgorithm.FILL_FIRST.name) }
-                        },
-                        label = {
-                            Text(
-                                stringResource(Res.string.fill_first) +
-                                    if (recommended == SplitAlgorithm.FILL_FIRST) " " + stringResource(Res.string.recommended) else "",
-                            )
-                        },
-                    )
-                    FilterChip(
-                        selected = algorithm == SplitAlgorithm.BALANCED,
-                        onClick = {
-                            algorithm = SplitAlgorithm.BALANCED
-                            scope.launch(
-                                Dispatchers.IO,
-                            ) { StaticDataDao.setSetting(SplitterSettings.ALGORITHM, SplitAlgorithm.BALANCED.name) }
-                        },
-                        label = {
-                            Text(
-                                stringResource(Res.string.balanced) +
-                                    if (recommended == SplitAlgorithm.BALANCED) " " + stringResource(Res.string.recommended) else "",
-                            )
-                        },
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-                Text(stringResource(Res.string.ship_label), style = MaterialTheme.typography.labelMedium)
-                Spacer(Modifier.height(4.dp))
-                ShipDropdown(
-                    selectedTypeId = shipTypeId,
-                    onSelect = {
-                        shipTypeId = it
-                        scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SplitterSettings.SHIP_TYPE_ID, it.toString()) }
-                    },
-                )
-                Spacer(Modifier.height(12.dp))
-                Button(onClick = { calculate() }, enabled = !isCalculating && pasteText.isNotBlank()) {
-                    if (isCalculating) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Text(stringResource(Res.string.calculate))
-                }
-            }
-        }
-
-        if (warnings.isNotEmpty()) {
-            item {
-                ContentCard(title = stringResource(Res.string.warnings_n, warnings.size)) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        warnings.forEach { w ->
-                            Text(
-                                "• ${w.lineText}: ${w.reason}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
-                            )
                         }
                     }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Tip(stringResource(Res.string.ship_label)) {
+                            Text(stringResource(Res.string.ship_short), style = MaterialTheme.typography.bodySmall, color = AXIS_COLOR)
+                        }
+                        ShipDropdown(
+                            selectedTypeId = shipTypeId,
+                            onSelect = {
+                                shipTypeId = it
+                                scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SplitterSettings.SHIP_TYPE_ID, it.toString()) }
+                            },
+                        )
+                    }
+                    ActionButton(
+                        stringResource(Res.string.calculate),
+                        enabled = pasteText.isNotBlank(),
+                        busy = isCalculating,
+                    ) { calculate() }
                 }
             }
         }
 
         val plan = activePlan
-        if (plan != null) {
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+        Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (plan == null) {
+                Panel(stringResource(Res.string.results), Modifier.fillMaxSize()) { Hint(stringResource(Res.string.splitter_hint)) }
+                return@Column
+            }
+            val maxIsk = maxIskText.toDoubleOrNull() ?: 0.0
+            val maxVolume = maxVolumeText.toDoubleOrNull() ?: 0.0
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).border(1.dp, outline(), MaterialTheme.shapes.extraSmall)) {
+                Kpi(stringResource(Res.string.kpi_cargo_value), formatIsk(plan.splits.sumOf { it.totalValue }), null, null, null)
+                Kpi(stringResource(Res.string.kpi_cargo_volume), formatM3(plan.splits.sumOf { it.totalVolume }), null, null, null)
+                Kpi(
+                    stringResource(Res.string.kpi_splits),
+                    plan.splits.size.toString(),
+                    stringResource(Res.string.plans_summary, ffdPlan?.splits?.size ?: 0, balancedPlan?.splits?.size ?: 0),
+                    null,
+                    null,
+                )
+                Kpi(
+                    stringResource(Res.string.kpi_unplaced),
+                    plan.unplaced.size.toString(),
+                    null,
+                    null,
+                    null,
+                    valueColor = MaterialTheme.colorScheme.error.takeIf { plan.unplaced.isNotEmpty() },
+                    last = true,
+                )
+            }
+            if (warnings.isNotEmpty() || plan.unplaced.isNotEmpty()) {
+                Panel(
+                    stringResource(Res.string.warnings_n, warnings.size + plan.unplaced.size),
+                    Modifier.fillMaxWidth().heightIn(max = 140.dp),
                 ) {
-                    Text(
-                        stringResource(Res.string.plans_summary, ffdPlan?.splits?.size ?: 0, balancedPlan?.splits?.size ?: 0),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    if (charId != null && plan.splits.isNotEmpty()) {
-                        Button(onClick = { confirmingPushAll = true }, enabled = !isPushing) {
-                            Text(stringResource(Res.string.push_all_n, plan.splits.size))
+                    LazyColumn {
+                        items(plan.unplaced) { u ->
+                            StatusLine("${u.name} × ${u.quantityRemaining}: ${u.reason}", MaterialTheme.colorScheme.error)
                         }
+                        items(warnings) { w -> StatusLine("${w.lineText}: ${w.reason}", warningColor) }
                     }
-                }
-                if (charId == null) {
-                    Text(
-                        stringResource(Res.string.select_char_push),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             }
-
-            if (plan.unplaced.isNotEmpty()) {
-                item {
-                    ContentCard(title = stringResource(Res.string.could_not_fit_n, plan.unplaced.size)) {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            plan.unplaced.forEach { u ->
-                                Text(
-                                    "• ${u.name} × ${u.quantityRemaining}: ${u.reason}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.error,
-                                )
-                            }
-                        }
+            Panel(
+                stringResource(Res.string.results),
+                Modifier.fillMaxWidth().weight(1f),
+                header = {
+                    Spacer(Modifier.weight(1f))
+                    if (charId == null) {
+                        Text(stringResource(Res.string.select_char_push), style = MaterialTheme.typography.labelSmall, color = AXIS_COLOR)
+                    } else if (plan.splits.isNotEmpty()) {
+                        Segment(stringResource(Res.string.push_all_n, plan.splits.size), true) { if (!isPushing) confirmingPushAll = true }
                     }
-                }
-            }
-
-            items(plan.splits, key = { it.index }) { split ->
-                val pushResult = pushResults[split.index]
-                ContentCard(
-                    title =
-                        stringResource(
-                            Res.string.split_title,
-                            split.index,
-                            formatIsk(split.totalValue),
-                            formatVolume(split.totalVolume),
-                        ),
-                    actions = {
-                        when {
-                            pushResult?.success == true -> {
-                                Icon(Icons.Default.CheckCircle, stringResource(Res.string.pushed), tint = positiveColor)
-                            }
-
-                            pushResult?.success == false -> {
-                                Icon(
-                                    Icons.Default.Error,
-                                    pushResult.error,
-                                    tint = MaterialTheme.colorScheme.error,
-                                )
-                            }
-
-                            charId != null -> {
-                                TextButton(onClick = { confirmingSplit = split }, enabled = !isPushing) {
-                                    Text(stringResource(Res.string.push_to_esi))
-                                }
-                            }
+                },
+            ) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(plan.splits, key = { it.index }) { split ->
+                        SplitCard(split, maxIsk, maxVolume, pushResults[split.index], canPush = charId != null && !isPushing) {
+                            confirmingSplit = split
                         }
-                    },
-                ) {
-                    Text(
-                        pluralStringResource(Res.plurals.item_types_n, split.itemTypeCount, split.itemTypeCount),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Column {
-                        split.items.forEach { li ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                            ) {
-                                Text(li.name, style = MaterialTheme.typography.bodySmall)
-                                Text("× ${li.quantity}", style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                    }
-                    if (pushResult?.success == false) {
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            stringResource(Res.string.push_failed, pushResult.error.orEmpty()),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
                     }
                 }
             }
@@ -439,6 +333,106 @@ fun SplitterScreen(context: ViewContext?) {
     }
 }
 
+// One split: value and volume against the limits as fill bars, then its items.
+@Composable
+internal fun SplitCard(
+    split: Split,
+    maxIsk: Double,
+    maxVolume: Double,
+    push: FittingPushResult?,
+    canPush: Boolean,
+    onPush: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().border(1.dp, outline(), MaterialTheme.shapes.extraSmall).padding(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(stringResource(Res.string.split_n, split.index), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            FillBar(formatIsk(split.totalValue) + " ISK", split.totalValue, maxIsk, Modifier.weight(1f))
+            FillBar(formatM3(split.totalVolume), split.totalVolume, maxVolume, Modifier.weight(1f))
+            Text(
+                pluralStringResource(Res.plurals.item_types_n, split.itemTypeCount, split.itemTypeCount),
+                style = MaterialTheme.typography.labelSmall,
+                color = AXIS_COLOR,
+            )
+            when {
+                push?.success == true -> {
+                    StatusLine(stringResource(Res.string.pushed), positiveColor)
+                }
+
+                push?.success == false -> {
+                    Tip(stringResource(Res.string.push_failed, push.error.orEmpty())) {
+                        StatusLine(stringResource(Res.string.push_failed_short), MaterialTheme.colorScheme.error)
+                    }
+                }
+
+                canPush -> {
+                    Segment(stringResource(Res.string.push_to_esi), false, onPush)
+                }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        split.items.forEach { li ->
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 1.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                TypeIcon(li.typeId, size = 16.dp)
+                Text(
+                    li.name,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    "× ${formatVolume(li.quantity.toLong())}",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = Mono,
+                    modifier = Modifier.width(90.dp),
+                    textAlign = TextAlign.End,
+                )
+                Text(
+                    formatIsk(li.quantity * li.unitPrice),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = Mono,
+                    color = AXIS_COLOR,
+                    modifier = Modifier.width(90.dp),
+                    textAlign = TextAlign.End,
+                )
+                Text(
+                    formatM3(li.quantity * li.unitVolume),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = Mono,
+                    color = AXIS_COLOR,
+                    modifier = Modifier.width(110.dp),
+                    textAlign = TextAlign.End,
+                )
+            }
+        }
+    }
+}
+
+// How full a split is against one limit; amber past 95%.
+@Composable
+private fun FillBar(
+    label: String,
+    value: Double,
+    limit: Double,
+    modifier: Modifier,
+) {
+    val f = if (limit > 0) (value / limit).toFloat().coerceIn(0f, 1f) else 0f
+    val color = if (f > 0.95f) warningColor else MaterialTheme.colorScheme.primary
+    Column(modifier) {
+        Row {
+            Text(label, style = MaterialTheme.typography.labelSmall, fontFamily = Mono, modifier = Modifier.weight(1f))
+            Text("${(f * 100).roundToInt()}%", style = MaterialTheme.typography.labelSmall, fontFamily = Mono, color = AXIS_COLOR)
+        }
+        Box(Modifier.fillMaxWidth().height(4.dp).background(outline())) {
+            Box(Modifier.fillMaxHeight().fillMaxWidth(f).background(color))
+        }
+    }
+}
+
 @Composable
 private fun ShipDropdown(
     selectedTypeId: Int,
@@ -448,11 +442,7 @@ private fun ShipDropdown(
     val selectedName = ShipFittingCatalog.HAULERS.find { it.typeId == selectedTypeId }?.name ?: "—"
 
     Box {
-        OutlinedButton(onClick = { expanded = true }) {
-            Text(selectedName)
-            Spacer(Modifier.width(4.dp))
-            Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null, Modifier.size(16.dp))
-        }
+        Segment("$selectedName ▾", false) { expanded = true }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             ShipFittingCatalog.HAULERS.forEach { hauler ->
                 DropdownMenuItem(

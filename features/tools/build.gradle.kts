@@ -19,4 +19,5 @@ dependencies {
     implementation(compose.material3)
     implementation(compose.components.resources)
     implementation(compose.materialIconsExtended)
+    testImplementation("org.jetbrains.compose.ui:ui-test:${libs.versions.compose.get()}") // headless render of the tools
 }

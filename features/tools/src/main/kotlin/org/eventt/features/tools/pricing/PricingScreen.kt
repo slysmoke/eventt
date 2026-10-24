@@ -1,11 +1,9 @@
 package org.eventt.features.tools.pricing
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.hoverable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -16,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -27,15 +26,16 @@ import org.eventt.core.database.ViewContext
 import org.eventt.core.model.CharacterModel
 import org.eventt.core.model.stringBlocking
 import org.eventt.features.tools.ParseWarning
+import org.eventt.features.tools.PasteBox
+import org.eventt.features.tools.PricingTotals
 import org.eventt.features.tools.ToolsInputParser
+import org.eventt.features.tools.pricingTotals
 import org.eventt.tools.generated.resources.*
-import org.eventt.ui.common.ContentCard
-import org.eventt.ui.common.Tip
-import org.eventt.ui.common.formatPriceSimple
+import org.eventt.ui.common.*
 import org.eventt.ui.theme.positiveColor
+import org.eventt.ui.theme.warningColor
 import org.jetbrains.compose.resources.stringResource
 import java.awt.Toolkit
-import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.StringSelection
 import java.util.Locale
 
@@ -236,306 +236,213 @@ fun PricingScreen(context: ViewContext?) {
 
     val clipboardText = remember(results) { PricingService.formatForClipboard(results) }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        item {
-            ContentCard(title = stringResource(Res.string.item_list)) {
-                OutlinedTextField(
-                    value = pasteText,
-                    onValueChange = { pasteText = it },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
-                    placeholder = { Text(stringResource(Res.string.paste_inventory)) },
-                    minLines = 5,
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = {
-                    val clip =
-                        try {
-                            Toolkit.getDefaultToolkit().systemClipboard.getData(DataFlavor.stringFlavor) as? String
-                        } catch (_: Exception) {
-                            null
-                        }
-                    if (clip != null) pasteText = clip
-                }) {
-                    Icon(Icons.Default.ContentPaste, null, Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(stringResource(Res.string.paste_from_clipboard))
-                }
-            }
-        }
+    val canCalculate = pasteText.isNotBlank() && pricingActingCharId != null && (!marginLimitEnabled || costBasisSource != null)
 
-        item {
-            ContentCard(title = stringResource(Res.string.pricing)) {
-                Text(stringResource(Res.string.cost_basis_source), style = MaterialTheme.typography.labelMedium)
-                Spacer(Modifier.height(4.dp))
-                CostBasisSourceDropdown(
-                    characters = allCharacters,
-                    corporations = allCorporations,
-                    selected = costBasisSource,
-                    onSelect = {
-                        costBasisSource = it
-                        persistCostBasisSource(it)
-                        pricingActingCharId = defaultActingCharFor(it, allCharacters)
-                        persistActingChar(pricingActingCharId)
-                    },
-                )
-                val corpSource = costBasisSource as? CostBasisSource.Corporation
-                if (corpSource != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(stringResource(Res.string.acting_character), style = MaterialTheme.typography.labelMedium)
-                    Spacer(Modifier.height(4.dp))
-                    ActingCharacterDropdown(
-                        members = allCharacters.filter { it.corporationId == corpSource.corpId },
-                        selectedId = pricingActingCharId,
-                        onSelect = {
-                            pricingActingCharId = it
-                            persistActingChar(it)
-                        },
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Text(
+    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.width(380.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            PasteBox(stringResource(Res.string.item_list), pasteText, Modifier.weight(1f)) { pasteText = it }
+            Panel(stringResource(Res.string.pricing), Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Labeled(stringResource(Res.string.cost_basis_source)) {
+                        CostBasisSourceDropdown(
+                            characters = allCharacters,
+                            corporations = allCorporations,
+                            selected = costBasisSource,
+                            onSelect = {
+                                costBasisSource = it
+                                persistCostBasisSource(it)
+                                pricingActingCharId = defaultActingCharFor(it, allCharacters)
+                                persistActingChar(pricingActingCharId)
+                            },
+                        )
+                    }
+                    val corpSource = costBasisSource as? CostBasisSource.Corporation
+                    if (corpSource != null) {
+                        Labeled(stringResource(Res.string.acting_character)) {
+                            ActingCharacterDropdown(
+                                members = allCharacters.filter { it.corporationId == corpSource.corpId },
+                                selectedId = pricingActingCharId,
+                                onSelect = {
+                                    pricingActingCharId = it
+                                    persistActingChar(it)
+                                },
+                            )
+                        }
+                    }
                     when {
-                        pricingActingCharId == null -> stringResource(Res.string.select_char_station)
-                        stationInfo != null -> stringResource(Res.string.selling_from, stationInfo!!.locationName)
-                        else -> stringResource(Res.string.no_docked_station)
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(
-                        checked = marginLimitEnabled,
-                        onCheckedChange = {
-                            marginLimitEnabled = it
-                            scope.launch(Dispatchers.IO) {
-                                StaticDataDao.setSetting(PricingSettings.MARGIN_LIMIT_ENABLED, it.toString())
-                            }
-                        },
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(Res.string.apply_margin_limit))
-                }
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = marginText,
-                    onValueChange = {
-                        marginText = it
-                        scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(PricingSettings.MARGIN_PCT, it) }
-                    },
-                    label = { Tip(stringResource(Res.string.tip_pr_margin_pct)) { Text(stringResource(Res.string.margin_pct)) } },
-                    singleLine = true,
-                    enabled = marginLimitEnabled,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(0.4f),
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    stringResource(Res.string.undercut_note),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    stringResource(Res.string.grossed_up_note, "%.2f".format(salesTaxPct), "%.2f".format(brokerFeePct)),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(12.dp))
-                Button(
-                    onClick = { calculate() },
-                    enabled =
-                        !isCalculating &&
-                            pasteText.isNotBlank() &&
-                            pricingActingCharId != null &&
-                            (!marginLimitEnabled || costBasisSource != null),
-                ) {
-                    if (isCalculating) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Text(stringResource(Res.string.calculate))
-                }
-                if (marginLimitEnabled && costBasisSource == null) {
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        stringResource(Res.string.pick_cost_basis),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
+                        pricingActingCharId == null -> {
+                            StatusLine(stringResource(Res.string.select_char_station))
+                        }
 
-        if (warnings.isNotEmpty() || pricingWarnings.isNotEmpty()) {
-            item {
-                ContentCard(title = stringResource(Res.string.warnings_n, warnings.size + pricingWarnings.size)) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        warnings.forEach { w ->
-                            Text(
-                                "• ${w.lineText}: ${w.reason}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
+                        stationInfo != null -> {
+                            StatusLine(
+                                stringResource(Res.string.selling_from, stationInfo!!.locationName),
+                                positiveColor,
                             )
                         }
-                        pricingWarnings.forEach { w ->
-                            Text(
-                                "• ${w.itemName}: ${w.reason}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
-                            )
+
+                        else -> {
+                            StatusLine(stringResource(Res.string.no_docked_station), warningColor)
                         }
                     }
-                }
-            }
-        }
-
-        if (results.isNotEmpty()) {
-            item {
-                ContentCard(title = stringResource(Res.string.results)) {
-                    Column {
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                stringResource(Res.string.col_item),
-                                modifier = Modifier.weight(2f),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            Text(
-                                stringResource(Res.string.col_qty),
-                                modifier = Modifier.weight(1f),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            Tip(stringResource(Res.string.tip_pr_cost), Modifier.weight(1f)) {
-                                Text(
-                                    stringResource(Res.string.col_cost),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                )
-                            }
-                            Tip(stringResource(Res.string.tip_pr_target), Modifier.weight(1f)) {
-                                Text(
-                                    stringResource(Res.string.col_target),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                )
-                            }
-                            Tip(stringResource(Res.string.tip_pr_market_low), Modifier.weight(1f)) {
-                                Text(
-                                    stringResource(Res.string.col_market_low),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                )
-                            }
-                            Tip(stringResource(Res.string.tip_pr_final), Modifier.weight(1f)) {
-                                Text(
-                                    stringResource(Res.string.col_final),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                )
-                            }
-                            Tip(stringResource(Res.string.tip_pr_margin), Modifier.weight(1f)) {
-                                Text(
-                                    stringResource(Res.string.col_margin),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                )
-                            }
-                        }
-                        HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                        results.forEach { r ->
-                            val interactionSource = remember(r) { MutableInteractionSource() }
-                            val isHovered by interactionSource.collectIsHoveredAsState()
-                            Row(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .hoverable(interactionSource)
-                                        .background(
-                                            if (isHovered) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f) else Color.Transparent,
-                                        ),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(r.name, modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodySmall)
-                                Text("${r.quantity}", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                                Text(
-                                    r.costBasis?.let { formatPriceSimple(it) } ?: "—",
-                                    modifier = Modifier.weight(1f),
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                                Text(
-                                    r.targetPrice?.let { formatPriceSimple(it) } ?: "—",
-                                    modifier = Modifier.weight(1f),
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                                Text(
-                                    r.marketLowestSell?.let { formatPriceSimple(it) } ?: "—",
-                                    modifier = Modifier.weight(1f),
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                                Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        r.finalPrice?.let { formatPriceSimple(it) } ?: "—",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.Bold,
-                                    )
-                                    if (r.usedMarketPrice && r.finalPrice != null) {
-                                        Spacer(Modifier.width(4.dp))
-                                        Icon(
-                                            Icons.Default.ArrowDownward,
-                                            stringResource(Res.string.undercut_market_price),
-                                            modifier = Modifier.size(12.dp),
-                                            tint = MaterialTheme.colorScheme.tertiary,
-                                        )
-                                    }
+                    StatusLine(stringResource(Res.string.fees_line, "%.2f".format(salesTaxPct), "%.2f".format(brokerFeePct)))
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Tip(stringResource(Res.string.apply_margin_limit)) {
+                            Segment(stringResource(Res.string.margin_limit), marginLimitEnabled) {
+                                marginLimitEnabled = !marginLimitEnabled
+                                scope.launch(Dispatchers.IO) {
+                                    StaticDataDao.setSetting(PricingSettings.MARGIN_LIMIT_ENABLED, marginLimitEnabled.toString())
                                 }
-                                val margin = r.actualMarginPct
-                                Text(
-                                    margin?.let { "%+.1f%%".format(Locale.US, it) } ?: "—",
-                                    modifier = Modifier.weight(1f),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color =
-                                        when {
-                                            margin == null -> MaterialTheme.colorScheme.onSurfaceVariant
-                                            margin < 0 -> MaterialTheme.colorScheme.error
-                                            else -> positiveColor
-                                        },
-                                )
                             }
                         }
+                        OutlinedTextField(
+                            value = marginText,
+                            onValueChange = {
+                                marginText = it
+                                scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(PricingSettings.MARGIN_PCT, it) }
+                            },
+                            label = { Tip(stringResource(Res.string.tip_pr_margin_pct)) { Text(stringResource(Res.string.margin_pct)) } },
+                            singleLine = true,
+                            enabled = marginLimitEnabled,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono),
+                            modifier = Modifier.width(120.dp),
+                        )
                     }
-                }
-            }
-
-            item {
-                ContentCard(
-                    title = stringResource(Res.string.copy_list),
-                    actions = {
-                        TextButton(onClick = {
-                            val sel = StringSelection(clipboardText)
-                            Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, sel)
-                        }) {
-                            Icon(Icons.Default.ContentCopy, null, Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text(stringResource(Res.string.copy_to_clipboard))
-                        }
-                    },
-                ) {
-                    OutlinedTextField(
-                        value = clipboardText,
-                        onValueChange = {},
-                        readOnly = true,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp),
-                        minLines = 4,
+                    Text(stringResource(Res.string.undercut_note), style = MaterialTheme.typography.labelSmall, color = AXIS_COLOR)
+                    Text(
+                        stringResource(Res.string.grossed_up_note, "%.2f".format(salesTaxPct), "%.2f".format(brokerFeePct)),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AXIS_COLOR,
                     )
+                    if (marginLimitEnabled && costBasisSource == null) StatusLine(stringResource(Res.string.pick_cost_basis), warningColor)
+                    ActionButton(stringResource(Res.string.calculate), enabled = canCalculate, busy = isCalculating) { calculate() }
                 }
             }
         }
+
+        Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (results.isEmpty() && warnings.isEmpty() && pricingWarnings.isEmpty()) {
+                Panel(stringResource(Res.string.results), Modifier.fillMaxSize()) { Hint(stringResource(Res.string.pricing_hint)) }
+                return@Column
+            }
+            PricingTotalsStrip(remember(results) { pricingTotals(results) })
+            if (warnings.isNotEmpty() || pricingWarnings.isNotEmpty()) {
+                Panel(
+                    stringResource(Res.string.warnings_n, warnings.size + pricingWarnings.size),
+                    Modifier.fillMaxWidth().heightIn(max = 140.dp),
+                ) {
+                    LazyColumn {
+                        items(warnings) { w -> StatusLine("${w.lineText}: ${w.reason}", warningColor) }
+                        items(pricingWarnings) { w -> StatusLine("${w.itemName}: ${w.reason}", warningColor) }
+                    }
+                }
+            }
+            Panel(stringResource(Res.string.results), Modifier.fillMaxWidth().weight(1f)) { ResultsTable(results) }
+            Panel(
+                stringResource(Res.string.copy_list),
+                Modifier.fillMaxWidth().height(150.dp),
+                header = {
+                    Spacer(Modifier.weight(1f))
+                    Segment(stringResource(Res.string.copy_to_clipboard), true) {
+                        val sel = StringSelection(clipboardText)
+                        Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, sel)
+                    }
+                },
+            ) {
+                OutlinedTextField(
+                    value = clipboardText,
+                    onValueChange = {},
+                    readOnly = true,
+                    modifier = Modifier.fillMaxSize(),
+                    textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = Mono),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun Labeled(
+    label: String,
+    content: @Composable () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = AXIS_COLOR)
+        content()
+    }
+}
+
+@Composable
+internal fun PricingTotalsStrip(t: PricingTotals) {
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).border(1.dp, outline(), MaterialTheme.shapes.extraSmall)) {
+        Kpi(stringResource(Res.string.kpi_items), t.items.toString(), null, null, null)
+        Kpi(stringResource(Res.string.kpi_list_value), formatIsk(t.listValue), null, null, null, Res.string.tip_kpi_list_value)
+        Kpi(stringResource(Res.string.col_cost), formatIsk(t.cost), null, null, null)
+        Kpi(
+            stringResource(Res.string.kpi_net_profit),
+            signed(t.netProfit),
+            t.marginPct?.let { String.format(Locale.US, "%+.1f%%", it) },
+            pnlColor(t.netProfit),
+            null,
+            Res.string.tip_kpi_net_profit,
+            valueColor = pnlColor(t.netProfit),
+        )
+        Kpi(stringResource(Res.string.kpi_undercut), t.undercut.toString(), null, null, null, Res.string.tip_kpi_undercut)
+        Kpi(
+            stringResource(Res.string.kpi_below_cost),
+            t.belowCost.toString(),
+            null,
+            null,
+            null,
+            valueColor = MaterialTheme.colorScheme.error.takeIf { t.belowCost > 0 },
+            last = true,
+        )
+    }
+}
+
+@Composable
+internal fun ResultsTable(results: List<PricingResult>) {
+    val cols =
+        listOf<Col<PricingResult>>(
+            Col(stringResource(Res.string.col_item), 2.4f, end = false) { it.name.lowercase() },
+            Col(stringResource(Res.string.col_qty), 0.7f) { it.quantity },
+            Col(stringResource(Res.string.col_cost), 1f, tip = stringResource(Res.string.tip_pr_cost)) { it.costBasis },
+            Col(stringResource(Res.string.col_target), 1f, tip = stringResource(Res.string.tip_pr_target)) { it.targetPrice },
+            Col(stringResource(Res.string.col_market_low), 1f, tip = stringResource(Res.string.tip_pr_market_low)) { it.marketLowestSell },
+            Col(stringResource(Res.string.col_final), 1.1f, tip = stringResource(Res.string.tip_pr_final)) { it.finalPrice },
+            Col(stringResource(Res.string.col_margin), 0.8f, tip = stringResource(Res.string.tip_pr_margin)) { it.actualMarginPct },
+            Col(stringResource(Res.string.col_total), 0.9f) { (it.finalPrice ?: 0.0) * it.quantity },
+        )
+    // Alphabetical by default; any column re-sorts. The copy list below keeps the paste's order.
+    Table(cols = cols, rows = results, empty = "", defaultSort = 0, defaultDesc = false, key = { "${it.typeId}:${it.name}" }) { r ->
+        val margin = r.actualMarginPct
+        listOf(
+            Cell(r.name) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TypeIcon(r.typeId, size = 18.dp)
+                    Text(r.name, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            },
+            Cell(formatVolume(r.quantity.toLong())),
+            Cell(r.costBasis?.let(::formatPriceSimple) ?: "—", AXIS_COLOR),
+            Cell(r.targetPrice?.let(::formatPriceSimple) ?: "—", AXIS_COLOR),
+            Cell(r.marketLowestSell?.let(::formatPriceSimple) ?: "—", AXIS_COLOR),
+            // ↓ = listed at the market undercut rather than the margin target.
+            Cell(
+                (r.finalPrice?.let(::formatPriceSimple) ?: "—") + if (r.usedMarketPrice && r.finalPrice != null) " ↓" else "",
+                if (r.usedMarketPrice && r.finalPrice != null) MaterialTheme.colorScheme.tertiary else null,
+            ),
+            Cell(
+                margin?.let { String.format(Locale.US, "%+.1f%%", it) } ?: "—",
+                when {
+                    margin == null -> AXIS_COLOR
+                    margin < 0 -> MaterialTheme.colorScheme.error
+                    else -> positiveColor
+                },
+            ),
+            Cell(r.finalPrice?.let { formatIsk(it * r.quantity) } ?: "—"),
+        )
     }
 }
 
@@ -552,12 +459,8 @@ private fun ActingCharacterDropdown(
     val selectedName = members.find { it.id == selectedId }?.name
 
     Box {
-        OutlinedButton(onClick = { expanded = true }, enabled = members.isNotEmpty()) {
-            Icon(Icons.Default.Person, null, Modifier.size(16.dp))
-            Spacer(Modifier.width(6.dp))
-            Text(selectedName ?: stringResource(Res.string.no_local_corp_members))
-            Spacer(Modifier.width(4.dp))
-            Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null, Modifier.size(16.dp))
+        Segment((selectedName ?: stringResource(Res.string.no_local_corp_members)) + " ▾", false) {
+            if (members.isNotEmpty()) expanded = true
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             members.sortedBy { it.name }.forEach { c ->
@@ -589,13 +492,7 @@ private fun CostBasisSourceDropdown(
     var expanded by remember { mutableStateOf(false) }
 
     Box {
-        OutlinedButton(onClick = { expanded = true }) {
-            Icon(Icons.Default.Person, null, Modifier.size(16.dp))
-            Spacer(Modifier.width(6.dp))
-            Text(selected?.label ?: stringResource(Res.string.select_char_or_corp))
-            Spacer(Modifier.width(4.dp))
-            Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null, Modifier.size(16.dp))
-        }
+        Segment((selected?.label ?: stringResource(Res.string.select_char_or_corp)) + " ▾", selected != null) { expanded = true }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             if (characters.isNotEmpty()) {
                 Text(

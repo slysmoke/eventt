@@ -8,8 +8,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.*
@@ -400,5 +402,40 @@ fun TabBar(
             }
         }
         HorizontalDivider(color = outline())
+    }
+}
+
+/** A status line under a setting or tool: coloured dot + text. */
+@Composable
+fun StatusLine(
+    text: String,
+    color: Color? = null,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(Modifier.padding(top = 6.dp).size(6.dp).background(color ?: AXIS_COLOR, CircleShape))
+        Text(text, style = MaterialTheme.typography.bodySmall, color = color ?: MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+/** Compact action button sized for the terminal panels; shows a spinner while [busy]. */
+@Composable
+fun ActionButton(
+    text: String,
+    enabled: Boolean = true,
+    busy: Boolean = false,
+    onClick: () -> Unit,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled && !busy,
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+        modifier = Modifier.heightIn(min = 30.dp),
+        shape = MaterialTheme.shapes.extraSmall,
+    ) {
+        if (busy) {
+            CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 2.dp)
+            Spacer(Modifier.width(6.dp))
+        }
+        Text(text, style = MaterialTheme.typography.labelMedium)
     }
 }
