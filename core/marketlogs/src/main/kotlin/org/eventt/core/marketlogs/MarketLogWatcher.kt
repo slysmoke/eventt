@@ -36,7 +36,9 @@ sealed class MarketLogEvent {
  * destroy a fresh, not-yet-processed export before this loop ever got to read it.
  */
 object MarketLogWatcher {
-    private const val DEFAULT_POLL_INTERVAL_MS = 1_000L
+    // An export shows up after two stable polls, so this is the overlay's update lag; listing a
+    // normally-empty folder 4x a second costs nothing.
+    private const val DEFAULT_POLL_INTERVAL_MS = 250L
 
     private val _events = MutableSharedFlow<MarketLogEvent>(extraBufferCapacity = 16)
     val events: SharedFlow<MarketLogEvent> = _events.asSharedFlow()

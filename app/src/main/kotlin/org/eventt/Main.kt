@@ -56,6 +56,14 @@ private fun acquireSingleInstanceLockOrExit() {
 }
 
 fun main() {
+    // Linux/XWayland (seen on Hyprland + NVIDIA): with vsync on, skiko's shared frame loop blocks
+    // the UI thread in glXSwapBuffers for a window on a hidden workspace, so the Trade Calc
+    // overlay on top of the game repaints only seconds late (or on mouse-over). skiko still caps
+    // the frame rate without vsync. Must be set before the first window; -D overrides it.
+    if (System.getProperty("os.name").startsWith("Linux") && System.getProperty("skiko.vsync.enabled") == null) {
+        System.setProperty("skiko.vsync.enabled", "false")
+    }
+
     // ESI requires a User-Agent identifying the app on every request — must be set before
     // any ESI/SSO call, which is why this runs before anything else in main().
     val repoUrl = AppVersion.GITHUB_REPO.takeIf { it.isNotBlank() }?.let { "https://github.com/$it" }
