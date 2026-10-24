@@ -1,5 +1,6 @@
 package org.eventt.ui.common
 
+import androidx.compose.ui.text.AnnotatedString
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 
@@ -35,5 +36,17 @@ class FormatUtilsTest {
         formatVolume(329_841L) shouldBe "329.8K"
         formatVolume(1_271_849L) shouldBe "1.3M"
         formatVolume(4_500.0) shouldBe "4.5K"
+    }
+
+    @Test
+    fun `number fields show digits in groups of three and map the cursor across the spaces`() {
+        val t = DigitGroupTransformation.filter(AnnotatedString("3500000.5"))
+        t.text.text shouldBe "3 500 000.5"
+        t.offsetMapping.originalToTransformed(1) shouldBe 2
+        t.offsetMapping.originalToTransformed(2) shouldBe 3
+        t.offsetMapping.originalToTransformed(9) shouldBe 11
+        t.offsetMapping.transformedToOriginal(2) shouldBe 1
+        t.offsetMapping.transformedToOriginal(11) shouldBe 9
+        DigitGroupTransformation.filter(AnnotatedString("320")).text.text shouldBe "320"
     }
 }

@@ -1,5 +1,9 @@
 package org.eventt.ui.common
 
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import java.util.Locale
 import kotlin.math.abs
 
@@ -56,3 +60,37 @@ fun formatVolume(m3: Double): String = abbreviate(m3, 1, 0) { String.format(Loca
  * Formats a volume/quantity given as a long integer, using abbreviated units (T/B/M/K).
  */
 fun formatVolume(vol: Long): String = abbreviate(vol.toDouble(), 1, 0) { vol.toString() }
+
+/**
+ * Shows a number field's leading digit run in groups of three ("3500000000" -> "3 500 000 000")
+ * while the field's text stays plain digits, so parsing and saved settings don't change.
+ */
+object DigitGroupTransformation : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        val raw = text.text
+        val digits = raw.takeWhile { it.isDigit() }.length
+        val out = StringBuilder()
+        // toOut[i] = position in the shown text of raw offset i; toRaw is its inverse.
+        val toOut = IntArray(raw.length + 1)
+        val toRaw = ArrayList<Int>(raw.length + raw.length / 3 + 1)
+        raw.forEachIndexed { i, c ->
+            if (i in 1 until digits && (digits - i) % 3 == 0) {
+                toRaw += i
+                out.append(' ')
+            }
+            toOut[i] = out.length
+            toRaw += i
+            out.append(c)
+        }
+        toOut[raw.length] = out.length
+        toRaw += raw.length
+        return TransformedText(
+            AnnotatedString(out.toString()),
+            object : OffsetMapping {
+                override fun originalToTransformed(offset: Int) = toOut[offset]
+
+                override fun transformedToOriginal(offset: Int) = toRaw[offset]
+            },
+        )
+    }
+}

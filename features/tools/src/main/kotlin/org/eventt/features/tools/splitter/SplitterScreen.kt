@@ -193,10 +193,13 @@ fun SplitterScreen(context: ViewContext?) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = maxIskText,
-                            onValueChange = {
-                                maxIskText = it
-                                scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SplitterSettings.MAX_ISK, it) }
+                            onValueChange = { typed ->
+                                // Pasted "3 500 000 000" keeps parsing: the grouping is display-only.
+                                val v = typed.filterNot { it.isWhitespace() || it == ',' }
+                                maxIskText = v
+                                scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SplitterSettings.MAX_ISK, v) }
                             },
+                            visualTransformation = DigitGroupTransformation,
                             label = { Tip(stringResource(Res.string.tip_sp_max_isk)) { Text(stringResource(Res.string.max_isk_split)) } },
                             singleLine = true,
                             textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono),
@@ -204,10 +207,13 @@ fun SplitterScreen(context: ViewContext?) {
                         )
                         OutlinedTextField(
                             value = maxVolumeText,
-                            onValueChange = {
-                                maxVolumeText = it
-                                scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SplitterSettings.MAX_VOLUME, it) }
+                            onValueChange = { typed ->
+                                // Pasted "3 500 000 000" keeps parsing: the grouping is display-only.
+                                val v = typed.filterNot { it.isWhitespace() || it == ',' }
+                                maxVolumeText = v
+                                scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SplitterSettings.MAX_VOLUME, v) }
                             },
+                            visualTransformation = DigitGroupTransformation,
                             label = { Tip(stringResource(Res.string.tip_sp_max_m3)) { Text(stringResource(Res.string.max_m3_split)) } },
                             singleLine = true,
                             textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono),
