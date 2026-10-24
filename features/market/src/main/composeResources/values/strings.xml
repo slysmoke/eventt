@@ -369,4 +369,18 @@
     <string name="click_for_alert">click a row for a price alert</string>
     <string name="c_qty">Qty</string>
     <string name="c_cumulative">Stacked</string>
+    <string name="kpi_found">Found</string>
+    <string name="kpi_est_daily">Est. daily profit</string>
+    <string name="tip_kpi_est_daily">Sum of the Est. Daily / Net×Vol column over every row: what the whole list would earn per day at the suggested quantities.</string>
+    <string name="kpi_capital">Capital needed</string>
+    <string name="tip_kpi_capital">ISK tied up buying the suggested quantity of every row (incl. shipping for inter-region).</string>
+    <string name="kpi_cargo">Cargo</string>
+    <string name="kpi_median_margin">Median margin</string>
+    <string name="kpi_best">Best item</string>
+    <string name="kpi_buy_signals">Buy signals</string>
+    <string name="kpi_budget">Budget</string>
+    <string name="kpi_to_buy">Left to buy</string>
+    <string name="kpi_held_pnl">Held P&amp;L now</string>
+    <string name="panel_opportunities">Opportunities</string>
+    <string name="panel_candidates">Candidates</string>
 </resources>

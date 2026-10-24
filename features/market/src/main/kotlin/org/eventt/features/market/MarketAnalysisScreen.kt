@@ -1,11 +1,6 @@
 package org.eventt.features.market
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.CompareArrows
-import androidx.compose.material.icons.automirrored.filled.TrendingDown
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -17,6 +12,8 @@ import org.eventt.core.database.StaticDataDao
 import org.eventt.core.model.StaticMarketGroupModel
 import org.eventt.core.model.StaticRegionModel
 import org.eventt.market.generated.resources.*
+import org.eventt.ui.common.TabBar
+import org.eventt.ui.common.TabItem
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -382,26 +379,16 @@ fun MarketAnalysisScreen() {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        PrimaryTabRow(selectedTabIndex = selectedTab) {
-            Tab(
-                selected = selectedTab == 0,
-                onClick = { selectedTab = 0 },
-                text = { Text(stringResource(Res.string.tab_station_trading)) },
-                icon = { Icon(Icons.Default.Store, null, Modifier.size(16.dp)) },
-            )
-            Tab(
-                selected = selectedTab == 1,
-                onClick = { selectedTab = 1 },
-                text = { Text(stringResource(Res.string.tab_inter_region)) },
-                icon = { Icon(Icons.AutoMirrored.Filled.CompareArrows, null, Modifier.size(16.dp)) },
-            )
-            Tab(
-                selected = selectedTab == 2,
-                onClick = { selectedTab = 2 },
-                text = { Text(stringResource(Res.string.tab_long_term)) },
-                icon = { Icon(Icons.AutoMirrored.Filled.TrendingDown, null, Modifier.size(16.dp)) },
-            )
-        }
+        TabBar(
+            listOf(
+                TabItem(stringResource(Res.string.tab_station_trading)),
+                TabItem(stringResource(Res.string.tab_inter_region)),
+                TabItem(stringResource(Res.string.tab_long_term)),
+            ),
+            selectedTab,
+            { selectedTab = it },
+            Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp),
+        )
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             Box(modifier = if (selectedTab == 0) Modifier.fillMaxSize() else Modifier.requiredSize(0.dp).clipToBounds()) {
                 StationTradingTab(allRegions, topGroups, selectedCharId)

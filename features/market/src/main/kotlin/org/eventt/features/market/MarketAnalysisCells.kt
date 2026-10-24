@@ -15,13 +15,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.eventt.market.generated.resources.*
+import org.eventt.ui.common.AXIS_COLOR
+import org.eventt.ui.common.Mono
 import org.eventt.ui.common.Tip
 import org.eventt.ui.common.formatPriceAbbr
 import org.eventt.ui.common.formatVolume
 import org.eventt.ui.common.onRightClick
+import org.eventt.ui.common.outline
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.eventt.ui.theme.warningColor
@@ -38,15 +42,14 @@ internal fun StationHeader(
     asc: Boolean,
     onSort: (StationSortCol) -> Unit,
 ) {
-    Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "#",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
-                modifier = Modifier.width(28.dp),
-            )
-            ACol(stringResource(Res.string.col_item), StationSortCol.NAME, sort, asc, onSort, Modifier.weight(1f))
+    Column {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(COL_GAP),
+        ) {
+            Text("#", style = MaterialTheme.typography.bodySmall, color = AXIS_COLOR, modifier = Modifier.width(28.dp))
+            ACol(stringResource(Res.string.col_item), StationSortCol.NAME, sort, asc, onSort, Modifier.weight(1f), end = false)
             ACol(
                 stringResource(Res.string.col_buy_at),
                 StationSortCol.BUY_PRICE,
@@ -122,11 +125,17 @@ internal fun StationHeader(
             Tip(stringResource(Res.string.tip_st_orders), Modifier.width(95.dp)) {
                 Text(
                     stringResource(Res.string.orders_sell_buy),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontWeight = FontWeight.Bold,
+                    color = AXIS_COLOR,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         }
+        HorizontalDivider(color = outline())
     }
 }
 
@@ -136,15 +145,14 @@ internal fun RegionHeader(
     asc: Boolean,
     onSort: (RegionSortCol) -> Unit,
 ) {
-    Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "#",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
-                modifier = Modifier.width(28.dp),
-            )
-            ACol(stringResource(Res.string.col_item), RegionSortCol.NAME, sort, asc, onSort, Modifier.weight(1f))
+    Column {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(COL_GAP),
+        ) {
+            Text("#", style = MaterialTheme.typography.bodySmall, color = AXIS_COLOR, modifier = Modifier.width(28.dp))
+            ACol(stringResource(Res.string.col_item), RegionSortCol.NAME, sort, asc, onSort, Modifier.weight(1f), end = false)
             ACol(
                 stringResource(Res.string.col_buy),
                 RegionSortCol.BUY_PRICE,
@@ -245,6 +253,7 @@ internal fun RegionHeader(
                 tooltip = stringResource(Res.string.tip_ir_net_vol),
             )
         }
+        HorizontalDivider(color = outline())
     }
 }
 
@@ -265,7 +274,7 @@ internal fun StationRow(
     val effVol = stationEffVol(opp, volCapEnabled, volCapPct)
     val bg =
         when {
-            selected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+            selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
             index % 2 == 1 -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.025f)
             else -> Color.Transparent
         }
@@ -278,11 +287,13 @@ internal fun StationRow(
                 .then(if (isActiveInGame) Modifier.border(BorderStroke(1.dp, STATION_ACTIVE_IN_GAME)) else Modifier)
                 .padding(horizontal = 10.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(COL_GAP),
     ) {
         Text(
             "${index + 1}",
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+            fontFamily = Mono,
+            color = AXIS_COLOR,
             modifier = Modifier.width(28.dp),
         )
         Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
@@ -310,25 +321,23 @@ internal fun StationRow(
         MarginText(opp.roiPct, Modifier.width(65.dp))
         PriceText(opp.netProfit, positiveColor, Modifier.width(95.dp))
         TrendText(opp.priceChange7d, Modifier.width(65.dp))
-        Text(
+        NumText(
             if (effVol > 0) formatVolume(effVol) else "—",
-            style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray,
+            color = AXIS_COLOR,
             modifier = Modifier.width(75.dp),
         )
-        Text(
+        NumText(
             if (opp.netProfit * effVol > 0) formatPriceAbbr(opp.netProfit * effVol) else "—",
-            style = MaterialTheme.typography.bodySmall,
+            bold = true,
             modifier = Modifier.width(95.dp),
         )
-        Text(
+        NumText(
             stringResource(Res.string.order_counts, opp.sellOrderCount, opp.buyOrderCount),
-            style = MaterialTheme.typography.labelSmall,
-            color = Color.Gray,
+            color = AXIS_COLOR,
             modifier = Modifier.width(95.dp),
         )
     }
-    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+    HorizontalDivider(thickness = 0.5.dp, color = outline().copy(alpha = 0.2f))
 }
 
 @Composable
@@ -347,7 +356,7 @@ internal fun RegionRow(
     val dailyProfit = regionDailyProfit(opp, tradeType, volCapEnabled, volCapPct)
     val bg =
         when {
-            selected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+            selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
             index % 2 == 1 -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.025f)
             else -> Color.Transparent
         }
@@ -360,11 +369,13 @@ internal fun RegionRow(
                 .then(if (isActiveInGame) Modifier.border(BorderStroke(1.dp, STATION_ACTIVE_IN_GAME)) else Modifier)
                 .padding(horizontal = 10.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(COL_GAP),
     ) {
         Text(
             "${index + 1}",
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+            fontFamily = Mono,
+            color = AXIS_COLOR,
             modifier = Modifier.width(28.dp),
         )
         Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
@@ -386,46 +397,46 @@ internal fun RegionRow(
                 )
             }
         }
-        Column(Modifier.width(95.dp)) {
-            PriceText(opp.buyPrice, Color.White, Modifier.fillMaxWidth())
+        Column(Modifier.width(95.dp), horizontalAlignment = Alignment.End) {
+            PriceText(opp.buyPrice, MaterialTheme.colorScheme.onSurface, Modifier.fillMaxWidth())
             Avg7dDeviationText(opp.buyVsAvg7dPct)
         }
-        Column(Modifier.width(95.dp)) {
-            PriceText(opp.sellPrice, Color.White, Modifier.fillMaxWidth())
+        Column(Modifier.width(95.dp), horizontalAlignment = Alignment.End) {
+            PriceText(opp.sellPrice, MaterialTheme.colorScheme.onSurface, Modifier.fillMaxWidth())
             Avg7dDeviationText(opp.sellVsAvg7dPct)
         }
         MarginText(opp.marginPct, Modifier.width(65.dp))
         MarginText(opp.roiPct, Modifier.width(65.dp))
-        Text(
+        NumText(
             formatVolume(opp.itemVolumeM3),
-            style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray,
+            color = AXIS_COLOR,
             modifier = Modifier.width(70.dp),
         )
         PriceText(opp.shippingCostPerUnit, warningColor, Modifier.width(90.dp))
         PriceText(opp.netProfit, positiveColor, Modifier.width(95.dp), bold = true)
         TrendText(opp.priceChange7d, Modifier.width(65.dp))
-        Text(
+        NumText(
             if (effVol > 0) formatVolume(effVol) else "—",
-            style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray,
+            color = AXIS_COLOR,
             modifier = Modifier.width(70.dp),
         )
-        Text(
+        NumText(
             if (qtyToBuy > 0) formatVolume(qtyToBuy) else "—",
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.SemiBold,
+            bold = true,
             modifier = Modifier.width(85.dp),
         )
         PriceText(dailyProfit, Color(0xFF4DABF7), Modifier.width(95.dp), bold = true)
     }
-    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+    HorizontalDivider(thickness = 0.5.dp, color = outline().copy(alpha = 0.2f))
 }
 
 // ─── Shared UI helpers ────────────────────────────────────────────────────
 
+// Gap between table columns; headers and rows must share it or the columns drift apart.
+internal val COL_GAP = 8.dp
+
 @Composable
-private fun <T> ACol(
+internal fun <T> ACol(
     label: String,
     col: T,
     current: T,
@@ -433,31 +444,41 @@ private fun <T> ACol(
     onSort: (T) -> Unit,
     modifier: Modifier = Modifier,
     tooltip: String? = null,
+    end: Boolean = true,
 ) {
     Tip(tooltip, modifier) {
         val active = col == current
-        Row(
-            modifier = Modifier.fillMaxWidth().clickable { onSort(col) }.padding(end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                label,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                maxLines = 1,
-            )
-            if (active) {
-                Icon(
-                    if (asc) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                    null,
-                    Modifier.size(10.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
+        Text(
+            label + if (active) (if (asc) " ▲" else " ▼") else "",
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Bold,
+            color = if (active) MaterialTheme.colorScheme.primary else AXIS_COLOR,
+            textAlign = if (end) TextAlign.End else TextAlign.Start,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth().clickable { onSort(col) },
+        )
     }
+}
+
+// A right-aligned monospace table number.
+@Composable
+internal fun NumText(
+    text: String,
+    modifier: Modifier,
+    color: Color = Color.Unspecified,
+    bold: Boolean = false,
+) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        fontFamily = Mono,
+        color = color,
+        fontWeight = if (bold) FontWeight.SemiBold else null,
+        textAlign = TextAlign.End,
+        maxLines = 1,
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -467,13 +488,7 @@ private fun PriceText(
     modifier: Modifier,
     bold: Boolean = false,
 ) {
-    Text(
-        formatPriceAbbr(value),
-        style = MaterialTheme.typography.bodySmall,
-        color = color,
-        fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal,
-        modifier = modifier,
-    )
+    NumText(formatPriceAbbr(value), modifier, color, bold)
 }
 
 @Composable
@@ -482,23 +497,13 @@ private fun TrendText(
     modifier: Modifier,
 ) {
     if (changePct.isNaN()) {
-        Text(
-            "—",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-            modifier = modifier,
-        )
+        NumText("—", modifier, AXIS_COLOR)
         return
     }
     val positive = changePct >= 0
     val color = if (positive) positiveColor else negativeColor
     val arrow = if (positive) "▲" else "▼"
-    Text(
-        "$arrow ${String.format(Locale.US, "%.1f", Math.abs(changePct))}%",
-        style = MaterialTheme.typography.bodySmall,
-        color = color,
-        modifier = modifier,
-    )
+    NumText("$arrow ${String.format(Locale.US, "%.1f", Math.abs(changePct))}%", modifier, color)
 }
 
 /**
@@ -514,13 +519,14 @@ private fun Avg7dDeviationText(deviationPct: Double) {
     val color =
         when {
             deviationPct < 0 -> positiveColor
-            deviationPct <= 10.0 -> Color.White
+            deviationPct <= 10.0 -> MaterialTheme.colorScheme.onSurface
             deviationPct <= 20.0 -> warningColor
             else -> negativeColor
         }
     Text(
         stringResource(Res.string.vs_7d, (if (deviationPct >= 0) "+" else "") + String.format(Locale.US, "%.1f", deviationPct)),
         style = MaterialTheme.typography.labelSmall,
+        fontFamily = Mono,
         color = color,
     )
 }
@@ -536,13 +542,7 @@ private fun MarginText(
             pct >= 10 -> warningColor
             else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
         }
-    Text(
-        "${String.format(Locale.US, "%.1f", pct)}%",
-        style = MaterialTheme.typography.bodySmall,
-        color = color,
-        fontWeight = FontWeight.Medium,
-        modifier = modifier,
-    )
+    NumText("${String.format(Locale.US, "%.1f", pct)}%", modifier, color)
 }
 
 @Composable
@@ -553,20 +553,9 @@ internal fun AnalysisEmptyState(
 ) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(
-                modifier =
-                    Modifier
-                        .size(72.dp)
-                        .background(
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-                            androidx.compose.foundation.shape.CircleShape,
-                        ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(icon, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f))
-            }
-            Text(primary, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
-            Text(secondary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+            Icon(icon, null, Modifier.size(28.dp), tint = AXIS_COLOR)
+            Text(primary, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f))
+            Text(secondary, style = MaterialTheme.typography.bodySmall, color = AXIS_COLOR)
         }
     }
 }
@@ -589,7 +578,7 @@ internal fun SelectionBar(
     onCopy: () -> Unit,
     onClear: () -> Unit,
 ) {
-    Surface(color = MaterialTheme.colorScheme.secondaryContainer) {
+    Surface(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -599,12 +588,12 @@ internal fun SelectionBar(
                 Icons.Default.CheckBox,
                 null,
                 Modifier.size(14.dp),
-                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                tint = MaterialTheme.colorScheme.primary,
             )
             Text(
                 stringResource(Res.string.n_selected, count),
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(Modifier.weight(1f))
             TextButton(
@@ -625,7 +614,7 @@ internal fun SelectionBar(
             }
         }
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+    HorizontalDivider(color = outline())
 }
 
 internal fun copyToClipboard(text: String) {

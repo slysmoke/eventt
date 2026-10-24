@@ -27,7 +27,10 @@ import org.eventt.core.model.StaticMarketGroupModel
 import org.eventt.core.model.StaticRegionModel
 import org.eventt.core.model.StaticStationModel
 import org.eventt.market.generated.resources.*
+import org.eventt.ui.common.AXIS_COLOR
+import org.eventt.ui.common.Mono
 import org.eventt.ui.common.Tip
+import org.eventt.ui.common.outline
 import org.jetbrains.compose.resources.stringResource
 
 // ─── Filter bar design tokens ──────────────────────────────────────────────
@@ -36,7 +39,7 @@ import org.jetbrains.compose.resources.stringResource
 // of drifting like Material's default OutlinedTextField (56.dp) vs. a hand-rolled chip (~38.dp).
 
 internal val FilterFieldHeight = 30.dp
-private val FilterFieldShape = RoundedCornerShape(6.dp)
+private val FilterFieldShape = RoundedCornerShape(4.dp)
 private val FilterLabelHeight = 16.dp
 private val FilterLabelGap = 2.dp
 
@@ -45,18 +48,12 @@ private val FilterLabelGap = 2.dp
 @Composable
 internal fun FilterBar(content: @Composable ColumnScope.() -> Unit) {
     Column {
-        Surface(
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 3.dp,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                content = content,
-            )
-        }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            content = content,
+        )
+        HorizontalDivider(color = outline())
     }
 }
 
@@ -72,8 +69,8 @@ internal fun ChipSurface(
     Surface(
         onClick = onClick,
         shape = FilterFieldShape,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        border = BorderStroke(1.dp, outline()),
+        color = Color.Transparent,
         modifier = modifier.width(width).height(FilterFieldHeight),
     ) {
         Row(
@@ -98,9 +95,9 @@ internal fun FilterControl(
     Tip(tooltip) {
         Column(verticalArrangement = Arrangement.spacedBy(FilterLabelGap)) {
             Text(
-                label,
+                label.uppercase(),
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                color = AXIS_COLOR,
                 maxLines = 1,
                 modifier = Modifier.height(FilterLabelHeight),
             )
@@ -138,7 +135,7 @@ private fun CompactTextField(
     val borderColor =
         when {
             isFocused -> colors.primary
-            else -> colors.outline.copy(alpha = 0.35f)
+            else -> outline()
         }
     BasicTextField(
         value = value,
@@ -148,6 +145,7 @@ private fun CompactTextField(
         interactionSource = interactionSource,
         textStyle =
             MaterialTheme.typography.bodySmall.copy(
+                fontFamily = Mono,
                 color = if (enabled) colors.onSurface else colors.onSurface.copy(alpha = 0.4f),
             ),
         cursorBrush = SolidColor(colors.primary),
@@ -158,8 +156,7 @@ private fun CompactTextField(
                     Modifier
                         .fillMaxSize()
                         .clip(FilterFieldShape)
-                        .background(colors.surfaceVariant.copy(alpha = if (enabled) 0.5f else 0.25f))
-                        .border(if (isFocused) 1.5.dp else 1.dp, borderColor, FilterFieldShape)
+                        .border(1.dp, borderColor, FilterFieldShape)
                         .padding(horizontal = 10.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
@@ -225,7 +222,7 @@ internal fun FilterDivider() {
                 .padding(top = FilterLabelHeight + FilterLabelGap)
                 .height(FilterFieldHeight)
                 .padding(horizontal = 4.dp),
-        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
+        color = outline(),
     )
 }
 

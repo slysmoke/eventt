@@ -41,6 +41,8 @@ import org.eventt.core.model.StaticStationModel
 import org.eventt.core.model.stringBlocking
 import org.eventt.core.staticdata.JumpGraphService
 import org.eventt.market.generated.resources.*
+import org.eventt.ui.common.AXIS_COLOR
+import org.eventt.ui.common.Panel
 import org.eventt.ui.common.ensureVisible
 import org.eventt.ui.theme.negativeColor
 import org.jetbrains.compose.resources.stringResource
@@ -685,100 +687,106 @@ internal fun StationTradingTab(
                 if (idx >= 0) listState.ensureVisible(idx)
             }
 
-            StationHeader(sortCol, sortAsc) { col ->
-                if (sortCol == col) {
-                    sortAsc = !sortAsc
-                } else {
-                    sortCol = col
-                    sortAsc = false
-                }
-            }
-            if (charId != null && StationTradingQueue.size > 0) {
-                val hotkeyLabel by HotkeyBindings.queueLabel.collectAsState()
-                Text(
-                    stringResource(
-                        Res.string.hotkey_cycles,
-                        hotkeyLabel,
-                        StationTradingQueue.size,
-                        StationTradingQueue.currentPosition,
-                        StationTradingQueue.size,
-                    ),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp),
-                )
-            }
-            if (selectedIds.isNotEmpty()) {
-                SelectionBar(
-                    count = selectedIds.size,
-                    onCopy = {
-                        val text =
-                            sorted
-                                .filter { it.typeId in selectedIds }
-                                .joinToString("\n") { "${it.typeName}\t${stationEffVol(it, volCapEnabled, volCapPctVal)}" }
-                        copyToClipboard(text)
-                    },
-                    onClear = { selectedIds = emptySet() },
-                )
-            }
-            @OptIn(ExperimentalComposeUiApi::class)
-            Box(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .onPointerEvent(PointerEventType.Press) { e ->
-                            // Left button only — right-click on a row opens its chart instead.
-                            if (!e.buttons.isPrimaryPressed) return@onPointerEvent
-                            dragStartIdx =
-                                itemIndexAt(
-                                    e.changes
-                                        .first()
-                                        .position.y,
-                                    listState,
-                                )
-                            isDragging = false
-                        }.onPointerEvent(PointerEventType.Move) { e ->
-                            val start = dragStartIdx ?: return@onPointerEvent
-                            if (!e.changes.first().pressed) {
-                                dragStartIdx = null
-                                return@onPointerEvent
-                            }
-                            val cur =
-                                itemIndexAt(
-                                    e.changes
-                                        .first()
-                                        .position.y,
-                                    listState,
-                                ) ?: return@onPointerEvent
-                            if (cur != start || isDragging) {
-                                isDragging = true
-                                val lo = minOf(start, cur)
-                                val hi = maxOf(start, cur)
-                                selectedIds = sorted.subList(lo, minOf(hi + 1, sorted.size)).map { it.typeId }.toSet()
-                            }
-                        }.onPointerEvent(PointerEventType.Release) { _ ->
-                            if (!isDragging) {
-                                val idx = dragStartIdx
-                                if (idx != null) {
-                                    val id = sorted.getOrNull(idx)?.typeId
-                                    if (id != null) selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id
-                                }
-                            }
-                            dragStartIdx = null
-                            isDragging = false
-                        },
-            ) {
-                LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                    itemsIndexed(sorted, key = { _, item -> item.typeId }) { idx, opp ->
-                        StationRow(
-                            opp,
-                            idx,
-                            opp.typeId in selectedIds,
-                            opp.typeId == activeTypeId,
-                            volCapEnabled,
-                            volCapPctVal,
-                            onShowDetails = { detailTypeId = it },
+            Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OpportunityKpis(remember(sorted, volCapEnabled, volCapPctVal) { stationTotals(sorted, volCapEnabled, volCapPctVal) })
+                Panel(stringResource(Res.string.panel_opportunities), Modifier.fillMaxSize(), header = {
+                    Spacer(Modifier.weight(1f))
+                    if (charId != null && StationTradingQueue.size > 0) {
+                        val hotkeyLabel by HotkeyBindings.queueLabel.collectAsState()
+                        Text(
+                            stringResource(
+                                Res.string.hotkey_cycles,
+                                hotkeyLabel,
+                                StationTradingQueue.size,
+                                StationTradingQueue.currentPosition,
+                                StationTradingQueue.size,
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = AXIS_COLOR,
                         )
+                    }
+                }) {
+                    StationHeader(sortCol, sortAsc) { col ->
+                        if (sortCol == col) {
+                            sortAsc = !sortAsc
+                        } else {
+                            sortCol = col
+                            sortAsc = false
+                        }
+                    }
+                    if (selectedIds.isNotEmpty()) {
+                        SelectionBar(
+                            count = selectedIds.size,
+                            onCopy = {
+                                val text =
+                                    sorted
+                                        .filter { it.typeId in selectedIds }
+                                        .joinToString("\n") { "${it.typeName}\t${stationEffVol(it, volCapEnabled, volCapPctVal)}" }
+                                copyToClipboard(text)
+                            },
+                            onClear = { selectedIds = emptySet() },
+                        )
+                    }
+                    @OptIn(ExperimentalComposeUiApi::class)
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .onPointerEvent(PointerEventType.Press) { e ->
+                                    // Left button only — right-click on a row opens its chart instead.
+                                    if (!e.buttons.isPrimaryPressed) return@onPointerEvent
+                                    dragStartIdx =
+                                        itemIndexAt(
+                                            e.changes
+                                                .first()
+                                                .position.y,
+                                            listState,
+                                        )
+                                    isDragging = false
+                                }.onPointerEvent(PointerEventType.Move) { e ->
+                                    val start = dragStartIdx ?: return@onPointerEvent
+                                    if (!e.changes.first().pressed) {
+                                        dragStartIdx = null
+                                        return@onPointerEvent
+                                    }
+                                    val cur =
+                                        itemIndexAt(
+                                            e.changes
+                                                .first()
+                                                .position.y,
+                                            listState,
+                                        ) ?: return@onPointerEvent
+                                    if (cur != start || isDragging) {
+                                        isDragging = true
+                                        val lo = minOf(start, cur)
+                                        val hi = maxOf(start, cur)
+                                        selectedIds = sorted.subList(lo, minOf(hi + 1, sorted.size)).map { it.typeId }.toSet()
+                                    }
+                                }.onPointerEvent(PointerEventType.Release) { _ ->
+                                    if (!isDragging) {
+                                        val idx = dragStartIdx
+                                        if (idx != null) {
+                                            val id = sorted.getOrNull(idx)?.typeId
+                                            if (id != null) selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id
+                                        }
+                                    }
+                                    dragStartIdx = null
+                                    isDragging = false
+                                },
+                    ) {
+                        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                            itemsIndexed(sorted, key = { _, item -> item.typeId }) { idx, opp ->
+                                StationRow(
+                                    opp,
+                                    idx,
+                                    opp.typeId in selectedIds,
+                                    opp.typeId == activeTypeId,
+                                    volCapEnabled,
+                                    volCapPctVal,
+                                    onShowDetails = { detailTypeId = it },
+                                )
+                            }
+                        }
                     }
                 }
             }

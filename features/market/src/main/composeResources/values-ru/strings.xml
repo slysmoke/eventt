@@ -369,4 +369,18 @@
     <string name="click_for_alert">клик по строке — алерт по цене</string>
     <string name="c_qty">Кол-во</string>
     <string name="c_cumulative">Накоп.</string>
+    <string name="kpi_found">Найдено</string>
+    <string name="kpi_est_daily">Прибыль в день</string>
+    <string name="tip_kpi_est_daily">Сумма колонки «Оценка/день» / «Чист.×объём» по всем строкам: сколько весь список принёс бы за день при предложенных количествах.</string>
+    <string name="kpi_capital">Нужно капитала</string>
+    <string name="tip_kpi_capital">Сколько ISK уйдёт на покупку предложенного количества по всем строкам (для межрегиона — с доставкой).</string>
+    <string name="kpi_cargo">Груз</string>
+    <string name="kpi_median_margin">Медианная маржа</string>
+    <string name="kpi_best">Лучший товар</string>
+    <string name="kpi_buy_signals">Сигналы покупки</string>
+    <string name="kpi_budget">Бюджет</string>
+    <string name="kpi_to_buy">Осталось купить</string>
+    <string name="kpi_held_pnl">P&amp;L позиций сейчас</string>
+    <string name="panel_opportunities">Возможности</string>
+    <string name="panel_candidates">Кандидаты</string>
 </resources>

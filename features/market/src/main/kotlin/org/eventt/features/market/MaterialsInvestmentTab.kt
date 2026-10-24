@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
@@ -52,10 +53,14 @@ import org.eventt.core.model.StaticStationModel
 import org.eventt.core.model.eveSigFigStep
 import org.eventt.core.model.stringBlocking
 import org.eventt.market.generated.resources.*
+import org.eventt.ui.common.AXIS_COLOR
+import org.eventt.ui.common.Mono
+import org.eventt.ui.common.Panel
 import org.eventt.ui.common.Tip
 import org.eventt.ui.common.formatPriceAbbr
 import org.eventt.ui.common.formatVolume
 import org.eventt.ui.common.onRightClick
+import org.eventt.ui.common.outline
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.eventt.ui.theme.warningColor
@@ -738,40 +743,45 @@ internal fun MaterialsInvestmentTab(
                     },
             )
         } else {
-            MaterialsHeader(
-                sort = sortCol,
-                asc = sortAsc,
-                allChecked = sorted.isNotEmpty() && sorted.all { it.candidate.typeId in selectedTypeIds },
-                onCheckAll = { checked ->
-                    selectedTypeIds = if (checked) sorted.map { it.candidate.typeId }.toSet() else emptySet()
-                },
-                onSort = { col ->
-                    if (sortCol == col) {
-                        sortAsc = !sortAsc
-                    } else {
-                        sortCol = col
-                        sortAsc = true
-                    }
-                },
-            )
-            LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                items(sorted, key = { it.candidate.typeId }) { alloc ->
-                    MaterialRow(
-                        alloc,
-                        checked = alloc.candidate.typeId in selectedTypeIds,
-                        onCheckedChange = { checked ->
-                            selectedTypeIds =
-                                if (checked) selectedTypeIds + alloc.candidate.typeId else selectedTypeIds - alloc.candidate.typeId
+            Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                MaterialsKpis(sorted, totalBudget.toDoubleOrNull() ?: 0.0)
+                Panel(stringResource(Res.string.panel_candidates), Modifier.fillMaxSize()) {
+                    MaterialsHeader(
+                        sort = sortCol,
+                        asc = sortAsc,
+                        allChecked = sorted.isNotEmpty() && sorted.all { it.candidate.typeId in selectedTypeIds },
+                        onCheckAll = { checked ->
+                            selectedTypeIds = if (checked) sorted.map { it.candidate.typeId }.toSet() else emptySet()
                         },
-                        isActiveInQueue = alloc.candidate.typeId == activeQueueTypeId,
-                        onShowDetails = { detailTypeId = it },
-                        onCreateAlerts = {
-                            scope.launch {
-                                val n = withContext(Dispatchers.IO) { createAlerts(listOf(alloc), regionId, charId) }
-                                statusMsg = getString(Res.string.alerts_set_one, n, alloc.candidate.typeName)
+                        onSort = { col ->
+                            if (sortCol == col) {
+                                sortAsc = !sortAsc
+                            } else {
+                                sortCol = col
+                                sortAsc = true
                             }
                         },
                     )
+                    LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        items(sorted, key = { it.candidate.typeId }) { alloc ->
+                            MaterialRow(
+                                alloc,
+                                checked = alloc.candidate.typeId in selectedTypeIds,
+                                onCheckedChange = { checked ->
+                                    selectedTypeIds =
+                                        if (checked) selectedTypeIds + alloc.candidate.typeId else selectedTypeIds - alloc.candidate.typeId
+                                },
+                                isActiveInQueue = alloc.candidate.typeId == activeQueueTypeId,
+                                onShowDetails = { detailTypeId = it },
+                                onCreateAlerts = {
+                                    scope.launch {
+                                        val n = withContext(Dispatchers.IO) { createAlerts(listOf(alloc), regionId, charId) }
+                                        statusMsg = getString(Res.string.alerts_set_one, n, alloc.candidate.typeName)
+                                    }
+                                },
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -794,19 +804,23 @@ internal fun MaterialsInvestmentTab(
 // ─── Table ──────────────────────────────────────────────────────────────
 
 @Composable
-private fun MaterialsHeader(
+internal fun MaterialsHeader(
     sort: MaterialSortCol,
     asc: Boolean,
     allChecked: Boolean,
     onCheckAll: (Boolean) -> Unit,
     onSort: (MaterialSortCol) -> Unit,
 ) {
-    Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+    Column {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(COL_GAP),
+        ) {
             Tip(stringResource(Res.string.mi_tip_select_all)) {
                 Checkbox(checked = allChecked, onCheckedChange = onCheckAll, modifier = Modifier.size(28.dp))
             }
-            MCol(stringResource(Res.string.m_item), MaterialSortCol.NAME, sort, asc, onSort, Modifier.weight(1f))
+            MCol(stringResource(Res.string.m_item), MaterialSortCol.NAME, sort, asc, onSort, Modifier.weight(1f), end = false)
             Tip(
                 stringResource(Res.string.mi_tip_current),
             ) {
@@ -857,6 +871,7 @@ private fun MaterialsHeader(
             }
             Spacer(Modifier.width(28.dp))
         }
+        HorizontalDivider(color = outline())
     }
 }
 
@@ -868,33 +883,11 @@ private fun <T> MCol(
     asc: Boolean,
     onSort: (T) -> Unit,
     modifier: Modifier = Modifier,
-) {
-    val active = col == current
-    Row(
-        modifier = modifier.clickable { onSort(col) }.padding(end = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-            color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-            maxLines = 1,
-        )
-        if (active) {
-            Icon(
-                if (asc) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                null,
-                Modifier.size(10.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
-        }
-    }
-}
+    end: Boolean = true,
+) = ACol(label, col, current, asc, onSort, modifier, end = end)
 
 @Composable
-private fun MaterialRow(
+internal fun MaterialRow(
     alloc: AllocatedMaterial,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
@@ -920,7 +913,7 @@ private fun MaterialRow(
                 .then(if (isActiveInQueue) Modifier.border(BorderStroke(1.dp, MaterialTheme.colorScheme.primary)) else Modifier)
                 .padding(horizontal = 10.dp, vertical = 3.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(COL_GAP)) {
             Checkbox(checked = checked, onCheckedChange = onCheckedChange, modifier = Modifier.size(28.dp))
             Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                 alloc.action?.let { action ->
@@ -991,11 +984,19 @@ private fun MaterialRow(
                     )
                 }
             }
-            Text(formatPriceAbbr(c.currentPrice), style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(80.dp))
+            Text(
+                formatPriceAbbr(c.currentPrice),
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = Mono,
+                textAlign = TextAlign.End,
+                modifier = Modifier.width(80.dp),
+            )
             Text(
                 formatPriceAbbr(c.avgPrice),
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray,
+                color = AXIS_COLOR,
+                fontFamily = Mono,
+                textAlign = TextAlign.End,
                 modifier = Modifier.width(80.dp),
             )
             Text(
@@ -1003,15 +1004,19 @@ private fun MaterialRow(
                     "${formatVolume(p.qtyHeld)}${p.avgBuyPrice?.let { " @ ${formatPriceAbbr(it)}" } ?: ""}"
                 } ?: "—",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray,
+                color = AXIS_COLOR,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                fontFamily = Mono,
+                textAlign = TextAlign.End,
                 modifier = Modifier.width(140.dp),
             )
             Text(
                 "${String.format(Locale.US, "%.1f", c.drawdownFromHighPct)}%",
                 style = MaterialTheme.typography.bodySmall,
                 color = negativeColor,
+                fontFamily = Mono,
+                textAlign = TextAlign.End,
                 modifier = Modifier.width(75.dp),
             )
             Text(
@@ -1019,6 +1024,8 @@ private fun MaterialRow(
                 style = MaterialTheme.typography.bodySmall,
                 color = positiveColor,
                 fontWeight = FontWeight.Medium,
+                fontFamily = Mono,
+                textAlign = TextAlign.End,
                 modifier = Modifier.width(65.dp),
             )
             val trendColor =
@@ -1031,6 +1038,8 @@ private fun MaterialRow(
                 if (c.trendPct.isNaN()) "—" else "${String.format(Locale.US, "%.1f", c.trendPct)}%",
                 style = MaterialTheme.typography.bodySmall,
                 color = trendColor,
+                fontFamily = Mono,
+                textAlign = TextAlign.End,
                 modifier = Modifier.width(55.dp),
             )
             Text(
@@ -1041,18 +1050,24 @@ private fun MaterialRow(
                 color = c.backtest?.let { if (it.pnlPct >= 0) positiveColor else negativeColor } ?: Color.Gray,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                fontFamily = Mono,
+                textAlign = TextAlign.End,
                 modifier = Modifier.width(105.dp),
             )
             Text(
                 "${String.format(Locale.US, "%.1f", c.volatilityPct)}%",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray,
+                color = AXIS_COLOR,
+                fontFamily = Mono,
+                textAlign = TextAlign.End,
                 modifier = Modifier.width(70.dp),
             )
             Text(
                 formatVolume(c.dailyVolume),
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray,
+                color = AXIS_COLOR,
+                fontFamily = Mono,
+                textAlign = TextAlign.End,
                 modifier = Modifier.width(65.dp),
             )
             val profit = alloc.sellTarget?.profitNow
@@ -1062,18 +1077,24 @@ private fun MaterialRow(
                 style = MaterialTheme.typography.bodySmall,
                 color = profitColor,
                 fontWeight = FontWeight.Medium,
+                fontFamily = Mono,
+                textAlign = TextAlign.End,
                 modifier = Modifier.width(85.dp),
             )
             Text(
                 alloc.sellTarget?.profitNowPct?.let { signedPct(it) } ?: "—",
                 style = MaterialTheme.typography.bodySmall,
                 color = profitColor,
+                fontFamily = Mono,
+                textAlign = TextAlign.End,
                 modifier = Modifier.width(60.dp),
             )
             Text(
                 if (alloc.toBuyIsk > 1.0) formatPriceAbbr(alloc.toBuyIsk) else "—",
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.SemiBold,
+                fontFamily = Mono,
+                textAlign = TextAlign.End,
                 modifier = Modifier.width(80.dp),
             )
             Tip(
@@ -1101,13 +1122,13 @@ private fun MaterialRow(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(start = 28.dp, top = 1.dp),
+                    modifier = Modifier.padding(start = 36.dp, top = 1.dp),
                 )
             }
         }
         c.position?.takeIf { it.hasOrders }?.let { p ->
             Tip(stringResource(Res.string.mi_tip_orders)) {
-                Row(modifier = Modifier.padding(start = 28.dp, top = 1.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(modifier = Modifier.padding(start = 36.dp, top = 1.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (p.buyOrderQty > 0) {
                         Text(
                             stringResource(
@@ -1134,7 +1155,7 @@ private fun MaterialRow(
             Tip(
                 stringResource(Res.string.mi_tip_sell_target),
             ) {
-                Row(modifier = Modifier.padding(start = 28.dp, top = 1.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(modifier = Modifier.padding(start = 36.dp, top = 1.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         stringResource(Res.string.sell_line, formatVolume(st.qty), formatPriceAbbr(st.targetPrice)),
                         style = MaterialTheme.typography.labelSmall,
@@ -1157,7 +1178,7 @@ private fun MaterialRow(
             }
         }
     }
-    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+    HorizontalDivider(thickness = 0.5.dp, color = outline().copy(alpha = 0.2f))
 }
 
 private fun signedPct(pct: Double): String = "${if (pct >= 0) "+" else ""}${String.format(Locale.US, "%.0f", pct)}%"
