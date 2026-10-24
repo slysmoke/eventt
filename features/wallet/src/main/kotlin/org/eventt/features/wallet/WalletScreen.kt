@@ -1,17 +1,8 @@
 package org.eventt.features.wallet
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.automirrored.filled.ShowChart
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,7 +17,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -47,8 +37,10 @@ import org.eventt.ui.common.*
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.eventt.wallet.generated.resources.*
-import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
+import java.time.LocalDate
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -59,748 +51,502 @@ fun WalletScreen(context: ViewContext?) {
     val corpId = (context as? ViewContext.Corporation)?.corporationId
     val actingCharId = context?.actingCharId
     var balance by remember { mutableStateOf(0.0) }
-    var dailyBreakdown by remember { mutableStateOf<List<DailyWalletEntry>>(emptyList()) }
     var pnlBreakdown by remember { mutableStateOf<List<DailyWalletEntry>>(emptyList()) }
     var fifoResult by remember { mutableStateOf<CostBasisService.FifoResult?>(null) }
     var transactions by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
     var journal by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var refreshAvailableAt by remember { mutableStateOf<Long?>(null) }
-    var activeTab by remember { mutableStateOf(0) }
     val pendingSearch by AppState.pendingWalletSearch.collectAsState()
-    LaunchedEffect(pendingSearch) { if (pendingSearch != null) activeTab = 0 }
 
-    LaunchedEffect(context) {
-        val acting = actingCharId
-        if (acting != null) {
-            isLoading = true
-            loadWalletData(
-                charId,
-                corpId,
-                acting,
-                balanceCallback = { balance = it },
-                dailyCallback = { dailyBreakdown = it },
-                pnlCallback = { pnlBreakdown = it },
-                fifoCallback = { fifoResult = it },
-                transactionsCallback = { transactions = it },
-                journalCallback = { journal = it },
-                expiryCallback = { refreshAvailableAt = it },
-            )
-            isLoading = false
-        }
+    suspend fun load(acting: Int) {
+        isLoading = true
+        loadWalletData(
+            charId,
+            corpId,
+            acting,
+            balanceCallback = { balance = it },
+            pnlCallback = { pnlBreakdown = it },
+            fifoCallback = { fifoResult = it },
+            transactionsCallback = { transactions = it },
+            journalCallback = { journal = it },
+            expiryCallback = { refreshAvailableAt = it },
+        )
+        isLoading = false
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(stringResource(Res.string.wallet), style = MaterialTheme.typography.headlineMedium)
-            actingCharId?.let { acting ->
-                EsiRefreshButton(
-                    isLoading = isLoading,
-                    expiresAtMs = refreshAvailableAt,
-                    onClick = {
-                        scope.launch {
-                            isLoading = true
-                            loadWalletData(
-                                charId,
-                                corpId,
-                                acting,
-                                balanceCallback = { balance = it },
-                                dailyCallback = { dailyBreakdown = it },
-                                pnlCallback = { pnlBreakdown = it },
-                                fifoCallback = { fifoResult = it },
-                                transactionsCallback = { transactions = it },
-                                journalCallback = { journal = it },
-                                expiryCallback = { refreshAvailableAt = it },
-                            )
-                            isLoading = false
-                        }
-                    },
-                )
-            }
+    LaunchedEffect(context) { actingCharId?.let { load(it) } }
+
+    Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(Res.string.wallet), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.weight(1f))
+            EsiRefreshButton(
+                isLoading = isLoading,
+                expiresAtMs = refreshAvailableAt,
+                enabled = actingCharId != null,
+                onClick = { actingCharId?.let { scope.launch { load(it) } } },
+            )
         }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Balance card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    stringResource(Res.string.balance),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-                Text(
-                    text = stringResource(Res.string.isk_amount, formatIsk(balance)),
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    val totalEarned = dailyBreakdown.sumOf { it.income }
-                    val totalSpent = dailyBreakdown.sumOf { it.expenses }
-                    Text(
-                        stringResource(Res.string.earned, formatIsk(totalEarned)),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = positiveColor,
-                    )
-                    Text(
-                        stringResource(Res.string.spent, formatIsk(totalSpent)),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = negativeColor,
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Tabs
-        PrimaryTabRow(selectedTabIndex = activeTab) {
-            Tab(selected = activeTab == 0, onClick = { activeTab = 0 }, text = { Text(stringResource(Res.string.transactions)) })
-            Tab(selected = activeTab == 1, onClick = { activeTab = 1 }, text = { Text(stringResource(Res.string.journal)) })
-            Tab(selected = activeTab == 2, onClick = { activeTab = 2 }, text = { Text("P&L") })
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Tab content
-        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            when (activeTab) {
-                0 -> TransactionList(transactions, pendingSearch)
-                1 -> JournalList(journal)
-                2 -> PnlChart(pnlBreakdown, fifoResult)
-            }
-        }
+        WalletBody(
+            balance = balance,
+            tx = remember(transactions) { transactions.map { it.toTx() } },
+            journal = remember(journal) { journal.map { it.toEntry() } },
+            daily = pnlBreakdown,
+            fifo = fifoResult,
+            pendingSearch = pendingSearch,
+            modifier = Modifier.weight(1f),
+        )
     }
 
     LoadingOverlay(isLoading = isLoading, message = stringResource(Res.string.loading_wallet))
 }
 
-private enum class SortDirection { ASC, DESC }
+private enum class WalletTab { TRANSACTIONS, JOURNAL, PNL }
 
-/** Clickable column header — click toggles sort on this column, arrow shows direction only when active. */
+private enum class Side { ALL, BUY, SELL }
+
+/** Everything under the header for already-loaded rows — no DB or ESI here. */
 @Composable
-private fun SortHeaderCell(
-    label: String,
-    modifier: Modifier = Modifier,
-    active: Boolean,
-    direction: SortDirection,
-    rightAlign: Boolean = false,
-    tooltip: String? = null,
-    onClick: () -> Unit,
-) {
-    Tip(tooltip, modifier) {
-        Row(
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-            horizontalArrangement = if (rightAlign) Arrangement.End else Arrangement.Start,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                label,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.SemiBold,
-            )
-            if (active) {
-                Icon(
-                    if (direction == SortDirection.ASC) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                    contentDescription = null,
-                    modifier = Modifier.size(12.dp).padding(start = 2.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun PaginationBar(
-    page: Int,
-    totalPages: Int,
-    totalCount: Int,
-    onPageChange: (Int) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            pluralStringResource(Res.plurals.entries_count, totalCount, totalCount),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            IconButton(onClick = { onPageChange(page - 1) }, enabled = page > 0) {
-                Icon(Icons.Default.ChevronLeft, contentDescription = stringResource(Res.string.previous_page))
-            }
-            Text(stringResource(Res.string.page_of, page + 1, totalPages), style = MaterialTheme.typography.bodySmall)
-            IconButton(onClick = { onPageChange(page + 1) }, enabled = page < totalPages - 1) {
-                Icon(Icons.Default.ChevronRight, contentDescription = stringResource(Res.string.next_page))
-            }
-        }
-    }
-}
-
-private enum class TxSortColumn { DATE, SIDE, ITEM, QTY, UNIT_PRICE, TOTAL, CLIENT, STATION }
-
-private fun txTotal(tx: Map<String, Any?>): Double {
-    val unitPrice = (tx["unit_price"] as? Number)?.toDouble() ?: 0.0
-    val quantity = (tx["quantity"] as? Number)?.toInt() ?: 0
-    return (tx["total"] as? Number)?.toDouble()?.takeIf { it > 0 } ?: (unitPrice * quantity)
-}
-
-@Composable
-private fun TransactionList(
-    transactions: List<Map<String, Any?>>,
+internal fun WalletBody(
+    balance: Double,
+    tx: List<Tx>,
+    journal: List<Entry>,
+    daily: List<DailyWalletEntry>,
+    fifo: CostBasisService.FifoResult?,
     pendingSearch: String?,
+    modifier: Modifier = Modifier,
+    today: LocalDate = LocalDate.now(),
 ) {
-    if (transactions.isEmpty()) {
-        EmptyState(
-            icon = Icons.Default.Receipt,
-            title = stringResource(Res.string.no_transactions),
-            description = stringResource(Res.string.select_char_transactions),
-        )
-        return
-    }
-
-    var searchQuery by remember { mutableStateOf("") }
+    var tab by remember { mutableStateOf(WalletTab.TRANSACTIONS) }
+    var period by remember { mutableStateOf(Period.D30) }
+    var txQuery by remember { mutableStateOf("") }
+    // A counterparty clicked on the Dashboard: everything ever traded with them, not just this month.
     LaunchedEffect(pendingSearch) {
         if (pendingSearch != null) {
-            searchQuery = pendingSearch
+            tab = WalletTab.TRANSACTIONS
+            period = Period.ALL
+            txQuery = pendingSearch
             AppState.clearPendingWalletSearch()
         }
     }
-    var sortColumn by remember { mutableStateOf(TxSortColumn.DATE) }
-    var sortDirection by remember { mutableStateOf(SortDirection.DESC) }
-    var page by remember { mutableStateOf(0) }
+    val txIn = remember(tx, period) { tx.inPeriod(period, today) { it.day } }
+    val journalIn = remember(journal, period) { journal.inPeriod(period, today) { it.day } }
 
-    fun toggleSort(column: TxSortColumn) {
-        if (sortColumn == column) {
-            sortDirection = if (sortDirection == SortDirection.ASC) SortDirection.DESC else SortDirection.ASC
-        } else {
-            sortColumn = column
-            sortDirection = SortDirection.DESC
-        }
-    }
-
-    val filtered =
-        remember(transactions, searchQuery) {
-            val q = searchQuery.trim()
-            if (q.isEmpty()) {
-                transactions
-            } else {
-                transactions.filter { tx ->
-                    listOfNotNull(
-                        tx["type_name"]?.toString(),
-                        tx["client_name"]?.toString(),
-                        tx["location_name"]?.toString(),
-                    ).any { it.contains(q, ignoreCase = true) }
-                }
-            }
-        }
-
-    val sorted =
-        remember(filtered, sortColumn, sortDirection) {
-            val comparator: Comparator<Map<String, Any?>> =
-                when (sortColumn) {
-                    TxSortColumn.DATE -> compareBy { it["date"]?.toString() ?: "" }
-                    TxSortColumn.SIDE -> compareBy { (it["is_buy"] as? Boolean) ?: false }
-                    TxSortColumn.ITEM -> compareBy { it["type_name"]?.toString() ?: "" }
-                    TxSortColumn.QTY -> compareBy { (it["quantity"] as? Number)?.toInt() ?: 0 }
-                    TxSortColumn.UNIT_PRICE -> compareBy { (it["unit_price"] as? Number)?.toDouble() ?: 0.0 }
-                    TxSortColumn.TOTAL -> compareBy { txTotal(it) }
-                    TxSortColumn.CLIENT -> compareBy { it["client_name"]?.toString() ?: "" }
-                    TxSortColumn.STATION -> compareBy { it["location_name"]?.toString() ?: "" }
-                }
-            filtered.sortedWith(if (sortDirection == SortDirection.DESC) comparator.reversed() else comparator)
-        }
-
-    LaunchedEffect(transactions, searchQuery) { page = 0 }
-
-    val pageSize = 100
-    val totalPages = maxOf(1, (sorted.size + pageSize - 1) / pageSize)
-    val clampedPage = page.coerceIn(0, totalPages - 1)
-    val pageItems = sorted.drop(clampedPage * pageSize).take(pageSize)
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        SearchField(
-            query = searchQuery,
-            onQueryChange = { searchQuery = it },
-            placeholder = stringResource(Res.string.search_tx),
-            modifier = Modifier.padding(bottom = 8.dp),
-        )
-
-        if (sorted.isEmpty()) {
-            EmptyState(
-                icon = Icons.Default.Receipt,
-                title = stringResource(Res.string.no_matches),
-                description = stringResource(Res.string.no_tx_match),
-            )
-            return
-        }
-
-        // Header
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            SortHeaderCell(stringResource(Res.string.col_date), Modifier.weight(1.8f), sortColumn == TxSortColumn.DATE, sortDirection) {
-                toggleSort(TxSortColumn.DATE)
-            }
-            SortHeaderCell(
-                stringResource(Res.string.col_bs),
-                Modifier.weight(0.6f),
-                sortColumn == TxSortColumn.SIDE,
-                sortDirection,
-                tooltip = stringResource(Res.string.tip_w_bs),
-            ) {
-                toggleSort(TxSortColumn.SIDE)
-            }
-            SortHeaderCell(stringResource(Res.string.col_item), Modifier.weight(3f), sortColumn == TxSortColumn.ITEM, sortDirection) {
-                toggleSort(TxSortColumn.ITEM)
-            }
-            SortHeaderCell(
-                stringResource(Res.string.col_qty),
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            TabBar(
+                listOf(
+                    TabItem(stringResource(Res.string.transactions), txIn.size),
+                    TabItem(stringResource(Res.string.journal), journalIn.size),
+                    TabItem("P&L"),
+                ),
+                tab.ordinal,
+                { tab = WalletTab.entries[it] },
                 Modifier.weight(1f),
-                sortColumn == TxSortColumn.QTY,
-                sortDirection,
-                rightAlign = true,
-            ) { toggleSort(TxSortColumn.QTY) }
-            SortHeaderCell(
-                stringResource(Res.string.col_unit_price),
-                Modifier.weight(2f),
-                sortColumn == TxSortColumn.UNIT_PRICE,
-                sortDirection,
-                rightAlign = true,
-            ) { toggleSort(TxSortColumn.UNIT_PRICE) }
-            SortHeaderCell(
-                stringResource(Res.string.col_total),
-                Modifier.weight(2f),
-                sortColumn == TxSortColumn.TOTAL,
-                sortDirection,
-                rightAlign = true,
-            ) { toggleSort(TxSortColumn.TOTAL) }
-            SortHeaderCell(
-                stringResource(Res.string.col_client),
-                Modifier.weight(2f),
-                sortColumn == TxSortColumn.CLIENT,
-                sortDirection,
-                tooltip = stringResource(Res.string.tip_w_client),
-            ) { toggleSort(TxSortColumn.CLIENT) }
-            SortHeaderCell(
-                stringResource(Res.string.col_station),
-                Modifier.weight(2.5f),
-                sortColumn == TxSortColumn.STATION,
-                sortDirection,
-            ) { toggleSort(TxSortColumn.STATION) }
-        }
-        HorizontalDivider()
-        LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
-            items(pageItems) { tx ->
-                val isBuy = tx["is_buy"] as? Boolean ?: false
-                val unitPrice = (tx["unit_price"] as? Number)?.toDouble() ?: 0.0
-                val quantity = (tx["quantity"] as? Number)?.toInt() ?: 0
-                val total = txTotal(tx)
-                val typeName =
-                    tx["type_name"]?.toString()?.ifEmpty { null }
-                        ?: stringResource(Res.string.unknown_type_id, tx["type_id"].toString())
-                val clientName =
-                    tx["client_name"]?.toString()?.ifEmpty { null }
-                        ?: tx["client_id"]?.let { "#$it" } ?: ""
-                val locationName =
-                    tx["location_name"]?.toString()?.ifEmpty { null }
-                        ?: tx["location_id"]?.toString() ?: ""
-                val dateStr = tx["date"]?.toString()?.take(16)?.replace("T", " ") ?: ""
-                val buyColor = positiveColor
-                val sellColor = negativeColor
-
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        dateStr,
-                        modifier = Modifier.weight(1.8f),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Surface(
-                        modifier = Modifier.weight(0.6f),
-                        color = (if (isBuy) buyColor else sellColor).copy(alpha = 0.15f),
-                        shape = MaterialTheme.shapes.extraSmall,
-                    ) {
-                        Text(
-                            if (isBuy) stringResource(Res.string.buy) else stringResource(Res.string.sell),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (isBuy) buyColor else sellColor,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                    Text(
-                        typeName,
-                        modifier = Modifier.weight(3f).padding(start = 4.dp),
-                        style = MaterialTheme.typography.bodyMedium,
-                        overflow = TextOverflow.Ellipsis,
-                        maxLines = 1,
-                    )
-                    Text(
-                        "%,d".format(quantity),
-                        modifier = Modifier.weight(1f),
-                        textAlign = TextAlign.End,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Text(
-                        formatIsk(unitPrice),
-                        modifier = Modifier.weight(2f),
-                        textAlign = TextAlign.End,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Text(
-                        formatIsk(total),
-                        modifier = Modifier.weight(2f),
-                        textAlign = TextAlign.End,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = if (isBuy) sellColor else buyColor,
-                    )
-                    Text(
-                        clientName,
-                        modifier = Modifier.weight(2f).padding(start = 8.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                        overflow = TextOverflow.Ellipsis,
-                        maxLines = 1,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        locationName,
-                        modifier = Modifier.weight(2.5f).padding(start = 8.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                        overflow = TextOverflow.Ellipsis,
-                        maxLines = 1,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            )
+            if (tab != WalletTab.PNL) {
+                Period.entries.forEach { p ->
+                    Segment(if (p == Period.ALL) stringResource(Res.string.period_all) else "${p.days}d", period == p) { period = p }
                 }
-                HorizontalDivider(thickness = 0.5.dp)
             }
         }
-        PaginationBar(page = clampedPage, totalPages = totalPages, totalCount = sorted.size, onPageChange = { page = it })
+        when (tab) {
+            WalletTab.TRANSACTIONS, WalletTab.JOURNAL -> {
+                TotalsStrip(balance, remember(tx, journal, fifo, period) { walletTotals(tx, journal, fifo, period, today) })
+                if (tab == WalletTab.TRANSACTIONS) {
+                    TransactionsTab(txIn, remember(fifo, period) { realizedByType(fifo, period, today) }, txQuery) { txQuery = it }
+                } else {
+                    JournalTab(journalIn)
+                }
+            }
+
+            WalletTab.PNL -> {
+                PnlTab(daily, fifo, today)
+            }
+        }
     }
 }
 
 @Composable
-private fun TxHeader(
-    label: String,
-    modifier: Modifier,
-    rightAlign: Boolean = false,
-    tooltip: String? = null,
+private fun TotalsStrip(
+    balance: Double,
+    t: WalletTotals,
 ) {
-    Tip(tooltip, modifier) {
-        Text(
-            label,
-            modifier = Modifier.fillMaxWidth(),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = if (rightAlign) TextAlign.End else TextAlign.Start,
-            fontWeight = FontWeight.SemiBold,
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).border(1.dp, outline(), MaterialTheme.shapes.extraSmall)) {
+        Kpi(stringResource(Res.string.balance), formatIsk(balance), null, null, null)
+        Kpi(
+            stringResource(Res.string.kpi_realized),
+            t.realized?.let(::signed) ?: "—",
+            null,
+            null,
+            null,
+            Res.string.tip_realized_pnl,
+            valueColor = pnlColor(t.realized),
+        )
+        Kpi(
+            stringResource(Res.string.kpi_sales),
+            formatIsk(t.sales),
+            stringResource(Res.string.n_trades, t.sells.toString()),
+            null,
+            SELL_DOT,
+        )
+        Kpi(
+            stringResource(Res.string.kpi_purchases),
+            formatIsk(t.purchases),
+            stringResource(Res.string.n_trades, t.buys.toString()),
+            null,
+            BUY_DOT,
+        )
+        Kpi(
+            stringResource(Res.string.kpi_fees),
+            formatIsk(t.fees),
+            if (t.sales > 0) stringResource(Res.string.pct_of_sales, String.format(Locale.US, "%.2f%%", t.fees / t.sales * 100)) else null,
+            null,
+            null,
+            Res.string.tip_fees,
+        )
+        Kpi(
+            stringResource(Res.string.cash_flow),
+            signed(t.cashFlow),
+            null,
+            null,
+            null,
+            Res.string.tip_cash_flow,
+            valueColor = pnlColor(t.cashFlow),
+        )
+        Kpi(stringResource(Res.string.kpi_items), t.items.toString(), null, null, null, last = true)
+    }
+}
+
+// Same marks as the Orders tabs: sell red, buy green.
+private val SELL_DOT = Color(0xFFE57373)
+private val BUY_DOT = Color(0xFF81C784)
+
+private fun shortStation(name: String) = name.split(" - ").take(2).joinToString(" - ")
+
+@Composable
+private fun TransactionsTab(
+    tx: List<Tx>,
+    realized: Map<Int, Double>?,
+    query: String,
+    onQuery: (String) -> Unit,
+) {
+    var side by remember { mutableStateOf(Side.ALL) }
+    val sided =
+        remember(tx, side) {
+            when (side) {
+                Side.ALL -> tx
+                Side.BUY -> tx.filter { it.isBuy }
+                Side.SELL -> tx.filter { !it.isBuy }
+            }
+        }
+    val shown =
+        remember(sided, query) { if (query.isBlank()) sided else sided.filter { it.search.contains(query.trim(), ignoreCase = true) } }
+
+    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Panel(
+            null,
+            Modifier.weight(0.7f).fillMaxHeight(),
+            header = {
+                Segment(stringResource(Res.string.side_all), side == Side.ALL) { side = Side.ALL }
+                Segment(stringResource(Res.string.buy), side == Side.BUY) { side = Side.BUY }
+                Segment(stringResource(Res.string.sell), side == Side.SELL) { side = Side.SELL }
+                Spacer(Modifier.weight(1f))
+                Text(
+                    stringResource(
+                        Res.string.tx_summary,
+                        formatIsk(shown.filter { it.isBuy }.sumOf { it.total }),
+                        formatIsk(shown.filter { !it.isBuy }.sumOf { it.total }),
+                        shown.size.toString(),
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontFamily = Mono,
+                    color = AXIS_COLOR,
+                )
+            },
+        ) {
+            TerminalSearch(query, onQuery, stringResource(Res.string.search_tx), Modifier.fillMaxWidth())
+            Spacer(Modifier.height(4.dp))
+            TxTable(shown)
+        }
+        Column(Modifier.weight(0.3f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Panel(stringResource(Res.string.panel_items), Modifier.fillMaxWidth().weight(1f)) {
+                FlowTable(remember(sided, realized) { byItem(sided, realized) }, stringResource(Res.string.col_item), realized != null) {
+                    onQuery(if (query == it.label) "" else it.label)
+                }
+            }
+            Panel(stringResource(Res.string.panel_clients), Modifier.fillMaxWidth().weight(1f)) {
+                FlowTable(remember(sided) { byClient(sided) }, stringResource(Res.string.col_client), false) {
+                    onQuery(if (query == it.label) "" else it.label)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TxTable(tx: List<Tx>) {
+    val cols =
+        listOf<Col<Tx>>(
+            Col(stringResource(Res.string.col_date), 1.2f, end = false) { it.date },
+            Col(stringResource(Res.string.col_bs), 0.4f, end = false) { it.isBuy },
+            Col(stringResource(Res.string.col_item), 2.6f, end = false) { it.typeName.lowercase() },
+            Col(stringResource(Res.string.col_qty), 0.8f) { it.qty },
+            Col(stringResource(Res.string.col_unit_price), 1f) { it.unitPrice },
+            Col(stringResource(Res.string.col_total), 1f) { it.total },
+            Col(stringResource(Res.string.col_client), 1.5f, end = false) { it.client.lowercase() },
+            Col(stringResource(Res.string.col_station), 1.6f, end = false) { it.station.lowercase() },
+        )
+    val b = stringResource(Res.string.b_short)
+    val s = stringResource(Res.string.s_short)
+    Table(cols = cols, rows = tx, empty = stringResource(Res.string.no_tx_match), defaultSort = 0, key = { it.id }) { t ->
+        listOf(
+            Cell(t.date.take(16).replace("T", " "), AXIS_COLOR),
+            Cell(if (t.isBuy) b else s, if (t.isBuy) positiveColor else negativeColor),
+            Cell(t.typeName) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TypeIcon(t.typeId, size = 18.dp)
+                    Text(t.typeName, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            },
+            Cell(formatVolume(t.qty.toLong())),
+            Cell(formatPriceAbbr(t.unitPrice)),
+            // Money out on a buy, in on a sell.
+            Cell(formatIsk(t.total), if (t.isBuy) negativeColor else positiveColor),
+            Cell(t.client, AXIS_COLOR),
+            Cell(shortStation(t.station), AXIS_COLOR),
         )
     }
 }
 
-private enum class JournalSortColumn { DATE, TYPE, DESCRIPTION, AMOUNT, TAX, BALANCE }
+// Items / clients beside the transactions; a click searches the table for that row.
+@Composable
+private fun FlowTable(
+    rows: List<FlowStat>,
+    title: String,
+    showRealized: Boolean,
+    onClick: (FlowStat) -> Unit,
+) {
+    val cols =
+        buildList<Col<FlowStat>> {
+            add(Col(title, 1.7f, end = false) { it.label.lowercase() })
+            if (showRealized) {
+                add(Col(stringResource(Res.string.col_realized), 1f) { it.realized })
+            } else {
+                add(Col(stringResource(Res.string.col_bought), 1f) { it.bought })
+                add(Col(stringResource(Res.string.col_sold), 1f) { it.sold })
+            }
+            add(Col(stringResource(Res.string.col_turnover), 1.2f) { it.turnover })
+            add(Col("#", 0.5f) { it.trades })
+        }
+    Table(cols = cols, rows = rows, empty = stringResource(Res.string.no_tx_match), defaultSort = cols.size - 2, key = {
+        it.key
+    }, onClick = onClick) { f ->
+        buildList {
+            add(
+                Cell(f.label) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        f.typeId?.let { TypeIcon(it, size = 16.dp) }
+                        Text(f.label, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                },
+            )
+            if (showRealized) {
+                add(Cell(f.realized?.let(::signed) ?: "—", pnlColor(f.realized)))
+            } else {
+                add(Cell(formatIsk(f.bought), AXIS_COLOR))
+                add(Cell(formatIsk(f.sold), AXIS_COLOR))
+            }
+            add(Cell(formatIsk(f.turnover)))
+            add(Cell(f.trades.toString(), AXIS_COLOR))
+        }
+    }
+}
 
 @Composable
-private fun JournalList(journal: List<Map<String, Any?>>) {
-    if (journal.isEmpty()) {
-        EmptyState(
-            icon = Icons.AutoMirrored.Filled.List,
-            title = stringResource(Res.string.no_journal),
-            description = stringResource(Res.string.select_char_journal),
-        )
+private fun JournalTab(journal: List<Entry>) {
+    var query by remember { mutableStateOf("") }
+    var refType by remember { mutableStateOf<String?>(null) }
+    val shown =
+        remember(journal, query, refType) {
+            journal.filter { e ->
+                (refType == null || e.refType == refType) &&
+                    (query.isBlank() || "${formatRefType(e.refType)} ${e.reason}".contains(query.trim(), ignoreCase = true))
+            }
+        }
+
+    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Panel(
+            null,
+            Modifier.weight(0.7f).fillMaxHeight(),
+            header = {
+                refType?.let { r -> Segment("${formatRefType(r)}  ✕", true) { refType = null } }
+                Spacer(Modifier.weight(1f))
+                Text(
+                    stringResource(Res.string.journal_summary, signed(shown.sumOf { it.amount }), shown.size.toString()),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontFamily = Mono,
+                    color = AXIS_COLOR,
+                )
+            },
+        ) {
+            TerminalSearch(query, { query = it }, stringResource(Res.string.search_journal), Modifier.fillMaxWidth())
+            Spacer(Modifier.height(4.dp))
+            val cols =
+                listOf<Col<Entry>>(
+                    Col(stringResource(Res.string.col_date), 1.2f, end = false) { it.date },
+                    Col(stringResource(Res.string.col_type), 1.6f, end = false) { formatRefType(it.refType) },
+                    Col(stringResource(Res.string.col_description), 2.6f, end = false) { it.reason.lowercase() },
+                    Col(stringResource(Res.string.col_amount), 1.1f) { it.amount },
+                    Col(stringResource(Res.string.col_tax), 0.8f) { it.tax },
+                    Col(stringResource(Res.string.balance), 1.1f) { it.balance },
+                )
+            Table(cols = cols, rows = shown, empty = stringResource(Res.string.no_journal_match), defaultSort = 0, key = { it.id }) { e ->
+                listOf(
+                    Cell(e.date.take(16).replace("T", " "), AXIS_COLOR),
+                    Cell(formatRefType(e.refType)),
+                    Cell(e.reason, AXIS_COLOR),
+                    Cell(signed(e.amount), pnlColor(e.amount)),
+                    Cell(e.tax?.let(::formatIsk) ?: "—", if (e.tax != null) negativeColor else AXIS_COLOR),
+                    Cell(formatIsk(e.balance), AXIS_COLOR),
+                )
+            }
+        }
+        Panel(stringResource(Res.string.panel_by_type), Modifier.weight(0.3f).fillMaxHeight()) {
+            Table(
+                cols =
+                    listOf(
+                        Col(stringResource(Res.string.col_type), 2f, end = false) { formatRefType(it.refType) },
+                        Col("#", 0.6f) { it.count },
+                        Col(stringResource(Res.string.col_amount), 1.2f) { abs(it.sum) },
+                    ),
+                rows = remember(journal) { byRefType(journal) },
+                empty = stringResource(Res.string.no_journal_match),
+                defaultSort = 2,
+                key = { it.refType },
+                onClick = { refType = if (refType == it.refType) null else it.refType },
+                highlight = { it.refType == refType },
+            ) { r ->
+                listOf(Cell(formatRefType(r.refType)), Cell(r.count.toString(), AXIS_COLOR), Cell(signed(r.sum), pnlColor(r.sum)))
+            }
+        }
+    }
+}
+
+@Composable
+private fun PnlTab(
+    daily: List<DailyWalletEntry>,
+    fifo: CostBasisService.FifoResult?,
+    today: LocalDate,
+) {
+    if (daily.isEmpty() && fifo == null) {
+        Hint(stringResource(Res.string.no_pnl_desc))
         return
     }
-
-    val totalTax = journal.filter { it["ref_type"] == "transaction_tax" }.sumOf { (it["amount"] as? Number)?.toDouble() ?: 0.0 }
-    val totalBroker = journal.filter { it["ref_type"] == "brokers_fee" }.sumOf { (it["amount"] as? Number)?.toDouble() ?: 0.0 }
-
-    var searchQuery by remember { mutableStateOf("") }
-    var sortColumn by remember { mutableStateOf(JournalSortColumn.DATE) }
-    var sortDirection by remember { mutableStateOf(SortDirection.DESC) }
-    var page by remember { mutableStateOf(0) }
-
-    fun toggleSort(column: JournalSortColumn) {
-        if (sortColumn == column) {
-            sortDirection = if (sortDirection == SortDirection.ASC) SortDirection.DESC else SortDirection.ASC
-        } else {
-            sortColumn = column
-            sortDirection = SortDirection.DESC
+    val window = daily.toPnlWindow()
+    val fifoWindow = fifo?.realizedPnlWindow()
+    // Days that closed with positive realized FIFO profit, out of the days that had any realized
+    // sales at all — a heavy restock day is not a "losing day", and a day without sales is
+    // neither won nor lost. Falls back to the cash-flow count when there's no FIFO data yet.
+    val realizedByDay =
+        remember(fifo) {
+            fifo
+                ?.realizedSells
+                ?.groupBy { it.date.take(10) }
+                ?.mapValues { (_, sells) -> sells.sumOf { it.profit } }
+                .orEmpty()
         }
-    }
+    val profitableDays = if (realizedByDay.isNotEmpty()) realizedByDay.count { it.value > 0 } else window.profitableDays
+    val tradingDays = if (realizedByDay.isNotEmpty()) realizedByDay.size else daily.size
+    // Realized profit (already net of relist fees, see CostBasisService.compute) relative to the
+    // capital the sold units cost — not net cash flow / income, which mostly measures restocking.
+    val realizedCost = fifo?.realizedSells?.sumOf { it.costBasis * it.qty } ?: 0.0
+    val margin = if (fifo != null && realizedCost > 0) fifo.totalRealizedPnl / realizedCost * 100 else null
+    val wToday = stringResource(Res.string.w_today)
+    val wAll = stringResource(Res.string.w_all)
 
-    val filtered =
-        remember(journal, searchQuery) {
-            val q = searchQuery.trim()
-            if (q.isEmpty()) {
-                journal
-            } else {
-                journal.filter { entry ->
-                    listOfNotNull(
-                        formatRefType(entry["ref_type"]?.toString() ?: ""),
-                        entry["reason"]?.toString(),
-                    ).any { it.contains(q, ignoreCase = true) }
-                }
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (fifoWindow != null) {
+            Strip {
+                PnlKpi(Res.string.kpi_realized_w, wToday, fifoWindow.todayPnl, Res.string.tip_realized_pnl)
+                PnlKpi(Res.string.kpi_realized_w, "7d", fifoWindow.pnl7d, Res.string.tip_realized_pnl)
+                PnlKpi(Res.string.kpi_realized_w, "30d", fifoWindow.pnl30d, Res.string.tip_realized_pnl)
+                PnlKpi(Res.string.kpi_realized_w, wAll, fifoWindow.pnlAll, Res.string.tip_realized_pnl)
+                Kpi(
+                    stringResource(Res.string.avg_margin_realized),
+                    margin?.let { String.format(Locale.US, "%.1f%%", it) } ?: "—",
+                    null,
+                    null,
+                    null,
+                    valueColor = pnlColor(margin),
+                )
+                Kpi(stringResource(Res.string.profitable_days), "$profitableDays / $tradingDays", null, null, null, last = true)
             }
         }
-
-    val sorted =
-        remember(filtered, sortColumn, sortDirection) {
-            val comparator: Comparator<Map<String, Any?>> =
-                when (sortColumn) {
-                    JournalSortColumn.DATE -> compareBy { it["date"]?.toString() ?: "" }
-                    JournalSortColumn.TYPE -> compareBy { formatRefType(it["ref_type"]?.toString() ?: "") }
-                    JournalSortColumn.DESCRIPTION -> compareBy { it["reason"]?.toString()?.trim() ?: "" }
-                    JournalSortColumn.AMOUNT -> compareBy { (it["amount"] as? Number)?.toDouble() ?: 0.0 }
-                    JournalSortColumn.TAX -> compareBy { (it["tax_amount"] as? Number)?.toDouble() ?: 0.0 }
-                    JournalSortColumn.BALANCE -> compareBy { (it["balance"] as? Number)?.toDouble() ?: 0.0 }
-                }
-            filtered.sortedWith(if (sortDirection == SortDirection.DESC) comparator.reversed() else comparator)
+        Strip {
+            PnlKpi(Res.string.kpi_cash_w, wToday, window.todayNet, Res.string.tip_cash_flow)
+            PnlKpi(Res.string.kpi_cash_w, "7d", window.net7d, Res.string.tip_cash_flow)
+            PnlKpi(Res.string.kpi_cash_w, "30d", window.net30d, Res.string.tip_cash_flow)
+            PnlKpi(Res.string.kpi_cash_w, wAll, window.netAll, Res.string.tip_cash_flow)
+            Kpi(stringResource(Res.string.income), formatIsk(window.incomeAll), null, null, BUY_DOT)
+            Kpi(stringResource(Res.string.expenses), formatIsk(window.expensesAll), null, null, SELL_DOT, last = true)
         }
-
-    LaunchedEffect(journal, searchQuery) { page = 0 }
-
-    val pageSize = 100
-    val totalPages = maxOf(1, (sorted.size + pageSize - 1) / pageSize)
-    val clampedPage = page.coerceIn(0, totalPages - 1)
-    val pageItems = sorted.drop(clampedPage * pageSize).take(pageSize)
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        SearchField(
-            query = searchQuery,
-            onQueryChange = { searchQuery = it },
-            placeholder = stringResource(Res.string.search_journal),
-            modifier = Modifier.padding(bottom = 8.dp),
-        )
-
-        // Tax summary
-        if (totalTax != 0.0 || totalBroker != 0.0) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f),
-                shape = MaterialTheme.shapes.small,
+        Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Realized profit per sell date, mirroring the Dashboard chart — the cash-flow series
+            // spikes hugely negative on every restock day, which reads as a loss.
+            val days = remember(today) { (29 downTo 0).map { today.minusDays(it.toLong()).toString() } }
+            Panel(
+                stringResource(if (fifo != null) Res.string.daily_realized_pnl_30d else Res.string.daily_cash_flow),
+                Modifier.weight(0.6f).fillMaxHeight(),
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(24.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        Icons.Default.Info,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onErrorContainer,
-                    )
-                    Text(
-                        stringResource(Res.string.taxes_paid),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                    )
-                    if (totalTax != 0.0) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                stringResource(Res.string.sales_tax),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer,
-                            )
-                            Text(
-                                formatIsk(totalTax),
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Bold,
-                                color = negativeColor,
-                            )
-                        }
-                    }
-                    if (totalBroker != 0.0) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                stringResource(Res.string.brokers_fee),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer,
-                            )
-                            Text(
-                                formatIsk(totalBroker),
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Bold,
-                                color = negativeColor,
-                            )
-                        }
-                    }
-                    if (totalTax != 0.0 && totalBroker != 0.0) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                stringResource(Res.string.col_total),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer,
-                            )
-                            Text(
-                                formatIsk(totalTax + totalBroker),
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Bold,
-                                color = negativeColor,
-                            )
-                        }
+                if (fifo != null) {
+                    PnlBarChart(days.map { realizedByDay[it] ?: 0.0 }, days, Modifier.fillMaxSize())
+                } else {
+                    val chronological = daily.reversed()
+                    PnlBarChart(chronological.map { it.net }, chronological.map { it.date }, Modifier.fillMaxSize())
+                }
+            }
+            Panel(stringResource(Res.string.daily_breakdown), Modifier.weight(0.4f).fillMaxHeight()) {
+                Table(
+                    cols =
+                        buildList<Col<DailyWalletEntry>> {
+                            add(Col(stringResource(Res.string.col_date), 1f, end = false) { it.date })
+                            if (fifo != null) add(Col(stringResource(Res.string.col_realized), 1f) { realizedByDay[it.date] })
+                            add(Col(stringResource(Res.string.income), 1f) { it.income })
+                            add(Col(stringResource(Res.string.expenses), 1f) { it.expenses })
+                            add(Col(stringResource(Res.string.net), 1f) { it.net })
+                        },
+                    rows = daily,
+                    empty = stringResource(Res.string.no_pnl_desc),
+                    defaultSort = 0,
+                    key = { it.date },
+                ) { d ->
+                    buildList {
+                        add(Cell(d.date, AXIS_COLOR))
+                        if (fifo != null) realizedByDay[d.date].let { add(Cell(it?.let(::signed) ?: "—", pnlColor(it))) }
+                        add(Cell(formatIsk(d.income), AXIS_COLOR))
+                        add(Cell(formatIsk(d.expenses), AXIS_COLOR))
+                        add(Cell(signed(d.net), pnlColor(d.net)))
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(6.dp))
         }
-
-        if (sorted.isEmpty()) {
-            EmptyState(
-                icon = Icons.AutoMirrored.Filled.List,
-                title = stringResource(Res.string.no_matches),
-                description = stringResource(Res.string.no_journal_match),
-            )
-            return
-        }
-
-        // Table header
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            SortHeaderCell(
-                stringResource(Res.string.col_date),
-                Modifier.weight(1.8f),
-                sortColumn == JournalSortColumn.DATE,
-                sortDirection,
-            ) { toggleSort(JournalSortColumn.DATE) }
-            SortHeaderCell(
-                stringResource(Res.string.col_type),
-                Modifier.weight(2.5f),
-                sortColumn == JournalSortColumn.TYPE,
-                sortDirection,
-                tooltip = stringResource(Res.string.tip_w_type),
-            ) { toggleSort(JournalSortColumn.TYPE) }
-            SortHeaderCell(
-                stringResource(Res.string.col_description),
-                Modifier.weight(3f),
-                sortColumn == JournalSortColumn.DESCRIPTION,
-                sortDirection,
-            ) { toggleSort(JournalSortColumn.DESCRIPTION) }
-            SortHeaderCell(
-                stringResource(Res.string.col_amount),
-                Modifier.weight(2f),
-                sortColumn == JournalSortColumn.AMOUNT,
-                sortDirection,
-                rightAlign = true,
-                tooltip = stringResource(Res.string.tip_w_amount),
-            ) { toggleSort(JournalSortColumn.AMOUNT) }
-            SortHeaderCell(
-                stringResource(Res.string.col_tax),
-                Modifier.weight(1.5f),
-                sortColumn == JournalSortColumn.TAX,
-                sortDirection,
-                rightAlign = true,
-                tooltip = stringResource(Res.string.tip_w_tax),
-            ) { toggleSort(JournalSortColumn.TAX) }
-            SortHeaderCell(
-                stringResource(Res.string.balance),
-                Modifier.weight(2f),
-                sortColumn == JournalSortColumn.BALANCE,
-                sortDirection,
-                rightAlign = true,
-                tooltip = stringResource(Res.string.tip_w_balance),
-            ) { toggleSort(JournalSortColumn.BALANCE) }
-        }
-        HorizontalDivider()
-
-        LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
-            items(pageItems) { entry ->
-                val amount = (entry["amount"] as? Number)?.toDouble() ?: 0.0
-                val taxAmount = (entry["tax_amount"] as? Number)?.toDouble()
-                val balance = (entry["balance"] as? Number)?.toDouble() ?: 0.0
-                val refType = entry["ref_type"]?.toString() ?: ""
-                val reason = entry["reason"]?.toString()?.trim() ?: ""
-                val dateStr = entry["date"]?.toString()?.take(16)?.replace("T", " ") ?: ""
-                val amountColor = if (amount >= 0) positiveColor else negativeColor
-
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        dateStr,
-                        modifier = Modifier.weight(1.8f),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        formatRefType(refType),
-                        modifier = Modifier.weight(2.5f),
-                        style = MaterialTheme.typography.bodySmall,
-                        overflow = TextOverflow.Ellipsis,
-                        maxLines = 1,
-                    )
-                    Text(
-                        reason,
-                        modifier = Modifier.weight(3f).padding(start = 4.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        overflow = TextOverflow.Ellipsis,
-                        maxLines = 1,
-                    )
-                    Text(
-                        "${if (amount >= 0) "+" else ""}${formatIsk(amount)}",
-                        modifier = Modifier.weight(2f),
-                        textAlign = TextAlign.End,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = amountColor,
-                    )
-                    Text(
-                        if (taxAmount != null && taxAmount != 0.0) formatIsk(taxAmount) else "—",
-                        modifier = Modifier.weight(1.5f),
-                        textAlign = TextAlign.End,
-                        style = MaterialTheme.typography.bodySmall,
-                        color =
-                            if (taxAmount != null &&
-                                taxAmount != 0.0
-                            ) {
-                                negativeColor
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                    )
-                    Text(
-                        formatIsk(balance),
-                        modifier = Modifier.weight(2f),
-                        textAlign = TextAlign.End,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                HorizontalDivider(thickness = 0.5.dp)
-            }
-        }
-        PaginationBar(page = clampedPage, totalPages = totalPages, totalCount = sorted.size, onPageChange = { page = it })
     }
 }
+
+@Composable
+private fun Strip(content: @Composable RowScope.() -> Unit) {
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).border(1.dp, outline(), MaterialTheme.shapes.extraSmall), content = content)
+}
+
+@Composable
+private fun RowScope.PnlKpi(
+    label: StringResource,
+    window: String,
+    v: Double,
+    tip: StringResource,
+) = Kpi(stringResource(label, window), signed(v), null, null, null, tip, valueColor = pnlColor(v))
 
 private fun formatRefType(refType: String): String =
     when (refType) {
@@ -913,230 +659,6 @@ private fun formatRefType(refType: String): String =
     }
 
 private fun pnlSignedText(value: Double): String = "${if (value >= 0) "+" else "-"}${formatIsk(abs(value))}"
-
-@Composable
-private fun pnlColor(value: Double): Color =
-    when {
-        value > 0 -> positiveColor
-        value < 0 -> negativeColor
-        else -> MaterialTheme.colorScheme.onSurface
-    }
-
-@Composable
-private fun PnlChart(
-    dailyBreakdown: List<DailyWalletEntry>,
-    fifoResult: CostBasisService.FifoResult?,
-) {
-    if (dailyBreakdown.isEmpty()) {
-        EmptyState(
-            icon = Icons.AutoMirrored.Filled.ShowChart,
-            title = stringResource(Res.string.no_pnl),
-            description = stringResource(Res.string.no_pnl_desc),
-        )
-        return
-    }
-
-    // dailyBreakdown arrives newest-first; chronological order is needed for the chart.
-    val chronological = dailyBreakdown.reversed()
-
-    val window = dailyBreakdown.toPnlWindow()
-    val todayNet = window.todayNet
-    val net7 = window.net7d
-    val net30 = window.net30d
-    val netAll = window.netAll
-    val incomeAll = window.incomeAll
-    val expensesAll = window.expensesAll
-    // Days that closed with positive realized FIFO profit, out of the days that had any realized
-    // sales at all — a heavy restock day is not a "losing day", and a day without sales is
-    // neither won nor lost. Falls back to the cash-flow count when there's no FIFO data yet.
-    val dailyRealizedByDay =
-        fifoResult
-            ?.realizedSells
-            ?.groupBy { it.date.substring(0, 10) }
-            ?.mapValues { (_, sells) -> sells.sumOf { it.profit } }
-            .orEmpty()
-    val profitableDays = if (dailyRealizedByDay.isNotEmpty()) dailyRealizedByDay.count { it.value > 0 } else window.profitableDays
-    val tradingDays = if (dailyRealizedByDay.isNotEmpty()) dailyRealizedByDay.size else chronological.size
-    // Average realized margin over completed FIFO trades — profit (already net of relist fees,
-    // see CostBasisService.compute) relative to the capital those sold units cost. The old figure
-    // (net cash flow / income) mostly measured how much restocking happened lately, not how
-    // profitable the trading was.
-    val realizedCost = fifoResult?.realizedSells?.sumOf { it.costBasis * it.qty } ?: 0.0
-    val margin =
-        if (fifoResult != null && realizedCost > 0) {
-            fifoResult.totalRealizedPnl / realizedCost * 100
-        } else {
-            null
-        }
-    val fifoWindow = fifoResult?.realizedPnlWindow()
-
-    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        Tip(stringResource(Res.string.tip_cash_flow)) {
-            Text(
-                stringResource(Res.string.cash_flow),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-            )
-        }
-        Spacer(modifier = Modifier.height(4.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            PnlStatCard(stringResource(Res.string.pnl_today), pnlSignedText(todayNet), pnlColor(todayNet), Modifier.weight(1f))
-            PnlStatCard(stringResource(Res.string.pnl_7_days), pnlSignedText(net7), pnlColor(net7), Modifier.weight(1f))
-            PnlStatCard(stringResource(Res.string.pnl_30_days), pnlSignedText(net30), pnlColor(net30), Modifier.weight(1f))
-            PnlStatCard(
-                stringResource(Res.string.pnl_days_total, chronological.size),
-                pnlSignedText(netAll),
-                pnlColor(netAll),
-                Modifier.weight(1f),
-            )
-        }
-
-        if (fifoWindow != null) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Tip(stringResource(Res.string.tip_realized_pnl)) {
-                Text(
-                    stringResource(Res.string.realized_pnl_fifo),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                )
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                PnlStatCard(
-                    stringResource(Res.string.pnl_today),
-                    pnlSignedText(fifoWindow.todayPnl),
-                    pnlColor(fifoWindow.todayPnl),
-                    Modifier.weight(1f),
-                )
-                PnlStatCard(
-                    stringResource(Res.string.pnl_7_days),
-                    pnlSignedText(fifoWindow.pnl7d),
-                    pnlColor(fifoWindow.pnl7d),
-                    Modifier.weight(1f),
-                )
-                PnlStatCard(
-                    stringResource(Res.string.pnl_30_days),
-                    pnlSignedText(fifoWindow.pnl30d),
-                    pnlColor(fifoWindow.pnl30d),
-                    Modifier.weight(1f),
-                )
-                PnlStatCard(
-                    stringResource(Res.string.all_time),
-                    pnlSignedText(fifoWindow.pnlAll),
-                    pnlColor(fifoWindow.pnlAll),
-                    Modifier.weight(1f),
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            PnlStatCard(stringResource(Res.string.income), "+${formatIsk(incomeAll)}", positiveColor, Modifier.weight(1f))
-            PnlStatCard(stringResource(Res.string.expenses), "-${formatIsk(expensesAll)}", negativeColor, Modifier.weight(1f))
-            PnlStatCard(
-                stringResource(Res.string.avg_margin_realized),
-                margin?.let { "%.1f%%".format(it) } ?: "—",
-                pnlColor(margin ?: 0.0),
-                Modifier.weight(1f),
-            )
-            PnlStatCard(
-                stringResource(Res.string.profitable_days),
-                "$profitableDays / $tradingDays",
-                MaterialTheme.colorScheme.onSurface,
-                Modifier.weight(1f),
-            )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Realized profit per sell date, mirroring the Dashboard chart — the cash-flow series
-        // this used to plot spikes hugely negative on every restock day, which reads as a loss.
-        if (fifoResult != null) {
-            ContentCard(stringResource(Res.string.daily_realized_pnl_30d)) {
-                val today = java.time.LocalDate.now()
-                val days = (29 downTo 0).map { today.minusDays(it.toLong()).toString() }
-                PnlBarChart(
-                    data = days.map { dailyRealizedByDay[it] ?: 0.0 },
-                    dates = days,
-                    modifier = Modifier.fillMaxWidth().height(220.dp),
-                )
-            }
-        } else {
-            ContentCard(stringResource(Res.string.daily_cash_flow)) {
-                PnlBarChart(
-                    data = chronological.map { it.net },
-                    dates = chronological.map { it.date },
-                    modifier = Modifier.fillMaxWidth().height(220.dp),
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        ContentCard(stringResource(Res.string.daily_breakdown)) {
-            PnlTable(chronological.reversed())
-        }
-    }
-}
-
-@Composable
-private fun PnlStatCard(
-    label: String,
-    valueText: String,
-    color: Color,
-    modifier: Modifier = Modifier,
-) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.08f)),
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp).fillMaxWidth()) {
-            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-            Text(valueText, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = color)
-        }
-    }
-}
-
-@Composable
-private fun PnlTable(entries: List<DailyWalletEntry>) {
-    Column {
-        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            TxHeader(stringResource(Res.string.col_date), Modifier.weight(2f))
-            TxHeader(stringResource(Res.string.income), Modifier.weight(1.5f), rightAlign = true)
-            TxHeader(stringResource(Res.string.expenses), Modifier.weight(1.5f), rightAlign = true)
-            TxHeader(stringResource(Res.string.net), Modifier.weight(1.5f), rightAlign = true)
-        }
-        HorizontalDivider()
-        entries.forEach { entry ->
-            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(entry.date, modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodySmall)
-                Text(
-                    "+${formatIsk(entry.income)}",
-                    modifier = Modifier.weight(1.5f),
-                    textAlign = TextAlign.End,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = positiveColor,
-                )
-                Text(
-                    "-${formatIsk(entry.expenses)}",
-                    modifier = Modifier.weight(1.5f),
-                    textAlign = TextAlign.End,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = negativeColor,
-                )
-                Text(
-                    pnlSignedText(entry.net),
-                    modifier = Modifier.weight(1.5f),
-                    textAlign = TextAlign.End,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = pnlColor(entry.net),
-                )
-            }
-            HorizontalDivider(thickness = 0.5.dp)
-        }
-    }
-}
 
 @Composable
 private fun PnlBarChart(
@@ -1268,7 +790,6 @@ private suspend fun loadWalletData(
     corporationId: Int?,
     actingCharId: Int,
     balanceCallback: (Double) -> Unit,
-    dailyCallback: (List<DailyWalletEntry>) -> Unit,
     pnlCallback: (List<DailyWalletEntry>) -> Unit,
     fifoCallback: (CostBasisService.FifoResult) -> Unit,
     transactionsCallback: (List<Map<String, Any?>>) -> Unit,
@@ -1281,7 +802,6 @@ private suspend fun loadWalletData(
         // Load from DB, resolve names (local + ESI fallback for old records)
         val summary = WalletDao.getWalletSummary(characterId = characterId, corporationId = corporationId)
         balanceCallback(summary.balance)
-        dailyCallback(summary.dailyBreakdown)
         pnlCallback(WalletDao.getTradingPnlBreakdown(characterId = characterId, corporationId = corporationId))
         transactionsCallback(
             resolveAllNames(WalletDao.getTransactions(characterId = characterId, corporationId = corporationId, limit = -1)),
