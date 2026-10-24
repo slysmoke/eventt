@@ -15,8 +15,10 @@ dependencies {
     implementation(project(":core:marketlogs"))
     implementation(project(":features:orders")) // CostBasisService, for the OBS overlay's session P&L
     implementation(project(":ui:theme"))
+    implementation(project(":ui:common")) // terminal Panel/KV/Segment, number formatting
     implementation(compose.desktop.currentOs)
     implementation(libs.compose.material3)
     implementation(libs.compose.components.resources)
     implementation(libs.kotlinx.serialization.json)
+    testImplementation(libs.compose.ui.test) // headless render of the Trade Calc body
 }
