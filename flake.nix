@@ -100,6 +100,7 @@
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
             jdk21
+            jetbrains.jdk-no-jcef-21 # JBR for Compose Hot Reload (`./gradlew hotrun`)
             gradle_9
             kotlin
             git
@@ -117,6 +118,8 @@
             echo "Kotlin: $(kotlin -version 2>&1)"
             echo "Gradle: $(gradle --version 2>&1 | head -n 3)"
 
+            # Gradle finds the JBR toolchain via org.gradle.java.installations.fromEnv
+            export JBR_21=${pkgs.jetbrains.jdk-no-jcef-21}/lib/openjdk
             export LD_LIBRARY_PATH=${pkgs.libGL}/lib:${pkgs.libGLU}/lib:${pkgs.libxkbcommon}/lib:${pkgs.libxi}/lib:${pkgs.libx11}/lib:$LD_LIBRARY_PATH
           '';
         };

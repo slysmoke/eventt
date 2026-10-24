@@ -22,6 +22,9 @@ val generateAppVersion =
         outputs.dir(outputDir)
         inputs.property("appVersion", appVersion)
         inputs.property("githubRepo", githubRepo)
+        // Locals, not the script vals: the configuration cache can't serialize script references.
+        val appVersion = appVersion
+        val githubRepo = githubRepo
         doLast {
             val dir = outputDir.get().asFile
             dir.mkdirs()

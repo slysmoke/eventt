@@ -34,9 +34,12 @@ subprojects {
         version.set("1.8.0")
         // Several modules add generated sources (AppVersion.kt, Compose resource accessors,
         // etc.) under build/ to their Kotlin source sets — those aren't ours to style-check.
+        // Plain locals: the configuration cache can't serialize lambdas capturing project/script.
+        val buildDir = layout.buildDirectory.get().asFile.path
+        val vendoredIcons = VENDORED_ICONS
         filter {
-            exclude { entry -> entry.file.path.contains("${layout.buildDirectory.get()}") }
-            exclude { entry -> entry.file.path.contains(VENDORED_ICONS) }
+            exclude { entry -> entry.file.path.contains(buildDir) }
+            exclude { entry -> entry.file.path.contains(vendoredIcons) }
         }
     }
 
@@ -46,7 +49,8 @@ subprojects {
         config.setFrom(files("$rootDir/detekt.yml"))
     }
     tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
-        exclude { it.file.path.contains(VENDORED_ICONS) }
+        val vendoredIcons = VENDORED_ICONS
+        exclude { it.file.path.contains(vendoredIcons) }
     }
 
     tasks.withType<Test> {
@@ -73,3 +77,6 @@ subprojects {
         }
     }
 }
+
+// `./gradlew hotrun` — run the app with Compose Hot Reload (edits apply without a restart).
+tasks.register("hotrun") { dependsOn(":app:hotRun") }
