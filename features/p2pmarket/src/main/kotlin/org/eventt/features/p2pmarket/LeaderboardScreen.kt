@@ -136,7 +136,7 @@ private fun SummaryStrip(
 ) {
     val sum = summary(ranked, window)
     val me = ranked.find { it.mine }
-    val leader = ranked.firstOrNull { !it.stale }
+    val leader = ranked.firstOrNull()
     Row(
         Modifier
             .fillMaxWidth()
@@ -226,7 +226,11 @@ private fun RankingTable(
                 Col(stringResource(Res.string.lb_col_roi), 0.8f) { window.roi(it.entry.stats) },
                 Col(stringResource(Res.string.lb_col_win), 0.6f) { it.entry.stats.winRate30dPct },
                 Col(stringResource(Res.string.lb_col_margin), 0.7f) { it.entry.stats.margin30dPct },
-                Col(stringResource(Res.string.lb_col_pf), 0.6f) { it.entry.stats.profitFactor30d },
+                Col(
+                    stringResource(Res.string.lb_col_pf),
+                    0.6f,
+                    tip = stringResource(Res.string.lb_pf_tip),
+                ) { it.entry.stats.profitFactor30d },
                 Col(stringResource(Res.string.lb_col_turnover), 0.9f) { it.entry.stats.turnover30d },
                 Col(stringResource(Res.string.lb_col_net_worth), 0.9f) { it.entry.stats.netWorth },
                 Col(stringResource(Res.string.lb_col_30d), 1.1f),
@@ -234,7 +238,7 @@ private fun RankingTable(
             ),
         rows = ranked,
         empty = stringResource(Res.string.no_one_opted),
-        // By place, best first — out-of-date entries stay at the bottom.
+        // By place, best first.
         defaultSort = 0,
         defaultDesc = false,
         key = { it.entry.pubkey },

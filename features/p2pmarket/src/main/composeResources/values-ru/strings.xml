@@ -162,6 +162,7 @@
     <string name="lb_col_win">Win</string>
     <string name="lb_col_margin">Маржа</string>
     <string name="lb_col_pf">PF</string>
+    <string name="lb_pf_tip">Профит-фактор за 30 дней: сумма прибыли прибыльных продаж ÷ сумма убытка убыточных. Больше 1 — зарабатывает больше, чем теряет; 2 — на каждый 1 ISK убытка приходится 2 ISK прибыли. Пусто, если убыточных продаж не было.</string>
     <string name="lb_col_turnover">Оборот</string>
     <string name="lb_col_net_worth">Капитал</string>
     <string name="lb_col_30d">30 дней</string>

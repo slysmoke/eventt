@@ -15,14 +15,14 @@ class LeaderboardDataTest {
     ) = LeaderboardEntry(key, key, null, LeaderboardStats(0.0, pnl30, 0.0), now - ageSec)
 
     @Test
-    fun `stale entries rank below current ones, and change counts places gained`() {
+    fun `ranks by pnl regardless of staleness, and change counts places gained`() {
         val entries = listOf(entry("a", 5.0), entry("b", 9.0, ageSec = 2 * STALE_SECONDS), entry("c", 7.0))
 
         val r = rank(entries, LbWindow.MONTH, previous = mapOf("a" to 1, "b" to 1), mine = setOf("a"), nowSec = now)
 
-        r.map { it.entry.pubkey } shouldBe listOf("c", "a", "b")
-        r.map { it.change } shouldBe listOf(null, -1, -2)
-        r.map { it.stale } shouldBe listOf(false, false, true)
+        r.map { it.entry.pubkey } shouldBe listOf("b", "c", "a")
+        r.map { it.change } shouldBe listOf(0, null, -2)
+        r.map { it.stale } shouldBe listOf(true, false, false)
         r.single { it.mine }.entry.pubkey shouldBe "a"
     }
 

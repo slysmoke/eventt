@@ -29,7 +29,7 @@ internal data class Ranked(
     val mine: Boolean,
 )
 
-/** Places by the window's P&L; out-of-date entries rank below every current one. */
+/** Places by the window's P&L; out-of-date entries are only flagged, not demoted. */
 internal fun rank(
     entries: Collection<LeaderboardEntry>,
     window: LbWindow,
@@ -38,7 +38,7 @@ internal fun rank(
     nowSec: Long,
 ): List<Ranked> =
     entries
-        .sortedWith(compareBy<LeaderboardEntry> { nowSec - it.updatedAt > STALE_SECONDS }.thenByDescending { window.pnl(it.stats) })
+        .sortedByDescending { window.pnl(it.stats) }
         .mapIndexed { i, e ->
             Ranked(e, i + 1, previous[e.pubkey]?.let { it - (i + 1) }, nowSec - e.updatedAt > STALE_SECONDS, e.pubkey in mine)
         }

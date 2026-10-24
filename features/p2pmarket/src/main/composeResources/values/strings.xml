@@ -162,6 +162,7 @@
     <string name="lb_col_win">Win</string>
     <string name="lb_col_margin">Margin</string>
     <string name="lb_col_pf">PF</string>
+    <string name="lb_pf_tip">Profit factor over 30 days: total profit of winning sales ÷ total loss of losing ones. Above 1 = earns more than loses; 2 = every 1 ISK lost is covered by 2 ISK earned. Blank when there were no losing sales.</string>
     <string name="lb_col_turnover">Turnover</string>
     <string name="lb_col_net_worth">Net worth</string>
     <string name="lb_col_30d">30 days</string>

@@ -28,7 +28,7 @@ class LeaderboardScreenTest {
         DatabaseManager.initialize(":memory:")
         val now = System.currentTimeMillis() / 1000
         val entries =
-            listOf("Sasha Winston" to 5.9e9, "Li Slysmoke" to 4.1e9, "Ash Knight" to -0.6e9, "Old Timer" to 9e9).mapIndexed {
+            listOf("Sasha Winston" to 5.9e9, "Li Slysmoke" to 4.1e9, "Ash Knight" to -0.6e9, "Old Timer" to 0.9e9).mapIndexed {
                 i,
                 (name, pnl),
                 ->
@@ -48,7 +48,7 @@ class LeaderboardScreenTest {
                         daily30d = (0 until 30).map { d -> pnl / 30 * sin((d + i) / 3.0) },
                         netWorth = if (i == 0) 9.27e11 else null,
                     )
-                // The last one hasn't republished for two days: it ranks below and shows as stale.
+                // The last one hasn't republished for two days: it shows as stale.
                 val at = if (i == 3) now - 2 * 86400 else now - 3600L * (i + 1)
                 LeaderboardEntry("pk$i", name, 2113351129 + i, stats, at)
             }
