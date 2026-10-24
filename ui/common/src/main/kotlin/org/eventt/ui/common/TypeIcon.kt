@@ -95,3 +95,31 @@ fun CharacterPortrait(
         ) {}
     }
 }
+
+/** A corporation's logo, same as [CharacterPortrait]. */
+@Composable
+fun CorporationLogo(
+    corporationId: Int?,
+    size: Dp = 24.dp,
+    modifier: Modifier = Modifier,
+) {
+    val px = if (size <= 32.dp) 32 else 64
+    val bitmap by produceState<ImageBitmap?>(initialValue = null, corporationId, px) {
+        value =
+            corporationId?.let { id ->
+                withContext(
+                    Dispatchers.IO,
+                ) { runCatching { EveImageServer.getCorporationLogo(id, px)?.toComposeImageBitmap() }.getOrNull() }
+            }
+    }
+    val bmp = bitmap
+    if (bmp != null) {
+        Image(bitmap = bmp, contentDescription = null, modifier = modifier.size(size).clip(MaterialTheme.shapes.extraSmall))
+    } else {
+        Surface(
+            modifier = modifier.size(size),
+            shape = MaterialTheme.shapes.extraSmall,
+            color = MaterialTheme.colorScheme.surfaceVariant,
+        ) {}
+    }
+}

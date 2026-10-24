@@ -1,5 +1,6 @@
 package org.eventt.features.characters
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -10,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -20,55 +22,42 @@ import org.eventt.core.database.AppState
 import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.CorporationDao
 import org.eventt.core.esi.EsiClient
-import org.eventt.ui.common.ConfirmDialog
-import org.eventt.ui.common.EmptyState
-import org.eventt.ui.common.LoadingOverlay
+import org.eventt.core.model.CharacterModel
+import org.eventt.ui.common.*
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
+import org.eventt.ui.theme.warningColor
 import org.jetbrains.compose.resources.stringResource
+import java.util.Locale
 
 @Composable
 fun CharacterManagementScreen() {
     val scope = rememberCoroutineScope()
-    var characters by remember { mutableStateOf<List<org.eventt.core.model.CharacterModel>>(emptyList()) }
-    var corporations by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
-    var trackedCorpIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var rows by remember { mutableStateOf<Pair<List<CharRow>, List<CorpRow>>?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var showAuthDialog by remember { mutableStateOf(false) }
-    var characterToRemove by remember { mutableStateOf<org.eventt.core.model.CharacterModel?>(null) }
+    var characterToRemove by remember { mutableStateOf<CharacterModel?>(null) }
     var authError by remember { mutableStateOf<String?>(null) }
 
     fun reload() {
-        scope.launch {
-            loadCharacters(
-                characters = { characters = it },
-                corps = { corporations = it },
-                tracked = { trackedCorpIds = it },
-            )
-        }
+        scope.launch { rows = loadCharacters() }
     }
 
     LaunchedEffect(Unit) { reload() }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            // Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(stringResource(Res.string.chars_corps_title), style = MaterialTheme.typography.headlineMedium)
-                Button(onClick = { showAuthDialog = true }) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(stringResource(Res.string.add_character))
-                }
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    stringResource(Res.string.chars_corps_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.weight(1f))
+                Segment("+ " + stringResource(Res.string.add_character), true) { showAuthDialog = true }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (characters.isEmpty() && corporations.isEmpty()) {
+            val (chars, corps) = rows ?: (emptyList<CharRow>() to emptyList())
+            if (rows != null && chars.isEmpty() && corps.isEmpty()) {
                 EmptyState(
                     icon = Icons.Default.Person,
                     title = stringResource(Res.string.no_characters_added),
@@ -76,52 +65,27 @@ fun CharacterManagementScreen() {
                     modifier = Modifier.fillMaxWidth().weight(1f),
                 )
             } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(characters) { char ->
-                        CharacterCard(
-                            character = char,
-                            onRemove = { characterToRemove = char },
-                            onRefresh = {
-                                scope.launch {
-                                    refreshCharacter(char.id)
-                                    reload()
-                                }
-                            },
-                        )
-                    }
-
-                    if (corporations.isNotEmpty()) {
-                        item {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(stringResource(Res.string.corporations), style = MaterialTheme.typography.titleLarge)
-                            Text(
-                                stringResource(Res.string.corporations_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
+                CharactersBody(
+                    chars,
+                    corps,
+                    Modifier.weight(1f),
+                    onRefresh = { c ->
+                        scope.launch {
+                            withContext(Dispatchers.IO) { refreshCharacter(c.id) }
+                            reload()
                         }
-                        items(corporations) { corp ->
-                            val corpId = corp["id"] as? Int
-                            CorporationCard(
-                                data = corp,
-                                isTracked = corpId in trackedCorpIds,
-                                onToggleTrack = {
-                                    corpId ?: return@CorporationCard
-                                    scope.launch(Dispatchers.IO) {
-                                        if (corpId in trackedCorpIds) CorporationDao.untrack(corpId) else CorporationDao.track(corpId)
-                                        withContext(Dispatchers.Main) {
-                                            reload()
-                                            AppState.refreshCharacters()
-                                        }
-                                    }
-                                },
-                            )
+                    },
+                    onRemove = { characterToRemove = it },
+                    onToggleTrack = { corp ->
+                        scope.launch(Dispatchers.IO) {
+                            if (corp.tracked) CorporationDao.untrack(corp.id) else CorporationDao.track(corp.id)
+                            withContext(Dispatchers.Main) {
+                                reload()
+                                AppState.refreshCharacters()
+                            }
                         }
-                    }
-                }
+                    },
+                )
             }
         }
 
@@ -199,168 +163,189 @@ fun CharacterManagementScreen() {
     }
 }
 
+/** KPI strip plus the character and corporation tables — no ESI here. */
 @Composable
-private fun CharacterCard(
-    character: org.eventt.core.model.CharacterModel,
-    onRemove: () -> Unit,
-    onRefresh: () -> Unit,
+internal fun CharactersBody(
+    chars: List<CharRow>,
+    corps: List<CorpRow>,
+    modifier: Modifier = Modifier,
+    onRefresh: (CharacterModel) -> Unit = {},
+    onRemove: (CharacterModel) -> Unit = {},
+    onToggleTrack: (CorpRow) -> Unit = {},
 ) {
-    val now = System.currentTimeMillis()
-    val tokenExpired = character.tokenExpiry < now
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Avatar placeholder
-            Surface(
-                modifier = Modifier.size(48.dp),
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.primaryContainer,
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        Icons.Default.Person,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(28.dp),
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(character.name, style = MaterialTheme.typography.titleMedium)
-                Spacer(modifier = Modifier.height(2.dp))
-
-                // Token status
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = if (tokenExpired) Icons.Default.Warning else Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = if (tokenExpired) negativeColor else positiveColor,
-                        modifier = Modifier.size(14.dp),
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = if (tokenExpired) stringResource(Res.string.token_expired) else stringResource(Res.string.token_valid),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (tokenExpired) negativeColor else positiveColor,
-                    )
-                }
-
-                // Corporation
-                character.corporationName?.let {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = stringResource(Res.string.corporation_label, it),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    )
-                }
-            }
-
-            // Actions
-            IconButton(onClick = onRefresh) {
-                Icon(Icons.Default.Refresh, contentDescription = stringResource(Res.string.refresh))
-            }
-            IconButton(onClick = onRemove) {
-                Icon(Icons.Default.Delete, contentDescription = stringResource(Res.string.remove), tint = negativeColor)
-            }
-        }
-    }
-}
-
-@Composable
-private fun CorporationCard(
-    data: Map<String, Any?>,
-    isTracked: Boolean,
-    onToggleTrack: () -> Unit,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp).fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Surface(
-                modifier = Modifier.size(36.dp),
-                shape = MaterialTheme.shapes.small,
-                color = MaterialTheme.colorScheme.secondaryContainer,
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        Icons.Default.Business,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(data["name"]?.toString() ?: stringResource(Res.string.unknown), style = MaterialTheme.typography.titleSmall)
-                Text(
-                    text = data["ticker"]?.toString() ?: "",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                )
-            }
-
-            Text(
-                text = "ID: ${data["id"]}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        val expired = chars.count { !it.tokenValid }
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).border(1.dp, outline(), MaterialTheme.shapes.extraSmall)) {
+            Kpi(stringResource(Res.string.kpi_characters), chars.size.toString(), null, null, null)
+            Kpi(
+                stringResource(Res.string.kpi_tokens),
+                "${chars.size - expired} / ${chars.size}",
+                if (expired > 0) stringResource(Res.string.kpi_expired_n, expired.toString()) else null,
+                negativeColor,
+                null,
+                Res.string.tip_tokens,
+                valueColor = negativeColor.takeIf { expired > 0 },
             )
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            if (isTracked) {
-                OutlinedButton(onClick = onToggleTrack) {
-                    Icon(Icons.Default.VisibilityOff, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(stringResource(Res.string.untrack))
-                }
-            } else {
-                Button(onClick = onToggleTrack) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(stringResource(Res.string.track))
-                }
-            }
+            Kpi(
+                stringResource(Res.string.corporations),
+                "${corps.count { it.tracked }} / ${corps.size}",
+                stringResource(Res.string.kpi_tracked),
+                null,
+                null,
+            )
+            Kpi(
+                stringResource(Res.string.kpi_orders),
+                (chars.sumOf { it.sellOrders + it.buyOrders } + corps.sumOf { it.orders }).toString(),
+                stringResource(
+                    Res.string.kpi_orders_split,
+                    chars.sumOf { it.sellOrders }.toString(),
+                    chars.sumOf { it.buyOrders }.toString(),
+                    corps.sumOf { it.orders }.toString(),
+                ),
+                null,
+                null,
+            )
+            Kpi(
+                stringResource(Res.string.kpi_trades_30d),
+                (chars.sumOf { it.trades30d } + corps.sumOf { it.trades30d }).toString(),
+                null,
+                null,
+                null,
+                last = true,
+            )
         }
+        Panel(stringResource(Res.string.characters), Modifier.fillMaxWidth().weight(1f)) { CharacterTable(chars, onRefresh, onRemove) }
+        Panel(
+            stringResource(Res.string.corporations),
+            Modifier.fillMaxWidth().weight(0.7f),
+            header = {
+                Text(
+                    stringResource(Res.string.corporations_desc),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AXIS_COLOR,
+                    maxLines = 1,
+                )
+            },
+        ) { CorpTable(corps, onToggleTrack) }
     }
 }
 
-private suspend fun loadCharacters(
-    characters: (List<org.eventt.core.model.CharacterModel>) -> Unit,
-    corps: (List<Map<String, Any?>>) -> Unit,
-    tracked: (Set<Int>) -> Unit,
+@Composable
+private fun CharacterTable(
+    rows: List<CharRow>,
+    onRefresh: (CharacterModel) -> Unit,
+    onRemove: (CharacterModel) -> Unit,
 ) {
-    try {
-        withContext(Dispatchers.IO) {
-            CharacterDao.getAll().forEach { char ->
-                runCatching { SsoAuthManager.ensureTokenFresh(char.id) }
-            }
-        }
-        characters(withContext(Dispatchers.IO) { CharacterDao.getAll() })
-        corps(withContext(Dispatchers.IO) { CorporationDao.getAll() })
-        tracked(withContext(Dispatchers.IO) { CorporationDao.getTrackedIds() })
-    } catch (e: Exception) {
-        println("Error loading characters: ${e.message}")
+    val cols =
+        listOf<Col<CharRow>>(
+            Col(stringResource(Res.string.h_character), 2.2f, end = false) { it.c.name.lowercase() },
+            Col(stringResource(Res.string.h_corporation), 1.8f, end = false) { it.c.corporationName?.lowercase() },
+            Col(stringResource(Res.string.h_token), 1f, end = false) { it.tokenValid },
+            Col(stringResource(Res.string.h_sell), 0.6f) { it.sellOrders },
+            Col(stringResource(Res.string.h_buy), 0.6f) { it.buyOrders },
+            Col(stringResource(Res.string.h_corp_orders), 0.9f) { it.corpOrders },
+            Col(stringResource(Res.string.kpi_trades_30d), 0.9f) { it.trades30d },
+            Col(stringResource(Res.string.h_last_trade), 1.2f) { it.lastTrade },
+            Col(stringResource(Res.string.h_fees), 1.1f) { it.salesTaxPct + it.brokerFeePct },
+            Col("", 0.7f),
+        )
+    Table(cols = cols, rows = rows, empty = stringResource(Res.string.no_characters_desc), defaultSort = 0, defaultDesc = false, key = {
+        it.c.id
+    }) { r ->
+        val denied = r.deniedCorp.takeIf { it.isNotEmpty() }
+        listOf(
+            Cell(r.c.name) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CharacterPortrait(r.c.id, size = 28.dp)
+                    Text(r.c.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                }
+            },
+            Cell(r.c.corporationName.orEmpty()) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    CorporationLogo(r.c.corporationId, size = 18.dp)
+                    Text(r.c.corporationName ?: "—", style = MaterialTheme.typography.bodySmall, color = AXIS_COLOR, maxLines = 1)
+                    // Corp endpoints ESI refused for this character (missing roles).
+                    denied?.let { d ->
+                        Tip(stringResource(Res.string.tip_denied, d.joinToString { it.name.lowercase() })) {
+                            Icon(Icons.Default.Lock, null, Modifier.size(12.dp), tint = warningColor)
+                        }
+                    }
+                }
+            },
+            Cell(
+                stringResource(if (r.tokenValid) Res.string.token_valid else Res.string.token_expired),
+                if (r.tokenValid) positiveColor else negativeColor,
+            ),
+            Cell(r.sellOrders.toString()),
+            Cell(r.buyOrders.toString()),
+            Cell(r.corpOrders.toString(), AXIS_COLOR),
+            Cell(r.trades30d.toString()),
+            Cell(r.lastTrade?.take(16)?.replace("T", " ") ?: "—", AXIS_COLOR),
+            Cell(String.format(Locale.US, "%.2f%% · %.2f%%", r.salesTaxPct, r.brokerFeePct), AXIS_COLOR),
+            Cell("") {
+                Row {
+                    IconButton(onClick = { onRefresh(r.c) }, modifier = Modifier.size(26.dp)) {
+                        Icon(Icons.Default.Refresh, stringResource(Res.string.refresh), Modifier.size(16.dp), tint = AXIS_COLOR)
+                    }
+                    IconButton(onClick = { onRemove(r.c) }, modifier = Modifier.size(26.dp)) {
+                        Icon(Icons.Default.Delete, stringResource(Res.string.remove), Modifier.size(16.dp), tint = negativeColor)
+                    }
+                }
+            },
+        )
     }
 }
 
-private suspend fun refreshCharacter(characterId: Int) {
+@Composable
+private fun CorpTable(
+    rows: List<CorpRow>,
+    onToggleTrack: (CorpRow) -> Unit,
+) {
+    val cols =
+        listOf<Col<CorpRow>>(
+            Col(stringResource(Res.string.h_corporation), 2.2f, end = false) { it.name.lowercase() },
+            Col(stringResource(Res.string.h_ticker), 0.7f, end = false) { it.ticker },
+            Col(stringResource(Res.string.h_members), 2f, end = false) { it.members.size },
+            Col(stringResource(Res.string.kpi_orders), 0.7f) { it.orders },
+            Col(stringResource(Res.string.kpi_trades_30d), 0.9f) { it.trades30d },
+            Col("", 1f),
+        )
+    Table(
+        cols = cols,
+        rows = rows,
+        empty = stringResource(Res.string.no_corps),
+        defaultSort = 0,
+        defaultDesc = false,
+        key = { it.id },
+    ) { r ->
+        listOf(
+            Cell(r.name) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CorporationLogo(r.id, size = 24.dp)
+                    Text(r.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                }
+            },
+            Cell("[${r.ticker}]", AXIS_COLOR),
+            Cell(r.members.joinToString(), AXIS_COLOR),
+            Cell(r.orders.toString()),
+            Cell(r.trades30d.toString()),
+            Cell("") {
+                Segment(stringResource(if (r.tracked) Res.string.tracked else Res.string.track), r.tracked) { onToggleTrack(r) }
+            },
+        )
+    }
+}
+
+private suspend fun loadCharacters(): Pair<List<CharRow>, List<CorpRow>> =
+    withContext(Dispatchers.IO) {
+        CharacterDao.getAll().forEach { char -> runCatching { SsoAuthManager.ensureTokenFresh(char.id) } }
+        runCatching { loadRows() }.getOrElse {
+            println("Error loading characters: ${it.message}")
+            emptyList<CharRow>() to emptyList()
+        }
+    }
+
+private fun refreshCharacter(characterId: Int) {
     try {
         val charInfo = EsiClient.getCharacterInfo(characterId)
         val corpId = (charInfo["corporation_id"] as? Number)?.toInt()
