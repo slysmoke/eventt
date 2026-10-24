@@ -31,6 +31,7 @@ import kotlinx.coroutines.withContext
 import org.eventt.core.database.StaticDataDao
 import org.eventt.features.overlay.StreamOverlayServer
 import org.eventt.settings.generated.resources.*
+import org.eventt.ui.common.*
 import org.jetbrains.compose.resources.stringResource
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
@@ -65,56 +66,40 @@ internal fun StreamOverlaySettingsCard() {
 
     val url = "http://127.0.0.1:${StreamOverlayServer.PORT}/?accent=$accent"
 
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(stringResource(Res.string.overlay_title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text(
-                stringResource(Res.string.overlay_desc),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+    Section(stringResource(Res.string.overlay_title), stringResource(Res.string.overlay_desc)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ActionButton(if (isRunning) stringResource(Res.string.stop) else stringResource(Res.string.start)) {
+                scope.launch(Dispatchers.IO) { if (isRunning) StreamOverlayServer.stop() else StreamOverlayServer.start() }
+            }
+            ActionButton(stringResource(Res.string.reset_session), enabled = isRunning) {
+                scope.launch(Dispatchers.IO) { StreamOverlayServer.resetSession() }
+            }
+            OutlinedTextField(
+                value = accent,
+                onValueChange = { hex -> saveAccent(hex.filter { it.isLetterOrDigit() }.take(6)) },
+                label = { Text(stringResource(Res.string.accent_hex)) },
+                modifier = Modifier.width(140.dp),
+                singleLine = true,
             )
+        }
 
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(
+                checked = autostart,
+                onCheckedChange = { checked ->
+                    autostart = checked
+                    scope.launch(Dispatchers.IO) { StreamOverlayServer.setAutostartEnabled(checked) }
+                },
+            )
+            Text(stringResource(Res.string.overlay_autostart), style = MaterialTheme.typography.bodySmall)
+        }
+
+        if (isRunning) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(onClick = {
-                    scope.launch(Dispatchers.IO) { if (isRunning) StreamOverlayServer.stop() else StreamOverlayServer.start() }
-                }) {
-                    Text(if (isRunning) stringResource(Res.string.stop) else stringResource(Res.string.start))
-                }
-                OutlinedButton(
-                    enabled = isRunning,
-                    onClick = { scope.launch(Dispatchers.IO) { StreamOverlayServer.resetSession() } },
-                ) {
-                    Text(stringResource(Res.string.reset_session))
-                }
-                OutlinedTextField(
-                    value = accent,
-                    onValueChange = { hex -> saveAccent(hex.filter { it.isLetterOrDigit() }.take(6)) },
-                    label = { Text(stringResource(Res.string.accent_hex)) },
-                    modifier = Modifier.width(140.dp),
-                    singleLine = true,
-                )
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(
-                    checked = autostart,
-                    onCheckedChange = { checked ->
-                        autostart = checked
-                        scope.launch(Dispatchers.IO) { StreamOverlayServer.setAutostartEnabled(checked) }
-                    },
-                )
-                Text(stringResource(Res.string.overlay_autostart), style = MaterialTheme.typography.bodySmall)
-            }
-
-            if (isRunning) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(url, style = MaterialTheme.typography.bodyMedium)
-                    OutlinedButton(onClick = {
-                        val sel = StringSelection(url)
-                        Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, sel)
-                    }) {
-                        Text(stringResource(Res.string.copy_url))
-                    }
+                Text(url, style = MaterialTheme.typography.bodySmall, fontFamily = Mono)
+                ActionButton(stringResource(Res.string.copy_url)) {
+                    val sel = StringSelection(url)
+                    Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, sel)
                 }
             }
         }

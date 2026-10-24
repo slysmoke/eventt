@@ -1,7 +1,11 @@
 package org.eventt.features.settings
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -9,6 +13,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
@@ -23,7 +29,10 @@ import org.eventt.core.marketlogs.MarketLogPaths
 import org.eventt.core.staticdata.CitadelService
 import org.eventt.core.staticdata.StaticDataImporter
 import org.eventt.settings.generated.resources.*
-import org.eventt.ui.common.Tip
+import org.eventt.ui.common.*
+import org.eventt.ui.theme.positiveColor
+import org.eventt.ui.theme.warningColor
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import java.io.File
@@ -94,96 +103,205 @@ fun SettingsScreen() {
         }
     }
 
-    Column(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
+    var section by remember { mutableStateOf(SettingsSection.GENERAL) }
+
+    Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(Res.string.settings_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+        Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                Modifier
+                    .width(220.dp)
+                    .fillMaxHeight()
+                    .border(1.dp, outline(), MaterialTheme.shapes.extraSmall)
+                    .padding(6.dp),
+            ) {
+                SettingsSection.entries.forEach { s ->
+                    // Data sources the app can't work well without: no SDE, or no marketlogs folder.
+                    val warn = s == SettingsSection.DATA && (sdeTypeCount == 0 || marketLogPath == null)
+                    NavRow(s, s == section, warn) { section = s }
+                }
+            }
+            Column(
+                Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                when (section) {
+                    SettingsSection.GENERAL -> {
+                        LanguageCard()
+                    }
+
+                    SettingsSection.TRADING -> {
+                        CharacterFeesCard()
+                    }
+
+                    SettingsSection.HOTKEYS -> {
+                        HotkeysCard()
+                        StreamOverlaySettingsCard()
+                    }
+
+                    SettingsSection.P2P -> {
+                        NostrIdentityCard()
+                        NostrRelaysCard()
+                    }
+
+                    SettingsSection.DATA -> {
+                        MarketLogsCard(
+                            path = marketLogPath,
+                            autoDetectFailed = marketLogAutoDetectFailed,
+                            onAutoDetect = {
+                                scope.launch(Dispatchers.IO) {
+                                    val detected = MarketLogPaths.autoDetect()
+                                    if (detected != null) {
+                                        MarketLogPaths.setConfiguredPath(detected)
+                                        withContext(Dispatchers.Main) {
+                                            marketLogPath = detected
+                                            marketLogAutoDetectFailed = false
+                                        }
+                                    } else {
+                                        withContext(Dispatchers.Main) { marketLogAutoDetectFailed = true }
+                                    }
+                                }
+                            },
+                            onBrowse = {
+                                val chooser =
+                                    JFileChooser().apply {
+                                        fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+                                        dialogTitle = selectFolderTitle
+                                        marketLogPath?.let { currentDirectory = File(it) }
+                                    }
+                                if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+                                    val selected = chooser.selectedFile.path
+                                    scope.launch(Dispatchers.IO) { MarketLogPaths.setConfiguredPath(selected) }
+                                    marketLogPath = selected
+                                    marketLogAutoDetectFailed = false
+                                }
+                            },
+                        )
+                        SdeCard(
+                            sdeState = sdeState,
+                            buildNumber = sdeBuildNumber,
+                            importDate = sdeImportDate,
+                            typeCount = sdeTypeCount,
+                            onImport = { scope.launch { StaticDataImporter.importAll() } },
+                        )
+                        CitadelCard(
+                            syncState = citadelSyncState,
+                            citadelCount = citadelCount,
+                            lastSyncMillis = citadelLastSync,
+                            onSync = { scope.launch { CitadelService.sync() } },
+                        )
+                        MarketHistorySourceCard(
+                            selectedSource = selectedSource,
+                            periodMonths = periodMonths,
+                            syncState = syncState,
+                            downloadCount = downloadCount,
+                            earliestDate = earliestDate,
+                            latestDate = latestDate,
+                            lastSyncMillis = lastSyncMillis,
+                            onSourceSelected = { source ->
+                                selectedSource = source
+                                scope.launch(Dispatchers.IO) { EveRefService.setSelectedSource(source) }
+                            },
+                            onPeriodSelected = { months ->
+                                periodMonths = months
+                                scope.launch(Dispatchers.IO) { EveRefService.setHistoryPeriodMonths(months) }
+                            },
+                            onSync = { scope.launch { EveRefService.sync() } },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private enum class SettingsSection(
+    val label: StringResource,
+    val icon: ImageVector,
+) {
+    GENERAL(Res.string.sec_general, Icons.Default.Language),
+    TRADING(Res.string.sec_trading, Icons.Default.Percent),
+    HOTKEYS(Res.string.sec_hotkeys, Icons.Default.Keyboard),
+    P2P(Res.string.sec_p2p, Icons.Default.Podcasts),
+    DATA(Res.string.sec_data, Icons.Default.Storage),
+}
+
+@Composable
+private fun NavRow(
+    s: SettingsSection,
+    selected: Boolean,
+    warn: Boolean,
+    onClick: () -> Unit,
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .then(if (selected) Modifier.background(accent.copy(alpha = 0.1f)) else Modifier)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(stringResource(Res.string.settings_title), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-
-        LanguageCard()
-
-        CharacterFeesCard()
-
-        HotkeysCard()
-
-        StreamOverlaySettingsCard()
-
-        NostrIdentityCard()
-
-        NostrRelaysCard()
-
-        MarketLogsCard(
-            path = marketLogPath,
-            autoDetectFailed = marketLogAutoDetectFailed,
-            onAutoDetect = {
-                scope.launch(Dispatchers.IO) {
-                    val detected = MarketLogPaths.autoDetect()
-                    if (detected != null) {
-                        MarketLogPaths.setConfiguredPath(detected)
-                        withContext(Dispatchers.Main) {
-                            marketLogPath = detected
-                            marketLogAutoDetectFailed = false
-                        }
-                    } else {
-                        withContext(Dispatchers.Main) { marketLogAutoDetectFailed = true }
-                    }
-                }
-            },
-            onBrowse = {
-                val chooser =
-                    JFileChooser().apply {
-                        fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
-                        dialogTitle = selectFolderTitle
-                        marketLogPath?.let { currentDirectory = File(it) }
-                    }
-                if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
-                    val selected = chooser.selectedFile.path
-                    scope.launch(Dispatchers.IO) { MarketLogPaths.setConfiguredPath(selected) }
-                    marketLogPath = selected
-                    marketLogAutoDetectFailed = false
-                }
-            },
+        Icon(s.icon, null, Modifier.size(16.dp), tint = if (selected) accent else AXIS_COLOR)
+        Text(
+            stringResource(s.label),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (selected) accent else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
         )
+        if (warn) Box(Modifier.size(6.dp).background(MaterialTheme.colorScheme.error, CircleShape))
+    }
+}
 
-        SdeCard(
-            sdeState = sdeState,
-            buildNumber = sdeBuildNumber,
-            importDate = sdeImportDate,
-            typeCount = sdeTypeCount,
-            onImport = { scope.launch { StaticDataImporter.importAll() } },
-        )
+/** One settings block: a terminal panel with an optional one-paragraph description on top. */
+@Composable
+internal fun Section(
+    title: String,
+    desc: String? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Panel(title, Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(top = 2.dp, bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            desc?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = AXIS_COLOR) }
+            content()
+        }
+    }
+}
 
-        CitadelCard(
-            syncState = citadelSyncState,
-            citadelCount = citadelCount,
-            lastSyncMillis = citadelLastSync,
-            onSync = { scope.launch { CitadelService.sync() } },
-        )
+/** A status line under a setting: coloured dot + monospace text. */
+@Composable
+internal fun StatusLine(
+    text: String,
+    color: Color? = null,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(Modifier.size(6.dp).background(color ?: AXIS_COLOR, CircleShape))
+        Text(text, style = MaterialTheme.typography.bodySmall, fontFamily = Mono, color = color ?: MaterialTheme.colorScheme.onSurface)
+    }
+}
 
-        MarketHistorySourceCard(
-            selectedSource = selectedSource,
-            periodMonths = periodMonths,
-            syncState = syncState,
-            downloadCount = downloadCount,
-            earliestDate = earliestDate,
-            latestDate = latestDate,
-            lastSyncMillis = lastSyncMillis,
-            onSourceSelected = { source ->
-                selectedSource = source
-                scope.launch(Dispatchers.IO) { EveRefService.setSelectedSource(source) }
-            },
-            onPeriodSelected = { months ->
-                periodMonths = months
-                scope.launch(Dispatchers.IO) { EveRefService.setHistoryPeriodMonths(months) }
-            },
-            onSync = {
-                scope.launch { EveRefService.sync() }
-            },
-        )
+/** Compact action button sized for the terminal panels; shows a spinner while [busy]. */
+@Composable
+internal fun ActionButton(
+    text: String,
+    enabled: Boolean = true,
+    busy: Boolean = false,
+    onClick: () -> Unit,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled && !busy,
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+        modifier = Modifier.heightIn(min = 30.dp),
+        shape = MaterialTheme.shapes.extraSmall,
+    ) {
+        if (busy) {
+            CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 2.dp)
+            Spacer(Modifier.width(6.dp))
+        }
+        Text(text, style = MaterialTheme.typography.labelMedium)
     }
 }
 
@@ -200,50 +318,63 @@ private fun MarketHistorySourceCard(
     onPeriodSelected: (Int) -> Unit,
     onSync: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.History, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text(
-                    stringResource(Res.string.market_history_source),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
+    Section(stringResource(Res.string.market_history_source)) {
+        SourceOption(
+            selected = selectedSource == "esi",
+            title = stringResource(Res.string.source_esi_title),
+            description = stringResource(Res.string.source_esi_desc),
+            onClick = { onSourceSelected("esi") },
+        )
+        SourceOption(
+            selected = selectedSource == "everef",
+            title = stringResource(Res.string.source_everef_title),
+            description = stringResource(Res.string.source_everef_desc),
+            onClick = { onSourceSelected("everef") },
+        )
+        // EveRef-specific settings — only shown when EveRef is selected
+        if (selectedSource == "everef") {
+            HorizontalDivider(color = outline())
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(stringResource(Res.string.history_period_to_keep), style = MaterialTheme.typography.bodySmall, color = AXIS_COLOR)
+                Spacer(Modifier.width(4.dp))
+                listOf(1 to Res.string.period_1_month, 3 to Res.string.period_3_months).forEach { (months, label) ->
+                    Segment(stringResource(label), periodMonths == months) { if (!syncState.isRunning) onPeriodSelected(months) }
+                }
             }
-
-            HorizontalDivider()
-
-            // ESI option
-            SourceOption(
-                selected = selectedSource == "esi",
-                title = stringResource(Res.string.source_esi_title),
-                description = stringResource(Res.string.source_esi_desc),
-                onClick = { onSourceSelected("esi") },
-            )
-
-            // EveRef option
-            SourceOption(
-                selected = selectedSource == "everef",
-                title = stringResource(Res.string.source_everef_title),
-                description = stringResource(Res.string.source_everef_desc),
-                onClick = { onSourceSelected("everef") },
-            )
-
-            // EveRef-specific settings — only shown when EveRef is selected
-            if (selectedSource == "everef") {
-                HorizontalDivider()
-                EveRefSettings(
-                    periodMonths = periodMonths,
-                    syncState = syncState,
-                    downloadCount = downloadCount,
-                    earliestDate = earliestDate,
-                    latestDate = latestDate,
-                    lastSyncMillis = lastSyncMillis,
-                    onPeriodSelected = onPeriodSelected,
-                    onSync = onSync,
+            if (downloadCount > 0 && earliestDate != null && latestDate != null) {
+                StatusLine(
+                    pluralStringResource(Res.plurals.days_downloaded, downloadCount, downloadCount, earliestDate, latestDate),
+                    positiveColor,
                 )
+            } else {
+                StatusLine(stringResource(Res.string.no_data_downloaded))
             }
+            lastSyncMillis?.let { StatusLine(stringResource(Res.string.last_sync, formatTimestamp(it))) }
+            syncState.error?.let { StatusLine(stringResource(Res.string.error_prefix, it), MaterialTheme.colorScheme.error) }
+            SyncControls(
+                stringResource(if (syncState.isRunning) Res.string.syncing else Res.string.sync_now),
+                syncState.isRunning,
+                syncState.progress,
+                syncState.status,
+                onSync,
+            )
         }
+    }
+}
+
+// Button plus, while it runs (or once it has made progress), a progress bar with the status text.
+@Composable
+private fun SyncControls(
+    label: String,
+    running: Boolean,
+    progress: Float,
+    status: String,
+    onClick: () -> Unit,
+) {
+    ActionButton(label, busy = running, onClick = onClick)
+    if (running || progress > 0f) {
+        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+        Text(status, style = MaterialTheme.typography.bodySmall, color = AXIS_COLOR)
     }
 }
 
@@ -255,134 +386,19 @@ private fun SourceOption(
     onClick: () -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        RadioButton(selected = selected, onClick = onClick, modifier = Modifier.padding(top = 2.dp))
-        Column(
-            modifier = Modifier.weight(1f).let { if (!selected) it else it },
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
+        RadioButton(selected = selected, onClick = onClick, modifier = Modifier.size(20.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 title,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
             )
-            Text(
-                description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun EveRefSettings(
-    periodMonths: Int,
-    syncState: EveRefService.SyncState,
-    downloadCount: Int,
-    earliestDate: String?,
-    latestDate: String?,
-    lastSyncMillis: Long?,
-    onPeriodSelected: (Int) -> Unit,
-    onSync: () -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // Period selector
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(
-                stringResource(Res.string.history_period_to_keep),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(
-                    1 to stringResource(Res.string.period_1_month),
-                    3 to stringResource(Res.string.period_3_months),
-                ).forEach { (months, label) ->
-                    FilterChip(
-                        selected = periodMonths == months,
-                        onClick = { onPeriodSelected(months) },
-                        label = { Text(label) },
-                        enabled = !syncState.isRunning,
-                    )
-                }
-            }
-        }
-
-        // Status row
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            shape = MaterialTheme.shapes.small,
-        ) {
-            Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (downloadCount > 0 && earliestDate != null && latestDate != null) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.CheckCircle, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
-                        Text(
-                            pluralStringResource(Res.plurals.days_downloaded, downloadCount, downloadCount, earliestDate, latestDate),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Info, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(
-                            stringResource(Res.string.no_data_downloaded),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                if (lastSyncMillis != null) {
-                    Text(
-                        stringResource(Res.string.last_sync, formatTimestamp(lastSyncMillis)),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (syncState.error != null) {
-                    Text(
-                        stringResource(Res.string.error_prefix, syncState.error.orEmpty()),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            }
-        }
-
-        // Sync button + progress
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = onSync,
-                enabled = !syncState.isRunning,
-            ) {
-                if (syncState.isRunning) {
-                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                    Spacer(Modifier.width(8.dp))
-                } else {
-                    Icon(Icons.Default.Sync, null, Modifier.size(16.dp))
-                    Spacer(Modifier.width(8.dp))
-                }
-                Text(if (syncState.isRunning) stringResource(Res.string.syncing) else stringResource(Res.string.sync_now))
-            }
-
-            if (syncState.isRunning || syncState.progress > 0f) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    LinearProgressIndicator(
-                        progress = { syncState.progress },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Text(
-                        syncState.status,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            Text(description, style = MaterialTheme.typography.bodySmall, color = AXIS_COLOR)
         }
     }
 }
@@ -395,106 +411,28 @@ private fun SdeCard(
     typeCount: Int,
     onImport: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.Storage, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text(stringResource(Res.string.sde_title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            }
-
-            Text(
-                stringResource(Res.string.sde_desc),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            HorizontalDivider()
-
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = MaterialTheme.shapes.small,
-            ) {
-                Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (typeCount > 0) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.CheckCircle, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
-                            Text(
-                                pluralStringResource(Res.plurals.types_loaded, typeCount, typeCount),
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                    } else {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Warning, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error)
-                            Text(
-                                stringResource(Res.string.no_sde_data),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                        }
-                    }
-                    if (buildNumber != null) {
-                        Text(
-                            stringResource(Res.string.sde_build, buildNumber),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (importDate != null) {
-                        Text(
-                            stringResource(Res.string.sde_imported, formatTimestamp(importDate)),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (sdeState.error != null) {
-                        Text(
-                            stringResource(Res.string.error_prefix, sdeState.error.orEmpty()),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                }
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = onImport, enabled = !sdeState.isRunning) {
-                    if (sdeState.isRunning) {
-                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                        Spacer(Modifier.width(8.dp))
-                    } else {
-                        Icon(Icons.Default.Download, null, Modifier.size(16.dp))
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Text(
-                        if (sdeState.isRunning) {
-                            stringResource(Res.string.importing)
-                        } else if (typeCount > 0) {
-                            stringResource(Res.string.reimport_sde)
-                        } else {
-                            stringResource(Res.string.import_sde)
-                        },
-                    )
-                }
-                if (sdeState.isRunning) {
-                    Text(sdeState.status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-
-            if (sdeState.isRunning || sdeState.progress > 0f) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    LinearProgressIndicator(
-                        progress = { sdeState.progress },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Text(
-                        sdeState.status,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+    Section(stringResource(Res.string.sde_title), stringResource(Res.string.sde_desc)) {
+        if (typeCount > 0) {
+            StatusLine(pluralStringResource(Res.plurals.types_loaded, typeCount, typeCount), positiveColor)
+        } else {
+            StatusLine(stringResource(Res.string.no_sde_data), MaterialTheme.colorScheme.error)
         }
+        buildNumber?.let { StatusLine(stringResource(Res.string.sde_build, it)) }
+        importDate?.let { StatusLine(stringResource(Res.string.sde_imported, formatTimestamp(it))) }
+        sdeState.error?.let { StatusLine(stringResource(Res.string.error_prefix, it), MaterialTheme.colorScheme.error) }
+        SyncControls(
+            stringResource(
+                when {
+                    sdeState.isRunning -> Res.string.importing
+                    typeCount > 0 -> Res.string.reimport_sde
+                    else -> Res.string.import_sde
+                },
+            ),
+            sdeState.isRunning,
+            sdeState.progress,
+            sdeState.status,
+            onImport,
+        )
     }
 }
 
@@ -505,85 +443,24 @@ private fun CitadelCard(
     lastSyncMillis: Long?,
     onSync: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.LocationCity, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text(
-                    stringResource(Res.string.citadels_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-
-            Text(
-                stringResource(Res.string.citadels_desc),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            HorizontalDivider()
-
-            // Status
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = MaterialTheme.shapes.small,
-            ) {
-                Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (citadelCount > 0) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.CheckCircle, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
-                            Text(
-                                pluralStringResource(Res.plurals.structures_in_db, citadelCount, citadelCount),
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                    } else {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Info, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(
-                                stringResource(Res.string.no_citadel_data),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                    if (lastSyncMillis != null) {
-                        Text(
-                            stringResource(Res.string.last_sync, formatTimestamp(lastSyncMillis)),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (!syncState.isRunning && syncState.status.isNotEmpty() && syncState.error == null) {
-                        Text(syncState.status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                    }
-                    if (syncState.error != null) {
-                        Text(
-                            stringResource(Res.string.error_prefix, syncState.error.orEmpty()),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                }
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = onSync, enabled = !syncState.isRunning) {
-                    if (syncState.isRunning) {
-                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                        Spacer(Modifier.width(8.dp))
-                    } else {
-                        Icon(Icons.Default.Sync, null, Modifier.size(16.dp))
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Text(if (syncState.isRunning) stringResource(Res.string.syncing) else stringResource(Res.string.sync_citadels))
-                }
-                if (syncState.isRunning) {
-                    Text(syncState.status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
+    Section(stringResource(Res.string.citadels_title), stringResource(Res.string.citadels_desc)) {
+        if (citadelCount > 0) {
+            StatusLine(pluralStringResource(Res.plurals.structures_in_db, citadelCount, citadelCount), positiveColor)
+        } else {
+            StatusLine(stringResource(Res.string.no_citadel_data))
         }
+        lastSyncMillis?.let { StatusLine(stringResource(Res.string.last_sync, formatTimestamp(it))) }
+        if (!syncState.isRunning && syncState.status.isNotEmpty() && syncState.error == null) {
+            StatusLine(syncState.status, MaterialTheme.colorScheme.primary)
+        }
+        syncState.error?.let { StatusLine(stringResource(Res.string.error_prefix, it), MaterialTheme.colorScheme.error) }
+        SyncControls(
+            stringResource(if (syncState.isRunning) Res.string.syncing else Res.string.sync_citadels),
+            syncState.isRunning,
+            0f,
+            syncState.status,
+            onSync,
+        )
     }
 }
 
@@ -594,66 +471,19 @@ private fun MarketLogsCard(
     onAutoDetect: () -> Unit,
     onBrowse: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.FolderOpen, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text(
-                    stringResource(Res.string.marketlogs_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-
-            Text(
-                stringResource(Res.string.marketlogs_desc),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            HorizontalDivider()
-
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = MaterialTheme.shapes.small,
-            ) {
-                Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (path != null) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.CheckCircle, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
-                            Text(path, style = MaterialTheme.typography.bodySmall)
-                        }
-                    } else {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Warning, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error)
-                            Text(
-                                stringResource(Res.string.not_configured),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                        }
-                    }
-                    if (autoDetectFailed) {
-                        Text(
-                            stringResource(Res.string.autodetect_failed),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                    if (System.getProperty("os.name").lowercase().contains("mac")) {
-                        Text(
-                            stringResource(Res.string.macos_path_warning),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.tertiary,
-                        )
-                    }
-                }
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onAutoDetect) { Text(stringResource(Res.string.auto_detect)) }
-                OutlinedButton(onClick = onBrowse) { Text(stringResource(Res.string.browse)) }
-            }
+    Section(stringResource(Res.string.marketlogs_title), stringResource(Res.string.marketlogs_desc)) {
+        if (path != null) {
+            StatusLine(path, positiveColor)
+        } else {
+            StatusLine(stringResource(Res.string.not_configured), MaterialTheme.colorScheme.error)
+        }
+        if (autoDetectFailed) StatusLine(stringResource(Res.string.autodetect_failed), MaterialTheme.colorScheme.error)
+        if (System.getProperty("os.name").lowercase().contains("mac")) {
+            StatusLine(stringResource(Res.string.macos_path_warning), warningColor)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ActionButton(stringResource(Res.string.auto_detect), onClick = onAutoDetect)
+            ActionButton(stringResource(Res.string.browse), onClick = onBrowse)
         }
     }
 }
@@ -665,39 +495,16 @@ private fun LanguageCard() {
     val active = remember { AppLanguage.get() }
     var selected by remember { mutableStateOf(active) }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.Language, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text(stringResource(Res.string.language), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            }
-            Box {
-                var expanded by remember { mutableStateOf(false) }
-                OutlinedButton(onClick = { expanded = true }) {
-                    Text(AppLanguage.SUPPORTED.getValue(selected))
-                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+    Section(stringResource(Res.string.language)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            AppLanguage.SUPPORTED.forEach { (code, name) ->
+                Segment(name, selected == code) {
+                    selected = code
+                    scope.launch(Dispatchers.IO) { AppLanguage.set(code) }
                 }
-                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                    AppLanguage.SUPPORTED.forEach { (code, name) ->
-                        DropdownMenuItem(
-                            text = { Text(name) },
-                            onClick = {
-                                expanded = false
-                                selected = code
-                                scope.launch(Dispatchers.IO) { AppLanguage.set(code) }
-                            },
-                        )
-                    }
-                }
-            }
-            if (selected != active) {
-                Text(
-                    stringResource(Res.string.language_restart),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.tertiary,
-                )
             }
         }
+        if (selected != active) StatusLine(stringResource(Res.string.language_restart), warningColor)
     }
 }
 
@@ -718,7 +525,12 @@ private fun CharacterFeesCard() {
             }
         }
 
-    if (characters.isEmpty()) return
+    if (characters.isEmpty()) {
+        Section(stringResource(Res.string.character_fees), stringResource(Res.string.character_fees_desc)) {
+            StatusLine(stringResource(Res.string.no_characters_yet))
+        }
+        return
+    }
 
     // Load current tax values for all characters
     val salesTaxValues =
@@ -746,90 +558,75 @@ private fun CharacterFeesCard() {
             }
         }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.Percent, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text(
-                    stringResource(Res.string.character_fees),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-
-            Text(
-                stringResource(Res.string.character_fees_desc),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            HorizontalDivider()
-
-            characters.forEach { char ->
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Section(stringResource(Res.string.character_fees), stringResource(Res.string.character_fees_desc)) {
+        characters.forEach { char ->
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CharacterPortrait(char.id, size = 24.dp)
                     Text(char.name, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        TaxField(
-                            label = stringResource(Res.string.sales_tax_pct),
-                            tooltip = stringResource(Res.string.tip_set_sales_tax),
-                            value = salesTaxValues[char.id] ?: "8.00",
-                            onValueChange = { v ->
-                                salesTaxValues[char.id] = v
-                                v.toDoubleOrNull()?.let { pct ->
-                                    scope.launch(Dispatchers.IO) { StaticDataDao.setCharSalesTax(char.id, pct.coerceIn(0.0, 100.0)) }
-                                }
-                            },
-                            modifier = Modifier.width(140.dp),
-                        )
-
-                        TaxField(
-                            label = stringResource(Res.string.brokers_fee_pct),
-                            tooltip = stringResource(Res.string.tip_set_broker_fee),
-                            value = brokersFeeValues[char.id] ?: "3.00",
-                            onValueChange = { v ->
-                                brokersFeeValues[char.id] = v
-                                v.toDoubleOrNull()?.let { pct ->
-                                    scope.launch(Dispatchers.IO) { StaticDataDao.setCharBrokersFee(char.id, pct.coerceIn(0.0, 100.0)) }
-                                }
-                            },
-                            modifier = Modifier.width(140.dp),
-                        )
-
-                        OutlinedTextField(
-                            value = relistSkillValues[char.id] ?: "0",
-                            onValueChange = { v ->
-                                val filtered = v.filter { it.isDigit() }.take(1)
-                                relistSkillValues[char.id] = filtered
-                                filtered.toIntOrNull()?.let { level ->
-                                    scope.launch(Dispatchers.IO) { StaticDataDao.setCharRelistSkillLevel(char.id, level.coerceIn(0, 5)) }
-                                }
-                            },
-                            label = {
-                                Tip(stringResource(Res.string.tip_set_relist_skill)) {
-                                    Text(
-                                        stringResource(Res.string.adv_broker_relations_lvl),
-                                        style = MaterialTheme.typography.labelSmall,
-                                    )
-                                }
-                            },
-                            singleLine = true,
-                            modifier = Modifier.width(180.dp),
-                            textStyle = MaterialTheme.typography.bodyMedium,
-                        )
-
-                        val tax = salesTaxValues[char.id]?.toDoubleOrNull() ?: 0.0
-                        val fee = brokersFeeValues[char.id]?.toDoubleOrNull() ?: 0.0
-                        Text(
-                            stringResource(Res.string.fees_total, "%.2f".format(tax + fee)),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
                 }
 
-                if (char != characters.last()) HorizontalDivider()
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    TaxField(
+                        label = stringResource(Res.string.sales_tax_pct),
+                        tooltip = stringResource(Res.string.tip_set_sales_tax),
+                        value = salesTaxValues[char.id] ?: "8.00",
+                        onValueChange = { v ->
+                            salesTaxValues[char.id] = v
+                            v.toDoubleOrNull()?.let { pct ->
+                                scope.launch(Dispatchers.IO) { StaticDataDao.setCharSalesTax(char.id, pct.coerceIn(0.0, 100.0)) }
+                            }
+                        },
+                        modifier = Modifier.width(140.dp),
+                    )
+
+                    TaxField(
+                        label = stringResource(Res.string.brokers_fee_pct),
+                        tooltip = stringResource(Res.string.tip_set_broker_fee),
+                        value = brokersFeeValues[char.id] ?: "3.00",
+                        onValueChange = { v ->
+                            brokersFeeValues[char.id] = v
+                            v.toDoubleOrNull()?.let { pct ->
+                                scope.launch(Dispatchers.IO) { StaticDataDao.setCharBrokersFee(char.id, pct.coerceIn(0.0, 100.0)) }
+                            }
+                        },
+                        modifier = Modifier.width(140.dp),
+                    )
+
+                    OutlinedTextField(
+                        value = relistSkillValues[char.id] ?: "0",
+                        onValueChange = { v ->
+                            val filtered = v.filter { it.isDigit() }.take(1)
+                            relistSkillValues[char.id] = filtered
+                            filtered.toIntOrNull()?.let { level ->
+                                scope.launch(Dispatchers.IO) { StaticDataDao.setCharRelistSkillLevel(char.id, level.coerceIn(0, 5)) }
+                            }
+                        },
+                        label = {
+                            Tip(stringResource(Res.string.tip_set_relist_skill)) {
+                                Text(
+                                    stringResource(Res.string.adv_broker_relations_lvl),
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                        },
+                        singleLine = true,
+                        modifier = Modifier.width(180.dp),
+                        textStyle = MaterialTheme.typography.bodyMedium,
+                    )
+
+                    val tax = salesTaxValues[char.id]?.toDoubleOrNull() ?: 0.0
+                    val fee = brokersFeeValues[char.id]?.toDoubleOrNull() ?: 0.0
+                    Text(
+                        stringResource(Res.string.fees_total, "%.2f".format(tax + fee)),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = Mono,
+                        color = AXIS_COLOR,
+                    )
+                }
             }
+
+            if (char != characters.last()) HorizontalDivider(color = outline())
         }
     }
 }

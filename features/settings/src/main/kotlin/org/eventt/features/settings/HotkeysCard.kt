@@ -36,6 +36,7 @@ import org.eventt.core.database.StaticDataDao
 import org.eventt.core.model.HotkeyBindings
 import org.eventt.core.model.HotkeyCombo
 import org.eventt.settings.generated.resources.*
+import org.eventt.ui.common.*
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -67,31 +68,23 @@ internal fun HotkeysCard() {
         HotkeyBindings.applyChange?.invoke()
     }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(stringResource(Res.string.global_hotkeys), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text(
-                stringResource(Res.string.global_hotkeys_desc),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            HotkeyCaptureRow(
-                label = stringResource(Res.string.hotkey_cycle_queue),
-                combo = queueCombo,
-                takenCombo = overlayCombo,
-                onPick = { queueCombo = it },
-                settingKey = HotkeyBindings.QUEUE_KEY_SETTING,
-                save = ::save,
-            )
-            HotkeyCaptureRow(
-                label = stringResource(Res.string.hotkey_toggle_calc),
-                combo = overlayCombo,
-                takenCombo = queueCombo,
-                onPick = { overlayCombo = it },
-                settingKey = HotkeyBindings.OVERLAY_KEY_SETTING,
-                save = ::save,
-            )
-        }
+    Section(stringResource(Res.string.global_hotkeys), stringResource(Res.string.global_hotkeys_desc)) {
+        HotkeyCaptureRow(
+            label = stringResource(Res.string.hotkey_cycle_queue),
+            combo = queueCombo,
+            takenCombo = overlayCombo,
+            onPick = { queueCombo = it },
+            settingKey = HotkeyBindings.QUEUE_KEY_SETTING,
+            save = ::save,
+        )
+        HotkeyCaptureRow(
+            label = stringResource(Res.string.hotkey_toggle_calc),
+            combo = overlayCombo,
+            takenCombo = queueCombo,
+            onPick = { overlayCombo = it },
+            settingKey = HotkeyBindings.OVERLAY_KEY_SETTING,
+            save = ::save,
+        )
     }
 }
 

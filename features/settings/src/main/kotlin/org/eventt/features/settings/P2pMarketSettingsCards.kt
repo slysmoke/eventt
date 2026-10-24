@@ -46,6 +46,7 @@ import org.eventt.core.nostr.NostrIdentityService
 import org.eventt.core.nostr.NostrRelayEvent
 import org.eventt.core.nostr.NostrRelayManager
 import org.eventt.settings.generated.resources.*
+import org.eventt.ui.common.*
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 import java.io.File
@@ -76,92 +77,75 @@ internal fun NostrIdentityCard() {
 
     LaunchedEffect(Unit) { reload() }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.Key, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text(
-                    stringResource(Res.string.p2p_identity_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-            Text(
-                stringResource(Res.string.p2p_identity_desc),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            HorizontalDivider()
-
-            if (characters.isEmpty()) {
-                Text(stringResource(Res.string.no_characters_yet), style = MaterialTheme.typography.bodySmall)
-            } else {
-                characters.forEach { character ->
-                    val characterIdentity = identitiesByCharacter[character.id]
-                    val isActive = characterIdentity != null && characterIdentity.pubkey == activePubkey
-                    val exportTitle = stringResource(Res.string.export_key_for, character.name)
-                    val importTitle = stringResource(Res.string.import_key_for, character.name)
-                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.Podcasts,
-                            contentDescription = if (isActive) stringResource(Res.string.currently_active) else null,
-                            modifier = Modifier.size(18.dp),
-                            tint = if (isActive) MaterialTheme.colorScheme.tertiary else Color.Transparent,
+    Section(stringResource(Res.string.p2p_identity_title), stringResource(Res.string.p2p_identity_desc)) {
+        if (characters.isEmpty()) {
+            Text(stringResource(Res.string.no_characters_yet), style = MaterialTheme.typography.bodySmall)
+        } else {
+            characters.forEach { character ->
+                val characterIdentity = identitiesByCharacter[character.id]
+                val isActive = characterIdentity != null && characterIdentity.pubkey == activePubkey
+                val exportTitle = stringResource(Res.string.export_key_for, character.name)
+                val importTitle = stringResource(Res.string.import_key_for, character.name)
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Podcasts,
+                        contentDescription = if (isActive) stringResource(Res.string.currently_active) else null,
+                        modifier = Modifier.size(18.dp),
+                        tint = if (isActive) MaterialTheme.colorScheme.tertiary else Color.Transparent,
+                    )
+                    Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
+                        Text(character.name, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            characterIdentity?.pubkey?.take(12)?.plus("…") ?: "…",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
-                            Text(character.name, style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                characterIdentity?.pubkey?.take(12)?.plus("…") ?: "…",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        IconButton(onClick = {
-                            val pubkey = characterIdentity?.pubkey ?: return@IconButton
-                            val chooser =
-                                JFileChooser().apply {
-                                    dialogTitle = exportTitle
-                                    fileSelectionMode = JFileChooser.FILES_ONLY
-                                    selectedFile = File("${character.name.replace(" ", "_")}_nostr_key.txt")
-                                }
-                            if (chooser.showSaveDialog(null) == JFileChooser.APPROVE_OPTION) {
-                                val file = chooser.selectedFile
-                                scope.launch(Dispatchers.IO) {
-                                    val nsec = NostrIdentityService.exportPrivateKey(pubkey)
-                                    if (nsec != null) {
-                                        runCatching { file.writeText(nsec) }
-                                    }
-                                }
-                            }
-                        }) { Icon(Icons.Default.Download, stringResource(Res.string.export_key), Modifier.size(16.dp)) }
-                        IconButton(onClick = {
-                            val chooser =
-                                JFileChooser().apply {
-                                    dialogTitle = importTitle
-                                    fileSelectionMode = JFileChooser.FILES_ONLY
-                                }
-                            if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
-                                val file = chooser.selectedFile
-                                scope.launch(Dispatchers.IO) {
-                                    val content = runCatching { file.readText().trim() }.getOrNull()
-                                    val imported = content?.let { NostrIdentityService.importPrivateKeyForCharacter(it, character) }
-                                    withContext(Dispatchers.Main) {
-                                        importError =
-                                            if (imported == null) {
-                                                getString(Res.string.import_key_failed, character.name)
-                                            } else {
-                                                null
-                                            }
-                                    }
-                                    reload()
-                                }
-                            }
-                        }) { Icon(Icons.Default.Upload, stringResource(Res.string.import_key), Modifier.size(16.dp)) }
                     }
+                    IconButton(onClick = {
+                        val pubkey = characterIdentity?.pubkey ?: return@IconButton
+                        val chooser =
+                            JFileChooser().apply {
+                                dialogTitle = exportTitle
+                                fileSelectionMode = JFileChooser.FILES_ONLY
+                                selectedFile = File("${character.name.replace(" ", "_")}_nostr_key.txt")
+                            }
+                        if (chooser.showSaveDialog(null) == JFileChooser.APPROVE_OPTION) {
+                            val file = chooser.selectedFile
+                            scope.launch(Dispatchers.IO) {
+                                val nsec = NostrIdentityService.exportPrivateKey(pubkey)
+                                if (nsec != null) {
+                                    runCatching { file.writeText(nsec) }
+                                }
+                            }
+                        }
+                    }) { Icon(Icons.Default.Download, stringResource(Res.string.export_key), Modifier.size(16.dp)) }
+                    IconButton(onClick = {
+                        val chooser =
+                            JFileChooser().apply {
+                                dialogTitle = importTitle
+                                fileSelectionMode = JFileChooser.FILES_ONLY
+                            }
+                        if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+                            val file = chooser.selectedFile
+                            scope.launch(Dispatchers.IO) {
+                                val content = runCatching { file.readText().trim() }.getOrNull()
+                                val imported = content?.let { NostrIdentityService.importPrivateKeyForCharacter(it, character) }
+                                withContext(Dispatchers.Main) {
+                                    importError =
+                                        if (imported == null) {
+                                            getString(Res.string.import_key_failed, character.name)
+                                        } else {
+                                            null
+                                        }
+                                }
+                                reload()
+                            }
+                        }
+                    }) { Icon(Icons.Default.Upload, stringResource(Res.string.import_key), Modifier.size(16.dp)) }
                 }
             }
-            importError?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         }
+        importError?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
     }
 }
 
@@ -180,68 +164,48 @@ internal fun NostrRelaysCard() {
         NostrRelayManager.events.collect { event -> if (event is NostrRelayEvent.RelayStatusChanged) reload() }
     }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.Podcasts, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text(
-                    stringResource(Res.string.p2p_relays_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-            Text(
-                stringResource(Res.string.p2p_relays_desc),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            HorizontalDivider()
-
-            relays.forEach { relay ->
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = relay.enabled,
-                        onCheckedChange = {
-                            scope.launch(Dispatchers.IO) {
-                                NostrRelayDao.setEnabled(relay.url, it)
-                                reload()
-                            }
-                        },
-                    )
-                    Column(modifier = Modifier.fillMaxWidth().padding(start = 4.dp)) {
-                        Text(relay.url, style = MaterialTheme.typography.bodySmall)
-                        RelayStatusLabel(relay)
-                        RelayNipWarningLabel(relay)
-                    }
-                    IconButton(onClick = {
+    Section(stringResource(Res.string.p2p_relays_title), stringResource(Res.string.p2p_relays_desc)) {
+        relays.forEach { relay ->
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = relay.enabled,
+                    onCheckedChange = {
                         scope.launch(Dispatchers.IO) {
-                            NostrRelayDao.remove(relay.url)
+                            NostrRelayDao.setEnabled(relay.url, it)
                             reload()
                         }
-                    }) { Icon(Icons.Default.Delete, stringResource(Res.string.remove), Modifier.size(16.dp)) }
+                    },
+                )
+                Column(modifier = Modifier.fillMaxWidth().padding(start = 4.dp)) {
+                    Text(relay.url, style = MaterialTheme.typography.bodySmall)
+                    RelayStatusLabel(relay)
+                    RelayNipWarningLabel(relay)
                 }
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = newRelayInput,
-                    onValueChange = { newRelayInput = it },
-                    label = { Text("wss://relay.example.com") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(0.7f),
-                )
-                OutlinedButton(onClick = {
-                    val url = newRelayInput.trim()
-                    if (url.isNotEmpty()) {
-                        scope.launch(Dispatchers.IO) {
-                            NostrRelayDao.upsert(NostrRelayManager.normalizeUrl(url))
-                            reload()
-                        }
-                        newRelayInput = ""
+                IconButton(onClick = {
+                    scope.launch(Dispatchers.IO) {
+                        NostrRelayDao.remove(relay.url)
+                        reload()
                     }
-                }) {
-                    Icon(Icons.Default.Add, null, Modifier.size(16.dp))
-                    Text(stringResource(Res.string.add))
+                }) { Icon(Icons.Default.Delete, stringResource(Res.string.remove), Modifier.size(16.dp)) }
+            }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = newRelayInput,
+                onValueChange = { newRelayInput = it },
+                label = { Text("wss://relay.example.com") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(0.7f),
+            )
+            ActionButton("+ " + stringResource(Res.string.add)) {
+                val url = newRelayInput.trim()
+                if (url.isNotEmpty()) {
+                    scope.launch(Dispatchers.IO) {
+                        NostrRelayDao.upsert(NostrRelayManager.normalizeUrl(url))
+                        reload()
+                    }
+                    newRelayInput = ""
                 }
             }
         }
