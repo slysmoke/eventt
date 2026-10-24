@@ -12,6 +12,7 @@ import org.eventt.core.database.StaticDataDao
 import org.eventt.core.database.WalletDao
 import org.eventt.core.esi.EsiClient
 import org.eventt.features.orders.CostBasisService
+import org.eventt.features.orders.StandingOrders
 import org.eventt.features.orders.WalletSyncService
 import java.time.Duration
 import java.time.Instant
@@ -98,6 +99,8 @@ internal data class OrderRow(
     val best: Double?,
     val outbid: Boolean,
     val expiresIn: Duration?,
+    // A buy order deliberately far under the best bid (see StandingOrders) — never "outbid".
+    val standing: Boolean = false,
 ) {
     val isk get() = order.price * order.volumeRemaining
 }
@@ -111,10 +114,12 @@ internal fun loadOrderRows(
     return ActiveOrderDao.getAll(characterId, corporationId).filter { it.state == "active" }.map { o ->
         val scopeId = if (o.isBuyOrder) o.regionId.toLong() else o.locationId
         val snap = MarketTopSnapshotDao.getWindow(o.typeId, scopeId, o.isBuyOrder, since).lastOrNull()
-        val outbid = snap != null && !snap.bestIsMine && (if (o.isBuyOrder) snap.bestPrice > o.price else snap.bestPrice < o.price)
+        val standing = o.isBuyOrder && snap != null && !snap.bestIsMine && StandingOrders.isStanding(o.price, snap.bestPrice)
+        val outbid =
+            snap != null && !snap.bestIsMine && !standing && (if (o.isBuyOrder) snap.bestPrice > o.price else snap.bestPrice < o.price)
         val expires =
             runCatching { Duration.between(now, Instant.parse(o.issued).plus(Duration.ofDays(o.duration.toLong()))) }.getOrNull()
-        OrderRow(o, snap?.bestPrice, outbid, expires)
+        OrderRow(o, snap?.bestPrice, outbid, expires, standing)
     }
 }
 

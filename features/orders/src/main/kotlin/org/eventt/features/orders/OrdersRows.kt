@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import org.eventt.core.database.AppState
 import org.eventt.core.database.OrderHistoryDao
 import org.eventt.orders.generated.resources.*
+import org.eventt.ui.common.Mono
 import org.eventt.ui.common.formatIsk
 import org.eventt.ui.common.onRightClick
 import org.eventt.ui.theme.negativeColor
@@ -30,6 +31,7 @@ import org.eventt.ui.theme.positiveColor
 import org.eventt.ui.theme.warningColor
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
+import java.util.Locale
 
 // ── Rows ──────────────────────────────────────────────────────────────────
 
@@ -72,7 +74,7 @@ internal fun SellOrderRow(
     ) {
         // Name + status dot
         Row(
-            modifier = Modifier.weight(3f).padding(end = 8.dp),
+            modifier = Modifier.weight(4f).padding(end = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
@@ -87,7 +89,7 @@ internal fun SellOrderRow(
             }
             Text(
                 order.typeName,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 overflow = TextOverflow.Ellipsis,
                 maxLines = 1,
                 modifier = Modifier.weight(1f),
@@ -108,6 +110,7 @@ internal fun SellOrderRow(
             costBasis?.let { if (isEstimated) "~${formatIsk(it)}" else formatIsk(it) } ?: "—",
             modifier = Modifier.weight(1.8f),
             style = MaterialTheme.typography.bodySmall,
+            fontFamily = Mono,
             color =
                 if (isEstimated) {
                     MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
@@ -120,7 +123,8 @@ internal fun SellOrderRow(
         Column(modifier = Modifier.weight(2.4f)) {
             Text(
                 formatIsk(order.price),
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = Mono,
                 color = if (isBeaten) UNDERCUT_COLOR else SELL_COLOR,
             )
             val bestSell = comparison?.bestSell
@@ -133,12 +137,15 @@ internal fun SellOrderRow(
             }
         }
 
+        DistanceCell(metrics.distancePct, standing = false, modifier = Modifier.weight(1.1f))
+
         RelistCell(order.relistCount, order.relistFeesPaid, metrics.updatesRemaining, modifier = Modifier.weight(1.8f))
 
         Text(
             totalProfit?.let { (if (isEstimated) "~" else "") + formatIsk(it) } ?: "—",
             modifier = Modifier.weight(1.8f),
             style = MaterialTheme.typography.bodySmall,
+            fontFamily = Mono,
             color = if (isEstimated) profitColor.copy(alpha = 0.7f) else profitColor,
             fontWeight = if (totalProfit != null) FontWeight.SemiBold else FontWeight.Normal,
         )
@@ -146,26 +153,29 @@ internal fun SellOrderRow(
             marginPct?.let { (if (isEstimated) "~" else "") + "%.1f%%".format(it) } ?: "—",
             modifier = Modifier.weight(1.2f),
             style = MaterialTheme.typography.bodySmall,
+            fontFamily = Mono,
             color = if (isEstimated) profitColor.copy(alpha = 0.7f) else profitColor,
         )
         Text(
             bestMarginPct?.let { "%.1f%%".format(it) } ?: "—",
             modifier = Modifier.weight(1.4f),
             style = MaterialTheme.typography.bodySmall,
+            fontFamily = Mono,
             color = bestMarginColor,
         )
-        VolumeBar(order.volumeRemaining, order.volumeTotal, isSell = true, modifier = Modifier.weight(2.5f).padding(horizontal = 4.dp))
-        Text(formatIsk(order.total), modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodyMedium)
+        VolumeBar(order.volumeRemaining, order.volumeTotal, isSell = true, modifier = Modifier.weight(2.1f).padding(horizontal = 4.dp))
+        Text(formatIsk(order.total), modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodySmall, fontFamily = Mono)
         CompetitionCell(metrics.competition, modifier = Modifier.weight(1.8f))
         Text(
             formatDuration(order.timeLeftSeconds),
             modifier = Modifier.weight(1.5f),
             style = MaterialTheme.typography.bodySmall,
+            fontFamily = Mono,
             color = timeLeftColor(order.timeLeftSeconds),
         )
 
         // Action button: open market in-game + copy overbid price
-        IconButton(modifier = Modifier.size(36.dp), onClick = onAction) {
+        IconButton(modifier = Modifier.size(24.dp), onClick = onAction) {
             Icon(
                 Icons.Default.OpenInBrowser,
                 contentDescription = stringResource(Res.string.open_in_game),
@@ -194,7 +204,13 @@ private fun CompetitionCell(
     modifier: Modifier = Modifier,
 ) {
     if (stats == null) {
-        Text("—", modifier = modifier, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            "—",
+            modifier = modifier,
+            style = MaterialTheme.typography.bodySmall,
+            fontFamily = Mono,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         return
     }
     val (label, color) =
@@ -358,6 +374,28 @@ private fun TooltipStatLine(
     }
 }
 
+// How far behind the best competing price ("+2.4%"), "top" when nothing beats it, and for a
+// standing buy order (see StandingOrders) its distance muted and unsigned.
+@Composable
+private fun DistanceCell(
+    distancePct: Double?,
+    standing: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val (text, color) =
+        when {
+            distancePct == null -> "—" to MaterialTheme.colorScheme.onSurfaceVariant
+
+            // Muted and unsigned: waiting for the price to come down to it, not beaten.
+            standing -> formatDistance(distancePct, signed = false) to MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+
+            distancePct <= 0 -> stringResource(Res.string.dist_top) to PROFIT_COLOR
+
+            else -> formatDistance(distancePct, signed = true) to UNDERCUT_COLOR
+        }
+    Text(text, modifier = modifier, style = MaterialTheme.typography.bodySmall, fontFamily = Mono, color = color, maxLines = 1)
+}
+
 // Modification fees paid so far ("N× · total") plus an estimated countdown to zero margin
 // ("~N left"), stacked like the Price column's undercut sub-line. updatesRemaining is omitted
 // (buy orders, or no cost basis to estimate against) rather than shown as a misleading "—".
@@ -372,6 +410,7 @@ private fun RelistCell(
         Text(
             if (relistCount > 0) "$relistCount× · ${formatIsk(relistFeesPaid)}" else "—",
             style = MaterialTheme.typography.bodySmall,
+            fontFamily = Mono,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (updatesRemaining != null) {
@@ -419,7 +458,7 @@ internal fun BuyOrderRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
-            modifier = Modifier.weight(3f).padding(end = 8.dp),
+            modifier = Modifier.weight(4f).padding(end = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
@@ -434,7 +473,7 @@ internal fun BuyOrderRow(
             }
             Text(
                 order.typeName,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 overflow = TextOverflow.Ellipsis,
                 maxLines = 1,
                 modifier = Modifier.weight(1f),
@@ -453,7 +492,12 @@ internal fun BuyOrderRow(
 
         // Price column: order price + competing price below if overbid
         Column(modifier = Modifier.weight(2.4f)) {
-            Text(formatIsk(order.price), style = MaterialTheme.typography.bodyMedium, color = if (isOverbid) UNDERCUT_COLOR else BUY_COLOR)
+            Text(
+                formatIsk(order.price),
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = Mono,
+                color = if (isOverbid) UNDERCUT_COLOR else BUY_COLOR,
+            )
             val bestBuy = comparison?.bestBuy
             if (isOverbid && bestBuy != null) {
                 Text(
@@ -466,38 +510,44 @@ internal fun BuyOrderRow(
 
         // No "~N left" estimate here: unlike a sell order, a buy order has no committed cost
         // basis yet to measure remaining margin against, only a speculative future resale price.
+        DistanceCell(metrics.distancePct, standing = metrics.isStanding, modifier = Modifier.weight(1.1f))
+
         RelistCell(order.relistCount, order.relistFeesPaid, updatesRemaining = null, modifier = Modifier.weight(1.6f))
 
         Text(
             marginPct?.let { "%.1f%%".format(it) } ?: "—",
             modifier = Modifier.weight(1.2f),
             style = MaterialTheme.typography.bodySmall,
+            fontFamily = Mono,
             color = marginColor,
         )
         Text(
             bestMarginPct?.let { "%.1f%%".format(it) } ?: "—",
             modifier = Modifier.weight(1.4f),
             style = MaterialTheme.typography.bodySmall,
+            fontFamily = Mono,
             color = bestMarginColor,
         )
 
-        VolumeBar(order.volumeRemaining, order.volumeTotal, isSell = false, modifier = Modifier.weight(2.5f).padding(horizontal = 4.dp))
-        Text(formatIsk(order.total), modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodyMedium)
+        VolumeBar(order.volumeRemaining, order.volumeTotal, isSell = false, modifier = Modifier.weight(2.1f).padding(horizontal = 4.dp))
+        Text(formatIsk(order.total), modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodySmall, fontFamily = Mono)
         CompetitionCell(metrics.competition, modifier = Modifier.weight(1.8f))
         Text(
             formatDuration(order.timeLeftSeconds),
             modifier = Modifier.weight(1.5f),
             style = MaterialTheme.typography.bodySmall,
+            fontFamily = Mono,
             color = timeLeftColor(order.timeLeftSeconds),
         )
         Text(
             formatDuration(order.orderAgeSeconds),
             modifier = Modifier.weight(1.5f),
             style = MaterialTheme.typography.bodySmall,
+            fontFamily = Mono,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        IconButton(modifier = Modifier.size(36.dp), onClick = onAction) {
+        IconButton(modifier = Modifier.size(24.dp), onClick = onAction) {
             Icon(
                 Icons.Default.OpenInBrowser,
                 contentDescription = stringResource(Res.string.open_in_game),
@@ -540,7 +590,7 @@ internal fun OrderHistoryRow(
         Row(modifier = Modifier.weight(3f), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 order.typeName,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 overflow = TextOverflow.Ellipsis,
                 maxLines = 1,
                 modifier = Modifier.weight(1f, fill = false),
@@ -559,11 +609,12 @@ internal fun OrderHistoryRow(
             style = MaterialTheme.typography.bodySmall,
             color = stateColor,
         )
-        Text(formatIsk(order.price), modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodyMedium)
+        Text(formatIsk(order.price), modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodySmall, fontFamily = Mono)
         Text(
             pnl?.let { formatIsk(it) } ?: "—",
             modifier = Modifier.weight(2f),
             style = MaterialTheme.typography.bodySmall,
+            fontFamily = Mono,
             color = profitColor ?: MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = if (pnl != null) FontWeight.SemiBold else FontWeight.Normal,
         )
@@ -571,18 +622,21 @@ internal fun OrderHistoryRow(
             marginPct?.let { "%.1f%%".format(it) } ?: "—",
             modifier = Modifier.weight(1.2f),
             style = MaterialTheme.typography.bodySmall,
+            fontFamily = Mono,
             color = profitColor ?: MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
             "${formatNumber(order.volumeRemaining)}/${formatNumber(order.volumeTotal)}",
             modifier = Modifier.weight(2f),
             style = MaterialTheme.typography.bodySmall,
+            fontFamily = Mono,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
             order.issued.take(16).replace("T", " "),
             modifier = Modifier.weight(2f),
             style = MaterialTheme.typography.bodySmall,
+            fontFamily = Mono,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
@@ -622,14 +676,14 @@ internal fun InventoryRow(
         Row(modifier = Modifier.weight(3f), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 item.typeName,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 overflow = TextOverflow.Ellipsis,
                 maxLines = 1,
                 modifier = Modifier.weight(1f, fill = false),
             )
             ItemDetailButton(ItemDetailTarget(item.typeId, item.typeName))
         }
-        Text(formatNumber(item.remainingQty), modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.bodyMedium)
+        Text(formatNumber(item.remainingQty), modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.bodySmall)
         val daysHeld = item.daysHeld
         Text(
             daysHeld?.let { stringResource(Res.string.days_short, it) } ?: "—",
@@ -642,13 +696,15 @@ internal fun InventoryRow(
             formatIsk(item.avgCostBasis),
             modifier = Modifier.weight(2f),
             style = MaterialTheme.typography.bodySmall,
+            fontFamily = Mono,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Text(formatIsk(item.totalCostBasis), modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodySmall)
+        Text(formatIsk(item.totalCostBasis), modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodySmall, fontFamily = Mono)
         Text(
             sellPrice?.let { formatIsk(it) } ?: "—",
             modifier = Modifier.weight(2f),
             style = MaterialTheme.typography.bodySmall,
+            fontFamily = Mono,
             color = if (isOwnListing) SELL_COLOR else MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
@@ -656,6 +712,7 @@ internal fun InventoryRow(
             profitPerUnit?.let { formatIsk(it * item.remainingQty) } ?: "—",
             modifier = Modifier.weight(2f),
             style = MaterialTheme.typography.bodySmall,
+            fontFamily = Mono,
             color = profitColor,
             fontWeight = if (profitPerUnit != null) FontWeight.SemiBold else FontWeight.Normal,
         )
@@ -663,12 +720,14 @@ internal fun InventoryRow(
             marginPct?.let { "%.1f%%".format(it) } ?: "—",
             modifier = Modifier.weight(1.2f),
             style = MaterialTheme.typography.bodySmall,
+            fontFamily = Mono,
             color = profitColor,
         )
         Text(
             realizedPnl?.let { formatIsk(it) } ?: "—",
             modifier = Modifier.weight(2f),
             style = MaterialTheme.typography.bodySmall,
+            fontFamily = Mono,
             color = realizedColor,
             fontWeight = if (realizedPnl != null) FontWeight.SemiBold else FontWeight.Normal,
         )

@@ -562,6 +562,11 @@ private fun OrdersPanel(
         warningColor.takeIf { outbid.isNotEmpty() },
     )
     KV(stringResource(Res.string.ord_expiring), expiring.size.toString(), warningColor.takeIf { expiring.isNotEmpty() })
+    orders
+        .count {
+            it.standing
+        }.takeIf { it > 0 }
+        ?.let { Tip(stringResource(Res.string.tip_standing)) { KV(stringResource(Res.string.ord_standing), it.toString()) } }
     KV(stringResource(Res.string.ord_fills_24h), "${fills.buys} / ${fills.sells}")
     KV(stringResource(Res.string.ord_volume_24h), "${formatIsk(fills.buyIsk)} / ${formatIsk(fills.sellIsk)}")
     Spacer(Modifier.height(6.dp))

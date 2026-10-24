@@ -74,10 +74,10 @@
     <string name="refresh_prices">Обновить цены</string>
     <string name="refresh_corp_orders">Обновить ордера корпорации</string>
     <string name="refresh_orders">Обновить ордера</string>
-    <string name="tab_sell">Sell (%1$s)</string>
-    <string name="tab_buy">Buy (%1$s)</string>
-    <string name="tab_history">История (%1$s)</string>
-    <string name="tab_inventory">Инвентарь (%1$s)</string>
+    <string name="tab_sell">Продажа</string>
+    <string name="tab_buy">Покупка</string>
+    <string name="tab_history">История</string>
+    <string name="tab_inventory">Инвентарь</string>
     <string name="no_order_history">Нет истории ордеров</string>
     <string name="add_char_history">Добавьте персонажа, чтобы увидеть историю ордеров.</string>
     <string name="no_completed_orders">Завершённых ордеров не найдено.</string>
@@ -160,4 +160,18 @@
     <string name="tip_i_total_profit">Ожидаемая прибыль, если всё оставшееся продастся по этой цене, после комиссий.</string>
     <string name="tip_i_margin">Прибыль с единицы в % от средней себестоимости.</string>
     <string name="tip_i_realized">Уже полученная прибыль от продаж этого предмета с момента, когда вы снова начали его держать (FIFO). Прибыль прошлых закрытых позиций — во вкладке «История».</string>
+    <string name="h_distance">Δ лучш.</string>
+    <string name="tip_o_distance_sell">Насколько выше самой дешёвой конкурирующей продажи на этой станции, в % от неё. «топ» — вас никто не перебил.</string>
+    <string name="tip_o_distance_buy">Насколько ниже лучшей конкурирующей покупки в регионе, в % от неё. «топ» — вас никто не перебил. Ордера ниже порога «стоячих» — это dip-ордера, а не перебитые.</string>
+    <string name="dist_top">топ</string>
+    <string name="standing_tag">стоячий</string>
+    <string name="s_escrow">Эскроу</string>
+    <string name="s_standing">Стоячих</string>
+    <string name="s_expiring_24h">Истекают &lt;24ч</string>
+    <string name="s_held_30d">Лежат &gt;30 дней</string>
+    <string name="standing_threshold">Стоячие ≥ %1$s%</string>
+    <string name="standing_off">Стоячие: выкл.</string>
+    <string name="tip_standing_threshold">Buy-ордера, которые хотя бы на столько ниже лучшей цены, — это dip-ордера, ждущие просадки: они не считаются перебитыми, не попадают в цикл Ctrl+Z по перебитым и в уведомления и не попадают в «Требуют внимания» на дашборде.</string>
+    <string name="notify_on">Уведомления</string>
+    <string name="recalc_short">Пересчитать P&amp;L</string>
 </resources>

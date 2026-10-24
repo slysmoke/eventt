@@ -329,3 +329,70 @@ fun TerminalSearch(
         }
     }
 }
+
+class TabItem(
+    val label: String,
+    val count: Int? = null,
+    // Small colour mark before the label (e.g. sell red / buy green).
+    val dot: Color? = null,
+)
+
+// Primary tabs that read as tabs at a glance: full-size labels, a count, and an accent underline
+// under the open one.
+@Composable
+fun TabBar(
+    tabs: List<TabItem>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    Column(modifier) {
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            tabs.forEachIndexed { i, t ->
+                val on = i == selected
+                Column(
+                    Modifier
+                        .width(IntrinsicSize.Max)
+                        .clickable { onSelect(i) }
+                        .then(if (on) Modifier.background(accent.copy(alpha = 0.08f), MaterialTheme.shapes.extraSmall) else Modifier),
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        t.dot?.let { Box(Modifier.size(8.dp).background(it, CircleShape)) }
+                        Text(
+                            t.label,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
+                            color = if (on) MaterialTheme.colorScheme.onSurface else AXIS_COLOR,
+                        )
+                        t.count?.let {
+                            Text(
+                                it.toString(),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontFamily = Mono,
+                                color = if (on) accent else AXIS_COLOR,
+                                modifier =
+                                    Modifier
+                                        .border(1.dp, if (on) accent.copy(alpha = 0.6f) else outline(), MaterialTheme.shapes.extraSmall)
+                                        .padding(horizontal = 6.dp, vertical = 1.dp),
+                            )
+                        }
+                    }
+                    Box(
+                        Modifier
+                            .align(
+                                Alignment.CenterHorizontally,
+                            ).fillMaxWidth()
+                            .height(2.dp)
+                            .background(if (on) accent else Color.Transparent),
+                    )
+                }
+            }
+        }
+        HorizontalDivider(color = outline())
+    }
+}

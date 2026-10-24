@@ -1,6 +1,7 @@
 package org.eventt.features.orders
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -14,10 +15,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.eventt.core.database.OrderHistoryDao
 import org.eventt.orders.generated.resources.*
+import org.eventt.ui.common.*
+import org.eventt.ui.common.AXIS_COLOR
 import org.eventt.ui.common.Tip
 import org.eventt.ui.common.formatIsk
 import org.eventt.ui.common.formatVolume
@@ -28,23 +32,6 @@ import org.jetbrains.compose.resources.stringResource
 import java.util.Locale
 
 // ── Sub-components ────────────────────────────────────────────────────────
-
-// Corp view: which member's orders the Sell/Buy tables (and the Ctrl+Z queue) show is driven by
-// the sidebar's corp/character selector — this just toggles between that one member and everyone.
-@Composable
-internal fun AllCharactersCheckbox(
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.clickable { onCheckedChange(!checked) },
-    ) {
-        Checkbox(checked = checked, onCheckedChange = onCheckedChange, modifier = Modifier.size(24.dp))
-        Spacer(Modifier.width(2.dp))
-        Text(stringResource(Res.string.all_characters), style = MaterialTheme.typography.labelMedium)
-    }
-}
 
 @Composable
 internal fun VolumeBar(
@@ -107,49 +94,16 @@ internal fun <T> SortHeader(
 ) {
     Tip(tooltip, modifier) {
         val isActive = currentCol == col
-        val labelColor = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-        Row(
-            modifier = Modifier.fillMaxWidth().clickable { onSort(col) },
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = if (rightAlign) Arrangement.End else Arrangement.Start,
-        ) {
-            if (isActive && rightAlign) {
-                Icon(
-                    if (dir ==
-                        SortDir.ASC
-                    ) {
-                        Icons.Default.ArrowUpward
-                    } else {
-                        Icons.Default.ArrowDownward
-                    },
-                    null,
-                    Modifier.size(12.dp),
-                    tint = labelColor,
-                )
-                Spacer(Modifier.width(2.dp))
-            }
-            Text(
-                label,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                color = labelColor,
-            )
-            if (isActive && !rightAlign) {
-                Spacer(Modifier.width(2.dp))
-                Icon(
-                    if (dir ==
-                        SortDir.ASC
-                    ) {
-                        Icons.Default.ArrowUpward
-                    } else {
-                        Icons.Default.ArrowDownward
-                    },
-                    null,
-                    Modifier.size(12.dp),
-                    tint = labelColor,
-                )
-            }
-        }
+        Text(
+            label + if (isActive) (if (dir == SortDir.ASC) " ▲" else " ▼") else "",
+            modifier = Modifier.fillMaxWidth().clickable { onSort(col) }.padding(end = 4.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = if (isActive) MaterialTheme.colorScheme.primary else AXIS_COLOR,
+            textAlign = if (rightAlign) TextAlign.End else TextAlign.Start,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -164,54 +118,156 @@ internal fun StaticHeader(
         Text(
             label,
             modifier = Modifier.fillMaxWidth(),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = AXIS_COLOR,
             textAlign = if (rightAlign) TextAlign.End else TextAlign.Start,
+            maxLines = 1,
         )
     }
 }
-// ── Summary bars ──────────────────────────────────────────────────────────
 
+// Buy tab: the standing-order threshold, picked from a few steps (0 = off).
+@Composable
+internal fun StandingThreshold(
+    pct: Double,
+    onChange: (Double) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Tip(stringResource(Res.string.tip_standing_threshold)) {
+            Segment(
+                if (pct >
+                    0
+                ) {
+                    stringResource(Res.string.standing_threshold, pct.toInt().toString())
+                } else {
+                    stringResource(Res.string.standing_off)
+                },
+                pct > 0,
+            ) { open = true }
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            listOf(0.0, 2.0, 3.0, 5.0, 10.0, 15.0, 20.0, 30.0).forEach { v ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            if (v >
+                                0
+                            ) {
+                                stringResource(Res.string.standing_threshold, v.toInt().toString())
+                            } else {
+                                stringResource(Res.string.standing_off)
+                            },
+                        )
+                    },
+                    onClick = {
+                        open = false
+                        onChange(v)
+                    },
+                )
+            }
+        }
+    }
+}
+
+// ── KPI strips ────────────────────────────────────────────────────────────
+
+@Composable
+private fun KpiRow(content: @Composable RowScope.() -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), MaterialTheme.shapes.extraSmall),
+        content = content,
+    )
+}
+
+// Sell or Buy tab: the active orders' size, what's beaten (buy: outbid, standing apart), volume
+// left, expiring soon, and on the sell side what they'd make at today's prices.
 @Composable
 internal fun OrdersSummaryBar(
     orders: List<CharacterOrder>,
     inventory: Map<Int, CostBasisService.InventoryItem>?,
     taxConfig: CostBasisService.TaxConfig = CostBasisService.TaxConfig(),
+    comparisons: Map<Pair<Int, Long>, MarketComparison> = emptyMap(),
 ) {
     val active = orders.filter { it.state == "active" }
-    val totalRemain = active.sumOf { it.volumeRemaining }
-    val totalEntered = active.sumOf { it.volumeTotal }
-    val pct = if (totalEntered > 0) totalRemain * 100.0 / totalEntered else 0.0
-    val totalIsk = active.sumOf { it.total }
-    val totalProfit =
-        inventory?.let {
-            active
-                .sumOf { o ->
-                    val cb = it[o.typeId]?.avgCostBasis ?: return@sumOf 0.0
-                    (o.price * taxConfig.sellMultiplier - cb) * o.volumeRemaining
-                }.takeIf { it != 0.0 }
+    val isBuy = active.firstOrNull()?.isBuyOrder ?: (inventory == null)
+    val totalRemain = active.sumOf { it.volumeRemaining.toLong() }
+    val totalEntered = active.sumOf { it.volumeTotal.toLong() }
+    val beaten = active.count { it.isBeatenBy(comparisons[it.typeId to it.locationId]) }
+    val standing = if (isBuy) active.count { StandingOrders.isStanding(it.price, comparisons[it.typeId to it.locationId]?.bestBuy) } else 0
+    val expiring = active.count { it.timeLeftSeconds in 1 until 86400 }
+    val relistFees = active.sumOf { it.relistFeesPaid }
+    val expectedProfit =
+        inventory?.let { inv ->
+            active.sumOf { o ->
+                val cb = inv[o.typeId]?.avgCostBasis ?: return@sumOf 0.0
+                (o.price * taxConfig.sellMultiplier - cb) * o.volumeRemaining
+            }
         }
-
-    Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceVariant, tonalElevation = 2.dp) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            SummaryItem(stringResource(Res.string.s_active_orders), active.size.toString())
-            SummaryItem(
-                stringResource(Res.string.s_volume),
-                "${formatNumber(totalRemain)}/${formatNumber(totalEntered)} (${String.format(Locale.US, "%.1f", pct)}%)",
+    KpiRow {
+        Kpi(stringResource(Res.string.s_active_orders), active.size.toString(), null, null, null)
+        Kpi(
+            stringResource(if (isBuy) Res.string.s_escrow else Res.string.s_total_isk),
+            formatIsk(active.sumOf { it.total }),
+            null,
+            null,
+            null,
+        )
+        Kpi(
+            stringResource(if (isBuy) Res.string.overbid else Res.string.undercut),
+            beaten.toString(),
+            if (active.isNotEmpty()) String.format(Locale.US, "%.0f%%", beaten * 100.0 / active.size) else null,
+            null,
+            null,
+            valueColor = UNDERCUT_COLOR.takeIf { beaten > 0 },
+        )
+        if (isBuy) Kpi(stringResource(Res.string.s_standing), standing.toString(), null, null, null, Res.string.tip_o_distance_buy)
+        Kpi(
+            stringResource(Res.string.s_volume),
+            "${formatVolume(totalRemain)} / ${formatVolume(totalEntered)}",
+            if (totalEntered > 0) String.format(Locale.US, "%.1f%%", totalRemain * 100.0 / totalEntered) else null,
+            null,
+            null,
+        )
+        Kpi(
+            stringResource(Res.string.s_expiring_24h),
+            expiring.toString(),
+            null,
+            null,
+            null,
+            valueColor =
+                warningColor.takeIf {
+                    expiring >
+                        0
+                },
+        )
+        Kpi(
+            stringResource(Res.string.s_relist_fees),
+            formatIsk(relistFees),
+            null,
+            null,
+            null,
+            valueColor =
+                LOSS_COLOR.takeIf {
+                    relistFees >
+                        0
+                },
+            last = expectedProfit == null,
+        )
+        if (expectedProfit != null) {
+            Kpi(
+                stringResource(Res.string.s_expected_profit),
+                signed(expectedProfit),
+                null,
+                null,
+                null,
+                valueColor = pnlColor(expectedProfit),
+                last = true,
             )
-            SummaryItem(stringResource(Res.string.s_total_isk), "${formatIsk(totalIsk)} ISK")
-            if (totalProfit != null) {
-                val color = if (totalProfit >= 0) PROFIT_COLOR else LOSS_COLOR
-                SummaryItem(stringResource(Res.string.s_expected_profit), "${formatIsk(totalProfit)} ISK", color)
-            }
-            val totalRelistFees = active.sumOf { it.relistFeesPaid }
-            if (totalRelistFees > 0) {
-                SummaryItem(stringResource(Res.string.s_relist_fees), "${formatIsk(totalRelistFees)} ISK", LOSS_COLOR)
-            }
         }
     }
 }
@@ -221,34 +277,28 @@ internal fun HistorySummaryBar(
     orders: List<OrderHistoryDao.OrderHistoryRecord>,
     fifoResult: CostBasisService.FifoResult?,
 ) {
-    val effectiveStates = orders.associateWith { effectiveOrderState(it) }
-    val fulfilled = effectiveStates.count { it.value == "fulfilled" }
-    val partiallyFilled = effectiveStates.count { it.value == "partially_filled" }
-    val cancelled = effectiveStates.count { it.value == "cancelled" }
-    val expired = effectiveStates.count { it.value == "expired" }
+    val states = orders.map { effectiveOrderState(it) }
     val totalSold =
         orders
-            .filter { !it.isBuyOrder && effectiveStates[it] in setOf("fulfilled", "partially_filled") }
+            .filter { !it.isBuyOrder && effectiveOrderState(it) in setOf("fulfilled", "partially_filled") }
             .sumOf { it.price * (it.volumeTotal - it.volumeRemaining) }
     val totalPnl = fifoResult?.totalRealizedPnl
-
-    Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceVariant, tonalElevation = 2.dp) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            SummaryItem(stringResource(Res.string.s_total), orders.size.toString())
-            SummaryItem(stringResource(Res.string.s_fulfilled), fulfilled.toString())
-            if (partiallyFilled > 0) SummaryItem(stringResource(Res.string.s_partially_filled), partiallyFilled.toString())
-            SummaryItem(stringResource(Res.string.s_cancelled), cancelled.toString())
-            SummaryItem(stringResource(Res.string.s_expired), expired.toString())
-            if (totalSold > 0) SummaryItem(stringResource(Res.string.s_sell_volume), "${formatIsk(totalSold)} ISK")
-            if (totalPnl != null) {
-                val color = if (totalPnl >= 0) PROFIT_COLOR else LOSS_COLOR
-                SummaryItem(stringResource(Res.string.s_total_realized), "${formatIsk(totalPnl)} ISK", color)
-            }
-        }
+    KpiRow {
+        Kpi(stringResource(Res.string.s_total), orders.size.toString(), null, null, null)
+        Kpi(stringResource(Res.string.s_fulfilled), states.count { it == "fulfilled" }.toString(), null, null, null)
+        Kpi(stringResource(Res.string.s_partially_filled), states.count { it == "partially_filled" }.toString(), null, null, null)
+        Kpi(stringResource(Res.string.s_cancelled), states.count { it == "cancelled" }.toString(), null, null, null)
+        Kpi(stringResource(Res.string.s_expired), states.count { it == "expired" }.toString(), null, null, null)
+        Kpi(stringResource(Res.string.s_sell_volume), formatIsk(totalSold), null, null, null)
+        Kpi(
+            stringResource(Res.string.s_total_realized),
+            totalPnl?.let(::signed) ?: "—",
+            null,
+            null,
+            null,
+            valueColor = pnlColor(totalPnl),
+            last = true,
+        )
     }
 }
 
@@ -257,32 +307,33 @@ internal fun InventorySummaryBar(
     fifoResult: CostBasisService.FifoResult,
     inventory: Map<Int, CostBasisService.InventoryItem>,
 ) {
-    val totalCost = inventory.values.sumOf { it.totalCostBasis }
-    val totalPnl = fifoResult.totalRealizedPnl
-    val pnlColor = if (totalPnl >= 0) PROFIT_COLOR else LOSS_COLOR
-
-    Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceVariant, tonalElevation = 2.dp) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            SummaryItem(stringResource(Res.string.s_items), inventory.size.toString())
-            SummaryItem(stringResource(Res.string.s_inventory_cost), "${formatIsk(totalCost)} ISK")
-            SummaryItem(stringResource(Res.string.s_all_time_realized), "${formatIsk(totalPnl)} ISK", pnlColor)
-        }
-    }
-}
-
-@Composable
-private fun SummaryItem(
-    label: String,
-    value: String,
-    valueColor: Color = Color.Unspecified,
-) {
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label + ":", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, color = valueColor)
+    val held = inventory.values.mapNotNull { it.daysHeld }
+    KpiRow {
+        Kpi(stringResource(Res.string.s_items), inventory.size.toString(), null, null, null)
+        Kpi(stringResource(Res.string.s_inventory_cost), formatIsk(inventory.values.sumOf { it.totalCostBasis }), null, null, null)
+        Kpi(
+            stringResource(Res.string.s_held_30d),
+            held.count { it > 30 }.toString(),
+            null,
+            null,
+            null,
+            valueColor =
+                warningColor.takeIf {
+                    held.any {
+                        it >
+                            30
+                    }
+                },
+        )
+        Kpi(
+            stringResource(Res.string.s_all_time_realized),
+            signed(fifoResult.totalRealizedPnl),
+            null,
+            null,
+            null,
+            valueColor = pnlColor(fifoResult.totalRealizedPnl),
+            last = true,
+        )
     }
 }
 

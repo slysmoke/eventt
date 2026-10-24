@@ -44,6 +44,8 @@ private fun sortBuyMetrics(
 
             SortCol.PRICE -> list.sortedBy { it.order.price }
 
+            SortCol.DISTANCE -> list.sortedBy { it.distancePct ?: Double.NEGATIVE_INFINITY }
+
             SortCol.RELIST -> list.sortedBy { it.order.relistFeesPaid }
 
             SortCol.MARGIN -> list.sortedBy { it.marginPct ?: Double.NEGATIVE_INFINITY }
@@ -80,6 +82,8 @@ private fun sortSellMetrics(
             SortCol.COST -> list.sortedBy { it.costBasis ?: Double.NEGATIVE_INFINITY }
 
             SortCol.PRICE -> list.sortedBy { it.order.price }
+
+            SortCol.DISTANCE -> list.sortedBy { it.distancePct ?: Double.NEGATIVE_INFINITY }
 
             SortCol.RELIST -> list.sortedBy { it.order.relistFeesPaid }
 
@@ -119,6 +123,7 @@ internal data class SellOrderMetrics(
     // Beaten: another sell order at the same station is currently cheaper than ours.
     val isBeaten: Boolean,
     val competition: CompetitionService.Stats?,
+    val distancePct: Double? = null,
 )
 
 internal fun computeSellMetrics(
@@ -190,6 +195,7 @@ internal fun computeSellMetrics(
         updatesRemaining,
         isBeaten,
         competitionStats,
+        distancePct(order.price, isBuy = false, comparison),
     )
 }
 
@@ -241,12 +247,10 @@ internal fun SellOrdersTable(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .background(
-                        MaterialTheme.colorScheme.surfaceVariant,
-                    ).padding(horizontal = 8.dp, vertical = 6.dp),
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SortHeader(stringResource(Res.string.h_name), SortCol.NAME, sortCol, sortDir, onSort, Modifier.weight(3f))
+            SortHeader(stringResource(Res.string.h_name), SortCol.NAME, sortCol, sortDir, onSort, Modifier.weight(4f))
             SortHeader(
                 stringResource(Res.string.h_cost),
                 SortCol.COST,
@@ -264,6 +268,15 @@ internal fun SellOrdersTable(
                 onSort,
                 Modifier.weight(2.4f),
                 tooltip = stringResource(Res.string.tip_o_price_sell),
+            )
+            SortHeader(
+                stringResource(Res.string.h_distance),
+                SortCol.DISTANCE,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.1f),
+                tooltip = stringResource(Res.string.tip_o_distance_sell),
             )
             SortHeader(
                 stringResource(Res.string.h_relist),
@@ -307,7 +320,7 @@ internal fun SellOrdersTable(
                 sortCol,
                 sortDir,
                 onSort,
-                Modifier.weight(2.5f),
+                Modifier.weight(2.1f),
                 tooltip = stringResource(Res.string.tip_o_volume),
             )
             SortHeader(
@@ -337,9 +350,9 @@ internal fun SellOrdersTable(
                 Modifier.weight(1.5f),
                 tooltip = stringResource(Res.string.tip_o_time_left),
             )
-            StaticHeader("", Modifier.width(36.dp))
+            StaticHeader("", Modifier.width(24.dp))
         }
-        HorizontalDivider()
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         val listState = rememberLazyListState()
         // The hotkey cycles activeOrderId through the list, but the highlighted row moves
         // independently of scroll position — without this, cycling can walk the active row
@@ -357,7 +370,7 @@ internal fun SellOrdersTable(
                     onSelect = { onSelect(m.order.orderId) },
                     onAction = { onAction(m.order) },
                 )
-                HorizontalDivider(thickness = 0.5.dp)
+                HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
             }
         }
     }
@@ -370,12 +383,15 @@ internal data class BuyOrderMetrics(
     val comparison: MarketComparison?,
     val marginPct: Double?,
     val bestMarginPct: Double?,
-    // Overbid: another buy order region-wide currently pays more than ours.
+    // Overbid: another buy order region-wide currently pays more than ours — and ours isn't a
+    // standing order deliberately sitting far under it (see StandingOrders).
     val isOverbid: Boolean,
     val competition: CompetitionService.Stats?,
+    val distancePct: Double? = null,
+    val isStanding: Boolean = false,
 )
 
-private fun computeBuyMetrics(
+internal fun computeBuyMetrics(
     order: CharacterOrder,
     taxConfig: CostBasisService.TaxConfig,
     comparisons: Map<Pair<Int, Long>, MarketComparison>,
@@ -385,10 +401,20 @@ private fun computeBuyMetrics(
     // Margin if this order fills and the item is resold at the current best sell price.
     val marginPct = computeMarginPct(order.price, comparison?.bestSell, taxConfig)
     val bestMarginPct = computeBestMarginPct(comparison, taxConfig)
-    val isOverbid = comparison?.bestBuy != null && comparison.bestBuy > order.price
+    val isStanding = StandingOrders.isStanding(order.price, comparison?.bestBuy)
+    val isOverbid = comparison?.bestBuy != null && comparison.bestBuy > order.price && !isStanding
     // Buy competition is scoped to the region, matching recordTopSnapshots.
     val competitionStats = competition[order.typeId to order.regionId.toLong()]
-    return BuyOrderMetrics(order, comparison, marginPct, bestMarginPct, isOverbid, competitionStats)
+    return BuyOrderMetrics(
+        order,
+        comparison,
+        marginPct,
+        bestMarginPct,
+        isOverbid,
+        competitionStats,
+        distancePct(order.price, isBuy = true, comparison),
+        isStanding,
+    )
 }
 
 @Composable
@@ -401,13 +427,15 @@ internal fun BuyOrdersTable(
     comparisons: Map<Pair<Int, Long>, MarketComparison>,
     competition: Map<Pair<Int, Long>, CompetitionService.Stats>,
     showOverbidOnly: Boolean,
+    // Not read here — keys the metrics so a threshold change re-derives isStanding/isOverbid.
+    standingPct: Double,
     selectedOrderId: Long?,
     activeOrderId: Long?,
     onSelect: (Long) -> Unit,
     onAction: (CharacterOrder) -> Unit,
 ) {
     val metrics =
-        remember(orders, taxConfig, comparisons, competition) {
+        remember(orders, taxConfig, comparisons, competition, standingPct) {
             orders.map { computeBuyMetrics(it, taxConfig, comparisons, competition) }
         }
     val visible = if (showOverbidOnly) metrics.filter { it.isOverbid } else metrics
@@ -418,12 +446,10 @@ internal fun BuyOrdersTable(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .background(
-                        MaterialTheme.colorScheme.surfaceVariant,
-                    ).padding(horizontal = 8.dp, vertical = 6.dp),
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SortHeader(stringResource(Res.string.h_name), SortCol.NAME, sortCol, sortDir, onSort, Modifier.weight(3f))
+            SortHeader(stringResource(Res.string.h_name), SortCol.NAME, sortCol, sortDir, onSort, Modifier.weight(4f))
             SortHeader(
                 stringResource(Res.string.h_price_best),
                 SortCol.PRICE,
@@ -432,6 +458,15 @@ internal fun BuyOrdersTable(
                 onSort,
                 Modifier.weight(2.4f),
                 tooltip = stringResource(Res.string.tip_o_price_buy),
+            )
+            SortHeader(
+                stringResource(Res.string.h_distance),
+                SortCol.DISTANCE,
+                sortCol,
+                sortDir,
+                onSort,
+                Modifier.weight(1.1f),
+                tooltip = stringResource(Res.string.tip_o_distance_buy),
             )
             SortHeader(
                 stringResource(Res.string.h_relist),
@@ -466,7 +501,7 @@ internal fun BuyOrdersTable(
                 sortCol,
                 sortDir,
                 onSort,
-                Modifier.weight(2.5f),
+                Modifier.weight(2.1f),
                 tooltip = stringResource(Res.string.tip_o_volume),
             )
             SortHeader(
@@ -505,9 +540,9 @@ internal fun BuyOrdersTable(
                 Modifier.weight(1.5f),
                 tooltip = stringResource(Res.string.tip_o_age),
             )
-            StaticHeader("", Modifier.width(36.dp))
+            StaticHeader("", Modifier.width(24.dp))
         }
-        HorizontalDivider()
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         val listState = rememberLazyListState()
         // The hotkey cycles activeOrderId through the list, but the highlighted row moves
         // independently of scroll position — without this, cycling can walk the active row
@@ -525,7 +560,7 @@ internal fun BuyOrdersTable(
                     onSelect = { onSelect(m.order.orderId) },
                     onAction = { onAction(m.order) },
                 )
-                HorizontalDivider(thickness = 0.5.dp)
+                HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
             }
         }
     }
@@ -592,9 +627,7 @@ internal fun OrderHistoryTable(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .background(
-                        MaterialTheme.colorScheme.surfaceVariant,
-                    ).padding(horizontal = 8.dp, vertical = 6.dp),
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SortHeader(stringResource(Res.string.h_name), HistorySortCol.NAME, sortCol, sortDir, ::toggleSort, Modifier.weight(3f))
@@ -639,11 +672,11 @@ internal fun OrderHistoryTable(
             SortHeader(stringResource(Res.string.h_issued), HistorySortCol.ISSUED, sortCol, sortDir, ::toggleSort, Modifier.weight(2f))
             SortHeader(stringResource(Res.string.h_station), HistorySortCol.STATION, sortCol, sortDir, ::toggleSort, Modifier.weight(2.5f))
         }
-        HorizontalDivider()
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         LazyColumn {
             items(sorted, key = { it.order.orderId }) { m ->
                 OrderHistoryRow(m.order, m.pnl, m.marginPct)
-                HorizontalDivider(thickness = 0.5.dp)
+                HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
             }
         }
     }
@@ -777,9 +810,7 @@ internal fun InventoryTable(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .background(
-                        MaterialTheme.colorScheme.surfaceVariant,
-                    ).padding(horizontal = 8.dp, vertical = 6.dp),
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SortHeader(stringResource(Res.string.h_name), InventorySortCol.NAME, sortCol, sortDir, ::toggleSort, Modifier.weight(3f))
@@ -857,7 +888,7 @@ internal fun InventoryTable(
             )
             Spacer(Modifier.width(28.dp))
         }
-        HorizontalDivider()
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         LazyColumn {
             items(sorted, key = { it.item.typeId }) { m ->
                 InventoryRow(
@@ -871,7 +902,7 @@ internal fun InventoryTable(
                         writeOffDefaultQty = m.item.remainingQty
                     },
                 )
-                HorizontalDivider(thickness = 0.5.dp)
+                HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
             }
         }
     }

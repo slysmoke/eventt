@@ -72,10 +72,10 @@
     <string name="refresh_prices">Refresh Prices</string>
     <string name="refresh_corp_orders">Refresh Corp Orders</string>
     <string name="refresh_orders">Refresh Orders</string>
-    <string name="tab_sell">Sell (%1$s)</string>
-    <string name="tab_buy">Buy (%1$s)</string>
-    <string name="tab_history">History (%1$s)</string>
-    <string name="tab_inventory">Inventory (%1$s)</string>
+    <string name="tab_sell">Sell orders</string>
+    <string name="tab_buy">Buy orders</string>
+    <string name="tab_history">History</string>
+    <string name="tab_inventory">Inventory</string>
     <string name="no_order_history">No Order History</string>
     <string name="add_char_history">Add a character to view order history.</string>
     <string name="no_completed_orders">No completed orders found.</string>
@@ -156,4 +156,18 @@
     <string name="tip_i_total_profit">Expected profit if everything held sells at that price, after fees.</string>
     <string name="tip_i_margin">Profit per unit as % of average cost.</string>
     <string name="tip_i_realized">Profit already made selling this item since you last started holding it (FIFO). Earlier closed positions are in History.</string>
+    <string name="h_distance">Δ best</string>
+    <string name="tip_o_distance_sell">How far above the cheapest competing sell at this station, as % of it. "top" = nothing undercuts you.</string>
+    <string name="tip_o_distance_buy">How far under the best competing bid in the region, as % of it. "top" = nobody outbids you. Orders further under than the standing threshold are dip orders, not outbid.</string>
+    <string name="dist_top">top</string>
+    <string name="standing_tag">standing</string>
+    <string name="s_escrow">Escrow</string>
+    <string name="s_standing">Standing</string>
+    <string name="s_expiring_24h">Expiring &lt;24h</string>
+    <string name="s_held_30d">Held &gt;30 days</string>
+    <string name="standing_threshold">Standing ≥ %1$s%</string>
+    <string name="standing_off">Standing: off</string>
+    <string name="tip_standing_threshold">Buy orders at least this far under the best bid are dip orders waiting for a price drop: they are not shown as outbid, skipped by the Ctrl+Z beaten cycle and the beaten notification, and left out of the Dashboard's attention list.</string>
+    <string name="notify_on">Notify</string>
+    <string name="recalc_short">Recalc P&amp;L</string>
 </resources>

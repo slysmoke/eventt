@@ -38,6 +38,7 @@ import org.eventt.core.model.formatEveSigFigPrice
 import org.eventt.core.model.stringBlocking
 import org.eventt.features.market.ItemDetailDialog
 import org.eventt.orders.generated.resources.*
+import org.eventt.ui.common.*
 import org.eventt.ui.common.CorpAccessNotice
 import org.eventt.ui.common.EmptyState
 import org.eventt.ui.common.EsiRefreshButton
@@ -64,13 +65,6 @@ internal val ACTIVE_IN_GAME = Color(0xFF4A90D9) // blue — currently open in EV
 
 private const val DEFAULT_REGION_ID = 10000002 // The Forge (Jita) — fallback for inventory items with no active order/region context
 private const val SHOW_BEATEN_ONLY_SETTING = "orders.show_beaten_only"
-
-private val beatenFilterIcon: @Composable () -> Unit = {
-    Icon(Icons.Default.ArrowDownward, contentDescription = null, modifier = Modifier.size(16.dp))
-}
-private val overbidFilterIcon: @Composable () -> Unit = {
-    Icon(Icons.Default.ArrowUpward, contentDescription = null, modifier = Modifier.size(16.dp))
-}
 
 internal data class CharacterOrder(
     val orderId: Long,
@@ -176,7 +170,7 @@ internal fun CharacterOrder.toActiveOrderRecord(
         priceUpdatedAt = priceUpdatedAt,
     )
 
-private fun ActiveOrderDao.ActiveOrderRecord.toCharacterOrder(): CharacterOrder =
+internal fun ActiveOrderDao.ActiveOrderRecord.toCharacterOrder(): CharacterOrder =
     CharacterOrder(
         orderId = orderId,
         typeId = typeId,
@@ -230,9 +224,17 @@ internal fun mergeRelistStats(
 
 // Whether a competitor currently beats this order — a cheaper sell at the same station, or a
 // higher buy region-wide. Single source for the hotkey queue, the header badge, and notifications.
+// The price Ctrl+Z / Enter copies: one EVE price step past the best competing order (above the
+// best bid for a buy, under the best ask for a sell), or our own price with no competition.
+internal fun CharacterOrder.undercutPrice(comp: MarketComparison?): Double {
+    val base = (if (isBuyOrder) comp?.bestBuy else comp?.bestSell) ?: return price
+    val step = eveSigFigStep(base)
+    return kotlin.math.round(base / step) * step + if (isBuyOrder) step else -step
+}
+
 internal fun CharacterOrder.isBeatenBy(comp: MarketComparison?): Boolean =
     if (isBuyOrder) {
-        comp?.bestBuy?.let { it > price } ?: false
+        comp?.bestBuy?.let { it > price && !StandingOrders.isStanding(price, it) } ?: false
     } else {
         comp?.bestSell?.let { it < price } ?: false
     }
@@ -277,7 +279,21 @@ internal fun computeBestMarginPct(
 
 // COST/RELIST/PROFIT/MARGIN/BEST_MARGIN are Sell-only (sorted in sortSellMetrics, since they're
 // derived values, not fields on CharacterOrder); TOTAL/ORDER_AGE are Buy-only (applySort).
-internal enum class SortCol { NAME, PRICE, VOLUME, TOTAL, TIME_LEFT, ORDER_AGE, COST, RELIST, PROFIT, MARGIN, BEST_MARGIN, COMPETITION }
+internal enum class SortCol {
+    NAME,
+    PRICE,
+    DISTANCE,
+    VOLUME,
+    TOTAL,
+    TIME_LEFT,
+    ORDER_AGE,
+    COST,
+    RELIST,
+    PROFIT,
+    MARGIN,
+    BEST_MARGIN,
+    COMPETITION,
+}
 
 internal enum class SortDir { ASC, DESC }
 
@@ -316,6 +332,9 @@ fun OrdersScreen(context: ViewContext?) {
     // Buy tab only: when on, hides every order that isn't currently outbid by a higher
     // competing buy order region-wide. Off (show all) by default.
     var showOverbidOnly by remember { mutableStateOf(false) }
+    // Buy orders at least this far under the best bid are standing dip orders (see StandingOrders).
+    var standingPct by remember { mutableStateOf(5.0) }
+    LaunchedEffect(Unit) { standingPct = withContext(Dispatchers.IO) { StandingOrders.thresholdPct } }
 
     // Market comparison data — loaded after orders, shown as overbid indicators. Refreshed on
     // order load, via the manual "Refresh Prices" button, and automatically once the ESI cache
@@ -702,19 +721,7 @@ fun OrdersScreen(context: ViewContext?) {
         // Table is frozen while a refresh is in flight — orders/marketComparisons are mid-update,
         // so acting on them now could open the market window for a price that's about to change.
         if (isLoading || isLoadingMarket) return
-        val comp = marketComparisons[order.typeId to order.locationId]
-        val overbidPrice =
-            if (order.isBuyOrder) {
-                comp?.bestBuy?.let { base ->
-                    val step = eveSigFigStep(base)
-                    kotlin.math.round(base / step) * step + step
-                } ?: order.price
-            } else {
-                comp?.bestSell?.let { base ->
-                    val step = eveSigFigStep(base)
-                    kotlin.math.round(base / step) * step - step
-                } ?: order.price
-            }
+        val overbidPrice = order.undercutPrice(marketComparisons[order.typeId to order.locationId])
         scope.launch(Dispatchers.IO) {
             try {
                 actingCharId?.let { EsiClient.openMarketWindow(it, order.typeId) }
@@ -779,7 +786,7 @@ fun OrdersScreen(context: ViewContext?) {
     // Keep the global hotkey queue in sync with the active tab + market comparison data.
     // Tab 0 = sell orders only, Tab 1 = buy orders only, other tabs = all.
     // Beaten orders sort first so the most urgent ones cycle first.
-    LaunchedEffect(context, orders, marketComparisons, activeTab, issuerFilter) {
+    LaunchedEffect(context, orders, marketComparisons, activeTab, issuerFilter, standingPct) {
         val cid = actingCharId ?: return@LaunchedEffect
         val tabFiltered =
             applyIssuerFilter(
@@ -850,140 +857,80 @@ fun OrdersScreen(context: ViewContext?) {
                     } else {
                         false
                     }
-                },
+                }.padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(Res.string.orders_title), style = MaterialTheme.typography.headlineMedium)
-                if (isLoadingMarket) {
-                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 1.5.dp)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(stringResource(Res.string.orders_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            if (isLoadingMarket) {
+                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 1.5.dp)
+                Text(stringResource(Res.string.loading_market), style = MaterialTheme.typography.labelSmall, color = AXIS_COLOR)
+            }
+            // Global hotkey queue indicator — scoped to the visible tab
+            val tabActive =
+                applyIssuerFilter(
+                    when (activeTab) {
+                        0 -> orders.filter { !it.isBuyOrder && it.state == "active" }
+                        1 -> orders.filter { it.isBuyOrder && it.state == "active" }
+                        else -> orders.filter { it.state == "active" }
+                    },
+                )
+            val beatenCount = tabActive.count { it.isBeatenBy(marketComparisons[it.typeId to it.locationId]) }
+            if (tabActive.isNotEmpty() && actingCharId != null) {
+                val hotkeyLabel by HotkeyBindings.queueLabel.collectAsState()
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "⌨ $hotkeyLabel · " + pluralStringResource(Res.plurals.queue_orders, tabActive.size, tabActive.size),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontFamily = Mono,
+                    color = AXIS_COLOR,
+                )
+                if (beatenCount > 0) {
                     Text(
-                        stringResource(Res.string.loading_market),
+                        stringResource(Res.string.n_beaten, beatenCount),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontFamily = Mono,
+                        color = UNDERCUT_COLOR,
+                        fontWeight = FontWeight.SemiBold,
                     )
                 }
-                // Global hotkey queue indicator — scoped to the visible tab
-                val tabActive =
-                    applyIssuerFilter(
-                        when (activeTab) {
-                            0 -> orders.filter { !it.isBuyOrder && it.state == "active" }
-                            1 -> orders.filter { it.isBuyOrder && it.state == "active" }
-                            else -> orders.filter { it.state == "active" }
-                        },
-                    )
-                val queueSize = tabActive.size
-                val beatenCount = tabActive.count { it.isBeatenBy(marketComparisons[it.typeId to it.locationId]) }
-                if (queueSize > 0 && actingCharId != null) {
-                    Spacer(Modifier.width(4.dp))
-                    Surface(
-                        shape = MaterialTheme.shapes.small,
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Icon(
-                                Icons.Default.Keyboard,
-                                contentDescription = null,
-                                modifier = Modifier.size(12.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            val hotkeyLabel by HotkeyBindings.queueLabel.collectAsState()
-                            Text(
-                                hotkeyLabel,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text("·", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(
-                                pluralStringResource(Res.plurals.queue_orders, queueSize, queueSize),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            if (beatenCount > 0) {
-                                Text("·", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(
-                                    stringResource(Res.string.n_beaten, beatenCount),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = UNDERCUT_COLOR,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                            }
-                            Text("·", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(
-                                stringResource(Res.string.only_beaten),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (onlyBeaten) UNDERCUT_COLOR else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                fontWeight = if (onlyBeaten) FontWeight.SemiBold else FontWeight.Normal,
-                                modifier =
-                                    Modifier.clickable {
-                                        onlyBeaten = !onlyBeaten
-                                        PendingOrdersQueue.onlyBeaten = onlyBeaten
-                                    },
-                            )
-                        }
-                    }
+                Segment(stringResource(Res.string.only_beaten), onlyBeaten) {
+                    onlyBeaten = !onlyBeaten
+                    PendingOrdersQueue.onlyBeaten = onlyBeaten
                 }
             }
+            Spacer(Modifier.weight(1f))
             if (actingCharId != null) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    if (corpId != null) {
-                        AllCharactersCheckbox(
-                            checked = issuerFilter == null,
-                            onCheckedChange = { allChars -> issuerFilter = if (allChars) null else actingCharId },
-                        )
+                if (corpId != null) {
+                    Segment(stringResource(Res.string.all_characters), issuerFilter == null) {
+                        issuerFilter = if (issuerFilter == null) actingCharId else null
                     }
-                    IconButton(onClick = {
+                }
+                Tip(stringResource(Res.string.toggle_beaten_notif)) {
+                    Segment(stringResource(Res.string.notify_on), notifyBeaten) {
                         notifyBeaten = !notifyBeaten
                         scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(NOTIFY_BEATEN_SETTING, notifyBeaten.toString()) }
-                    }) {
-                        Icon(
-                            if (notifyBeaten) Icons.Default.NotificationsActive else Icons.Default.NotificationsOff,
-                            contentDescription = stringResource(Res.string.toggle_beaten_notif),
-                            tint = if (notifyBeaten) UNDERCUT_COLOR else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp),
-                        )
                     }
-                    TextButton(onClick = { recalculateFifo() }) {
-                        Text(stringResource(Res.string.recalc_pnl))
-                    }
-                    EsiRefreshButton(
-                        isLoading = isLoadingMarket,
-                        enabled = !isLoading,
-                        expiresAtMs = marketComparisonsExpiresAt,
-                        onClick = { fetchMarketComparisons(orders) },
-                        label = stringResource(Res.string.refresh_prices),
-                    )
-                    EsiRefreshButton(
-                        isLoading = isLoading,
-                        enabled = !isLoadingMarket,
-                        expiresAtMs = refreshAvailableAt,
-                        onClick = { loadOrders() },
-                        label =
-                            if (corpId !=
-                                null
-                            ) {
-                                stringResource(Res.string.refresh_corp_orders)
-                            } else {
-                                stringResource(Res.string.refresh_orders)
-                            },
-                    )
                 }
+                Segment(stringResource(Res.string.recalc_short), false) { recalculateFifo() }
+                EsiRefreshButton(
+                    isLoading = isLoadingMarket,
+                    enabled = !isLoading,
+                    expiresAtMs = marketComparisonsExpiresAt,
+                    onClick = { fetchMarketComparisons(orders) },
+                    label = stringResource(Res.string.refresh_prices),
+                )
+                EsiRefreshButton(
+                    isLoading = isLoading,
+                    enabled = !isLoadingMarket,
+                    expiresAtMs = refreshAvailableAt,
+                    onClick = { loadOrders() },
+                    label = stringResource(if (corpId != null) Res.string.refresh_corp_orders else Res.string.refresh_orders),
+                )
             }
         }
 
         if (corpId != null && deniedFeatures.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(8.dp))
             CorpAccessNotice(deniedFeatures, onRetry = { loadOrders(clearDenied = true) })
         }
 
@@ -1007,19 +954,23 @@ fun OrdersScreen(context: ViewContext?) {
                     }
             }
 
-        PrimaryTabRow(selectedTabIndex = activeTab, modifier = Modifier.fillMaxWidth()) {
-            Tab(selected = activeTab == 0, onClick = { activeTab = 0 }) {
-                Text(stringResource(Res.string.tab_sell, sellOrders.size), modifier = Modifier.padding(8.dp))
-            }
-            Tab(selected = activeTab == 1, onClick = { activeTab = 1 }) {
-                Text(stringResource(Res.string.tab_buy, buyOrders.size), modifier = Modifier.padding(8.dp))
-            }
-            Tab(selected = activeTab == 2, onClick = { activeTab = 2 }) {
-                Text(stringResource(Res.string.tab_history, historyOrders.size), modifier = Modifier.padding(8.dp))
-            }
-            Tab(selected = activeTab == 3, onClick = { activeTab = 3 }) {
-                Text(stringResource(Res.string.tab_inventory, inventory.size), modifier = Modifier.padding(8.dp))
-            }
+        TabBar(
+            listOf(
+                TabItem(stringResource(Res.string.tab_sell), sellOrders.size, SELL_COLOR),
+                TabItem(stringResource(Res.string.tab_buy), buyOrders.size, BUY_COLOR),
+                TabItem(stringResource(Res.string.tab_history), historyOrders.size),
+                TabItem(stringResource(Res.string.tab_inventory), inventory.size),
+            ),
+            selected = activeTab,
+            onSelect = { activeTab = it },
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        when (activeTab) {
+            0 -> OrdersSummaryBar(sellOrders, inventory, tax, marketComparisons)
+            1 -> OrdersSummaryBar(buyOrders, null, tax, marketComparisons)
+            2 -> HistorySummaryBar(historyOrders, fifoResult)
+            else -> fifoResult?.let { InventorySummaryBar(it, inventory) }
         }
 
         fun onSort(col: SortCol) {
@@ -1031,184 +982,137 @@ fun OrdersScreen(context: ViewContext?) {
             }
         }
 
-        // Dimmed + non-interactive (see triggerOrderAction's own guard) while a refresh is in
-        // flight — orders/marketComparisons are mid-update, so acting on a row now could target
-        // stale data.
-        Box(modifier = Modifier.weight(1f).fillMaxWidth().alpha(if (isLoading || isLoadingMarket) 0.5f else 1f)) {
-            when (activeTab) {
-                2 -> {
-                    if (historyOrders.isEmpty() && !isLoading) {
-                        EmptyState(
-                            icon = Icons.Default.History,
-                            title = stringResource(Res.string.no_order_history),
-                            description =
-                                if (context ==
-                                    null
-                                ) {
-                                    stringResource(Res.string.add_char_history)
-                                } else {
-                                    stringResource(Res.string.no_completed_orders)
-                                },
-                        )
-                    } else {
-                        OrderHistoryTable(historyOrders, fifoResult)
-                    }
-                }
-
-                3 -> {
-                    if (inventory.isEmpty() && !isLoading) {
-                        EmptyState(
-                            icon = Icons.Default.Inventory2,
-                            title = stringResource(Res.string.no_inventory),
-                            description =
-                                if (context ==
-                                    null
-                                ) {
-                                    stringResource(Res.string.add_char_inventory)
-                                } else {
-                                    stringResource(Res.string.no_fifo_items)
-                                },
-                        )
-                    } else {
-                        InventoryTable(
-                            inventory,
-                            sellOrders,
-                            fifoResult,
-                            inventoryMarketPrices,
-                            characterId = charId,
-                            corporationId = corpId,
-                            actingCharId = actingCharId,
-                            onAdjusted = ::recalculateFifo,
-                        )
-                    }
-                }
-
-                else -> {
-                    val filtered = if (activeTab == 0) sellOrders else buyOrders
-                    if (filtered.isEmpty() && !isLoading) {
-                        EmptyState(
-                            icon = Icons.Default.Receipt,
-                            title =
-                                if (activeTab ==
-                                    0
-                                ) {
-                                    stringResource(Res.string.no_sell_orders)
-                                } else {
-                                    stringResource(Res.string.no_buy_orders)
-                                },
-                            description =
-                                if (context ==
-                                    null
-                                ) {
-                                    stringResource(Res.string.add_char_orders)
-                                } else {
-                                    stringResource(Res.string.no_active_orders)
-                                },
-                        )
-                    } else if (activeTab == 0) {
-                        Column {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                                horizontalArrangement = Arrangement.End,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                FilterChip(
-                                    selected = showBeatenOnly,
-                                    onClick = {
-                                        showBeatenOnly = !showBeatenOnly
-                                        scope.launch(Dispatchers.IO) {
-                                            StaticDataDao.setSetting(SHOW_BEATEN_ONLY_SETTING, showBeatenOnly.toString())
-                                        }
-                                    },
-                                    label = {
-                                        Text(
-                                            if (showBeatenOnly) {
-                                                stringResource(
-                                                    Res.string.beaten_only,
-                                                )
-                                            } else {
-                                                stringResource(Res.string.all_orders)
-                                            },
-                                        )
-                                    },
-                                    leadingIcon = if (showBeatenOnly) beatenFilterIcon else null,
-                                )
-                            }
-                            SellOrdersTable(
-                                orders = filtered,
-                                sortCol = sortCol,
-                                sortDir = sortDir,
-                                onSort = ::onSort,
-                                inventory = inventory,
-                                taxConfig = tax,
-                                historyCostBasis = historyCostBasis,
-                                comparisons = marketComparisons,
-                                competition = competitionStats,
-                                relistDiscountPct = relistDiscountPct,
-                                showBeatenOnly = showBeatenOnly,
-                                selectedOrderId = selectedOrderId,
-                                activeOrderId = activeOrderId,
-                                onSelect = { id -> selectedOrderId = if (selectedOrderId == id) null else id },
-                                onAction = { order -> triggerOrderAction(order) },
-                            )
-                        }
-                    } else {
-                        Column {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                                horizontalArrangement = Arrangement.End,
-                            ) {
-                                FilterChip(
-                                    selected = showOverbidOnly,
-                                    onClick = { showOverbidOnly = !showOverbidOnly },
-                                    label = {
-                                        Text(
-                                            if (showOverbidOnly) {
-                                                stringResource(
-                                                    Res.string.overbid_only,
-                                                )
-                                            } else {
-                                                stringResource(Res.string.all_orders)
-                                            },
-                                        )
-                                    },
-                                    leadingIcon = if (showOverbidOnly) overbidFilterIcon else null,
-                                )
-                            }
-                            BuyOrdersTable(
-                                orders = filtered,
-                                sortCol = sortCol,
-                                sortDir = sortDir,
-                                onSort = ::onSort,
-                                taxConfig = tax,
-                                comparisons = marketComparisons,
-                                competition = competitionStats,
-                                showOverbidOnly = showOverbidOnly,
-                                selectedOrderId = selectedOrderId,
-                                activeOrderId = activeOrderId,
-                                onSelect = { id -> selectedOrderId = if (selectedOrderId == id) null else id },
-                                onAction = { order -> triggerOrderAction(order) },
-                            )
+        Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Panel(
+                null,
+                Modifier.weight(1f).fillMaxHeight(),
+                header = {
+                    Spacer(Modifier.weight(1f))
+                    if (activeTab == 0) {
+                        Segment(stringResource(Res.string.beaten_only), showBeatenOnly) {
+                            showBeatenOnly = !showBeatenOnly
+                            scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SHOW_BEATEN_ONLY_SETTING, showBeatenOnly.toString()) }
                         }
                     }
-                }
-            }
-        }
+                    if (activeTab == 1) {
+                        StandingThreshold(standingPct) { v ->
+                            standingPct = v
+                            scope.launch(Dispatchers.IO) { StandingOrders.thresholdPct = v }
+                        }
+                        Segment(stringResource(Res.string.overbid_only), showOverbidOnly) { showOverbidOnly = !showOverbidOnly }
+                    }
+                },
+            ) {
+                // Dimmed + non-interactive (see triggerOrderAction's own guard) while a refresh is in
+                // flight — orders/marketComparisons are mid-update, so acting on a row now could target
+                // stale data.
+                Box(modifier = Modifier.weight(1f).fillMaxWidth().alpha(if (isLoading || isLoadingMarket) 0.5f else 1f)) {
+                    when (activeTab) {
+                        2 -> {
+                            if (historyOrders.isEmpty() && !isLoading) {
+                                EmptyState(
+                                    icon = Icons.Default.History,
+                                    title = stringResource(Res.string.no_order_history),
+                                    description =
+                                        stringResource(
+                                            if (context ==
+                                                null
+                                            ) {
+                                                Res.string.add_char_history
+                                            } else {
+                                                Res.string.no_completed_orders
+                                            },
+                                        ),
+                                )
+                            } else {
+                                OrderHistoryTable(historyOrders, fifoResult)
+                            }
+                        }
 
-        when (activeTab) {
-            3 -> {
-                fifoResult?.let { InventorySummaryBar(it, inventory) }
-            }
+                        3 -> {
+                            if (inventory.isEmpty() && !isLoading) {
+                                EmptyState(
+                                    icon = Icons.Default.Inventory2,
+                                    title = stringResource(Res.string.no_inventory),
+                                    description =
+                                        stringResource(
+                                            if (context ==
+                                                null
+                                            ) {
+                                                Res.string.add_char_inventory
+                                            } else {
+                                                Res.string.no_fifo_items
+                                            },
+                                        ),
+                                )
+                            } else {
+                                InventoryTable(
+                                    inventory,
+                                    sellOrders,
+                                    fifoResult,
+                                    inventoryMarketPrices,
+                                    characterId = charId,
+                                    corporationId = corpId,
+                                    actingCharId = actingCharId,
+                                    onAdjusted = ::recalculateFifo,
+                                )
+                            }
+                        }
 
-            2 -> {
-                if (historyOrders.isNotEmpty()) HistorySummaryBar(historyOrders, fifoResult)
-            }
-
-            else -> {
-                val filtered = if (activeTab == 0) sellOrders else buyOrders
-                if (filtered.isNotEmpty()) {
-                    val tax = fifoResult?.taxConfig ?: CostBasisService.TaxConfig()
-                    OrdersSummaryBar(filtered, if (activeTab == 0) inventory else null, tax)
+                        else -> {
+                            val filtered = if (activeTab == 0) sellOrders else buyOrders
+                            if (filtered.isEmpty() && !isLoading) {
+                                EmptyState(
+                                    icon = Icons.Default.Receipt,
+                                    title = stringResource(if (activeTab == 0) Res.string.no_sell_orders else Res.string.no_buy_orders),
+                                    description =
+                                        stringResource(
+                                            if (context ==
+                                                null
+                                            ) {
+                                                Res.string.add_char_orders
+                                            } else {
+                                                Res.string.no_active_orders
+                                            },
+                                        ),
+                                )
+                            } else if (activeTab == 0) {
+                                SellOrdersTable(
+                                    orders = filtered,
+                                    sortCol = sortCol,
+                                    sortDir = sortDir,
+                                    onSort = ::onSort,
+                                    inventory = inventory,
+                                    taxConfig = tax,
+                                    historyCostBasis = historyCostBasis,
+                                    comparisons = marketComparisons,
+                                    competition = competitionStats,
+                                    relistDiscountPct = relistDiscountPct,
+                                    showBeatenOnly = showBeatenOnly,
+                                    selectedOrderId = selectedOrderId,
+                                    activeOrderId = activeOrderId,
+                                    onSelect = { id -> selectedOrderId = if (selectedOrderId == id) null else id },
+                                    onAction = { order -> triggerOrderAction(order) },
+                                )
+                            } else {
+                                BuyOrdersTable(
+                                    orders = filtered,
+                                    sortCol = sortCol,
+                                    sortDir = sortDir,
+                                    onSort = ::onSort,
+                                    taxConfig = tax,
+                                    comparisons = marketComparisons,
+                                    competition = competitionStats,
+                                    showOverbidOnly = showOverbidOnly,
+                                    standingPct = standingPct,
+                                    selectedOrderId = selectedOrderId,
+                                    activeOrderId = activeOrderId,
+                                    onSelect = { id -> selectedOrderId = if (selectedOrderId == id) null else id },
+                                    onAction = { order -> triggerOrderAction(order) },
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

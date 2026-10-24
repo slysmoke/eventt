@@ -102,4 +102,6 @@
     <string name="st_roi">ROI</string>
     <string name="st_roi_year">ROI, annualized</string>
     <string name="tip_roi">Realized profit over the range divided by the average ISK tied up in trading (buy-order escrow + stock at cost) — how hard the trading capital works. Annualized scales it to 365 days.</string>
+    <string name="ord_standing">Standing buy orders</string>
+    <string name="tip_standing">Buy orders deliberately far under the best bid (threshold set on the Orders screen) — waiting for a dip, so not counted as outbid.</string>
 </resources>

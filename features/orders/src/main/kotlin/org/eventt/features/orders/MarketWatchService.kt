@@ -139,7 +139,8 @@ object MarketWatchService {
                 // ranged-buy false positives ever get reported.
                 val isBeaten =
                     if (order.isBuyOrder) {
-                        book.any { it.isBuy() && (it.oid() ?: -1L) !in ownIds && (it.price() ?: 0.0) > livePrice }
+                        val bestBuy = book.filter { it.isBuy() && (it.oid() ?: -1L) !in ownIds }.mapNotNull { it.price() }.maxOrNull()
+                        bestBuy != null && bestBuy > livePrice && !StandingOrders.isStanding(livePrice, bestBuy)
                     } else {
                         book.any {
                             !it.isBuy() &&
