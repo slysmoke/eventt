@@ -62,8 +62,7 @@ import org.eventt.core.nostr.OrderRepository
 import org.eventt.core.nostr.OrderSide
 import org.eventt.core.nostr.PostOrderResult
 import org.eventt.p2pmarket.generated.resources.*
-import org.eventt.ui.common.SearchField
-import org.eventt.ui.common.Tip
+import org.eventt.ui.common.*
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 import java.util.Locale
@@ -72,8 +71,6 @@ private data class MyOrderRowData(
     val order: NostrOrderModel,
     val typeName: String,
 )
-
-private enum class MyOrdersSortColumn { PRICE, QTY, EXPIRY }
 
 // Remembers the last region you posted in across posts, tab switches, and restarts — re-picking
 // the same region (usually a home trade hub) for every single order got old fast.
@@ -85,8 +82,6 @@ fun MyOrdersScreen() {
 
     var myOrders by remember { mutableStateOf<List<NostrOrderModel>>(emptyList()) }
     var myOrderRows by remember { mutableStateOf<List<MyOrderRowData>>(emptyList()) }
-    var myOrdersSortColumn by remember { mutableStateOf(MyOrdersSortColumn.EXPIRY) }
-    var myOrdersSortDirection by remember { mutableStateOf(SortDirection.ASC) }
 
     var showPostForm by remember { mutableStateOf(false) }
     var side by remember { mutableStateOf(OrderSide.SELL) }
@@ -106,6 +101,7 @@ fun MyOrdersScreen() {
     var isPosting by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
     var defaultAttribution by remember { mutableStateOf<TransactionAttribution?>(null) }
+    var editing by remember { mutableStateOf<NostrOrderModel?>(null) }
 
     LaunchedEffect(Unit) {
         defaultAttribution = withContext(Dispatchers.IO) { P2pAttributionDefault.get() }
@@ -138,17 +134,6 @@ fun MyOrdersScreen() {
             }
     }
 
-    fun toggleMyOrdersSort(
-        column: MyOrdersSortColumn,
-        defaultDirection: SortDirection,
-    ) {
-        if (myOrdersSortColumn == column) {
-            myOrdersSortDirection = if (myOrdersSortDirection == SortDirection.ASC) SortDirection.DESC else SortDirection.ASC
-        } else {
-            myOrdersSortColumn = column
-            myOrdersSortDirection = defaultDirection
-        }
-    }
     // Refreshed every time this tab is (re)entered, so switching the active character in Settings
     // is reflected here without a manual reload.
     LaunchedEffect(Unit) {
@@ -252,52 +237,20 @@ fun MyOrdersScreen() {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                stringResource(Res.string.attribute_new_trades),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            AttributionPicker(
-                defaultAttribution,
-                onSelect = { attribution ->
-                    defaultAttribution = attribution
-                    scope.launch(Dispatchers.IO) { P2pAttributionDefault.set(attribution) }
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (showPostForm) {
+            Panel(
+                stringResource(Res.string.post_a_new_order),
+                Modifier.fillMaxWidth(),
+                header = {
+                    Spacer(Modifier.weight(1f))
+                    Segment("✕", false) { showPostForm = false }
                 },
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        if (!showPostForm) {
-            OutlinedButton(onClick = { showPostForm = true }, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.Add, null, Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(stringResource(Res.string.post_new_order))
-            }
-        } else {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(stringResource(Res.string.post_a_new_order), style = MaterialTheme.typography.titleMedium)
-                        IconButton(
-                            onClick = { showPostForm = false },
-                        ) { Icon(Icons.Default.Close, stringResource(Res.string.collapse), Modifier.size(18.dp)) }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = side == OrderSide.SELL,
-                            onClick = { side = OrderSide.SELL },
-                            label = { Text(stringResource(Res.string.selling)) },
-                        )
-                        FilterChip(
-                            selected = side == OrderSide.BUY,
-                            onClick = { side = OrderSide.BUY },
-                            label = { Text(stringResource(Res.string.buying)) },
-                        )
+            ) {
+                Column(Modifier.padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Segment(stringResource(Res.string.selling), side == OrderSide.SELL) { side = OrderSide.SELL }
+                        Segment(stringResource(Res.string.buying), side == OrderSide.BUY) { side = OrderSide.BUY }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Column(modifier = Modifier.weight(1f)) {
@@ -415,16 +368,8 @@ fun MyOrdersScreen() {
                             singleLine = true,
                             modifier = Modifier.weight(1f),
                         )
-                        FilterChip(
-                            selected = minLotUnit == MinLotUnit.UNITS,
-                            onClick = { minLotUnit = MinLotUnit.UNITS },
-                            label = { Text(stringResource(Res.string.units)) },
-                        )
-                        FilterChip(
-                            selected = minLotUnit == MinLotUnit.ISK,
-                            onClick = { minLotUnit = MinLotUnit.ISK },
-                            label = { Text("ISK") },
-                        )
+                        Segment(stringResource(Res.string.units), minLotUnit == MinLotUnit.UNITS) { minLotUnit = MinLotUnit.UNITS }
+                        Segment("ISK", minLotUnit == MinLotUnit.ISK) { minLotUnit = MinLotUnit.ISK }
                     }
                     Text(
                         tradingAs?.let {
@@ -447,157 +392,95 @@ fun MyOrdersScreen() {
                 }
             }
         }
-
-        Spacer(Modifier.height(16.dp))
-        Text(stringResource(Res.string.my_active_orders), style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
-        if (myOrderRows.isEmpty()) {
-            Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                Text(stringResource(Res.string.no_active_orders_yet), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        } else {
-            val sortedRows =
-                when (myOrdersSortColumn) {
-                    MyOrdersSortColumn.PRICE -> myOrderRows.sortedBy { it.order.price }
-                    MyOrdersSortColumn.QTY -> myOrderRows.sortedBy { it.order.qtyRemaining }
-                    MyOrdersSortColumn.EXPIRY -> myOrderRows.sortedBy { it.order.expiration }
-                }.let { if (myOrdersSortDirection == SortDirection.DESC) it.reversed() else it }
-
-            MyOrdersTableHeader(myOrdersSortColumn, myOrdersSortDirection, onSort = ::toggleMyOrdersSort)
-            HorizontalDivider()
-            LazyColumn(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                items(sortedRows, key = { "${it.order.orderUuid}:${it.order.pubkey}" }) { row ->
-                    MyOrderTableRow(
-                        row,
-                        onRenew = { scope.launch(Dispatchers.IO) { OrderRepository.renewOrder(row.order) } },
-                        onCancel = { scope.launch(Dispatchers.IO) { OrderRepository.cancelOrder(row.order) } },
-                        onEdit = { newPrice, newQtyRemaining ->
-                            scope.launch(Dispatchers.IO) { OrderRepository.editOrder(row.order, newPrice, newQtyRemaining) }
-                        },
-                    )
-                }
+        val now = System.currentTimeMillis() / 1000
+        Panel(
+            stringResource(Res.string.my_active_orders),
+            Modifier.fillMaxWidth().weight(1f),
+            header = {
+                Spacer(Modifier.weight(1f))
+                Text(stringResource(Res.string.attribute_new_trades), style = MaterialTheme.typography.labelSmall, color = AXIS_COLOR)
+                AttributionPicker(
+                    defaultAttribution,
+                    onSelect = { attribution ->
+                        defaultAttribution = attribution
+                        scope.launch(Dispatchers.IO) { P2pAttributionDefault.set(attribution) }
+                    },
+                )
+                if (!showPostForm) Segment("+ " + stringResource(Res.string.post_new_order), true) { showPostForm = true }
+            },
+        ) {
+            val cols =
+                listOf<Col<MyOrderRowData>>(
+                    Col(stringResource(Res.string.h_side), 0.5f, end = false) { it.order.side },
+                    Col(stringResource(Res.string.h_item), 2.4f, end = false) { it.typeName.lowercase() },
+                    Col(stringResource(Res.string.h_price), 1f) { it.order.price },
+                    Col(stringResource(Res.string.h_qty), 0.9f) { it.order.qtyRemaining },
+                    Col(stringResource(Res.string.h_value), 1f, tip = stringResource(Res.string.tip_p_value), sort = {
+                        it.order.qtyRemaining *
+                            it.order.price
+                    }),
+                    Col(
+                        stringResource(Res.string.h_expires),
+                        0.8f,
+                        tip = stringResource(Res.string.tip_p_my_expires),
+                        sort = { it.order.expiration },
+                    ),
+                    Col("", 1.8f),
+                )
+            Table(
+                cols = cols,
+                rows = myOrderRows,
+                empty = stringResource(Res.string.no_active_orders_yet),
+                defaultSort = 5,
+                defaultDesc = false,
+                key = { "${it.order.orderUuid}:${it.order.pubkey}" },
+            ) { row ->
+                val order = row.order
+                listOf(
+                    Cell(order.side) { OrderSideBadge(OrderSide.valueOf(order.side.uppercase())) },
+                    Cell(row.typeName) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            TypeIcon(order.typeId, size = 18.dp)
+                            Column {
+                                Text(
+                                    row.typeName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                ExpiringSoonLabel(order.expiration)
+                            }
+                        }
+                    },
+                    Cell(formatPriceAbbr(order.price)),
+                    Cell("${formatVolume(order.qtyRemaining)}/${formatVolume(order.qtyTotal)}"),
+                    Cell(formatIsk(order.qtyRemaining * order.price), AXIS_COLOR),
+                    Cell(formatDurationShort(order.expiration - now), AXIS_COLOR),
+                    Cell("") {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Segment(stringResource(Res.string.edit), false) { editing = order }
+                            Segment(stringResource(Res.string.renew), false) {
+                                scope.launch(Dispatchers.IO) { OrderRepository.renewOrder(order) }
+                            }
+                            Segment(stringResource(Res.string.cancel), false) {
+                                scope.launch(Dispatchers.IO) { OrderRepository.cancelOrder(order) }
+                            }
+                        }
+                    },
+                )
             }
         }
     }
-}
 
-@Composable
-private fun MyOrdersTableHeader(
-    sortColumn: MyOrdersSortColumn,
-    sortDirection: SortDirection,
-    onSort: (MyOrdersSortColumn, SortDirection) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            stringResource(Res.string.h_side),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.width(60.dp),
-        )
-        Text(
-            stringResource(Res.string.h_item),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.weight(1f),
-        )
-        SortHeaderCell(
-            stringResource(Res.string.h_price),
-            Modifier.width(130.dp),
-            active = sortColumn == MyOrdersSortColumn.PRICE,
-            direction = sortDirection,
-        ) { onSort(MyOrdersSortColumn.PRICE, SortDirection.DESC) }
-        SortHeaderCell(
-            stringResource(Res.string.h_qty),
-            Modifier.width(90.dp),
-            active = sortColumn == MyOrdersSortColumn.QTY,
-            direction = sortDirection,
-        ) { onSort(MyOrdersSortColumn.QTY, SortDirection.DESC) }
-        Tip(stringResource(Res.string.tip_p_value)) {
-            Text(
-                stringResource(Res.string.h_value),
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.width(130.dp),
-            )
-        }
-        SortHeaderCell(
-            stringResource(Res.string.h_expires),
-            Modifier.width(110.dp),
-            active = sortColumn == MyOrdersSortColumn.EXPIRY,
-            direction = sortDirection,
-            tooltip = stringResource(Res.string.tip_p_my_expires),
-        ) { onSort(MyOrdersSortColumn.EXPIRY, SortDirection.ASC) }
-        Spacer(Modifier.width(270.dp))
-    }
-}
-
-@Composable
-private fun MyOrderTableRow(
-    row: MyOrderRowData,
-    onRenew: () -> Unit,
-    onCancel: () -> Unit,
-    onEdit: (newPrice: Double, newQtyRemaining: Long) -> Unit,
-) {
-    val order = row.order
-    var showEditDialog by remember { mutableStateOf(false) }
-    if (showEditDialog) {
+    editing?.let { order ->
         EditOrderDialog(
             order = order,
-            onDismiss = { showEditDialog = false },
+            onDismiss = { editing = null },
             onSave = { newPrice, newQtyRemaining ->
-                onEdit(newPrice, newQtyRemaining)
-                showEditDialog = false
+                scope.launch(Dispatchers.IO) { OrderRepository.editOrder(order, newPrice, newQtyRemaining) }
+                editing = null
             },
         )
-    }
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(modifier = Modifier.width(60.dp)) {
-            OrderSideBadge(OrderSide.valueOf(order.side.uppercase()))
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(row.typeName, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            ExpiringSoonLabel(order.expiration)
-        }
-        Text(
-            String.format(Locale.US, "%,.2f", order.price),
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.width(130.dp),
-        )
-        Text("${order.qtyRemaining}/${order.qtyTotal}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(90.dp))
-        Text(
-            String.format(Locale.US, "%,.2f", order.qtyRemaining * order.price),
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.width(130.dp),
-        )
-        Text(
-            stringResource(Res.string.time_left, formatDurationShort(order.expiration - System.currentTimeMillis() / 1000)),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(110.dp),
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(270.dp)) {
-            OutlinedButton(
-                onClick = { showEditDialog = true },
-                contentPadding = COMPACT_BUTTON_PADDING,
-            ) { Text(stringResource(Res.string.edit)) }
-            OutlinedButton(onClick = onRenew, contentPadding = COMPACT_BUTTON_PADDING) { Text(stringResource(Res.string.renew)) }
-            OutlinedButton(onClick = onCancel, contentPadding = COMPACT_BUTTON_PADDING) { Text(stringResource(Res.string.cancel)) }
-        }
     }
 }
 

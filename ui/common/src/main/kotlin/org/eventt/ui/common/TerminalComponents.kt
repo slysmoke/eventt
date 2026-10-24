@@ -191,6 +191,8 @@ class Col<T>(
     val title: String,
     val weight: Float,
     val end: Boolean = true,
+    // Hover text on the header.
+    val tip: String? = null,
     // Clicking the header sorts by this; null = not sortable.
     val sort: ((T) -> Comparable<*>?)? = null,
 )
@@ -246,33 +248,37 @@ fun <T> Table(
                 Box(Modifier.weight(c.weight), contentAlignment = if (c.end) Alignment.CenterEnd else Alignment.CenterStart) { custom() }
                 return@forEachIndexed
             }
-            Text(
-                values[i].text + if (header && i == sortCol) (if (desc) " ▼" else " ▲") else "",
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = if (header || !c.end) null else Mono,
-                fontWeight = if (header) FontWeight.Bold else null,
-                color =
-                    values[i].color ?: when {
-                        header && i == sortCol -> MaterialTheme.colorScheme.primary
-                        header -> AXIS_COLOR
-                        else -> MaterialTheme.colorScheme.onSurface
-                    },
-                textAlign = if (c.end) TextAlign.End else TextAlign.Start,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier =
-                    Modifier.weight(c.weight).then(
-                        if (sortable) {
-                            Modifier.clickable {
-                                // Same column flips the order; a new one starts descending.
-                                desc = if (sortCol == i) !desc else true
-                                sortCol = i
-                            }
-                        } else {
-                            Modifier
+            val text = @Composable { m: Modifier ->
+                Text(
+                    values[i].text + if (header && i == sortCol) (if (desc) " ▼" else " ▲") else "",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = if (header || !c.end) null else Mono,
+                    fontWeight = if (header) FontWeight.Bold else null,
+                    color =
+                        values[i].color ?: when {
+                            header && i == sortCol -> MaterialTheme.colorScheme.primary
+                            header -> AXIS_COLOR
+                            else -> MaterialTheme.colorScheme.onSurface
                         },
-                    ),
-            )
+                    textAlign = if (c.end) TextAlign.End else TextAlign.Start,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier =
+                        m.then(
+                            if (sortable) {
+                                Modifier.clickable {
+                                    // Same column flips the order; a new one starts descending.
+                                    desc = if (sortCol == i) !desc else true
+                                    sortCol = i
+                                }
+                            } else {
+                                Modifier
+                            },
+                        ),
+                )
+            }
+            val tip = c.tip.takeIf { header }
+            if (tip != null) Tip(tip, Modifier.weight(c.weight)) { text(Modifier.fillMaxWidth()) } else text(Modifier.weight(c.weight))
         }
     }
     line(cols.map { Cell(it.title) }, header = true)

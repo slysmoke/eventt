@@ -1,43 +1,18 @@
 package org.eventt.features.p2pmarket
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.Sell
-import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
@@ -54,8 +29,7 @@ import org.eventt.core.nostr.OrderSide
 import org.eventt.core.nostr.ReputationAggregator
 import org.eventt.core.nostr.ReservationService
 import org.eventt.p2pmarket.generated.resources.*
-import org.eventt.ui.common.SearchField
-import org.eventt.ui.common.Tip
+import org.eventt.ui.common.*
 import org.eventt.ui.theme.positiveColor
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
@@ -70,8 +44,6 @@ private data class BrowseRow(
     val confirmedTrades: Int,
 )
 
-private enum class BrowseSortColumn { PRICE, QTY, SAVINGS, EXPIRY }
-
 @Composable
 fun BrowseScreen() {
     val scope = rememberCoroutineScope()
@@ -79,12 +51,13 @@ fun BrowseScreen() {
     var orders by remember { mutableStateOf<List<NostrOrderModel>>(emptyList()) }
     var rows by remember { mutableStateOf<List<BrowseRow>>(emptyList()) }
     var searchQuery by remember { mutableStateOf("") }
-    var sortColumn by remember { mutableStateOf(BrowseSortColumn.EXPIRY) }
-    var sortDirection by remember { mutableStateOf(SortDirection.ASC) }
     var activeIdentityPubkey by remember { mutableStateOf<String?>(null) }
     // The viewer's own effective sales tax rate — BUY orders' savings badge needs it (see
     // SavingsBadgeService.computeSavings); defaults to the 8% base rate with no active identity.
     var viewerSalesTaxPct by remember { mutableStateOf(8.0) }
+    var requestFor by remember { mutableStateOf<NostrOrderModel?>(null) }
+    var requestError by remember { mutableStateOf<String?>(null) }
+    var sent by remember { mutableStateOf(setOf<String>()) }
 
     // Refreshed every time this tab is (re)entered, so switching the active character in Settings
     // immediately changes which order(s) are treated as "yours" here — order.isMine is a stale,
@@ -95,18 +68,6 @@ fun BrowseScreen() {
             val identity = NostrIdentityService.getActiveIdentity()
             activeIdentityPubkey = identity?.pubkey
             viewerSalesTaxPct = identity?.characterId?.let { StaticDataDao.getCharSalesTax(it) } ?: 8.0
-        }
-    }
-
-    fun toggleSort(
-        column: BrowseSortColumn,
-        defaultDirection: SortDirection,
-    ) {
-        if (sortColumn == column) {
-            sortDirection = if (sortDirection == SortDirection.ASC) SortDirection.DESC else SortDirection.ASC
-        } else {
-            sortColumn = column
-            sortDirection = defaultDirection
         }
     }
 
@@ -130,243 +91,124 @@ fun BrowseScreen() {
             }
     }
 
-    val filtered = if (searchQuery.isBlank()) rows else rows.filter { it.typeName.contains(searchQuery, ignoreCase = true) }
-    val displayedRows =
-        when (sortColumn) {
-            BrowseSortColumn.PRICE -> filtered.sortedBy { it.order.price }
-            BrowseSortColumn.QTY -> filtered.sortedBy { it.order.qtyRemaining }
-            BrowseSortColumn.SAVINGS -> filtered.sortedBy { it.savings?.savingsPct ?: Double.NEGATIVE_INFINITY }
-            BrowseSortColumn.EXPIRY -> filtered.sortedBy { it.order.expiration }
-        }.let { if (sortDirection == SortDirection.DESC) it.reversed() else it }
+    val shown =
+        remember(
+            rows,
+            searchQuery,
+        ) { if (searchQuery.isBlank()) rows else rows.filter { it.typeName.contains(searchQuery, ignoreCase = true) } }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = sideFilter == null, onClick = { sideFilter = null }, label = { Text(stringResource(Res.string.all)) })
-            FilterChip(selected = sideFilter == OrderSide.SELL, onClick = {
-                sideFilter = OrderSide.SELL
-            }, label = { Text(stringResource(Res.string.filter_selling)) })
-            FilterChip(selected = sideFilter == OrderSide.BUY, onClick = {
-                sideFilter = OrderSide.BUY
-            }, label = { Text(stringResource(Res.string.filter_buying)) })
-        }
-        Spacer(Modifier.height(8.dp))
-        SearchField(query = searchQuery, onQueryChange = { searchQuery = it }, placeholder = stringResource(Res.string.search_item))
-        Spacer(Modifier.height(12.dp))
-        if (displayedRows.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    if (rows.isEmpty()) {
-                        stringResource(Res.string.no_orders_yet)
-                    } else {
-                        stringResource(Res.string.no_orders_match, searchQuery)
-                    },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        } else {
-            BrowseTableHeader(sortColumn, sortDirection, onSort = ::toggleSort)
-            HorizontalDivider()
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                items(displayedRows, key = { "${it.order.orderUuid}:${it.order.pubkey}" }) { row ->
-                    BrowseTableRow(row, scope, isOwnOrder = row.order.pubkey == activeIdentityPubkey)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun BrowseTableHeader(
-    sortColumn: BrowseSortColumn,
-    sortDirection: SortDirection,
-    onSort: (BrowseSortColumn, SortDirection) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    Panel(
+        null,
+        Modifier.fillMaxSize(),
+        header = {
+            Segment(stringResource(Res.string.all), sideFilter == null) { sideFilter = null }
+            Segment(stringResource(Res.string.filter_selling), sideFilter == OrderSide.SELL) { sideFilter = OrderSide.SELL }
+            Segment(stringResource(Res.string.filter_buying), sideFilter == OrderSide.BUY) { sideFilter = OrderSide.BUY }
+            Spacer(Modifier.weight(1f))
+        },
     ) {
-        Spacer(Modifier.width(24.dp))
-        Text(
-            stringResource(Res.string.h_item),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            stringResource(Res.string.h_region),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.width(130.dp),
-        )
-        SortHeaderCell(
-            stringResource(Res.string.h_price),
-            Modifier.width(130.dp),
-            active = sortColumn == BrowseSortColumn.PRICE,
-            direction = sortDirection,
-        ) { onSort(BrowseSortColumn.PRICE, SortDirection.DESC) }
-        SortHeaderCell(
-            stringResource(Res.string.h_qty),
-            Modifier.width(80.dp),
-            active = sortColumn == BrowseSortColumn.QTY,
-            direction = sortDirection,
-        ) { onSort(BrowseSortColumn.QTY, SortDirection.DESC) }
-        SortHeaderCell(
-            stringResource(Res.string.h_savings),
-            Modifier.width(100.dp),
-            active = sortColumn == BrowseSortColumn.SAVINGS,
-            direction = sortDirection,
-            tooltip = stringResource(Res.string.tip_p_savings),
-        ) { onSort(BrowseSortColumn.SAVINGS, SortDirection.DESC) }
-        Tip(stringResource(Res.string.tip_p_trader)) {
-            Text(
-                stringResource(Res.string.h_trader),
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.width(160.dp),
+        TerminalSearch(searchQuery, { searchQuery = it }, stringResource(Res.string.search_item), Modifier.fillMaxWidth())
+        Spacer(Modifier.height(4.dp))
+        val now = System.currentTimeMillis() / 1000
+        val cols =
+            listOf<Col<BrowseRow>>(
+                Col(stringResource(Res.string.h_side), 0.5f, end = false) { it.order.side },
+                Col(stringResource(Res.string.h_item), 2.4f, end = false) { it.typeName.lowercase() },
+                Col(stringResource(Res.string.h_region), 1.1f, end = false) { it.regionName },
+                Col(stringResource(Res.string.h_price), 1f) { it.order.price },
+                Col(stringResource(Res.string.h_qty), 0.8f) { it.order.qtyRemaining },
+                Col(stringResource(Res.string.h_value), 0.9f) { it.order.price * it.order.qtyRemaining },
+                Col(
+                    stringResource(Res.string.h_savings),
+                    0.7f,
+                    tip = stringResource(Res.string.tip_p_savings),
+                    sort = { it.savings?.savingsPct },
+                ),
+                Col(stringResource(Res.string.h_trader), 1.6f, end = false, tip = stringResource(Res.string.tip_p_trader), sort = {
+                    it.order.traderChar.lowercase()
+                }),
+                Col(
+                    stringResource(Res.string.h_expires),
+                    0.8f,
+                    tip = stringResource(Res.string.tip_p_expires),
+                    sort = { it.order.expiration },
+                ),
+                Col("", 0.7f),
             )
-        }
-        SortHeaderCell(
-            stringResource(Res.string.h_expires),
-            Modifier.width(110.dp),
-            active = sortColumn == BrowseSortColumn.EXPIRY,
-            direction = sortDirection,
-            tooltip = stringResource(Res.string.tip_p_expires),
-        ) { onSort(BrowseSortColumn.EXPIRY, SortDirection.ASC) }
-        Spacer(Modifier.width(110.dp))
-    }
-}
-
-@Composable
-private fun BrowseTableRow(
-    row: BrowseRow,
-    scope: kotlinx.coroutines.CoroutineScope,
-    isOwnOrder: Boolean,
-) {
-    val order = row.order
-    val side = remember(order.side) { OrderSide.valueOf(order.side.uppercase()) }
-    var showRequestDialog by remember { mutableStateOf(false) }
-    var requestSent by remember(order.orderUuid, order.pubkey) { mutableStateOf(false) }
-    var requestError by remember { mutableStateOf<String?>(null) }
-
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            if (side == OrderSide.SELL) Icons.Default.Sell else Icons.Default.ShoppingCart,
-            null,
-            modifier = Modifier.width(24.dp),
-            tint = if (side == OrderSide.SELL) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
-        )
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                OrderSideBadge(side)
-                Text(
-                    row.typeName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                IconButton(modifier = Modifier.size(20.dp), onClick = { AppState.openInMarket(order.typeId) }) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.OpenInNew,
-                        contentDescription = stringResource(Res.string.view_in_market),
-                        modifier = Modifier.size(13.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            ExpiringSoonLabel(order.expiration)
-        }
-        Text(
-            row.regionName,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.width(130.dp),
-        )
-        Text(
-            String.format(Locale.US, "%,.2f", order.price),
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.width(130.dp),
-        )
-        Text("${order.qtyRemaining}/${order.qtyTotal}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(80.dp))
-        Box(modifier = Modifier.width(100.dp)) {
-            row.savings?.let { s ->
-                Text(
-                    "${if (s.savingsPct >= 0) "-" else "+"}${String.format(Locale.US, "%.1f", abs(s.savingsPct))}%",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (s.savingsPct >= 0) positiveColor else MaterialTheme.colorScheme.error,
-                )
-            }
-        }
-        Column(modifier = Modifier.width(160.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    order.traderChar.ifBlank { "—" },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                if (order.traderChar.isNotBlank()) TraderInfoButton(order.traderChar, order.traderCharId)
-            }
-            Text(
-                "(${orderOwnerRole(side)})",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            PresenceBadge(order.pubkey)
-            if (row.confirmedTrades > 0) {
-                Text(
-                    stringResource(Res.string.confirmed_n, row.confirmedTrades),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.tertiary,
-                )
-            }
-        }
-        Box(modifier = Modifier.width(110.dp)) {
-            val remainingSeconds = order.expiration - System.currentTimeMillis() / 1000
-            Text(
-                stringResource(Res.string.time_left, formatDurationShort(remainingSeconds)),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Box(modifier = Modifier.width(110.dp)) {
-            if (!isOwnOrder) {
-                // A SELL order is fulfilled by buying it; a BUY order is fulfilled by selling into
-                // it — the button must say which one *you'd* be doing, not just "Request", or
-                // it's ambiguous which direction the trade goes in a mixed sell/buy list.
-                OutlinedButton(onClick = { showRequestDialog = true }, enabled = !requestSent, contentPadding = COMPACT_BUTTON_PADDING) {
-                    val label =
-                        when {
-                            requestSent -> stringResource(Res.string.sent)
-                            side == OrderSide.SELL -> stringResource(Res.string.buy)
-                            else -> stringResource(Res.string.sell)
+        Table(
+            cols = cols,
+            rows = shown,
+            empty =
+                if (rows.isEmpty()) stringResource(Res.string.no_orders_yet) else stringResource(Res.string.no_orders_match, searchQuery),
+            defaultSort = 8,
+            defaultDesc = false,
+            key = { "${it.order.orderUuid}:${it.order.pubkey}" },
+            highlight = { it.order.pubkey == activeIdentityPubkey },
+        ) { row ->
+            val order = row.order
+            val side = OrderSide.valueOf(order.side.uppercase())
+            val key = "${order.orderUuid}:${order.pubkey}"
+            listOf(
+                Cell(order.side) { OrderSideBadge(side) },
+                Cell(row.typeName) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        TypeIcon(order.typeId, size = 18.dp)
+                        Column(Modifier.weight(1f, fill = false)) {
+                            Text(row.typeName, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            ExpiringSoonLabel(order.expiration)
                         }
-                    Text(label)
-                }
-            }
+                        IconButton(modifier = Modifier.size(18.dp), onClick = { AppState.openInMarket(order.typeId) }) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.OpenInNew,
+                                contentDescription = stringResource(Res.string.view_in_market),
+                                modifier = Modifier.size(12.dp),
+                                tint = AXIS_COLOR,
+                            )
+                        }
+                    }
+                },
+                Cell(row.regionName, AXIS_COLOR),
+                Cell(formatPriceAbbr(order.price)),
+                Cell("${formatVolume(order.qtyRemaining)}/${formatVolume(order.qtyTotal)}"),
+                Cell(formatIsk(order.price * order.qtyRemaining), AXIS_COLOR),
+                Cell(
+                    row.savings?.let { s ->
+                        "${if (s.savingsPct >= 0) "-" else "+"}${String.format(Locale.US, "%.1f", abs(s.savingsPct))}%"
+                    }
+                        ?: "—",
+                    row.savings?.let { if (it.savingsPct >= 0) positiveColor else MaterialTheme.colorScheme.error } ?: AXIS_COLOR,
+                ),
+                Cell(
+                    order.traderChar,
+                ) { TraderCell(order.traderChar, order.traderCharId, order.pubkey, row.confirmedTrades, orderOwnerRole(side)) },
+                Cell(formatDurationShort(order.expiration - now), AXIS_COLOR),
+                Cell("") {
+                    // A SELL order is fulfilled by buying it; a BUY order by selling into it — the
+                    // button says which one *you'd* be doing.
+                    if (order.pubkey != activeIdentityPubkey) {
+                        Segment(
+                            stringResource(
+                                when {
+                                    key in sent -> Res.string.sent
+                                    side == OrderSide.SELL -> Res.string.buy
+                                    else -> Res.string.sell
+                                },
+                            ),
+                            key !in sent,
+                        ) { if (key !in sent) requestFor = order }
+                    }
+                },
+            )
         }
     }
 
-    if (showRequestDialog) {
+    requestFor?.let { order ->
         RequestReservationDialog(
             order = order,
-            side = side,
+            side = OrderSide.valueOf(order.side.uppercase()),
             error = requestError,
             onDismiss = {
-                showRequestDialog = false
+                requestFor = null
                 requestError = null
             },
             onSend = { qty, note ->
@@ -374,8 +216,8 @@ private fun BrowseTableRow(
                     val tradeId = ReservationService.sendRequest(order, qty, note)
                     withContext(Dispatchers.Main) {
                         if (tradeId != null) {
-                            requestSent = true
-                            showRequestDialog = false
+                            sent = sent + "${order.orderUuid}:${order.pubkey}"
+                            requestFor = null
                         } else {
                             requestError = getString(Res.string.err_no_identity_add)
                         }
@@ -383,6 +225,40 @@ private fun BrowseTableRow(
                 }
             },
         )
+    }
+}
+
+/** Counterparty cell shared by the P2P tables: name with the info button, presence, and their confirmed-trade count. */
+@Composable
+internal fun TraderCell(
+    name: String,
+    characterId: Int?,
+    pubkey: String,
+    confirmedTrades: Int = 0,
+    role: String? = null,
+) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                name.ifBlank { "${pubkey.take(12)}…" },
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            if (name.isNotBlank()) TraderInfoButton(name, characterId)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            role?.let { Text("($it)", style = MaterialTheme.typography.labelSmall, color = AXIS_COLOR) }
+            PresenceBadge(pubkey)
+            if (confirmedTrades > 0) {
+                Text(
+                    stringResource(Res.string.confirmed_n, confirmedTrades),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
+            }
+        }
     }
 }
 

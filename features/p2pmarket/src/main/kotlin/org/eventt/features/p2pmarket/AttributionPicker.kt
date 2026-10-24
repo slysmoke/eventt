@@ -23,6 +23,7 @@ import org.eventt.core.database.TransactionAttribution
 import org.eventt.core.model.CharacterModel
 import org.eventt.core.model.stringBlocking
 import org.eventt.p2pmarket.generated.resources.*
+import org.eventt.ui.common.Segment
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -73,9 +74,7 @@ internal fun AttributionPicker(
         }
 
     Box(modifier = modifier) {
-        OutlinedButton(onClick = { expanded = true }, contentPadding = COMPACT_BUTTON_PADDING) {
-            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall)
-        }
+        Segment("$label ▾", false) { expanded = true }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             characters.forEach { char ->
                 DropdownMenuItem(

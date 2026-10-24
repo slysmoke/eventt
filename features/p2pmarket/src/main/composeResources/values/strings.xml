@@ -70,7 +70,6 @@
     <string name="attribute_new_trades">Attribute new trades to:</string>
     <string name="post_new_order">Post new order</string>
     <string name="post_a_new_order">Post a new order</string>
-    <string name="collapse">Collapse</string>
     <string name="selling">Selling</string>
     <string name="buying">Buying</string>
     <string name="search_item">Search item...</string>
@@ -89,7 +88,6 @@
     <string name="h_side">Side</string>
     <string name="h_value">Value</string>
     <string name="h_expires">Expires</string>
-    <string name="time_left">%1$s left</string>
     <string name="edit">Edit</string>
     <string name="renew">Renew</string>
     <string name="cancel">Cancel</string>
@@ -140,16 +138,8 @@
     <string name="no_one_opted">No one has opted in yet.</string>
     <string name="filter_selling">Selling</string>
     <string name="filter_buying">Buying</string>
-    <string name="tip_p_savings">How much better this P2P price is than trading the same item on the open market in that region right now, fees included. A live snapshot, not a promise.</string>
-    <string name="tip_p_expires">Time until the order disappears from the relays unless its owner renews it.</string>
-    <string name="tip_p_my_expires">Time until the order disappears from the relays. Press Renew to extend it.</string>
-    <string name="tip_p_trader">The character who posted the order, their online status and how many trades others have confirmed with them (reputation).</string>
-    <string name="tip_p_value">Price × remaining quantity.</string>
     <string name="tip_p_min_lot">Smallest amount a counterparty may request at once — in units, or in ISK value.</string>
     <string name="tip_p_price">Your price per unit. The suggest button next to it offers one based on The Forge market, minus the sales tax or broker fee the other side saves by trading with you.</string>
-    <string name="tip_p_role">Whether you were the buyer or the seller in this trade.</string>
-    <string name="tip_p_inbox_status">Confirmed = both sides published a completion receipt, so the trade counts toward reputation.</string>
-    <string name="tip_p_attributed">Which character or corporation this trade is booked to for cost basis and margins (Orders, Dashboard). Change it anytime.</string>
     <string name="lb_ranking">Ranking · %1$s</string>
     <string name="lb_trader">Trader</string>
     <string name="lb_traders">Traders</string>
@@ -195,4 +185,23 @@
     <string name="lb_not_published">Not published this session</string>
     <string name="lb_published">Published %1$s ago as %2$s</string>
     <string name="lb_last_sent">Sent: P&amp;L 7d %1$s, 30d %2$s, 365d %3$s · ROI 30d %4$s · net worth %5$s</string>
+    <string name="p2p_title">P2P Market</string>
+    <string name="kpi_relays">Relays</string>
+    <string name="tip_kpi_relays">Enabled relays the app is connected to right now. With none connected, nothing you post or request goes out.</string>
+    <string name="kpi_online">Traders online</string>
+    <string name="tip_kpi_online">Counterparties whose presence status is live right now.</string>
+    <string name="kpi_network_orders">Orders on network</string>
+    <string name="kpi_sell_buy">sell %1$s · buy %2$s</string>
+    <string name="kpi_waiting_you">Waiting on you</string>
+    <string name="tip_kpi_waiting_you">Requests on your orders you haven't accepted or declined yet.</string>
+    <string name="kpi_to_complete">To complete</string>
+    <string name="tip_kpi_to_complete">Your requests the other side accepted — finish the trade in game and mark it completed.</string>
+    <string name="tip_p_savings">How much better this P2P price is than trading the same item on the open market in that region right now, fees included. A live snapshot, not a promise.</string>
+    <string name="tip_p_expires">Time until the order disappears from the relays unless its owner renews it.</string>
+    <string name="tip_p_my_expires">Time until the order disappears from the relays. Press Renew to extend it.</string>
+    <string name="tip_p_trader">The character who posted the order, their online status and how many trades others have confirmed with them (reputation).</string>
+    <string name="tip_p_value">Price × remaining quantity.</string>
+    <string name="tip_p_role">Whether you were the buyer or the seller in this trade.</string>
+    <string name="tip_p_inbox_status">Confirmed = both sides published a completion receipt, so the trade counts toward reputation.</string>
+    <string name="tip_p_attributed">Which character or corporation this trade is booked to for cost basis and margins (Orders, Dashboard). Change it anytime.</string>
 </resources>

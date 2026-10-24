@@ -42,6 +42,9 @@ import org.eventt.core.nostr.NostrRelayManager
 import org.eventt.core.nostr.OrderSide
 import org.eventt.core.nostr.ReservationService
 import org.eventt.p2pmarket.generated.resources.*
+import org.eventt.ui.common.*
+import org.eventt.ui.theme.warningColor
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 import java.time.Instant
@@ -94,232 +97,123 @@ fun IncomingRequestsScreen() {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text(
-            if (sellerReservations.isEmpty()) {
-                stringResource(Res.string.incoming_requests)
-            } else {
-                stringResource(Res.string.incoming_requests_n, sellerReservations.size)
-            },
-            style = MaterialTheme.typography.titleMedium,
-        )
-        Text(
-            stringResource(Res.string.incoming_desc),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        actionError?.let {
-            Spacer(Modifier.height(8.dp))
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-        }
-
-        Spacer(Modifier.height(8.dp))
+    val now = System.currentTimeMillis() / 1000
+    Panel(
         if (sellerReservations.isEmpty()) {
-            Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                Text(stringResource(Res.string.no_incoming), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            stringResource(Res.string.incoming_requests)
         } else {
-            ReservationsTableHeader()
-            HorizontalDivider()
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                items(sellerReservations, key = { it.reservation.tradeId }) { row ->
-                    SellerReservationTableRow(
-                        row,
-                        onAccept = {
-                            scope.launch(Dispatchers.IO) {
-                                val ok = ReservationService.respond(row.reservation, accept = true)
-                                actionError = if (ok) null else getString(Res.string.err_accept)
-                                reloadReservations()
-                            }
-                        },
-                        onDecline = {
-                            scope.launch(Dispatchers.IO) {
-                                val ok = ReservationService.respond(row.reservation, accept = false)
-                                actionError = if (ok) null else getString(Res.string.err_decline)
-                                reloadReservations()
-                            }
-                        },
-                        onMarkCompleted = {
-                            scope.launch(Dispatchers.IO) {
-                                val ok = ReservationService.markCompleted(row.reservation)
-                                actionError =
-                                    if (ok) null else getString(Res.string.err_receipt)
-                                reloadReservations()
-                            }
-                        },
-                        onRelease = {
-                            scope.launch(Dispatchers.IO) {
-                                val ok = ReservationService.release(row.reservation)
-                                actionError = if (ok) null else getString(Res.string.err_release)
-                                reloadReservations()
-                            }
-                        },
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReservationsTableHeader() {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            stringResource(Res.string.incoming_requests_n, sellerReservations.size)
+        },
+        Modifier.fillMaxSize(),
     ) {
-        Text(
-            stringResource(Res.string.h_item),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            stringResource(Res.string.h_region),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.width(120.dp),
-        )
-        Text(
-            stringResource(Res.string.h_price),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.width(130.dp),
-        )
-        Text(
-            stringResource(Res.string.h_qty),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.width(60.dp),
-        )
-        Text(
-            stringResource(Res.string.h_requester),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.width(150.dp),
-        )
-        Text(
-            stringResource(Res.string.h_status),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.width(150.dp),
-        )
-        Text(
-            stringResource(Res.string.h_requested),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.width(110.dp),
-        )
-        Text("", modifier = Modifier.width(260.dp))
-    }
-}
+        Text(stringResource(Res.string.incoming_desc), style = MaterialTheme.typography.bodySmall, color = AXIS_COLOR)
+        actionError?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+        Spacer(Modifier.height(4.dp))
 
-@Composable
-private fun SellerReservationTableRow(
-    row: SellerReservationRowData,
-    onAccept: () -> Unit,
-    onDecline: () -> Unit,
-    onMarkCompleted: () -> Unit,
-    onRelease: () -> Unit,
-) {
-    val reservation = row.reservation
-    val nowSec = System.currentTimeMillis() / 1000
-
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                row.orderSide?.let { OrderSideBadge(it) }
-                Text(row.typeName, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        fun act(
+            block: suspend () -> Boolean,
+            err: StringResource,
+        ) {
+            scope.launch(Dispatchers.IO) {
+                actionError = if (block()) null else getString(err)
+                reloadReservations()
             }
-            if (reservation.note.isNotBlank()) {
-                Text(
-                    reservation.note,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            if (reservation.status == "accepted") {
-                reservation.holdUntil?.let {
-                    Text(
-                        stringResource(Res.string.held_until, Instant.ofEpochSecond(it).toString()),
-                        style = MaterialTheme.typography.labelSmall,
+        }
+        Table(
+            cols =
+                listOf<Col<SellerReservationRowData>>(
+                    Col(stringResource(Res.string.h_item), 2.4f, end = false) { it.typeName.lowercase() },
+                    Col(stringResource(Res.string.h_region), 1.1f, end = false) { it.regionName },
+                    Col(stringResource(Res.string.h_price), 1f) { it.price },
+                    Col(stringResource(Res.string.h_qty), 0.6f) { it.reservation.qty },
+                    Col(stringResource(Res.string.h_requester), 1.6f, end = false) { it.reservation.buyerChar.lowercase() },
+                    Col(stringResource(Res.string.h_status), 1.3f, end = false) { it.reservation.status },
+                    Col(stringResource(Res.string.h_requested), 1.1f) { it.reservation.requestedAt },
+                    Col("", 1.7f),
+                ),
+            rows = sellerReservations,
+            empty = stringResource(Res.string.no_incoming),
+            defaultSort = 6,
+            key = { it.reservation.tradeId },
+            // New requests waiting on you stand out from accepted ones.
+            highlight = { it.reservation.status == "sent" },
+        ) { row ->
+            val r = row.reservation
+            listOf(
+                Cell(row.typeName) {
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            row.orderSide?.let { OrderSideBadge(it) }
+                            Text(row.typeName, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        if (r.note.isNotBlank()) {
+                            Text(
+                                r.note,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = AXIS_COLOR,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        if (r.status == "accepted") {
+                            r.holdUntil?.let {
+                                Text(
+                                    stringResource(Res.string.held_until, Instant.ofEpochSecond(it).toString()),
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                        }
+                    }
+                },
+                Cell(row.regionName ?: "—", AXIS_COLOR),
+                Cell(row.price?.let(::formatPriceAbbr) ?: "—"),
+                Cell(r.qty.toString()),
+                Cell(r.buyerChar) {
+                    TraderCell(
+                        r.buyerChar,
+                        r.buyerCharacterId,
+                        r.buyerPubkey,
+                        role =
+                            row.orderSide?.let {
+                                stringResource(
+                                    if (it ==
+                                        OrderSide.SELL
+                                    ) {
+                                        Res.string.wants_to
+                                    } else {
+                                        Res.string.wants_to_sell
+                                    },
+                                )
+                            },
                     )
-                }
-            }
-        }
-        Text(
-            row.regionName ?: "—",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.width(120.dp),
-        )
-        Text(
-            row.price?.let { String.format(Locale.US, "%,.2f", it) } ?: "—",
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.width(130.dp),
-        )
-        Text("${reservation.qty}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(60.dp))
-        Column(modifier = Modifier.width(150.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    reservation.buyerChar.ifBlank { "${reservation.buyerPubkey.take(12)}…" },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (reservation.buyerChar.isNotBlank()) TraderInfoButton(reservation.buyerChar, reservation.buyerCharacterId)
-            }
-            PresenceBadge(reservation.buyerPubkey)
-            row.orderSide?.let {
-                Text(
-                    stringResource(if (it == OrderSide.SELL) Res.string.wants_to else Res.string.wants_to_sell),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        Text(
-            if (reservation.status ==
-                "sent"
-            ) {
-                stringResource(Res.string.awaiting_response)
-            } else {
-                stringResource(Res.string.accepted_awaiting)
-            },
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(150.dp),
-        )
-        Text(
-            stringResource(Res.string.time_ago, formatDurationShort(nowSec - reservation.requestedAt)),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.width(110.dp),
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.width(260.dp)) {
-            if (reservation.status == "sent") {
-                Button(onClick = onAccept, contentPadding = COMPACT_BUTTON_PADDING) { Text(stringResource(Res.string.accept)) }
-                OutlinedButton(onClick = onDecline, contentPadding = COMPACT_BUTTON_PADDING) { Text(stringResource(Res.string.decline)) }
-            } else {
-                Button(
-                    onClick = onMarkCompleted,
-                    contentPadding = COMPACT_BUTTON_PADDING,
-                ) { Text(stringResource(Res.string.mark_completed)) }
-                OutlinedButton(onClick = onRelease, contentPadding = COMPACT_BUTTON_PADDING) { Text(stringResource(Res.string.release)) }
-            }
+                },
+                Cell(
+                    stringResource(if (r.status == "sent") Res.string.awaiting_response else Res.string.accepted_awaiting),
+                    if (r.status == "sent") MaterialTheme.colorScheme.error else warningColor,
+                ),
+                Cell(stringResource(Res.string.time_ago, formatDurationShort(now - r.requestedAt)), AXIS_COLOR),
+                Cell("") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (r.status == "sent") {
+                            Segment(
+                                stringResource(Res.string.accept),
+                                true,
+                            ) { act({ ReservationService.respond(r, accept = true) }, Res.string.err_accept) }
+                            Segment(stringResource(Res.string.decline), false) {
+                                act({ ReservationService.respond(r, accept = false) }, Res.string.err_decline)
+                            }
+                        } else {
+                            Segment(stringResource(Res.string.mark_completed), true) {
+                                act({ ReservationService.markCompleted(r) }, Res.string.err_receipt)
+                            }
+                            Segment(
+                                stringResource(Res.string.release),
+                                false,
+                            ) { act({ ReservationService.release(r) }, Res.string.err_release) }
+                        }
+                    }
+                },
+            )
         }
     }
 }

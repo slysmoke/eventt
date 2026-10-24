@@ -42,7 +42,8 @@ import org.eventt.core.nostr.NostrRelayManager
 import org.eventt.core.nostr.ReceiptService
 import org.eventt.core.nostr.p2pTransactionId
 import org.eventt.p2pmarket.generated.resources.*
-import org.eventt.ui.common.Tip
+import org.eventt.ui.common.*
+import org.eventt.ui.theme.positiveColor
 import org.jetbrains.compose.resources.stringResource
 import java.time.Instant
 
@@ -56,8 +57,6 @@ private data class InboxRowData(
     val order: NostrOrderModel?,
 )
 
-private enum class InboxSortColumn { QTY, REQUESTED }
-
 /**
  * Trades I've marked completed — a Status column shows whether the counterparty's own receipt has
  * landed yet. A trade only counts toward reputation ([org.eventt.core.nostr.ReputationAggregator])
@@ -69,20 +68,6 @@ private enum class InboxSortColumn { QTY, REQUESTED }
 fun InboxScreen() {
     val scope = rememberCoroutineScope()
     var rows by remember { mutableStateOf<List<InboxRowData>>(emptyList()) }
-    var sortColumn by remember { mutableStateOf(InboxSortColumn.REQUESTED) }
-    var sortDirection by remember { mutableStateOf(SortDirection.DESC) }
-
-    fun toggleSort(
-        column: InboxSortColumn,
-        defaultDirection: SortDirection,
-    ) {
-        if (sortColumn == column) {
-            sortDirection = if (sortDirection == SortDirection.ASC) SortDirection.DESC else SortDirection.ASC
-        } else {
-            sortColumn = column
-            sortDirection = defaultDirection
-        }
-    }
 
     suspend fun reload() {
         val completed =
@@ -108,138 +93,74 @@ fun InboxScreen() {
         NostrRelayManager.events.collect { event -> if (event is NostrRelayEvent.ReservationActivity) reload() }
     }
 
-    val displayedRows =
-        when (sortColumn) {
-            InboxSortColumn.QTY -> rows.sortedBy { it.reservation.qty }
-            InboxSortColumn.REQUESTED -> rows.sortedBy { it.reservation.requestedAt }
-        }.let { if (sortDirection == SortDirection.DESC) it.reversed() else it }
-
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        if (displayedRows.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    stringResource(Res.string.no_completed_trades),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        } else {
-            InboxTableHeader(sortColumn, sortDirection, onSort = ::toggleSort)
-            HorizontalDivider()
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                items(displayedRows, key = { it.reservation.tradeId }) { row ->
-                    InboxTableRow(
-                        row,
-                        onAttributionChange = { attribution ->
-                            scope.launch(Dispatchers.IO) {
-                                val reservation = row.reservation
-                                ReceiptService.bookCostBasisEntry(
-                                    reservation,
-                                    attribution,
-                                    fallbackOrder = row.order,
-                                    dateIfNew = Instant.ofEpochSecond(reservation.respondedAt ?: reservation.requestedAt).toString(),
-                                )
-                                reload()
-                            }
+    val now = System.currentTimeMillis() / 1000
+    Panel(stringResource(Res.string.tab_inbox), Modifier.fillMaxSize()) {
+        Table(
+            cols =
+                listOf<Col<InboxRowData>>(
+                    Col(stringResource(Res.string.h_item), 2.4f, end = false) { it.typeName.lowercase() },
+                    Col(stringResource(Res.string.h_qty), 0.6f) { it.reservation.qty },
+                    Col(
+                        stringResource(Res.string.h_role),
+                        0.6f,
+                        end = false,
+                        tip = stringResource(Res.string.tip_p_role),
+                        sort = { it.reservation.role },
+                    ),
+                    Col(
+                        stringResource(Res.string.h_status),
+                        2f,
+                        end = false,
+                        tip = stringResource(Res.string.tip_p_inbox_status),
+                        sort = { it.isConfirmed },
+                    ),
+                    Col(
+                        stringResource(
+                            Res.string.h_attributed_to,
+                        ),
+                        1.4f,
+                        end = false,
+                        tip = stringResource(Res.string.tip_p_attributed),
+                        sort = {
+                            it.attribution?.toString()
                         },
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun InboxTableHeader(
-    sortColumn: InboxSortColumn,
-    sortDirection: SortDirection,
-    onSort: (InboxSortColumn, SortDirection) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            stringResource(Res.string.h_item),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.weight(1f),
-        )
-        SortHeaderCell(
-            stringResource(Res.string.h_qty),
-            Modifier.width(80.dp),
-            active = sortColumn == InboxSortColumn.QTY,
-            direction = sortDirection,
-        ) { onSort(InboxSortColumn.QTY, SortDirection.DESC) }
-        Tip(stringResource(Res.string.tip_p_role)) {
-            Text(
-                stringResource(Res.string.h_role),
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.width(80.dp),
+                    ),
+                    Col(stringResource(Res.string.h_requested), 1.1f) { it.reservation.requestedAt },
+                ),
+            rows = rows,
+            empty = stringResource(Res.string.no_completed_trades),
+            defaultSort = 5,
+            key = { it.reservation.tradeId },
+        ) { row ->
+            val r = row.reservation
+            listOf(
+                Cell(row.typeName) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        row.order?.let { TypeIcon(it.typeId, size = 18.dp) }
+                        Text(row.typeName, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                },
+                Cell(r.qty.toString()),
+                Cell(r.role, AXIS_COLOR),
+                Cell(
+                    stringResource(if (row.isConfirmed) Res.string.confirmed_rep else Res.string.awaiting_confirmation),
+                    if (row.isConfirmed) positiveColor else AXIS_COLOR,
+                ),
+                Cell("") {
+                    AttributionPicker(row.attribution, { attribution ->
+                        scope.launch(Dispatchers.IO) {
+                            ReceiptService.bookCostBasisEntry(
+                                r,
+                                attribution,
+                                fallbackOrder = row.order,
+                                dateIfNew = Instant.ofEpochSecond(r.respondedAt ?: r.requestedAt).toString(),
+                            )
+                            reload()
+                        }
+                    })
+                },
+                Cell(stringResource(Res.string.time_ago, formatDurationShort(now - r.requestedAt)), AXIS_COLOR),
             )
         }
-        Tip(stringResource(Res.string.tip_p_inbox_status)) {
-            Text(
-                stringResource(Res.string.h_status),
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.width(260.dp),
-            )
-        }
-        Tip(stringResource(Res.string.tip_p_attributed)) {
-            Text(
-                stringResource(Res.string.h_attributed_to),
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.width(160.dp),
-            )
-        }
-        SortHeaderCell(
-            stringResource(Res.string.h_requested),
-            Modifier.width(110.dp),
-            active = sortColumn == InboxSortColumn.REQUESTED,
-            direction = sortDirection,
-        ) { onSort(InboxSortColumn.REQUESTED, SortDirection.DESC) }
-    }
-}
-
-@Composable
-private fun InboxTableRow(
-    row: InboxRowData,
-    onAttributionChange: (TransactionAttribution) -> Unit,
-) {
-    val reservation = row.reservation
-    val nowSec = System.currentTimeMillis() / 1000
-
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            row.typeName,
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        Text("${reservation.qty}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(80.dp))
-        Text(reservation.role, style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(80.dp))
-        Text(
-            if (row.isConfirmed) stringResource(Res.string.confirmed_rep) else stringResource(Res.string.awaiting_confirmation),
-            style = MaterialTheme.typography.labelSmall,
-            color = if (row.isConfirmed) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(260.dp),
-        )
-        AttributionPicker(row.attribution, onAttributionChange, modifier = Modifier.width(160.dp))
-        Text(
-            stringResource(Res.string.time_ago, formatDurationShort(nowSec - reservation.requestedAt)),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.width(110.dp),
-        )
     }
 }
