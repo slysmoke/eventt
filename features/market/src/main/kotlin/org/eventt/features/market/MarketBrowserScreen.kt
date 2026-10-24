@@ -1,40 +1,23 @@
 package org.eventt.features.market
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.isSecondaryPressed
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -54,28 +37,14 @@ import org.eventt.core.model.stringBlocking
 import org.eventt.core.staticdata.StaticDataImporter
 import org.eventt.market.generated.resources.*
 import org.eventt.ui.common.*
-import org.eventt.ui.common.Tip
-import org.eventt.ui.common.formatPriceAbbr
-import org.eventt.ui.common.formatVolume
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.eventt.ui.theme.warningColor
 import org.jetbrains.compose.resources.stringResource
+import java.time.Duration
+import java.time.Instant
+import java.time.LocalDate
 import java.util.Locale
-import kotlin.math.floor
-import kotlin.math.log10
-import kotlin.math.pow
-import kotlin.math.roundToInt
-
-// Trade hub regions
-val TRADE_HUBS =
-    listOf(
-        10000002 to "The Forge (Jita)",
-        10000043 to "Domain (Amarr)",
-        10000032 to "Sinq Laison (Dodixie)",
-        10000030 to "Metropolis (Hek)",
-        10000042 to "Heimatar (Rens)",
-    )
 
 private sealed class TreeNode {
     data class GroupNode(
@@ -89,34 +58,42 @@ private sealed class TreeNode {
     ) : TreeNode()
 }
 
+private typealias Book = Pair<List<MarketOrder>, List<MarketOrder>>
+
 @Composable
 fun MarketBrowserScreen() {
     val scope = rememberCoroutineScope()
     var searchQuery by remember { mutableStateOf("") }
     var searchResults by remember { mutableStateOf<List<StaticTypeModel>>(emptyList()) }
     var selectedType by remember { mutableStateOf<StaticTypeModel?>(null) }
-    var selectedRegionId by remember { mutableStateOf(10000002) }
-    var orderBook by remember { mutableStateOf<Pair<List<MarketOrder>, List<MarketOrder>>>(emptyList<MarketOrder>() to emptyList()) }
+    var hub by remember { mutableStateOf(HUBS.first()) }
+    var orderBook by remember { mutableStateOf<Book>(emptyList<MarketOrder>() to emptyList()) }
     var history by remember { mutableStateOf<List<MarketHistoryModel>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(false) }
-    var showOrderBook by remember { mutableStateOf(true) }
     var topGroups by remember { mutableStateOf<List<StaticMarketGroupModel>>(emptyList()) }
     var expandedGroups by remember { mutableStateOf(setOf<Int>()) }
     var isSdeImporting by remember { mutableStateOf(false) }
-    var showAddToAlert by remember { mutableStateOf(false) }
-    var contextMenuOrder by remember { mutableStateOf<MarketOrder?>(null) }
+    // null = closed; NaN = opened from the header (no price picked); a number = prefilled from a book row.
+    var alertPrice by remember { mutableStateOf<Double?>(null) }
+
+    fun open(
+        type: StaticTypeModel,
+        h: Hub = hub,
+    ) {
+        selectedType = type
+        orderBook = emptyList<MarketOrder>() to emptyList()
+        history = emptyList()
+        scope.launch { loadMarketData(h.regionId, type.typeId, ordersCallback = { orderBook = it }, historyCallback = { history = it }) }
+    }
 
     // Deep link from another tab (e.g. Orders' "view price" button) — preselect the requested
     // item exactly as a search-result click would, then clear the one-shot signal.
     val pendingTypeId by AppState.pendingMarketTypeId.collectAsState()
     LaunchedEffect(pendingTypeId) {
         val typeId = pendingTypeId ?: return@LaunchedEffect
-        val type = withContext(Dispatchers.IO) { StaticDataDao.getTypeById(typeId) }
-        if (type != null) {
-            selectedType = type
+        withContext(Dispatchers.IO) { StaticDataDao.getTypeById(typeId) }?.let {
             searchQuery = ""
             searchResults = emptyList()
-            loadMarketData(selectedRegionId, type.typeId, ordersCallback = { orderBook = it }, historyCallback = { history = it })
+            open(it)
         }
         AppState.clearPendingMarketTypeId()
     }
@@ -135,118 +112,41 @@ fun MarketBrowserScreen() {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // ─── Top Bar ──────────────────────────────────────────────
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(stringResource(Res.string.market_browser), style = MaterialTheme.typography.headlineMedium)
-
-                    // Region selector
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            stringResource(Res.string.region_colon),
-                            style = MaterialTheme.typography.labelMedium,
-                            modifier = Modifier.padding(end = 6.dp),
-                        )
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            items(TRADE_HUBS) { (id, name) ->
-                                FilterChip(
-                                    selected = selectedRegionId == id,
-                                    onClick = {
-                                        selectedRegionId = id
-                                        selectedType?.let { type ->
-                                            scope.launch {
-                                                loadMarketData(id, type.typeId, ordersCallback = { orderBook = it }, historyCallback = {
-                                                    history =
-                                                        it
-                                                })
-                                            }
-                                        }
-                                    },
-                                    label = {
-                                        Text(
-                                            name,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                    },
-                                )
-                            }
-                        }
-                    }
+    Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(stringResource(Res.string.market_browser), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.weight(1f))
+            HUBS.forEach { h ->
+                Segment(h.name, hub == h) {
+                    hub = h
+                    selectedType?.let { open(it, h) }
                 }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Search
-                SearchField(
-                    query = searchQuery,
-                    onQueryChange = { query ->
+            }
+        }
+        Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Panel(stringResource(Res.string.categories), Modifier.width(280.dp).fillMaxHeight()) {
+                TerminalSearch(
+                    searchQuery,
+                    { query ->
                         searchQuery = query
                         if (query.length >= 2) {
-                            scope.launch(Dispatchers.IO) {
-                                searchResults = StaticDataDao.searchMarketTypes(query, limit = 30)
-                            }
+                            scope.launch(Dispatchers.IO) { searchResults = StaticDataDao.searchMarketTypes(query, limit = 50) }
                         } else {
                             searchResults = emptyList()
                         }
                     },
-                    placeholder = stringResource(Res.string.search_items),
-                    modifier = Modifier.fillMaxWidth(0.5f),
+                    stringResource(Res.string.search_items),
+                    Modifier.fillMaxWidth(),
                 )
-
-                // Search results dropdown
-                if (searchResults.isNotEmpty()) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(0.5f).heightIn(max = 250.dp),
-                    ) {
-                        LazyColumn {
-                            items(searchResults) { type ->
-                                SearchRow(
-                                    type = type,
-                                    onClick = {
-                                        selectedType = type
-                                        searchQuery = ""
-                                        searchResults = emptyList()
-                                        scope.launch {
-                                            loadMarketData(selectedRegionId, type.typeId, ordersCallback = {
-                                                orderBook = it
-                                            }, historyCallback = {
-                                                history =
-                                                    it
-                                            })
-                                        }
-                                    },
-                                )
-                            }
+                Spacer(Modifier.height(4.dp))
+                // While searching, the matches replace the tree.
+                if (searchQuery.length >= 2) {
+                    LazyColumn(Modifier.fillMaxSize()) {
+                        items(searchResults, key = { it.typeId }) { type ->
+                            SearchRow(type, type.typeId == selectedType?.typeId) { open(type) }
                         }
                     }
-                }
-            }
-        }
-
-        // ─── Main Content ─────────────────────────────────────────
-        Row(modifier = Modifier.fillMaxSize()) {
-            // Sidebar: Market Group Tree
-            Surface(
-                modifier = Modifier.width(260.dp).fillMaxHeight(),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-            ) {
-                Column(modifier = Modifier.padding(4.dp)) {
-                    Text(
-                        stringResource(Res.string.categories),
-                        style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    )
+                } else {
                     MarketGroupTree(
                         topGroups = topGroups,
                         expandedGroups = expandedGroups,
@@ -254,110 +154,284 @@ fun MarketBrowserScreen() {
                         onToggleExpand = { groupId ->
                             expandedGroups = if (groupId in expandedGroups) expandedGroups - groupId else expandedGroups + groupId
                         },
-                        onTypeClick = { type ->
-                            selectedType = type
-                            scope.launch {
-                                loadMarketData(selectedRegionId, type.typeId, ordersCallback = { orderBook = it }, historyCallback = {
-                                    history =
-                                        it
-                                })
-                            }
-                        },
+                        onTypeClick = { open(it) },
                     )
                 }
             }
-
-            // Main panel
-            Surface(
-                modifier = Modifier.fillMaxHeight(),
-                color = MaterialTheme.colorScheme.background,
-            ) {
-                Column(modifier = Modifier.padding(16.dp).fillMaxSize()) {
-                    if (selectedType != null) {
-                        TypeMarketHeader(
-                            type = selectedType!!,
-                            orderBook = orderBook,
-                            showOrderBook = showOrderBook,
-                            onToggleView = { showOrderBook = !showOrderBook },
-                            onAddToAlert = { showAddToAlert = true },
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        if (showOrderBook) {
-                            OrderBookView(orderBook, onCreateAlert = { order -> contextMenuOrder = order })
-                        } else {
-                            HistoryChartView(history, selectedType!!, selectedRegionId, orderBook)
-                        }
-                    } else {
-                        EmptyState(
-                            icon = Icons.Default.Store,
-                            title = stringResource(Res.string.browse_market),
-                            description = stringResource(Res.string.browse_market_desc),
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    }
-                }
+            val type = selectedType
+            if (type != null) {
+                MarketBody(type, hub, orderBook, history, Modifier.weight(1f)) { alertPrice = it ?: Double.NaN }
+            } else {
+                EmptyState(
+                    icon = Icons.Default.Store,
+                    title = stringResource(Res.string.browse_market),
+                    description = stringResource(Res.string.browse_market_desc),
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                )
             }
         }
     }
 
-    LoadingOverlay(isLoading = isLoading, message = stringResource(Res.string.loading_market_data))
-
     // SDE Import overlay
     if (isSdeImporting) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
-        ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Surface(
                 modifier = Modifier.padding(32.dp),
                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
                 shape = MaterialTheme.shapes.medium,
                 shadowElevation = 12.dp,
             ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Icon(
-                        Icons.Default.Downloading,
-                        contentDescription = null,
-                        modifier = Modifier.size(48.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
+                Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.Downloading, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.height(16.dp))
                     Text(stringResource(Res.string.importing_sde), style = MaterialTheme.typography.titleLarge)
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(Modifier.height(4.dp))
                     Text(
-                        text = stringResource(Res.string.downloading_sde),
+                        stringResource(Res.string.downloading_sde),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(Modifier.height(12.dp))
                     CircularProgressIndicator()
                 }
             }
         }
     }
 
-    // Add to Alert dialog (from header button)
-    if (showAddToAlert && selectedType != null) {
+    val type = selectedType
+    val price = alertPrice
+    if (type != null && price != null) {
         AddToAlertDialog(
-            type = selectedType!!,
+            type = type,
             orderBook = orderBook,
-            onDismiss = { showAddToAlert = false },
-            onAdded = { showAddToAlert = false },
+            prefilledPrice = price.takeIf { !it.isNaN() },
+            onDismiss = { alertPrice = null },
+            onAdded = { alertPrice = null },
         )
     }
+}
 
-    // Add to Alert dialog (from right-click on order row)
-    if (contextMenuOrder != null && selectedType != null) {
-        AddToAlertDialog(
-            type = selectedType!!,
-            orderBook = orderBook,
-            prefilledPrice = contextMenuOrder!!.price,
-            onDismiss = { contextMenuOrder = null },
-            onAdded = { contextMenuOrder = null },
+/** Item header, KPI strip and the book or history — no DB or ESI here except the chart's own trades. */
+@Composable
+internal fun MarketBody(
+    type: StaticTypeModel,
+    hub: Hub,
+    book: Book,
+    history: List<MarketHistoryModel>,
+    modifier: Modifier = Modifier,
+    today: LocalDate = LocalDate.now(),
+    // null = from the header button, else the clicked order's price.
+    onAlert: (Double?) -> Unit,
+) {
+    var showHistory by remember { mutableStateOf(false) }
+    // Region-wide by default (as ESI returns it); on = only the hub station, where the trading is.
+    var hubOnly by remember { mutableStateOf(false) }
+    val (allSells, allBuys) = book
+    val sells = remember(allSells, hubOnly, hub) { if (hubOnly) allSells.filter { it.locationId == hub.stationId } else allSells }
+    val buys = remember(allBuys, hubOnly, hub) { if (hubOnly) allBuys.filter { it.locationId == hub.stationId } else allBuys }
+    val stats = remember(sells, buys, history) { marketStats(sells, buys, history, today) }
+
+    Column(modifier.fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TypeIcon(type.typeId, size = 28.dp)
+            Column(Modifier.weight(1f)) {
+                Text(type.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text(
+                    stringResource(Res.string.region_label, if (type.typeId == PLEX_TYPE_ID) "PLEX" else hub.name),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AXIS_COLOR,
+                )
+            }
+            Segment(stringResource(Res.string.orders), !showHistory) { showHistory = false }
+            Segment(stringResource(Res.string.history), showHistory) { showHistory = true }
+            Spacer(Modifier.width(8.dp))
+            Segment(stringResource(Res.string.hub_only, hub.name), hubOnly) { hubOnly = !hubOnly }
+            Segment("+ " + stringResource(Res.string.alert), false) { onAlert(null) }
+        }
+        StatsStrip(stats)
+        if (showHistory) {
+            Panel(null, Modifier.fillMaxWidth().weight(1f)) { HistoryChartView(history, type, hub.regionId, book) }
+        } else {
+            Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                BookPanel(stringResource(Res.string.sell_orders), sells, isBuy = false, Modifier.weight(1f), onAlert)
+                BookPanel(stringResource(Res.string.buy_orders), buys, isBuy = true, Modifier.weight(1f), onAlert)
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatsStrip(s: MarketStats) {
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).border(1.dp, outline(), MaterialTheme.shapes.extraSmall)) {
+        Kpi(
+            stringResource(Res.string.best_sell),
+            s.bestAsk?.let(::formatPriceAbbr) ?: "—",
+            stringResource(Res.string.n_orders_vol, s.askOrders.toString(), formatVolume(s.askVolume)),
+            null,
+            negativeColor,
         )
+        Kpi(
+            stringResource(Res.string.best_buy),
+            s.bestBid?.let(::formatPriceAbbr) ?: "—",
+            stringResource(Res.string.n_orders_vol, s.bidOrders.toString(), formatVolume(s.bidVolume)),
+            null,
+            positiveColor,
+        )
+        Kpi(
+            stringResource(Res.string.spread),
+            s.spreadPct?.let { String.format(Locale.US, "%.2f%%", it) } ?: "—",
+            s.bestAsk?.let { a -> s.bestBid?.let { b -> formatPriceAbbr(a - b) } },
+            null,
+            null,
+            Res.string.tip_spread,
+            valueColor = warningColor.takeIf { (s.spreadPct ?: 0.0) >= 5 },
+        )
+        Kpi(
+            stringResource(Res.string.avg_price_30d),
+            s.avg30?.let(::formatPriceAbbr) ?: "—",
+            s.midVsAvgPct?.let { stringResource(Res.string.mid_vs_avg, pct(it)) },
+            null,
+            null,
+            Res.string.tip_mid_vs_avg,
+        )
+        Kpi(
+            stringResource(Res.string.range_30d),
+            if (s.low30 != null && s.high30 != null) "${formatPriceAbbr(s.low30)} – ${formatPriceAbbr(s.high30)}" else "—",
+            null,
+            null,
+            null,
+        )
+        Kpi(stringResource(Res.string.vol_day), formatVolPerDay(s.volPerDay30), null, null, null, Res.string.tip_vol_day, last = true)
+    }
+}
+
+private fun shortLocation(name: String) = name.split(" - ").take(2).joinToString(" - ")
+
+// One side of the book, best price first, with the volume stacked from the spread. Clicking a
+// row opens a price alert at that price.
+@Composable
+private fun BookPanel(
+    title: String,
+    orders: List<MarketOrder>,
+    isBuy: Boolean,
+    modifier: Modifier,
+    onAlert: (Double?) -> Unit,
+) {
+    val rows = remember(orders, isBuy) { stack(orders, isBuy) }
+    val now = remember(orders) { Instant.now() }
+    val side = if (isBuy) positiveColor else negativeColor
+    Panel(
+        title,
+        modifier.fillMaxHeight(),
+        header = {
+            Box(Modifier.size(6.dp).background(side, MaterialTheme.shapes.extraSmall))
+            Text(orders.size.toString(), style = MaterialTheme.typography.labelSmall, fontFamily = Mono, color = AXIS_COLOR)
+            Spacer(Modifier.weight(1f))
+            Text(stringResource(Res.string.click_for_alert), style = MaterialTheme.typography.labelSmall, color = AXIS_COLOR)
+        },
+    ) {
+        val cols =
+            buildList<Col<BookRow>> {
+                add(Col(stringResource(Res.string.c_price), 1f) { it.o.price })
+                add(Col(stringResource(Res.string.c_qty), 0.8f) { it.o.volumeRemaining })
+                add(Col(stringResource(Res.string.c_cumulative), 0.8f) { it.cumulative })
+                add(Col(stringResource(Res.string.c_isk_total), 0.9f) { it.o.price * it.o.volumeRemaining })
+                if (isBuy) {
+                    add(Col(stringResource(Res.string.c_min), 0.5f) { it.o.minVolume })
+                    add(Col(stringResource(Res.string.c_range), 0.7f, end = false) { it.o.range })
+                }
+                add(Col(stringResource(Res.string.c_location), 1.8f, end = false) { it.o.locationName })
+                add(Col(stringResource(Res.string.c_expires), 0.6f) { it.o.expiresAt() })
+            }
+        Table(
+            cols = cols,
+            rows = rows,
+            empty = stringResource(Res.string.no_orders),
+            defaultSort = 0,
+            defaultDesc = isBuy,
+            key = { it.o.orderId },
+            onClick = { onAlert(it.o.price) },
+        ) { r ->
+            val left = r.o.expiresAt()?.let { Duration.between(now, it) }
+            buildList {
+                add(Cell(formatPriceAbbr(r.o.price), side))
+                add(Cell(formatVolume(r.o.volumeRemaining.toLong())))
+                add(Cell(formatVolume(r.cumulative), AXIS_COLOR))
+                add(Cell(formatPriceAbbr(r.o.price * r.o.volumeRemaining), AXIS_COLOR))
+                if (isBuy) {
+                    add(Cell(if (r.o.minVolume > 1) formatVolume(r.o.minVolume.toLong()) else "", AXIS_COLOR))
+                    add(Cell(r.o.range, AXIS_COLOR))
+                }
+                add(Cell(shortLocation(r.o.locationName), AXIS_COLOR))
+                add(
+                    Cell(
+                        computeExpiry(r.o.issued, r.o.duration),
+                        when {
+                            left == null -> AXIS_COLOR
+                            left.toDays() < 1 -> negativeColor
+                            left.toDays() < 7 -> warningColor
+                            else -> AXIS_COLOR
+                        },
+                    ),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HistoryChartView(
+    history: List<MarketHistoryModel>,
+    type: StaticTypeModel,
+    regionId: Int,
+    orderBook: Book,
+) {
+    if (history.isEmpty()) {
+        Hint(stringResource(Res.string.history_hint))
+        return
+    }
+    val effRegion = if (type.typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else regionId
+    // Your fills/orders for whichever character or corp is selected in the sidebar.
+    val context by AppState.selectedContext.collectAsState()
+    val trades by produceState<MyTrades?>(null, type.typeId, effRegion, context) {
+        value =
+            withContext(Dispatchers.IO) {
+                context?.let { ctx ->
+                    runCatching {
+                        loadMyTrades(ctx.actingCharId, (ctx as? ViewContext.Corporation)?.corporationId, type.typeId, effRegion)
+                    }.getOrNull()
+                }
+            }
+    }
+    ItemPriceChart(
+        typeId = type.typeId,
+        regionId = effRegion,
+        stationId = null,
+        history = remember(history) { history.sortedBy { it.date } },
+        trades = trades,
+        bestBid = orderBook.second.maxOfOrNull { it.price },
+        bestAsk = orderBook.first.minOfOrNull { it.price },
+        modifier = Modifier.fillMaxSize(),
+    )
+}
+
+@Composable
+private fun SearchRow(
+    type: StaticTypeModel,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .then(if (selected) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)) else Modifier)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        TypeIcon(type.typeId, size = 18.dp)
+        Text(type.name, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -491,616 +565,6 @@ private fun TypeTreeRow(
     }
 }
 
-// ─── Type Market Header ──────────────────────────────────────────────────
-
-@Composable
-private fun TypeMarketHeader(
-    type: StaticTypeModel,
-    orderBook: Pair<List<MarketOrder>, List<MarketOrder>>,
-    showOrderBook: Boolean,
-    onToggleView: () -> Unit,
-    onAddToAlert: () -> Unit,
-) {
-    val (sellOrders, buyOrders) = orderBook
-    val bestSell = sellOrders.minOfOrNull { it.price }
-    val bestBuy = buyOrders.maxOfOrNull { it.price }
-    val spread =
-        if (bestSell != null && bestBuy != null && bestSell > 0) {
-            ((bestSell - bestBuy) / bestSell) * 100
-        } else {
-            null
-        }
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TypeIcon(type.typeId, size = 32.dp)
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            Column {
-                Text(type.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text(
-                    stringResource(Res.string.region_label, TRADE_HUBS.find { it.first == 10000002 }?.second ?: "The Forge"),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.Gray,
-                )
-            }
-        }
-
-        Row {
-            FilterChip(selected = showOrderBook, onClick = onToggleView, label = { Text(stringResource(Res.string.orders)) })
-            Spacer(modifier = Modifier.width(4.dp))
-            FilterChip(selected = !showOrderBook, onClick = onToggleView, label = { Text(stringResource(Res.string.history)) })
-            Spacer(modifier = Modifier.width(8.dp))
-            OutlinedButton(onClick = onAddToAlert, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
-                Icon(Icons.Default.Notifications, null, modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(stringResource(Res.string.alert), style = MaterialTheme.typography.labelSmall)
-            }
-        }
-    }
-
-    // Spread bar
-    if (bestSell != null && bestBuy != null) {
-        Spacer(modifier = Modifier.height(8.dp))
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            shape = MaterialTheme.shapes.small,
-        ) {
-            Row(
-                modifier = Modifier.padding(10.dp),
-                horizontalArrangement = Arrangement.spacedBy(24.dp),
-            ) {
-                SpreadItem(stringResource(Res.string.best_sell), formatPriceAbbr(bestSell), negativeColor)
-                SpreadItem(stringResource(Res.string.best_buy), formatPriceAbbr(bestBuy), positiveColor)
-                SpreadItem(
-                    stringResource(Res.string.spread),
-                    "${String.format(Locale.US, "%.2f", spread ?: 0.0)}%",
-                    warningColor,
-                    tooltip = stringResource(Res.string.tip_spread),
-                )
-                SpreadItem(stringResource(Res.string.sell_orders), sellOrders.size.toString(), MaterialTheme.colorScheme.onSurface)
-                SpreadItem(stringResource(Res.string.buy_orders), buyOrders.size.toString(), MaterialTheme.colorScheme.onSurface)
-            }
-        }
-    }
-
-    Spacer(modifier = Modifier.height(4.dp))
-}
-
-@Composable
-private fun SpreadItem(
-    label: String,
-    value: String,
-    color: Color,
-    tooltip: String? = null,
-) {
-    Tip(tooltip) {
-        Column {
-            Text(label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-            Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = color)
-        }
-    }
-}
-
-// ─── Order Book ───────────────────────────────────────────────────────────
-
-private enum class OrderSortColumn {
-    PRICE,
-    REMAIN,
-    TOTAL_ISK,
-    MIN_VOL,
-    RANGE,
-    LOCATION,
-    ISSUED,
-    EXPIRES,
-}
-
-private fun sortOrders(
-    orders: List<MarketOrder>,
-    col: OrderSortColumn,
-    asc: Boolean,
-): List<MarketOrder> {
-    val cmp: Comparator<MarketOrder> =
-        when (col) {
-            OrderSortColumn.PRICE -> {
-                compareBy { it.price }
-            }
-
-            OrderSortColumn.REMAIN -> {
-                compareBy { it.volumeRemaining }
-            }
-
-            OrderSortColumn.TOTAL_ISK -> {
-                compareBy { it.price * it.volumeRemaining }
-            }
-
-            OrderSortColumn.MIN_VOL -> {
-                compareBy { it.minVolume }
-            }
-
-            OrderSortColumn.RANGE -> {
-                compareBy { it.range }
-            }
-
-            OrderSortColumn.LOCATION -> {
-                compareBy { it.locationName }
-            }
-
-            OrderSortColumn.ISSUED -> {
-                compareBy { it.issued }
-            }
-
-            OrderSortColumn.EXPIRES -> {
-                compareBy {
-                    try {
-                        java.time.Instant
-                            .parse(it.issued)
-                            .plusSeconds(it.duration * 86400L)
-                            .epochSecond
-                    } catch (e: Exception) {
-                        0L
-                    }
-                }
-            }
-        }
-    return if (asc) orders.sortedWith(cmp) else orders.sortedWith(cmp.reversed())
-}
-
-@Composable
-private fun OrderBookView(
-    orders: Pair<List<MarketOrder>, List<MarketOrder>>,
-    onCreateAlert: ((MarketOrder) -> Unit)? = null,
-) {
-    val (rawSell, rawBuy) = orders
-
-    var sellSort by remember { mutableStateOf(OrderSortColumn.PRICE) }
-    var sellAsc by remember { mutableStateOf(true) }
-    var buySort by remember { mutableStateOf(OrderSortColumn.PRICE) }
-    var buyAsc by remember { mutableStateOf(false) }
-
-    val sellOrders = remember(rawSell, sellSort, sellAsc) { sortOrders(rawSell, sellSort, sellAsc) }
-    val buyOrders = remember(rawBuy, buySort, buyAsc) { sortOrders(rawBuy, buySort, buyAsc) }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        OrderTable(
-            title = stringResource(Res.string.sell_orders),
-            count = sellOrders.size,
-            titleColor = negativeColor,
-            orders = sellOrders,
-            isBuy = false,
-            sortCol = sellSort,
-            ascending = sellAsc,
-            modifier = Modifier.weight(1f),
-            onSort = { col ->
-                if (sellSort == col) {
-                    sellAsc = !sellAsc
-                } else {
-                    sellSort = col
-                    sellAsc = true
-                }
-            },
-            onCreateAlert = onCreateAlert,
-        )
-        HorizontalDivider(thickness = 2.dp)
-        OrderTable(
-            title = stringResource(Res.string.buy_orders),
-            count = buyOrders.size,
-            titleColor = positiveColor,
-            orders = buyOrders,
-            isBuy = true,
-            sortCol = buySort,
-            ascending = buyAsc,
-            modifier = Modifier.weight(1f),
-            onSort = { col ->
-                if (buySort == col) {
-                    buyAsc = !buyAsc
-                } else {
-                    buySort = col
-                    buyAsc = false
-                }
-            },
-            onCreateAlert = onCreateAlert,
-        )
-    }
-}
-
-@Composable
-private fun OrderTable(
-    title: String,
-    count: Int,
-    titleColor: Color,
-    orders: List<MarketOrder>,
-    isBuy: Boolean,
-    sortCol: OrderSortColumn,
-    ascending: Boolean,
-    modifier: Modifier = Modifier,
-    onSort: (OrderSortColumn) -> Unit,
-    onCreateAlert: ((MarketOrder) -> Unit)? = null,
-) {
-    Column(modifier = modifier) {
-        // Section title bar
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "$title ($count)",
-                style = MaterialTheme.typography.labelMedium,
-                color = titleColor,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-
-        // Sortable column header
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                    .padding(horizontal = 10.dp, vertical = 3.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            SortableCol(stringResource(Res.string.c_price), OrderSortColumn.PRICE, sortCol, ascending, onSort, Modifier.width(90.dp))
-            SortableCol(
-                stringResource(Res.string.c_remain_total),
-                OrderSortColumn.REMAIN,
-                sortCol,
-                ascending,
-                onSort,
-                Modifier.width(120.dp),
-                tooltip = stringResource(Res.string.tip_c_remain),
-            )
-            SortableCol(
-                stringResource(Res.string.c_isk_total),
-                OrderSortColumn.TOTAL_ISK,
-                sortCol,
-                ascending,
-                onSort,
-                Modifier.width(90.dp),
-                tooltip = stringResource(Res.string.tip_c_isk_total),
-            )
-            SortableCol(
-                stringResource(Res.string.c_min),
-                OrderSortColumn.MIN_VOL,
-                sortCol,
-                ascending,
-                onSort,
-                Modifier.width(50.dp),
-                tooltip = stringResource(Res.string.tip_c_min),
-            )
-            if (isBuy) {
-                SortableCol(
-                    stringResource(Res.string.c_range),
-                    OrderSortColumn.RANGE,
-                    sortCol,
-                    ascending,
-                    onSort,
-                    Modifier.width(80.dp),
-                    tooltip = stringResource(Res.string.tip_c_range),
-                )
-            }
-            SortableCol(stringResource(Res.string.c_location), OrderSortColumn.LOCATION, sortCol, ascending, onSort, Modifier.weight(1f))
-            SortableCol(
-                stringResource(Res.string.c_issued),
-                OrderSortColumn.ISSUED,
-                sortCol,
-                ascending,
-                onSort,
-                Modifier.width(82.dp),
-                tooltip = stringResource(Res.string.tip_c_issued),
-            )
-            SortableCol(
-                stringResource(Res.string.c_expires),
-                OrderSortColumn.EXPIRES,
-                sortCol,
-                ascending,
-                onSort,
-                Modifier.width(56.dp),
-                tooltip = stringResource(Res.string.tip_c_expires),
-            )
-        }
-
-        // Rows
-        Column(modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
-            if (orders.isEmpty()) {
-                Text(
-                    stringResource(Res.string.no_orders),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray,
-                    modifier = Modifier.padding(12.dp),
-                )
-            } else {
-                orders.forEachIndexed { index, order ->
-                    OrderRow(order = order, isBuy = isBuy, index = index, onCreateAlert = onCreateAlert)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SortableCol(
-    label: String,
-    col: OrderSortColumn,
-    current: OrderSortColumn,
-    ascending: Boolean,
-    onSort: (OrderSortColumn) -> Unit,
-    modifier: Modifier = Modifier,
-    tooltip: String? = null,
-) {
-    Tip(tooltip, modifier) {
-        val active = col == current
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .clickable { onSort(col) }
-                    .padding(end = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                label,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                color =
-                    if (active) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    },
-                maxLines = 1,
-            )
-            if (active) {
-                Icon(
-                    imageVector = if (ascending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                    contentDescription = null,
-                    modifier = Modifier.size(10.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun OrderRow(
-    order: MarketOrder,
-    isBuy: Boolean,
-    index: Int,
-    onCreateAlert: ((MarketOrder) -> Unit)? = null,
-) {
-    val priceColor = if (!isBuy) negativeColor else positiveColor
-    val expiry = remember(order.issued, order.duration) { computeExpiry(order.issued, order.duration) }
-    val expDaysLeft = remember(order.issued, order.duration) { daysLeftUntilExpiry(order.issued, order.duration) }
-    val expColor =
-        when {
-            expDaysLeft == null -> Color.Gray
-            expDaysLeft <= 1 -> negativeColor
-            expDaysLeft <= 7 -> warningColor
-            else -> Color(0xFF888888)
-        }
-    val rowBg =
-        if (index % 2 == 0) {
-            Color.Transparent
-        } else {
-            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.025f)
-        }
-    var showContextMenu by remember { mutableStateOf(false) }
-
-    Box {
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .background(rowBg)
-                    .padding(horizontal = 10.dp, vertical = 3.dp)
-                    .pointerInput(Unit) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
-                                    showContextMenu = true
-                                }
-                            }
-                        }
-                    },
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                formatPriceAbbr(order.price),
-                style = MaterialTheme.typography.bodySmall,
-                color = priceColor,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.width(90.dp),
-            )
-            Text(
-                "${formatVolume(order.volumeRemaining.toLong())} / ${formatVolume(order.volumeTotal.toLong())}",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.width(120.dp),
-            )
-            Text(
-                formatPriceAbbr(order.price * order.volumeRemaining),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
-                modifier = Modifier.width(90.dp),
-            )
-            Text(
-                formatVolume(order.minVolume.toLong()),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                modifier = Modifier.width(50.dp),
-            )
-            if (isBuy) {
-                Text(
-                    order.range,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.tertiary,
-                    modifier = Modifier.width(80.dp),
-                )
-            }
-            Text(
-                order.locationName,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                order.issued.take(10),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
-                modifier = Modifier.width(82.dp),
-            )
-            Text(
-                expiry,
-                style = MaterialTheme.typography.labelSmall,
-                color = expColor,
-                fontWeight = if (expDaysLeft != null && expDaysLeft <= 1) FontWeight.Medium else FontWeight.Normal,
-                modifier = Modifier.width(56.dp),
-            )
-        }
-        DropdownMenu(expanded = showContextMenu, onDismissRequest = { showContextMenu = false }) {
-            DropdownMenuItem(
-                text = { Text(stringResource(Res.string.create_price_alert)) },
-                leadingIcon = { Icon(Icons.Default.Notifications, null, modifier = Modifier.size(16.dp)) },
-                onClick = {
-                    showContextMenu = false
-                    onCreateAlert?.invoke(order)
-                },
-            )
-        }
-    } // Box
-    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
-}
-
-// ─── History Chart ────────────────────────────────────────────────────────
-
-@Composable
-private fun HistoryChartView(
-    history: List<MarketHistoryModel>,
-    type: StaticTypeModel,
-    regionId: Int,
-    orderBook: Pair<List<MarketOrder>, List<MarketOrder>>,
-) {
-    if (history.isEmpty()) {
-        EmptyState(
-            icon = Icons.AutoMirrored.Filled.ShowChart,
-            title = stringResource(Res.string.no_history_data),
-            description = stringResource(Res.string.history_hint),
-        )
-        return
-    }
-    val effRegion = if (type.typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else regionId
-    // Your fills/orders for whichever character or corp is selected in the sidebar.
-    val context by AppState.selectedContext.collectAsState()
-    val trades by produceState<MyTrades?>(null, type.typeId, effRegion, context) {
-        value =
-            withContext(Dispatchers.IO) {
-                context?.let { ctx ->
-                    runCatching {
-                        loadMyTrades(ctx.actingCharId, (ctx as? ViewContext.Corporation)?.corporationId, type.typeId, effRegion)
-                    }.getOrNull()
-                }
-            }
-    }
-    val sorted = remember(history) { history.sortedBy { it.date } }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        ItemPriceChart(
-            typeId = type.typeId,
-            regionId = effRegion,
-            stationId = null,
-            history = sorted,
-            trades = trades,
-            bestBid = orderBook.second.maxOfOrNull { it.price },
-            bestAsk = orderBook.first.minOfOrNull { it.price },
-            modifier = Modifier.fillMaxWidth().weight(1f),
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Last-30-day summary — vol/day uses calendar days as denominator, not trading-day count.
-        val cutoff =
-            java.time.LocalDate
-                .now()
-                .minusDays(30)
-                .toString()
-        val recent = sorted.filter { it.date.take(10) >= cutoff }
-        val totalVolume = recent.sumOf { it.volume }
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard(stringResource(Res.string.avg_price_30d), formatPriceAbbr(recent.averageOf { it.average }), Modifier.weight(1f))
-            StatCard(stringResource(Res.string.highest_30d), formatPriceAbbr(recent.maxOfOrNull { it.highest } ?: 0.0), Modifier.weight(1f))
-            StatCard(stringResource(Res.string.lowest_30d), formatPriceAbbr(recent.minOfOrNull { it.lowest } ?: 0.0), Modifier.weight(1f))
-            StatCard(stringResource(Res.string.total_vol_30d), formatVolume(totalVolume), Modifier.weight(1f))
-            StatCard(stringResource(Res.string.vol_day), formatVolPerDay(totalVolume, 30), Modifier.weight(1f))
-            StatCard(stringResource(Res.string.orders_30d), formatVolume(recent.sumOf { it.orderCount }), Modifier.weight(1f))
-        }
-    }
-}
-
-@Composable
-internal fun StatCard(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier,
-    valueColor: Color = Color.Unspecified,
-) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-    ) {
-        Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-            Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = valueColor)
-        }
-    }
-}
-
-// ─── Helper Composables ───────────────────────────────────────────────────
-
-@Composable
-private fun SearchRow(
-    type: StaticTypeModel,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        TypeIcon(type.typeId, size = 18.dp)
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(type.name, style = MaterialTheme.typography.bodyMedium)
-    }
-}
-
-// ─── Data Models ──────────────────────────────────────────────────────────
-
-private data class MarketOrder(
-    val orderId: Long,
-    val price: Double,
-    val volumeRemaining: Int,
-    val volumeTotal: Int,
-    val minVolume: Int,
-    val isBuyOrder: Boolean,
-    val locationId: Long,
-    val locationName: String,
-    val systemId: Int,
-    val issued: String,
-    val duration: Int,
-    val range: String,
-)
-
 // ─── Data Loading ─────────────────────────────────────────────────────────
 
 private suspend fun loadMarketData(
@@ -1226,45 +690,14 @@ private fun computeExpiry(
         stringBlocking(Res.string.dur_d, durationDays)
     }
 
-private fun daysLeftUntilExpiry(
-    issued: String,
-    durationDays: Int,
-): Long? =
-    try {
-        val issuedInstant = java.time.Instant.parse(issued)
-        val expiryInstant = issuedInstant.plusSeconds(durationDays * 86400L)
-        (
-            expiryInstant.epochSecond -
-                java.time.Instant
-                    .now()
-                    .epochSecond
-        ) / 86400
-    } catch (e: Exception) {
-        null
-    }
-
-// Deprecated local formatPrice removed. Use formatPriceAbbr from FormatUtils.
-
-// Deprecated local formatVolume removed. Use formatVolume(vol) from FormatUtils.
-
-private fun <T> List<T>.averageOf(selector: (T) -> Double): Double {
-    if (isEmpty()) return 0.0
-    return sumOf(selector) / size
-}
-
-private fun formatVolPerDay(
-    totalVol: Long,
-    calendarDays: Int,
-): String {
-    val perDay = totalVol.toDouble() / calendarDays.coerceAtLeast(1)
-    return when {
+private fun formatVolPerDay(perDay: Double): String =
+    when {
         perDay >= 1_000_000 -> String.format(Locale.US, "%.1fM", perDay / 1_000_000)
         perDay >= 1_000 -> String.format(Locale.US, "%.1fK", perDay / 1_000)
         perDay >= 10 -> String.format(Locale.US, "%.0f", perDay)
         perDay >= 1 -> String.format(Locale.US, "%.1f", perDay)
         else -> String.format(Locale.US, "%.2f", perDay)
     }
-}
 
 // ─── Add to Alert Dialog ────────────────────────────────────────────────
 

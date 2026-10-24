@@ -105,12 +105,10 @@
     <string name="save">Save</string>
     <string name="cancel">Cancel</string>
     <string name="market_browser">Market Browser</string>
-    <string name="region_colon">Region:</string>
     <string name="search_items">Search items...</string>
     <string name="categories">Categories</string>
     <string name="browse_market">Browse the Market</string>
     <string name="browse_market_desc">Select a category from the sidebar or search for an item.</string>
-    <string name="loading_market_data">Loading market data...</string>
     <string name="importing_sde">Importing SDE Data</string>
     <string name="downloading_sde">Downloading EVE Static Data Export…\nThis may take a minute.</string>
     <string name="region_label">Region: %1$s</string>
@@ -123,23 +121,16 @@
     <string name="sell_orders">Sell Orders</string>
     <string name="buy_orders">Buy Orders</string>
     <string name="c_price">Price</string>
-    <string name="c_remain_total">Remain / Total</string>
     <string name="c_isk_total">ISK Total</string>
     <string name="c_min">Min</string>
     <string name="c_range">Range</string>
     <string name="c_location">Location</string>
-    <string name="c_issued">Issued</string>
     <string name="c_expires">Expires</string>
     <string name="no_orders">No orders</string>
     <string name="create_price_alert">Create Price Alert</string>
-    <string name="no_history_data">No History Data</string>
     <string name="history_hint">History will be loaded when you select a type.</string>
     <string name="avg_price_30d">Avg Price 30d</string>
-    <string name="highest_30d">Highest 30d</string>
-    <string name="lowest_30d">Lowest 30d</string>
-    <string name="total_vol_30d">Total Vol 30d</string>
     <string name="vol_day">Vol/Day</string>
-    <string name="orders_30d">Orders 30d</string>
     <string name="unknown_location">Unknown Location</string>
     <string name="unknown_structure">Unknown Structure (%1$s)</string>
     <string name="expired">Expired</string>
@@ -309,7 +300,7 @@
     <string name="tip_st_buy_at">Current best buy order at the station — the price your own buy order has to beat.</string>
     <string name="tip_st_sell_at">Current best sell order at the station — the price your own sell order has to undercut.</string>
     <string name="tip_st_margin">Net profit per unit after sales tax and broker fees, as % of the sell price.</string>
-    <string name="tip_st_roi">Net profit per unit as % of the buy price — return on the ISK you tie up.</string>
+    <string name="tip_st_roi">Net profit per unit as % of the sell price — return on the ISK you tie up.</string>
     <string name="tip_st_net">Profit per unit after sales tax and broker fees on both orders.</string>
     <string name="tip_st_7d">Price change over the last 7 days.</string>
     <string name="tip_st_vol">Units traded per day in the region (from market history), capped by real station fills when Adam4EVE Flow is on and scaled by Vol % when enabled.</string>
@@ -345,13 +336,7 @@
     <string name="tip_src_dst_vol">The % of daily volume you expect to trade. Checked: based on the buy (source) region's volume; unchecked: on the sell (destination) region's.</string>
     <string name="tip_a4e_flow_ir">Cap the legs that are your own placed orders by real per-station fills from Adam4EVE. Uses a third-party service.</string>
     <string name="tip_presets">Saved buy/sell region + station routes — load one to switch quickly.</string>
-    <string name="tip_spread">Gap between the best sell and best buy price, as % of the buy price. A wide spread leaves room for station trading.</string>
-    <string name="tip_c_remain">Units still left in the order / units it was originally placed with.</string>
-    <string name="tip_c_isk_total">Price × remaining units — total ISK sitting in the order.</string>
-    <string name="tip_c_min">Minimum quantity per transaction the order owner requires.</string>
-    <string name="tip_c_range">How far from its station a buy order accepts sellers: station, a number of jumps, or the whole region.</string>
-    <string name="tip_c_issued">When the order was placed or its price last changed.</string>
-    <string name="tip_c_expires">Time left until the order expires.</string>
+    <string name="tip_spread">Gap between the best sell and best buy price, as % of the sell price. A wide spread leaves room for station trading.</string>
     <string name="tip_trade_type">How each leg is traded. "Sell" = take the lowest sell order (instant buy); "Buy" = hit the highest buy order (instant sell); "order" = place your own order and wait. Safe Buy → Sell prices your buy order below what local traders could profit from, so it's rarely outbid.</string>
     <string name="tip_price_spike">Items whose recent history shows a sharp one-off spike (a buyout, wash trading) can look profitable when they aren't. Exclude them, show only them, or ignore.</string>
     <string name="tip_al_target">The alert fires once the watched price goes below (or above) this value. Checked every 5 minutes while the app is running.</string>
@@ -375,4 +360,13 @@
     <string name="mi_guide_separate">• Best: invest with a separate character. Holdings, orders and cost are counted per character, so the two strategies never meet.\n• Or hold investments at a different station than where you flip, and select that station here — prices, holdings, orders and purchase history are then counted only there.\n• Or simply never flip the items you are investing in, and invest only in items you don't station-trade.</string>
     <string name="mi_guide_risks_title">Risks</string>
     <string name="mi_guide_risks">• A cheap price can be the new normal: a balance patch or a new source can push an item down for good. That is what Exclude 1y Lows and the Backtest column guard against — they reduce the risk, they don't remove it.\n• Capital is locked for a long time; don't put in ISK you need for daily trading.\n• Thin markets fill slowly both ways — respect Min Vol and Liquidity d.\n• Every order pays broker fee, every sale pays sales tax, every price change pays a modification fee. The targets already include them; extra relisting doesn't.</string>
+    <string name="hub_only">%1$s station only</string>
+    <string name="n_orders_vol">%1$s orders · %2$s units</string>
+    <string name="mid_vs_avg">mid %1$s vs avg</string>
+    <string name="tip_mid_vs_avg">Average daily price over the last 30 days; below, where the current mid price (between best sell and best buy) sits against it.</string>
+    <string name="range_30d">Range 30d</string>
+    <string name="tip_vol_day">Units traded per day over the last 30 calendar days, region-wide.</string>
+    <string name="click_for_alert">click a row for a price alert</string>
+    <string name="c_qty">Qty</string>
+    <string name="c_cumulative">Stacked</string>
 </resources>

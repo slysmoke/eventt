@@ -23,6 +23,7 @@ dependencies {
     implementation(compose.material3)
     implementation(compose.components.resources)
     implementation(compose.materialIconsExtended)
+    testImplementation("org.jetbrains.compose.ui:ui-test:${libs.versions.compose.get()}") // headless render of the market body
     implementation(libs.okhttp.core)
     testImplementation(libs.okhttp.mockwebserver)
 }
