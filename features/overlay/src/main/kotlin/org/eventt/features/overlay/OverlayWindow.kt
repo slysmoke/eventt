@@ -7,7 +7,6 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -16,7 +15,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -40,11 +38,11 @@ import org.eventt.core.model.formatEveSigFigPrice
 import org.eventt.features.orders.CostBasisService
 import org.eventt.overlay.generated.resources.*
 import org.eventt.ui.common.AXIS_COLOR
-import org.eventt.ui.common.DigitGroupTransformation
 import org.eventt.ui.common.KV
 import org.eventt.ui.common.Mono
 import org.eventt.ui.common.Panel
 import org.eventt.ui.common.Segment
+import org.eventt.ui.common.TerminalField
 import org.eventt.ui.common.Tip
 import org.eventt.ui.common.formatIsk
 import org.eventt.ui.common.formatPriceAbbr
@@ -866,7 +864,7 @@ internal fun CalcSettingsPanel(
                 DEPTH_STEPS.forEach { d -> Segment("$d%", settings.depthPct == d) { onChange(settings.copy(depthPct = d)) } }
             }
             SettingRow(stringResource(Res.string.tc_units), stringResource(Res.string.tip_units)) {
-                NumberField(settings.units, decimals = false) { onChange(settings.copy(units = it)) }
+                TerminalField(settings.units, number = true, decimals = false) { onChange(settings.copy(units = it)) }
             }
             HorizontalDivider(color = outline())
             SettingRow(stringResource(Res.string.tc_cost_source), stringResource(Res.string.tip_cost_source)) {
@@ -882,7 +880,7 @@ internal fun CalcSettingsPanel(
             }
             if (settings.costMode == CostMode.MANUAL) {
                 SettingRow(stringResource(Res.string.tc_manual_cost), stringResource(Res.string.tip_manual_cost)) {
-                    NumberField(settings.manualCost, decimals = true) { onChange(settings.copy(manualCost = it)) }
+                    TerminalField(settings.manualCost, number = true, decimals = true) { onChange(settings.copy(manualCost = it)) }
                 }
             }
             HorizontalDivider(color = outline())
@@ -907,30 +905,4 @@ private fun SettingRow(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically, content = content)
     }
-}
-
-// Dense number input: digits grouped on screen ("10 000"), plain digits in the value.
-@Composable
-private fun NumberField(
-    value: String,
-    decimals: Boolean,
-    onValue: (String) -> Unit,
-) {
-    val ink = MaterialTheme.colorScheme.onSurface
-    BasicTextField(
-        value = value,
-        onValueChange = { typed ->
-            val v = typed.filter { it.isDigit() || (decimals && it == '.') }
-            if (v.count { it == '.' } <= 1) onValue(v)
-        },
-        singleLine = true,
-        visualTransformation = DigitGroupTransformation,
-        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = Mono, color = ink),
-        cursorBrush = SolidColor(ink),
-        modifier =
-            Modifier
-                .width(120.dp)
-                .border(1.dp, outline(), MaterialTheme.shapes.extraSmall)
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-    )
 }

@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -403,6 +404,40 @@ fun TabBar(
         }
         HorizontalDivider(color = outline())
     }
+}
+
+/**
+ * One-line input, terminal style. [number] keeps digits only (plus one '.' with [decimals]) and
+ * shows them grouped ("10 000") while the value stays plain digits.
+ */
+@Composable
+fun TerminalField(
+    value: String,
+    modifier: Modifier = Modifier.width(120.dp),
+    number: Boolean = false,
+    decimals: Boolean = false,
+    onValue: (String) -> Unit,
+) {
+    val ink = MaterialTheme.colorScheme.onSurface
+    BasicTextField(
+        value = value,
+        onValueChange = { typed ->
+            if (!number) {
+                onValue(typed)
+            } else {
+                val v = typed.filter { it.isDigit() || (decimals && it == '.') }
+                if (v.count { it == '.' } <= 1) onValue(v)
+            }
+        },
+        singleLine = true,
+        visualTransformation = if (number) DigitGroupTransformation else VisualTransformation.None,
+        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = Mono, color = ink),
+        cursorBrush = SolidColor(ink),
+        modifier =
+            modifier
+                .border(1.dp, outline(), MaterialTheme.shapes.extraSmall)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+    )
 }
 
 /** A status line under a setting or tool: coloured dot + text. */
