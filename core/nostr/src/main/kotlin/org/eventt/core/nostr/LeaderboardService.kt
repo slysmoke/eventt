@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.roundToLong
 
 // Checked against github.com/nostr-protocol/nips (2026-07-27) — 30736 is unassigned (adjacent to
@@ -111,11 +112,34 @@ object LeaderboardService {
         _lastPublish.value = LeaderboardPublish(System.currentTimeMillis() / 1000, traderChar, stats)
     }
 
-    /** Publishes the tombstone and drops [identity]'s entry from the local aggregate — see [buildTombstone]/[onTombstone]. */
+    /**
+     * Takes [identity] off the board for good: a withdrawal replaces its entry on every relay (an
+     * addressable event — relays keep only the newest), the NIP-09 tombstone asks the ones that
+     * honour deletions to drop the history, and the local aggregate forgets it right away.
+     */
     suspend fun publishTombstone(identity: NostrIdentity) {
-        NostrRelayManager.publish(buildTombstone(QuartzGateway.signerFor(identity.keyPair)))
-        onTombstone(identity.pubkey)
+        val signer = QuartzGateway.signerFor(identity.keyPair)
+        val withdrawal = buildWithdrawal(signer)
+        NostrRelayManager.publish(withdrawal)
+        NostrRelayManager.publish(buildTombstone(signer))
+        onEvent(withdrawal)
     }
+
+    /**
+     * Same kind and d tag as an entry, so it replaces the entry on relays, but no figures: older
+     * clients fail to parse it and simply show nothing for this identity.
+     */
+    fun buildWithdrawal(
+        signer: NostrSignerSync,
+        createdAt: Long = System.currentTimeMillis() / 1000,
+    ): Event =
+        QuartzGateway.signEvent(
+            signer,
+            createdAt,
+            LEADERBOARD_KIND,
+            arrayOf(DTag(LEADERBOARD_D_TAG).toTagArray(), arrayOf("withdrawn", "1")),
+            "",
+        )
 
     fun buildEntryEvent(
         signer: NostrSignerSync,
@@ -174,6 +198,11 @@ object LeaderboardService {
         )
 
     /** Defensive parse — a malformed/unknown-shape event from another client is skipped (null), never crashes the app. */
+    private fun isWithdrawal(event: Event) =
+        event.kind == LEADERBOARD_KIND &&
+            runCatching { event.dTag() }.getOrNull() == LEADERBOARD_D_TAG &&
+            event.tags.any { it.size >= 2 && it[0] == "withdrawn" && it[1] == "1" }
+
     fun parseEntryEvent(event: Event): LeaderboardEntry? {
         if (event.kind != LEADERBOARD_KIND) return null
         if (runCatching { event.dTag() }.getOrNull() != LEADERBOARD_D_TAG) return null
@@ -215,9 +244,21 @@ object LeaderboardService {
         }.getOrNull()
     }
 
+    // When each identity was withdrawn: relays replay in any order, and an entry older than its
+    // withdrawal must not bring the trader back.
+    private val withdrawnAt = ConcurrentHashMap<String, Long>()
+
     /** Called by [NostrRelayManager]'s leaderboard subscription. */
     fun onEvent(event: Event) {
+        if (isWithdrawal(event)) {
+            withdrawnAt.merge(event.pubKey, event.createdAt, ::maxOf)
+            _entries.update { current ->
+                if ((current[event.pubKey]?.updatedAt ?: Long.MAX_VALUE) <= event.createdAt) current - event.pubKey else current
+            }
+            return
+        }
         val parsed = parseEntryEvent(event) ?: return
+        if ((withdrawnAt[parsed.pubkey] ?: -1) >= parsed.updatedAt) return
         _entries.update { current ->
             val previous = current[parsed.pubkey]
             // Relays replay in arbitrary order — an older entry must not overwrite a newer one.
@@ -232,6 +273,7 @@ object LeaderboardService {
      * of lingering until it falls off some TTL that doesn't exist.
      */
     fun onTombstone(pubkey: String) {
+        withdrawnAt.merge(pubkey, System.currentTimeMillis() / 1000, ::maxOf)
         _entries.update { it - pubkey }
     }
 }

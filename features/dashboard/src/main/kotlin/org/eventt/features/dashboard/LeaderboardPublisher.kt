@@ -51,13 +51,22 @@ object LeaderboardPublisher {
     }
 
     private suspend fun publishIfEnabled() {
-        val charId = StaticDataDao.getLeaderboardPublisherCharId() ?: return
-        val identity = NostrIdentityService.listIdentities().find { it.characterId == charId } ?: return
+        val charId = StaticDataDao.getLeaderboardPublisherCharId()
+        val identities = NostrIdentityService.listIdentities()
+        val identity = charId?.let { id -> identities.find { it.characterId == id } }
+        // One trader, one entry: any other local identity still on the board (a previous
+        // publisher, or every one of them once publishing is off) is withdrawn.
+        val listed = LeaderboardService.entries.value.keys
+        identities.filter { it.pubkey != identity?.pubkey && it.pubkey in listed }.forEach { LeaderboardService.publishTombstone(it) }
+        if (identity == null) return
 
         WalletSyncService.syncAll()
         // The publisher's own tax/broker-fee settings, same as the Dashboard's "Combine all".
         val snapshot = loadSnapshot(null, null, "all", charId, null)
         val traderChar = CharacterDao.getById(charId)?.name ?: identity.label
+        // The sync above takes a while: if the publisher was switched meanwhile, this entry would
+        // put the old one back on the board right after it was withdrawn.
+        if (StaticDataDao.getLeaderboardPublisherCharId() != charId) return
         LeaderboardService.publishEntry(identity, leaderboardStats(snapshot, StaticDataDao.getLeaderboardShareNetWorth()), traderChar)
     }
 }

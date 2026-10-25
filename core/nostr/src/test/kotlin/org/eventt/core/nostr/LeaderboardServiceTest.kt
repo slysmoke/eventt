@@ -89,6 +89,25 @@ class LeaderboardServiceTest {
     }
 
     @Test
+    fun `a withdrawal removes the entry and an older replay doesn't bring it back`() {
+        val s = QuartzGateway.signerFor(KeyPair())
+        val entry = LeaderboardService.buildEntryEvent(s, LeaderboardStats(1.0, 2.0, 3.0), "Trader", 1, createdAt = 1_700_000_000L)
+        val withdrawal = LeaderboardService.buildWithdrawal(s, createdAt = 1_700_000_100L)
+
+        LeaderboardService.onEvent(entry)
+        LeaderboardService.onEvent(withdrawal)
+        LeaderboardService.onEvent(entry)
+        LeaderboardService.entries.value[s.pubKey].shouldBeNull()
+        LeaderboardService.parseEntryEvent(withdrawal).shouldBeNull()
+
+        // Publishing again later puts the trader back.
+        LeaderboardService.onEvent(
+            LeaderboardService.buildEntryEvent(s, LeaderboardStats(1.0, 2.0, 3.0), "Trader", 1, createdAt = 1_700_000_200L),
+        )
+        LeaderboardService.entries.value[s.pubKey].shouldNotBeNull()
+    }
+
+    @Test
     fun `an event under a different d tag is ignored`() {
         val foreign =
             QuartzGateway.signEvent(
