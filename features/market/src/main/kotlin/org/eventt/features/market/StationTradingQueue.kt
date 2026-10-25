@@ -9,8 +9,6 @@ import kotlinx.coroutines.launch
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.eveSigFigStep
 import org.eventt.core.model.formatEveSigFigPrice
-import java.awt.Toolkit
-import java.awt.datatransfer.StringSelection
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.round
 
@@ -87,8 +85,7 @@ object StationTradingQueue {
         if (phase == Phase.PRICE) {
             scope.launch {
                 runCatching { EsiClient.openMarketWindow(item.charId, item.typeId) }
-                val sel = StringSelection(formatEveSigFigPrice(item.priceToSet))
-                Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, sel)
+                copyToClipboard(formatEveSigFigPrice(item.priceToSet))
             }
             if (copyVolume) {
                 phase = Phase.VOLUME
@@ -97,8 +94,7 @@ object StationTradingQueue {
             }
         } else {
             scope.launch {
-                val sel = StringSelection(item.volume.coerceAtLeast(1).toString())
-                Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, sel)
+                copyToClipboard(item.volume.coerceAtLeast(1).toString())
             }
             cursor.incrementAndGet()
             phase = Phase.PRICE

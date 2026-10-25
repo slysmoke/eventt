@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.eventt.core.model.AppLog
 import org.eventt.market.generated.resources.*
 import org.eventt.ui.common.AXIS_COLOR
 import org.eventt.ui.common.Mono
@@ -617,7 +618,11 @@ internal fun SelectionBar(
     HorizontalDivider(color = outline())
 }
 
+// The clipboard can be unavailable (another app holds it, no display) — log it, never throw:
+// callers fire this from hotkey queues' background coroutines, where a throw goes uncaught.
 internal fun copyToClipboard(text: String) {
-    val sel = StringSelection(text)
-    Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, null)
+    runCatching {
+        val sel = StringSelection(text)
+        Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, null)
+    }.onFailure { AppLog.warn("Clipboard", "copy failed: ${it.message}") }
 }
