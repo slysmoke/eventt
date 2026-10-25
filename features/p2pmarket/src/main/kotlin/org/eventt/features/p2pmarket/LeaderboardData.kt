@@ -12,36 +12,55 @@ internal enum class LbWindow(
     val label: StringResource,
     // Key the daily places are stored under.
     val key: String,
+    val days: Int,
     val pnl: (LeaderboardStats) -> Double,
     val roi: (LeaderboardStats) -> Double?,
 ) {
-    WEEK(Res.string.lb_7_days, "7d", { it.pnl7d }, { it.roi7dPct }),
-    MONTH(Res.string.lb_30_days, "30d", { it.pnl30d }, { it.roi30dPct }),
-    YEAR(Res.string.lb_365_days, "365d", { it.pnl365d }, { it.roi365dPct }),
+    WEEK(Res.string.lb_7_days, "7d", 7, { it.pnl7d }, { it.roi7dPct }),
+    MONTH(Res.string.lb_30_days, "30d", 30, { it.pnl30d }, { it.roi30dPct }),
+    YEAR(Res.string.lb_365_days, "365d", 365, { it.pnl365d }, { it.roi365dPct }),
 }
 
 internal data class Ranked(
     val entry: LeaderboardEntry,
     val rank: Int,
-    // Places gained since the previous recorded day (negative = lost); null = new on the board.
+    // Places gained since the previous recorded day among traders on both boards (negative =
+    // lost); null = new on the board.
     val change: Int?,
     val stale: Boolean,
     val mine: Boolean,
 )
 
-/** Places by the window's P&L; out-of-date entries are only flagged, not demoted. */
+/**
+ * Places by the window's P&L. An entry last published before the window began is left out: its
+ * numbers describe a period that no longer overlaps this one. Younger out-of-date entries stay,
+ * flagged.
+ */
 internal fun rank(
     entries: Collection<LeaderboardEntry>,
     window: LbWindow,
     previous: Map<String, Int>,
     mine: Set<String>,
     nowSec: Long,
-): List<Ranked> =
-    entries
-        .sortedByDescending { window.pnl(it.stats) }
-        .mapIndexed { i, e ->
-            Ranked(e, i + 1, previous[e.pubkey]?.let { it - (i + 1) }, nowSec - e.updatedAt > STALE_SECONDS, e.pubkey in mine)
+): List<Ranked> {
+    val board =
+        entries
+            .filter { nowSec - it.updatedAt <= window.days * 86400L }
+            .sortedByDescending { window.pnl(it.stats) }
+    // Places gained are counted among traders on both boards only: someone dropping off or
+    // joining shifts everyone's place without anyone overtaking anyone.
+    val both = board.filter { it.pubkey in previous }
+    val placeNow = both.withIndex().associate { (i, e) -> e.pubkey to i }
+    val placeBefore =
+        both.sortedWith(compareBy({ previous.getValue(it.pubkey) }, { placeNow.getValue(it.pubkey) })).withIndex().associate { (i, e) ->
+            e.pubkey to
+                i
         }
+    return board.mapIndexed { i, e ->
+        val change = placeBefore[e.pubkey]?.let { it - placeNow.getValue(e.pubkey) }
+        Ranked(e, i + 1, change, nowSec - e.updatedAt > STALE_SECONDS, e.pubkey in mine)
+    }
+}
 
 internal data class BoardSummary(
     val traders: Int,
