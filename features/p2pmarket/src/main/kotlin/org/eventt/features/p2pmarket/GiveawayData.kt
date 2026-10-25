@@ -46,16 +46,10 @@ internal fun eligible(
         .map { GiveawayParticipant(it.pubkey, it.traderChar) }
         .sortedBy { it.name.lowercase() }
 
-// Test giveaways are the organiser's dry runs: nobody else sees them.
-private fun Giveaway.visibleTo(isAdmin: Boolean) = !test || isAdmin
-
 /** The giveaway to show: the newest one not cancelled. */
-internal fun currentGiveaway(
-    all: Collection<Giveaway>,
-    isAdmin: Boolean,
-): Giveaway? =
+internal fun currentGiveaway(all: Collection<Giveaway>): Giveaway? =
     all
-        .filter { it.status != GiveawayStatus.CANCELLED && it.visibleTo(isAdmin) }
+        .filter { it.status != GiveawayStatus.CANCELLED }
         .maxByOrNull { it.id.removePrefix("g-").toLongOrNull() ?: 0L }
 
 internal data class Wins(
@@ -64,23 +58,17 @@ internal data class Wins(
 )
 
 /** Every trader's wins over all drawn giveaways, by pubkey. */
-internal fun wins(
-    all: Collection<Giveaway>,
-    isAdmin: Boolean,
-): Map<String, Wins> =
+internal fun wins(all: Collection<Giveaway>): Map<String, Wins> =
     all
-        .filter { it.status == GiveawayStatus.DRAWN && it.visibleTo(isAdmin) }
+        .filter { it.status == GiveawayStatus.DRAWN }
         .flatMap { g -> g.winners.map { it.pubkey to g.plexPerWinner.toLong() } }
         .groupBy({ it.first }, { it.second })
         .mapValues { (_, prizes) -> Wins(prizes.size, prizes.sum()) }
 
 /** Winners of the newest drawn giveaway — the ones shown in gold, until the next draw. */
-internal fun lastWinners(
-    all: Collection<Giveaway>,
-    isAdmin: Boolean,
-): Set<String> =
+internal fun lastWinners(all: Collection<Giveaway>): Set<String> =
     all
-        .filter { it.status == GiveawayStatus.DRAWN && it.visibleTo(isAdmin) }
+        .filter { it.status == GiveawayStatus.DRAWN }
         .maxByOrNull { it.id.removePrefix("g-").toLongOrNull() ?: 0L }
         ?.winners
         ?.map { it.pubkey }
@@ -95,18 +83,7 @@ internal fun closeGiveaway(
     excludePubkeys: Set<String>,
     excludeCharIds: Set<Int>,
 ): Giveaway {
-    val participants =
-        if (g.test) {
-            eligible(
-                entries,
-                g.activeDays,
-                nowSec,
-                emptySet(),
-                emptySet(),
-            )
-        } else {
-            eligible(entries, g.activeDays, nowSec, excludePubkeys, excludeCharIds)
-        }
+    val participants = eligible(entries, g.activeDays, nowSec, excludePubkeys, excludeCharIds)
     if (participants.isEmpty()) return g.copy(status = GiveawayStatus.CANCELLED)
     val height = requireNotNull(BitcoinBlocks.tip()?.height) { "no Bitcoin block height" }
     return g.copy(status = GiveawayStatus.CLOSED, participants = participants, btcHeight = height + BLOCKS_AHEAD)

@@ -48,8 +48,6 @@ data class Giveaway(
     val btcHeight: Int? = null,
     val btcHash: String? = null,
     val winners: List<GiveawayParticipant> = emptyList(),
-    // A dry run by the organiser: their own characters take part, and other clients hide it.
-    val test: Boolean = false,
     val updatedAt: Long = 0,
 )
 
@@ -85,7 +83,6 @@ object GiveawayService {
                 add(arrayOf("draw_at", g.drawAt.toString()))
                 g.btcHeight?.let { add(arrayOf("btc_height", it.toString())) }
                 g.btcHash?.let { add(arrayOf("btc_hash", it)) }
-                if (g.test) add(arrayOf("test", "1"))
                 g.participants.forEach { add(arrayOf("participant", it.pubkey, it.name)) }
                 g.winners.forEach { add(arrayOf("winner", it.pubkey, it.name)) }
             }
@@ -99,6 +96,8 @@ object GiveawayService {
     ): Giveaway? {
         if (event.kind != GIVEAWAY_KIND || event.pubKey != admin) return null
         if (!runCatching { event.verify() }.getOrDefault(false)) return null
+        // The organiser's old dry runs, from when the form had a test mode — never shown.
+        if (event.tags.any { it.size >= 2 && it[0] == "test" && it[1] == "1" }) return null
         return runCatching {
             fun tag(name: String) = event.tags.firstOrNull { it.size >= 2 && it[0] == name }?.get(1)
 
@@ -115,7 +114,6 @@ object GiveawayService {
                 btcHeight = tag("btc_height")?.toIntOrNull(),
                 btcHash = tag("btc_hash"),
                 winners = people("winner"),
-                test = tag("test") == "1",
                 updatedAt = event.createdAt,
             )
         }.getOrNull()

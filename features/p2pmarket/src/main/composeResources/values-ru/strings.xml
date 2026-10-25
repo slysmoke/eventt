@@ -237,13 +237,9 @@
     <string name="gw_f_note">Описание</string>
     <string name="gw_publish">Опубликовать</string>
     <string name="gw_back">Назад</string>
-    <string name="gw_unit_min">мин</string>
-    <string name="gw_unit_hour">ч</string>
     <string name="gw_unit_day">дн</string>
     <string name="gw_left_dh">%1$sд %2$sч</string>
     <string name="gw_left_hm">%1$sч %2$sм</string>
-    <string name="gw_test">Тест</string>
-    <string name="gw_test_tip">Пробный запуск: участвуют и твои персонажи, а видишь его только ты. Чужие клиенты тестовый розыгрыш не показывают и его выигрыши не считают.</string>
     <string name="gw_auto_results">Итоги разыгрываются и публикуются автоматически, пока приложение запущено.</string>
     <string name="gw_time_left">До розыгрыша</string>
     <string name="gw_closing">закрываем…</string>

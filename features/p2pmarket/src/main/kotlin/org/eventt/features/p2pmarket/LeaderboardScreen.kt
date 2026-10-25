@@ -27,7 +27,6 @@ import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.LeaderboardRankDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.model.CharacterModel
-import org.eventt.core.nostr.GIVEAWAY_ADMIN_PUBKEY
 import org.eventt.core.nostr.Giveaway
 import org.eventt.core.nostr.GiveawayService
 import org.eventt.core.nostr.LeaderboardEntry
@@ -105,9 +104,8 @@ internal fun LeaderboardContent(
             }
         }
     }
-    val isAdmin = GIVEAWAY_ADMIN_PUBKEY in myPubkeys
-    val winsBy = remember(giveaways, isAdmin) { wins(giveaways, isAdmin) }
-    val golden = remember(giveaways, isAdmin) { lastWinners(giveaways, isAdmin) }
+    val winsBy = remember(giveaways) { wins(giveaways) }
+    val golden = remember(giveaways) { lastWinners(giveaways) }
     val focus = ranked.find { it.entry.pubkey == selected } ?: ranked.find { it.mine } ?: ranked.firstOrNull()
 
     Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

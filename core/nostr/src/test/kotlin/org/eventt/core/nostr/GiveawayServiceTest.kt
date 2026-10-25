@@ -23,7 +23,6 @@ class GiveawayServiceTest {
             btcHeight = 900_000,
             btcHash = "00000000000000000001abc",
             winners = people.take(3),
-            test = true,
         )
 
     @Test
@@ -34,6 +33,8 @@ class GiveawayServiceTest {
         GiveawayService.parseEvent(event).shouldBeNull()
         val forged = Event(event.id, event.pubKey, event.createdAt, event.kind, event.tags, "Every PLEX to me", event.sig)
         GiveawayService.parseEvent(forged, admin = signer.pubKey).shouldBeNull()
+        val dryRun = QuartzGateway.signEvent(signer, 1_800_000_100, GIVEAWAY_KIND, event.tags + arrayOf("test", "1"), "")
+        GiveawayService.parseEvent(dryRun, admin = signer.pubKey).shouldBeNull()
     }
 
     @Test

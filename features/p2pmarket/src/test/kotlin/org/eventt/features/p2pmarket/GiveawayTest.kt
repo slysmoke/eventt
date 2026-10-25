@@ -56,20 +56,17 @@ class GiveawayTest {
     }
 
     @Test
-    fun `wins add up per trader over drawn giveaways, test runs only for the organiser`() {
+    fun `wins add up per trader over drawn giveaways`() {
         val p = { k: String -> GiveawayParticipant(k, k) }
         val all =
             listOf(
                 Giveaway("g-1", GiveawayStatus.DRAWN, 500, 2, 7, 0, "", winners = listOf(p("a"), p("b"))),
                 Giveaway("g-2", GiveawayStatus.DRAWN, 1000, 1, 7, 0, "", winners = listOf(p("a"))),
-                Giveaway("g-3", GiveawayStatus.DRAWN, 9, 1, 7, 0, "", winners = listOf(p("b")), test = true),
-                Giveaway("g-4", GiveawayStatus.ANNOUNCED, 500, 1, 7, 0, "", test = true),
+                Giveaway("g-3", GiveawayStatus.CANCELLED, 500, 1, 7, 0, ""),
             )
 
-        wins(all, isAdmin = false) shouldBe mapOf("a" to Wins(2, 1500), "b" to Wins(1, 500))
-        wins(all, isAdmin = true)["b"] shouldBe Wins(2, 509)
-        currentGiveaway(all, isAdmin = false)?.id shouldBe "g-2"
-        currentGiveaway(all, isAdmin = true)?.id shouldBe "g-4"
+        wins(all) shouldBe mapOf("a" to Wins(2, 1500), "b" to Wins(1, 500))
+        currentGiveaway(all)?.id shouldBe "g-2"
     }
 
     // Writes PNGs to build/giveaway-screens/ for a look without launching the app.
@@ -119,7 +116,7 @@ class GiveawayTest {
                                         now = now,
                                     )
                                 },
-                                { AnnounceForm(GiveawayForm(drawIn = "1", unit = DrawUnit.MINUTES, test = true), false, {}, {}, {}) },
+                                { AnnounceForm(GiveawayForm(), false, {}, {}, {}) },
                             ).forEach { body -> Panel("PLEX giveaway", Modifier.padding(bottom = 8.dp)) { body() } }
                         }
                     }

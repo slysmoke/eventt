@@ -237,13 +237,9 @@
     <string name="gw_f_note">Note</string>
     <string name="gw_publish">Publish</string>
     <string name="gw_back">Back</string>
-    <string name="gw_unit_min">min</string>
-    <string name="gw_unit_hour">h</string>
     <string name="gw_unit_day">d</string>
     <string name="gw_left_dh">%1$sd %2$sh</string>
     <string name="gw_left_hm">%1$sh %2$sm</string>
-    <string name="gw_test">Test</string>
-    <string name="gw_test_tip">A dry run: your own characters take part and only you see it. Nobody else's client shows a test giveaway or counts its wins.</string>
     <string name="gw_auto_results">Results are drawn and published automatically while the app is running.</string>
     <string name="gw_time_left">Draw in</string>
     <string name="gw_closing">closing…</string>

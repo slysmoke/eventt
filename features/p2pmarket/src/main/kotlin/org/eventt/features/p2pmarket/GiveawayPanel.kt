@@ -31,7 +31,6 @@ import org.eventt.p2pmarket.generated.resources.*
 import org.eventt.ui.common.*
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
-import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import java.time.Instant
 import java.time.ZoneId
@@ -43,24 +42,13 @@ private const val BLOCK_POLL_MS = 30_000L
 // The latest giveaway's winners, wherever their names show.
 internal val GOLD = Color(0xFFE8B730)
 
-internal enum class DrawUnit(
-    val seconds: Long,
-    val label: StringResource,
-) {
-    MINUTES(60, Res.string.gw_unit_min),
-    HOURS(3600, Res.string.gw_unit_hour),
-    DAYS(86400, Res.string.gw_unit_day),
-}
-
 /** What the organiser fills in to announce a giveaway; numbers kept as typed. */
 internal data class GiveawayForm(
-    val plex: String = "500",
+    val plex: String = "100",
     val winners: String = "3",
     val activeDays: String = "7",
     val drawIn: String = "7",
-    val unit: DrawUnit = DrawUnit.DAYS,
     val note: String = "",
-    val test: Boolean = false,
 ) {
     fun toGiveaway(nowSec: Long): Giveaway? {
         val plex = plex.toIntOrNull()?.takeIf { it > 0 } ?: return null
@@ -73,9 +61,8 @@ internal data class GiveawayForm(
             plex,
             winners,
             days,
-            nowSec + drawIn * unit.seconds,
+            nowSec + drawIn * 86400,
             note.trim(),
-            test = test,
         )
     }
 }
@@ -106,19 +93,11 @@ internal fun timeLeft(sec: Long): String {
     }
 }
 
-/** Whether this machine holds the organiser's key — loaded once. */
-@Composable
-private fun rememberIsAdmin(): Boolean {
-    var isAdmin by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { isAdmin = NostrIdentityService.getIdentityByPubkey(GIVEAWAY_ADMIN_PUBKEY) != null }
-    return isAdmin
-}
-
 /** Gift icon and countdown next to "Leaderboard" in the sidebar while a giveaway is running. */
 @Composable
 fun GiveawayNavBadge() {
     val all by GiveawayService.giveaways.collectAsState()
-    val g = currentGiveaway(all.values, rememberIsAdmin()) ?: return
+    val g = currentGiveaway(all.values) ?: return
     if (g.status != GiveawayStatus.ANNOUNCED && g.status != GiveawayStatus.CLOSED) return
     val now = rememberNow()
     val color = MaterialTheme.colorScheme.primary
@@ -164,7 +143,7 @@ internal fun GiveawayPanel(
     val now = rememberNow()
     val all by GiveawayService.giveaways.collectAsState()
     val isAdmin = GIVEAWAY_ADMIN_PUBKEY in myPubkeys
-    val g = currentGiveaway(all.values, isAdmin)
+    val g = currentGiveaway(all.values)
     var myCharIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
     LaunchedEffect(isAdmin) {
         if (isAdmin) myCharIds = withContext(Dispatchers.IO) { CharacterDao.getAll().map { it.id }.toSet() }
@@ -207,15 +186,10 @@ internal fun GiveawayPanel(
     }
 
     if (g == null && !isAdmin) return
-    // Matches closeGiveaway: a test run includes the organiser; otherwise the organiser's machine
-    // knows all of their identities and characters, everyone else just the organiser's key.
-    val exclude =
-        when {
-            g?.test == true -> emptySet()
-            isAdmin -> myPubkeys
-            else -> setOf(GIVEAWAY_ADMIN_PUBKEY)
-        }
-    val excludeChars = if (g?.test == true) emptySet() else myCharIds
+    // Matches closeGiveaway: the organiser's machine knows all of their identities and
+    // characters, everyone else just the organiser's key.
+    val exclude = if (isAdmin) myPubkeys else setOf(GIVEAWAY_ADMIN_PUBKEY)
+    val excludeChars = myCharIds
     val eligibleNow =
         remember(
             entries,
@@ -227,16 +201,6 @@ internal fun GiveawayPanel(
 
     Panel(stringResource(Res.string.gw_title), Modifier.fillMaxWidth(), header = {
         g?.let { StatusChip(it.status) }
-        if (g?.test ==
-            true
-        ) {
-            Text(
-                stringResource(Res.string.gw_test).uppercase(),
-                style = MaterialTheme.typography.labelSmall,
-                fontFamily = Mono,
-                color = negativeColor,
-            )
-        }
         Spacer(Modifier.weight(1f))
         Tip(stringResource(Res.string.gw_tip_fair)) {
             Text(stringResource(Res.string.gw_fair), style = MaterialTheme.typography.labelSmall, color = AXIS_COLOR)
@@ -450,14 +414,11 @@ internal fun AnnounceForm(
             }
             field(stringResource(Res.string.gw_f_draw_in)) {
                 TerminalField(f.drawIn, Modifier.width(60.dp), number = true) { onChange(f.copy(drawIn = it)) }
-                DrawUnit.entries.forEach { u -> Segment(stringResource(u.label), f.unit == u) { onChange(f.copy(unit = u)) } }
+                Text(stringResource(Res.string.gw_unit_day), style = MaterialTheme.typography.labelSmall, color = AXIS_COLOR)
             }
             field(stringResource(Res.string.gw_f_note)) { TerminalField(f.note, Modifier.width(320.dp)) { onChange(f.copy(note = it)) } }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Tip(
-                stringResource(Res.string.gw_test_tip),
-            ) { Segment(stringResource(Res.string.gw_test), f.test) { onChange(f.copy(test = !f.test)) } }
             ActionButton(stringResource(Res.string.gw_publish), enabled = f.toGiveaway(0) != null, busy = busy, onClick = onPublish)
             ActionButton(stringResource(Res.string.gw_back), onClick = onCancel)
         }
