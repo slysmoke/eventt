@@ -14,7 +14,7 @@ import kotlin.math.abs
  */
 object StandingOrders {
     private const val SETTING = "orders.standing_buy_pct"
-    private const val DEFAULT_PCT = 5.0
+    private const val DEFAULT_PCT = 0.0
 
     // Read from settings once, then kept in memory — every beaten check in the app goes through here.
     @Volatile

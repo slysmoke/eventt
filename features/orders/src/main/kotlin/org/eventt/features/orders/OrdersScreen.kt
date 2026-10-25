@@ -333,7 +333,7 @@ fun OrdersScreen(context: ViewContext?) {
     // competing buy order region-wide. Off (show all) by default.
     var showOverbidOnly by remember { mutableStateOf(false) }
     // Buy orders at least this far under the best bid are standing dip orders (see StandingOrders).
-    var standingPct by remember { mutableStateOf(5.0) }
+    var standingPct by remember { mutableStateOf(0.0) }
     LaunchedEffect(Unit) { standingPct = withContext(Dispatchers.IO) { StandingOrders.thresholdPct } }
 
     // Market comparison data — loaded after orders, shown as overbid indicators. Refreshed on
@@ -820,11 +820,17 @@ fun OrdersScreen(context: ViewContext?) {
     // Beaten-order tray notifications live in MarketWatchService now — it watches every
     // character's cached orders app-wide, so they fire even with another tab or character active.
 
-    // Auto-refresh market comparisons once the ESI cache for every pair has expired, so beaten
-    // detection (and the notification above) stays current without manual clicks.
+    // Auto-refresh orders and market comparisons once their ESI caches expire, so the table and
+    // beaten detection stay current without manual clicks. The orders fetch is usually a cache hit:
+    // MarketWatchService's background sweep already pulled them.
     LaunchedEffect(context) {
         while (true) {
             delay(30_000)
+            val ordersExpiry = refreshAvailableAt
+            if (ordersExpiry != null && System.currentTimeMillis() >= ordersExpiry && !isLoading && !isLoadingMarket) {
+                loadOrders()
+                continue
+            }
             val expiry = marketComparisonsExpiresAt ?: continue
             if (System.currentTimeMillis() >= expiry && !isLoadingMarket && !isLoading && orders.isNotEmpty()) {
                 fetchMarketComparisons(orders)
