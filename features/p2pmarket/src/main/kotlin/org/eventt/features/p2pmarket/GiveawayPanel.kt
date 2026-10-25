@@ -93,6 +93,17 @@ internal fun timeLeft(sec: Long): String {
     }
 }
 
+// The sidebar has room for one unit only: "7d", "5h", "12m".
+@Composable
+private fun badgeTime(sec: Long): String {
+    val d = sec.coerceAtLeast(0)
+    return when {
+        d >= 86400 -> stringResource(Res.string.gw_left_d, (d / 86400).toString())
+        d >= 3600 -> stringResource(Res.string.gw_left_h, (d / 3600).toString())
+        else -> stringResource(Res.string.gw_left_m, ((d + 59) / 60).toString())
+    }
+}
+
 /** Gift icon and countdown next to "Leaderboard" in the sidebar while a giveaway is running. */
 @Composable
 fun GiveawayNavBadge() {
@@ -113,7 +124,7 @@ fun GiveawayNavBadge() {
         Text(
             // Once closed, how long the block has been awaited: Bitcoin blocks come at random, so any
             // "time left" would only ever say "about ten minutes".
-            if (announced) timeLeft(g.drawAt - now) else shortDuration(now - g.updatedAt),
+            if (announced) badgeTime(g.drawAt - now) else badgeTime(now - g.updatedAt),
             style = MaterialTheme.typography.labelSmall,
             fontFamily = Mono,
             color = color,

@@ -245,6 +245,8 @@
     <string name="gw_closing">closing…</string>
     <string name="gw_wins">Giveaway wins</string>
     <string name="gw_wins_value">%1$s · %2$s PLEX</string>
+    <string name="gw_left_d">%1$sd</string>
+    <string name="gw_left_h">%1$sh</string>
     <string name="gw_left_m">%1$sm</string>
     <string name="gw_blocks_left">Blocks to go</string>
     <string name="gw_blocks_left_value">%1$s of %2$s</string>

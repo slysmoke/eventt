@@ -245,6 +245,8 @@
     <string name="gw_closing">закрываем…</string>
     <string name="gw_wins">Выигрыши в розыгрышах</string>
     <string name="gw_wins_value">%1$s · %2$s PLEX</string>
+    <string name="gw_left_d">%1$sд</string>
+    <string name="gw_left_h">%1$sч</string>
     <string name="gw_left_m">%1$sм</string>
     <string name="gw_blocks_left">Осталось блоков</string>
     <string name="gw_blocks_left_value">%1$s из %2$s</string>
