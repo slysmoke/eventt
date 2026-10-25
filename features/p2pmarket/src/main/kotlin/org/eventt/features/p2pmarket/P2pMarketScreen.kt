@@ -168,7 +168,8 @@ private class NetworkStats(
 private fun rememberNetworkStats(): NetworkStats {
     var orders by remember { mutableStateOf<List<NostrOrderModel>>(emptyList()) }
     var relays by remember { mutableStateOf<List<NostrRelayModel>>(emptyList()) }
-    val presence by PresenceService.presence.collectAsState()
+    // Running apps, like the header counter — not characters: one trader may hold several identities.
+    val presence by PresenceService.appPresence.collectAsState()
     LaunchedEffect(Unit) { OrderRepository.browse(OrderFilter()).collect { orders = it } }
     LaunchedEffect(Unit) {
         relays = withContext(Dispatchers.IO) { NostrRelayDao.getAll() }

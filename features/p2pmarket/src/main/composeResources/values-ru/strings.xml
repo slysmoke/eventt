@@ -190,7 +190,7 @@
     <string name="kpi_relays">Релеи</string>
     <string name="tip_kpi_relays">Включённые релеи, к которым приложение сейчас подключено. Если ни одного — ваши ордера и запросы никуда не уходят.</string>
     <string name="kpi_online">Трейдеры онлайн</string>
-    <string name="tip_kpi_online">Контрагенты, у которых сейчас активен статус присутствия.</string>
+    <string name="tip_kpi_online">Сколько копий приложения сейчас запущено — по одной на трейдера, сколько бы у него ни было персонажей.</string>
     <string name="kpi_network_orders">Ордера в сети</string>
     <string name="kpi_sell_buy">прод. %1$s · пок. %2$s</string>
     <string name="kpi_waiting_you">Ждут вас</string>

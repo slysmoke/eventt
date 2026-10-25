@@ -190,7 +190,7 @@
     <string name="kpi_relays">Relays</string>
     <string name="tip_kpi_relays">Enabled relays the app is connected to right now. With none connected, nothing you post or request goes out.</string>
     <string name="kpi_online">Traders online</string>
-    <string name="tip_kpi_online">Counterparties whose presence status is live right now.</string>
+    <string name="tip_kpi_online">Copies of the app running right now — one per trader, however many characters they have.</string>
     <string name="kpi_network_orders">Orders on network</string>
     <string name="kpi_sell_buy">sell %1$s · buy %2$s</string>
     <string name="kpi_waiting_you">Waiting on you</string>
