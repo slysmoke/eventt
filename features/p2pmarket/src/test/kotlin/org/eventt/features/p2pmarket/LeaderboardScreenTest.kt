@@ -10,6 +10,9 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import org.eventt.core.database.DatabaseManager
+import org.eventt.core.nostr.Giveaway
+import org.eventt.core.nostr.GiveawayParticipant
+import org.eventt.core.nostr.GiveawayStatus
 import org.eventt.core.nostr.LeaderboardEntry
 import org.eventt.core.nostr.LeaderboardStats
 import org.eventt.ui.theme.DarkColorScheme
@@ -53,7 +56,27 @@ class LeaderboardScreenTest {
                 LeaderboardEntry("pk$i", name, 2113351129 + i, stats, at)
             }
         runDesktopComposeUiTest(1440, 860) {
-            setContent { MaterialTheme(colorScheme = DarkColorScheme) { Surface { LeaderboardContent(entries) } } }
+            setContent {
+                MaterialTheme(colorScheme = DarkColorScheme) {
+                    Surface {
+                        LeaderboardContent(
+                            entries,
+                            listOf(
+                                Giveaway(
+                                    "g-1",
+                                    GiveawayStatus.DRAWN,
+                                    500,
+                                    2,
+                                    7,
+                                    now,
+                                    "",
+                                    winners = listOf(GiveawayParticipant("pk1", "Li Slysmoke"), GiveawayParticipant("pk2", "Ash Knight")),
+                                ),
+                            ),
+                        )
+                    }
+                }
+            }
             waitForIdle()
             // Leader strip, table row and detail card.
             onAllNodesWithText("Sasha Winston", substring = true, useUnmergedTree = true).assertCountEquals(3)

@@ -49,6 +49,7 @@ private const val DMS_SUBSCRIPTION_ID = "p2pmarket-dms"
 private const val RECEIPTS_SUBSCRIPTION_ID = "p2pmarket-receipts"
 private const val PRESENCE_SUBSCRIPTION_ID = "p2pmarket-presence"
 private const val LEADERBOARD_SUBSCRIPTION_ID = "p2pmarket-leaderboard"
+private const val GIVEAWAY_SUBSCRIPTION_ID = "p2pmarket-giveaway"
 private const val GIFT_WRAP_KIND = 1059
 private const val EXPIRED_HOLD_SWEEP_MILLIS = 10L * 60 * 1000
 
@@ -311,6 +312,35 @@ object NostrRelayManager {
                             forFilters: List<Filter>?,
                         ) {
                             LeaderboardService.onEvent(event)
+                        }
+                    },
+                )
+
+                // PLEX giveaways — the organiser's events only (authors filter here, signature
+                // check in GiveawayService.parseEvent).
+                val giveawayFilter =
+                    Filter(
+                        null,
+                        listOf(GIVEAWAY_ADMIN_PUBKEY),
+                        listOf(GIVEAWAY_KIND),
+                        mapOf("t" to listOf(GIVEAWAY_T_TAG)),
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                    )
+                c.subscribe(
+                    GIVEAWAY_SUBSCRIPTION_ID,
+                    relayUrls.associateWith { listOf(giveawayFilter) },
+                    object : SubscriptionListener {
+                        override fun onEvent(
+                            event: Event,
+                            isLive: Boolean,
+                            relay: NormalizedRelayUrl,
+                            forFilters: List<Filter>?,
+                        ) {
+                            GiveawayService.onEvent(event)
                         }
                     },
                 )

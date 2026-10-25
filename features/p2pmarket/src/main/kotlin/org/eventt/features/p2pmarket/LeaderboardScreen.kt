@@ -3,9 +3,12 @@ package org.eventt.features.p2pmarket
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -24,6 +27,9 @@ import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.LeaderboardRankDao
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.model.CharacterModel
+import org.eventt.core.nostr.GIVEAWAY_ADMIN_PUBKEY
+import org.eventt.core.nostr.Giveaway
+import org.eventt.core.nostr.GiveawayService
 import org.eventt.core.nostr.LeaderboardEntry
 import org.eventt.core.nostr.LeaderboardPublish
 import org.eventt.core.nostr.LeaderboardService
@@ -58,12 +64,16 @@ private fun nowSec() = System.currentTimeMillis() / 1000
 @Composable
 fun LeaderboardScreen() {
     val entries by LeaderboardService.entries.collectAsState()
-    LeaderboardContent(entries.values)
+    val giveaways by GiveawayService.giveaways.collectAsState()
+    LeaderboardContent(entries.values, giveaways.values)
 }
 
 /** The whole page for a given set of entries — split out so it can be drawn without relays. */
 @Composable
-internal fun LeaderboardContent(entries: Collection<LeaderboardEntry>) {
+internal fun LeaderboardContent(
+    entries: Collection<LeaderboardEntry>,
+    giveaways: Collection<Giveaway> = emptyList(),
+) {
     val scope = rememberCoroutineScope()
     var window by remember { mutableStateOf(LbWindow.MONTH) }
     var myPubkeys by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -95,6 +105,9 @@ internal fun LeaderboardContent(entries: Collection<LeaderboardEntry>) {
             }
         }
     }
+    val isAdmin = GIVEAWAY_ADMIN_PUBKEY in myPubkeys
+    val winsBy = remember(giveaways, isAdmin) { wins(giveaways, isAdmin) }
+    val golden = remember(giveaways, isAdmin) { lastWinners(giveaways, isAdmin) }
     val focus = ranked.find { it.entry.pubkey == selected } ?: ranked.find { it.mine } ?: ranked.firstOrNull()
 
     Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -114,13 +127,25 @@ internal fun LeaderboardContent(entries: Collection<LeaderboardEntry>) {
         }
 
         SummaryStrip(ranked, window, now)
+        GiveawayPanel(entries, myPubkeys)
 
         Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Panel(stringResource(Res.string.lb_ranking, stringResource(window.label)), Modifier.weight(0.7f).fillMaxHeight()) {
-                RankingTable(ranked, window, now) { selected = it.entry.pubkey }
+                RankingTable(ranked, window, now, golden) { selected = it.entry.pubkey }
             }
             Panel(stringResource(Res.string.lb_trader), Modifier.weight(0.3f).fillMaxHeight()) {
-                if (focus == null) Hint(stringResource(Res.string.no_one_opted)) else TraderCard(focus, now)
+                if (focus ==
+                    null
+                ) {
+                    Hint(stringResource(Res.string.no_one_opted))
+                } else {
+                    TraderCard(
+                        focus,
+                        now,
+                        winsBy[focus.entry.pubkey],
+                        focus.entry.pubkey in golden,
+                    )
+                }
             }
         }
 
@@ -214,6 +239,7 @@ private fun RankingTable(
     ranked: List<Ranked>,
     window: LbWindow,
     now: Long,
+    golden: Set<String>,
     onSelect: (Ranked) -> Unit,
 ) {
     Table(
@@ -265,16 +291,19 @@ private fun RankingTable(
                 },
             ),
             Cell(r.entry.displayName()) {
+                val gold = r.entry.pubkey in golden
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     CharacterPortrait(r.entry.traderCharId, 20.dp)
                     Text(
                         r.entry.displayName() + if (r.mine) "  ★" else "",
                         style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.SemiBold.takeIf { r.mine },
-                        color = dim ?: MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.SemiBold.takeIf { r.mine || gold },
+                        color = if (gold) GOLD else dim ?: MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
                     )
+                    if (gold) Icon(Icons.Default.CardGiftcard, null, tint = GOLD, modifier = Modifier.size(13.dp))
                 }
             },
             Cell(signed(pnl), dim ?: pnlColor(pnl)),
@@ -320,6 +349,8 @@ private fun Sparkline(
 private fun TraderCard(
     r: Ranked,
     now: Long,
+    wins: Wins?,
+    gold: Boolean,
 ) {
     val s = r.entry.stats
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -331,10 +362,12 @@ private fun TraderCard(
                         r.entry.displayName(),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
+                        color = if (gold) GOLD else MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )
+                    if (gold) Icon(Icons.Default.CardGiftcard, null, tint = GOLD, modifier = Modifier.padding(start = 4.dp).size(16.dp))
                     TraderInfoButton(r.entry.traderChar, r.entry.traderCharId)
                 }
                 Text(
@@ -368,6 +401,12 @@ private fun TraderCard(
         KV(stringResource(Res.string.lb_sells), s.sells30d?.toString() ?: "—")
         KV(stringResource(Res.string.lb_turnover), s.turnover30d?.let(::formatIsk) ?: "—")
         KV(stringResource(Res.string.lb_net_worth), s.netWorth?.let(::formatIsk) ?: stringResource(Res.string.lb_not_shared))
+        Spacer(Modifier.height(4.dp))
+        KV(
+            stringResource(Res.string.gw_wins),
+            wins?.let { stringResource(Res.string.gw_wins_value, it.count.toString(), formatPlex(it.plex)) } ?: "—",
+            wins?.let { MaterialTheme.colorScheme.primary },
+        )
     }
 }
 

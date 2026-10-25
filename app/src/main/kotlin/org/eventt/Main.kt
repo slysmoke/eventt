@@ -26,6 +26,7 @@ import org.eventt.features.market.A4eHistorySync
 import org.eventt.features.orders.MarketWatchService
 import org.eventt.features.orders.PendingOrdersQueue
 import org.eventt.features.overlay.StreamOverlayServer
+import org.eventt.features.p2pmarket.GiveawayAutomation
 import org.eventt.notify.TrayNotifier
 import org.eventt.ui.EventtApp
 import org.jetbrains.compose.resources.painterResource
@@ -118,6 +119,8 @@ fun main() {
     NostrRelayManager.start()
     // Opt-in trader leaderboard republish sweep — see LeaderboardPublisher.
     LeaderboardPublisher.start()
+    // Organiser's machine only: closes PLEX giveaways on time and publishes the draw.
+    GiveawayAutomation.start()
     // Opt-in OBS overlay server — see StreamOverlaySettingsCard's autostart checkbox.
     StreamOverlayServer.startIfAutostartEnabled()
     P2pRequestNotifier.start()

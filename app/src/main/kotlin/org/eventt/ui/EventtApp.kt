@@ -76,6 +76,7 @@ import org.eventt.features.orders.WalletSyncService
 import org.eventt.features.overlay.OverlayController
 import org.eventt.features.overlay.OverlayWindow
 import org.eventt.features.p2pmarket.CountBadge
+import org.eventt.features.p2pmarket.GiveawayNavBadge
 import org.eventt.features.p2pmarket.LeaderboardScreen
 import org.eventt.features.p2pmarket.P2pMarketScreen
 import org.eventt.features.p2pmarket.rememberPendingBuyRequestCount
@@ -926,6 +927,7 @@ private fun Sidebar(
                         if (screen == AppScreen.P2P_MARKET) {
                             CountBadge(rememberPendingBuyRequestCount())
                         }
+                        if (screen == AppScreen.LEADERBOARD) GiveawayNavBadge()
                         if (screen == AppScreen.ORDERS) {
                             // Currently-beaten orders across every character — fed by
                             // MarketWatchService's background sweep, so it's live even
