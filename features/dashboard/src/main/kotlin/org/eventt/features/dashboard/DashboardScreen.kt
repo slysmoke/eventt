@@ -60,6 +60,7 @@ internal enum class Tab(
     POSITIONS(Res.string.tab_positions),
     ALLOCATION(Res.string.tab_allocation),
     ITEMS(Res.string.tab_items),
+    STATIONS(Res.string.tab_stations),
     COUNTERPARTIES(Res.string.tab_counterparties),
     TRADES(Res.string.tab_trades),
 }
@@ -327,6 +328,21 @@ internal fun DashboardBody(
 
                     Tab.ITEMS -> {
                         ItemsTable(remember(s, from) { itemPnl(s.fifo.realizedSells, from) { s.names[it] ?: "#$it" } }, onOpenItem)
+                    }
+
+                    Tab.STATIONS -> {
+                        val rows =
+                            remember(s, from) {
+                                // Sale location names ride along on the wallet transactions.
+                                val names =
+                                    s.txs
+                                        .mapNotNull { tx ->
+                                            val id = tx["location_id"] as? Long ?: return@mapNotNull null
+                                            (tx["location_name"] as? String)?.ifEmpty { null }?.let { id to it }
+                                        }.toMap()
+                                stationPnl(s.fifo.realizedSells, from) { names[it] ?: unknown }
+                            }
+                        StationsTable(rows)
                     }
 
                     Tab.COUNTERPARTIES -> {
@@ -711,6 +727,32 @@ private fun ItemsTable(
             Cell(i.marginPct?.let(::pct) ?: "—", pnlColor(i.marginPct)),
             Cell(String.format(Locale.US, "%.1f", i.avgHeldDays), warningColor.takeIf { i.avgHeldDays > 30 }),
             Cell(shortDate(i.lastSold), AXIS_COLOR),
+        )
+    }
+}
+
+@Composable
+private fun StationsTable(rows: List<StationPnl>) {
+    Table(
+        cols =
+            listOf(
+                Col<StationPnl>(stringResource(Res.string.col_station), 3f, end = false) { it.name.lowercase() },
+                Col(stringResource(Res.string.col_sold), 1f) { it.qty },
+                Col(stringResource(Res.string.col_profit), 1.2f) { it.profit },
+                Col(stringResource(Res.string.col_margin), 0.9f) { it.marginPct },
+                Col(stringResource(Res.string.col_last), 0.9f) { it.lastSold },
+            ),
+        rows = rows,
+        defaultSort = 2,
+        empty = stringResource(Res.string.no_realized_sales),
+        key = { it.locationId },
+    ) { r ->
+        listOf(
+            Cell(r.name),
+            Cell(formatVolume(r.qty.toLong())),
+            Cell(signed(r.profit), pnlColor(r.profit)),
+            Cell(r.marginPct?.let(::pct) ?: "—", pnlColor(r.marginPct)),
+            Cell(shortDate(r.lastSold), AXIS_COLOR),
         )
     }
 }

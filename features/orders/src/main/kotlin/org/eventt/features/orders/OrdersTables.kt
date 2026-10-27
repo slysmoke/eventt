@@ -397,11 +397,19 @@ internal fun computeBuyMetrics(
     taxConfig: CostBasisService.TaxConfig,
     comparisons: Map<Pair<Int, Long>, MarketComparison>,
     competition: Map<Pair<Int, Long>, CompetitionService.Stats>,
+    marginRange: Int = MarginRange.STATION,
 ): BuyOrderMetrics {
     val comparison = comparisons[order.typeId to order.locationId]
-    // Margin if this order fills and the item is resold at the current best sell price.
-    val marginPct = computeMarginPct(order.price, comparison?.bestSell, taxConfig)
-    val bestMarginPct = computeBestMarginPct(comparison, taxConfig)
+    // Margin if this order fills and the item is resold at the current best sell price — at this
+    // station, or anywhere within [marginRange] jumps of it.
+    val resale =
+        if (marginRange == MarginRange.STATION) {
+            comparison?.bestSell
+        } else {
+            comparison?.regionSells?.filter { it.second <= marginRange }?.minOfOrNull { it.first }
+        }
+    val marginPct = computeMarginPct(order.price, resale, taxConfig)
+    val bestMarginPct = computeBestMarginPct(comparison, taxConfig, resale)
     val isStanding = StandingOrders.isStanding(order.price, comparison?.bestBuy)
     val isOverbid = comparison?.bestBuy != null && comparison.bestBuy > order.price && !isStanding
     // Buy competition is scoped to the region, matching recordTopSnapshots.
@@ -434,10 +442,11 @@ internal fun BuyOrdersTable(
     activeOrderId: Long?,
     onSelect: (Long) -> Unit,
     onAction: (CharacterOrder) -> Unit,
+    marginRange: Int = MarginRange.STATION,
 ) {
     val metrics =
-        remember(orders, taxConfig, comparisons, competition, standingPct) {
-            orders.map { computeBuyMetrics(it, taxConfig, comparisons, competition) }
+        remember(orders, taxConfig, comparisons, competition, standingPct, marginRange) {
+            orders.map { computeBuyMetrics(it, taxConfig, comparisons, competition, marginRange) }
         }
     val visible = if (showOverbidOnly) metrics.filter { it.isOverbid } else metrics
     val sorted = sortBuyMetrics(visible, sortCol, sortDir)

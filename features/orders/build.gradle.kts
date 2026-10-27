@@ -10,6 +10,7 @@ version = "1.0.0"
 dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:database"))
+    implementation(project(":core:staticdata")) // JumpGraphService, for the buy-margin jump range
     implementation(project(":core:auth"))
     implementation(project(":core:esi"))
     implementation(project(":core:marketlogs"))

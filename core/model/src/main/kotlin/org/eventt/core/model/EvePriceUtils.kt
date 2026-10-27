@@ -34,16 +34,25 @@ fun formatEveSigFigPrice(price: Double): String {
 }
 
 /**
- * One tick below [price] on EVE's 4-sigfig grid — the price to paste to undercut a sell order.
- * Snaps to the grid first so float noise doesn't skip a tick.
+ * [ticks] ticks below [price] on EVE's 4-sigfig grid — the price to paste to undercut a sell order.
+ * Snaps to the grid first so float noise doesn't skip a tick; steps one tick at a time so a
+ * magnitude boundary (10 000 → 9 990 → 9 989) uses the right step on each side.
  */
-fun eveUndercutPrice(price: Double): Double {
-    val step = eveSigFigStep(price)
-    return (round(price / step) * step - step).coerceAtLeast(0.01)
-}
+fun eveUndercutPrice(
+    price: Double,
+    ticks: Int = 1,
+): Double =
+    (1..ticks).fold(price) { p, _ ->
+        val step = eveSigFigStep(p)
+        (round(p / step) * step - step).coerceAtLeast(0.01)
+    }
 
-/** One tick above [price] on EVE's 4-sigfig grid — the price to paste to outbid a buy order. */
-fun eveOutbidPrice(price: Double): Double {
-    val step = eveSigFigStep(price)
-    return round(price / step) * step + step
-}
+/** [ticks] ticks above [price] on EVE's 4-sigfig grid — the price to paste to outbid a buy order. */
+fun eveOutbidPrice(
+    price: Double,
+    ticks: Int = 1,
+): Double =
+    (1..ticks).fold(price) { p, _ ->
+        val step = eveSigFigStep(p)
+        round(p / step) * step + step
+    }
