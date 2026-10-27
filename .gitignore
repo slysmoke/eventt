@@ -78,3 +78,6 @@ compose_resources/
 
 # direnv
 .direnv/
+
+# Local strategy backtesting lab — not shipped
+/strategy-lab/
