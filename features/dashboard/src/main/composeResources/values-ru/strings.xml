@@ -67,6 +67,8 @@
     <string name="tab_positions">Позиции</string>
     <string name="tab_items">Предметы</string>
     <string name="tab_counterparties">Контрагенты</string>
+    <string name="tab_stations">Станции</string>
+    <string name="col_station">Станция</string>
     <string name="tab_trades">Сделки</string>
     <string name="col_item">Предмет</string>
     <string name="col_qty">Кол-во</string>

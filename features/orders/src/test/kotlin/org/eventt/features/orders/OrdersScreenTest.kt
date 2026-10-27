@@ -47,6 +47,20 @@ class OrdersScreenTest {
     }
 
     @Test
+    fun `margin range picks the cheapest sell within that many jumps`() {
+        val order = activeOrder(price = 100.0).copy(isBuyOrder = true)
+        val sells = listOf(120.0 to 3, 150.0 to 1, 110.0 to Int.MAX_VALUE)
+        val comps = mapOf((order.typeId to order.locationId) to MarketComparison(bestSell = null, bestBuy = 100.0, regionSells = sells))
+
+        fun marginAt(range: Int) = computeBuyMetrics(order, tax, comps, emptyMap(), range).marginPct
+        marginAt(MarginRange.STATION).shouldBeNull()
+        marginAt(0).shouldBeNull()
+        marginAt(2) shouldBe computeMarginPct(100.0, 150.0, tax)
+        marginAt(5) shouldBe computeMarginPct(100.0, 120.0, tax)
+        marginAt(MarginRange.REGION) shouldBe computeMarginPct(100.0, 110.0, tax)
+    }
+
+    @Test
     fun `computeBestMarginPct is null when there's no comparison or a one-sided market`() {
         computeBestMarginPct(null, tax).shouldBeNull()
         computeBestMarginPct(MarketComparison(bestSell = null, bestBuy = 100.0), tax).shouldBeNull()

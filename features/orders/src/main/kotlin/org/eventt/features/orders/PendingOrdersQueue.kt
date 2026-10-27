@@ -6,12 +6,13 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import org.eventt.core.database.StaticDataDao
 import org.eventt.core.esi.EsiClient
-import org.eventt.core.model.eveSigFigStep
+import org.eventt.core.model.eveOutbidPrice
+import org.eventt.core.model.eveUndercutPrice
 import org.eventt.core.model.formatEveSigFigPrice
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
-import kotlin.math.round
 
 data class PendingOrder(
     val charId: Int,
@@ -24,18 +25,41 @@ data class PendingOrder(
     val bestCompetingPrice: Double?,
     val isBeaten: Boolean,
 ) {
-    // Price to paste into the EVE modify-order dialog to beat the competition by one sigfig step.
+    // Price to paste into the EVE modify-order dialog to beat the competition by [UndercutTicks] steps.
     val priceToSet: Double get() =
         when {
-            isBeaten && bestCompetingPrice != null -> {
-                val step = eveSigFigStep(bestCompetingPrice)
-                val rounded = round(bestCompetingPrice / step) * step
-                if (isBuyOrder) rounded + step else rounded - step
-            }
+            isBeaten && bestCompetingPrice != null -> beatPrice(bestCompetingPrice, isBuyOrder)
+            else -> ownPrice
+        }
+}
 
-            else -> {
-                ownPrice
-            }
+/** [UndercutTicks.count] EVE price ticks past [best]: above a bid for a buy order, under an ask for a sell. */
+internal fun beatPrice(
+    best: Double,
+    isBuy: Boolean,
+    ticks: Int = UndercutTicks.count,
+): Double = if (isBuy) eveOutbidPrice(best, ticks) else eveUndercutPrice(best, ticks)
+
+/**
+ * How many price ticks the Orders hotkey / row action steps past the best competing order. One tick
+ * wins the top spot by the minimum; more gives a buffer against the next 0.01-ISK war.
+ */
+object UndercutTicks {
+    private const val SETTING = "orders.undercut_ticks"
+    val CHOICES = listOf(1, 2, 3, 5, 10)
+
+    // Read once, then kept in memory: priceToSet runs on the hotkey path.
+    @Volatile
+    private var cached: Int? = null
+
+    var count: Int
+        get() =
+            cached
+                ?: (runCatching { StaticDataDao.getSetting(SETTING) }.getOrNull()?.toIntOrNull()?.coerceAtLeast(1) ?: 1)
+                    .also { cached = it }
+        set(value) {
+            cached = value
+            StaticDataDao.setSetting(SETTING, value.toString())
         }
 }
 

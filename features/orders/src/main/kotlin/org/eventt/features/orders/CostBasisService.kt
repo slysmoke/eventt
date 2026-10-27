@@ -75,6 +75,8 @@ object CostBasisService {
         val marginPct: Double, // net profit / total cost × 100
         // Quantity-weighted days between buying the matched lots and this sale.
         val heldDays: Double = 0.0,
+        // Station/structure the sale happened at (0 for a P2P trade) — the Dashboard's per-station P&L.
+        val locationId: Long = 0,
     )
 
     data class FifoResult(
@@ -214,6 +216,7 @@ object CostBasisService {
                                     profit,
                                     margin,
                                     heldDaySum / qtyMatched,
+                                    tx.locationId,
                                 ),
                             )
                         }

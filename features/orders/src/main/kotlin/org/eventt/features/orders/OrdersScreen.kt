@@ -33,9 +33,9 @@ import org.eventt.core.database.WalletDao
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.CorpFeature
 import org.eventt.core.model.HotkeyBindings
-import org.eventt.core.model.eveSigFigStep
 import org.eventt.core.model.formatEveSigFigPrice
 import org.eventt.core.model.stringBlocking
+import org.eventt.core.staticdata.JumpGraphService
 import org.eventt.features.market.ItemDetailDialog
 import org.eventt.orders.generated.resources.*
 import org.eventt.ui.common.*
@@ -65,6 +65,7 @@ internal val ACTIVE_IN_GAME = Color(0xFF4A90D9) // blue — currently open in EV
 
 private const val DEFAULT_REGION_ID = 10000002 // The Forge (Jita) — fallback for inventory items with no active order/region context
 private const val SHOW_BEATEN_ONLY_SETTING = "orders.show_beaten_only"
+private const val MARGIN_RANGE_SETTING = "orders.buy_margin_range"
 
 internal data class CharacterOrder(
     val orderId: Long,
@@ -224,12 +225,11 @@ internal fun mergeRelistStats(
 
 // Whether a competitor currently beats this order — a cheaper sell at the same station, or a
 // higher buy region-wide. Single source for the hotkey queue, the header badge, and notifications.
-// The price Ctrl+Z / Enter copies: one EVE price step past the best competing order (above the
-// best bid for a buy, under the best ask for a sell), or our own price with no competition.
+// The price Ctrl+Z / Enter copies: UndercutTicks EVE price steps past the best competing order
+// (above the best bid for a buy, under the best ask for a sell), or our own price with no competition.
 internal fun CharacterOrder.undercutPrice(comp: MarketComparison?): Double {
     val base = (if (isBuyOrder) comp?.bestBuy else comp?.bestSell) ?: return price
-    val step = eveSigFigStep(base)
-    return kotlin.math.round(base / step) * step + if (isBuyOrder) step else -step
+    return beatPrice(base, isBuyOrder)
 }
 
 internal fun CharacterOrder.isBeatenBy(comp: MarketComparison?): Boolean =
@@ -249,6 +249,10 @@ internal fun CharacterOrder.isBeatenBy(comp: MarketComparison?): Boolean =
 internal data class MarketComparison(
     val bestSell: Double?, // lowest sell from others at the same station — null means no sell competition there
     val bestBuy: Double?, // highest region-wide buy from others — null means no buy competition
+    // Every sell from others in the region as (price, jumps from this location's system) — the
+    // buy-side margin's resale pool when its range is wider than the station (buy orders parked in
+    // a structure near the hub). Jumps are Int.MAX_VALUE when not computed (Station/Region range).
+    val regionSells: List<Pair<Double, Int>> = emptyList(),
 )
 
 /** Net margin (%) of buying at [buyPrice] (cost includes buy broker fee) and reselling at [sellPrice] (revenue net of sales tax + sell broker fee). */
@@ -275,7 +279,8 @@ internal fun computeMarginPct(
 internal fun computeBestMarginPct(
     comparison: MarketComparison?,
     taxConfig: CostBasisService.TaxConfig,
-): Double? = computeMarginPct(comparison?.bestBuy, comparison?.bestSell, taxConfig)
+    resale: Double? = comparison?.bestSell,
+): Double? = computeMarginPct(comparison?.bestBuy, resale, taxConfig)
 
 // COST/RELIST/PROFIT/MARGIN/BEST_MARGIN are Sell-only (sorted in sortSellMetrics, since they're
 // derived values, not fields on CharacterOrder); TOTAL/ORDER_AGE are Buy-only (applySort).
@@ -332,6 +337,10 @@ fun OrdersScreen(context: ViewContext?) {
     // Buy tab only: when on, hides every order that isn't currently outbid by a higher
     // competing buy order region-wide. Off (show all) by default.
     var showOverbidOnly by remember { mutableStateOf(false) }
+    var marginRange by remember { mutableStateOf(MarginRange.STATION) }
+    LaunchedEffect(Unit) {
+        marginRange = withContext(Dispatchers.IO) { StaticDataDao.getSetting(MARGIN_RANGE_SETTING)?.toIntOrNull() ?: MarginRange.STATION }
+    }
     // Buy orders at least this far under the best bid are standing dip orders (see StandingOrders).
     var standingPct by remember { mutableStateOf(0.0) }
     LaunchedEffect(Unit) { standingPct = withContext(Dispatchers.IO) { StandingOrders.thresholdPct } }
@@ -347,6 +356,8 @@ fun OrdersScreen(context: ViewContext?) {
 
     // Ctrl+Z cycles only beaten orders when on (mirrors PendingOrdersQueue.onlyBeaten).
     var onlyBeaten by remember { mutableStateOf(PendingOrdersQueue.onlyBeaten) }
+    var undercutTicks by remember { mutableStateOf(1) }
+    LaunchedEffect(Unit) { undercutTicks = withContext(Dispatchers.IO) { UndercutTicks.count } }
 
     // Tray notification when an order newly becomes beaten. Persisted; default on.
     var notifyBeaten by remember { mutableStateOf(true) }
@@ -414,6 +425,11 @@ fun OrdersScreen(context: ViewContext?) {
                     // ones that are still cached, which is what made frequent clicks feel like a
                     // burst of requests.
                     var latestExpiry: Long? = null
+                    // Jump distances only for a jump-count margin range; the graph is cached forever
+                    // after its first build (see JumpGraphService), BFS once per origin system.
+                    val needJumps = marginRange in 0 until MarginRange.REGION
+                    val graphReady = mutableSetOf<Int>()
+                    val distances = mutableMapOf<Int, Map<Int, Int>>()
                     for ((typeId, regionId) in uniqueRegionPairs) {
                         ensureActive()
                         try {
@@ -432,10 +448,29 @@ fun OrdersScreen(context: ViewContext?) {
                                     .maxOrNull()
                             // One entry per station this character actually has an active order at —
                             // bestSell only counts other sellers at that same station.
+                            if (needJumps && graphReady.add(regionId)) JumpGraphService.ensureRegionGraph(regionId)
                             ownOrdersForPair.map { it.locationId }.toSet().forEach { locationId ->
+                                // The book carries each order's system — the only way to place a structure.
+                                val systemId =
+                                    if (!needJumps) {
+                                        null
+                                    } else {
+                                        all
+                                            .firstOrNull {
+                                                (it["order_id"] as? Number)?.toLong() in ownIds &&
+                                                    (it["location_id"] as? Number)?.toLong() == locationId
+                                            }?.let { (it["system_id"] as? Number)?.toInt() }
+                                            ?: StaticDataDao.getStationById(locationId)?.systemId
+                                    }
+                                val dist = systemId?.let { sys -> distances.getOrPut(sys) { JumpGraphService.bfsDistances(sys, regionId) } }
+                                val regionSells =
+                                    sellersElsewhere.mapNotNull { o ->
+                                        val price = (o["price"] as? Number)?.toDouble() ?: return@mapNotNull null
+                                        price to (dist?.get((o["system_id"] as? Number)?.toInt()) ?: Int.MAX_VALUE)
+                                    }
                                 val ordersHere = sellersElsewhere.filter { (it["location_id"] as? Number)?.toLong() == locationId }
                                 val bestSell = ordersHere.mapNotNull { (it["price"] as? Number)?.toDouble() }.minOrNull()
-                                result[typeId to locationId] = MarketComparison(bestSell, bestBuy)
+                                result[typeId to locationId] = MarketComparison(bestSell, bestBuy, regionSells)
                             }
                             val pairParams = mapOf("order_type" to "all", "type_id" to typeId.toString())
                             // The public order book's own "as of" time for this (typeId, regionId)
@@ -904,6 +939,10 @@ fun OrdersScreen(context: ViewContext?) {
                     onlyBeaten = !onlyBeaten
                     PendingOrdersQueue.onlyBeaten = onlyBeaten
                 }
+                UndercutTicksPicker(undercutTicks) { v ->
+                    undercutTicks = v
+                    scope.launch(Dispatchers.IO) { UndercutTicks.count = v }
+                }
             }
             Spacer(Modifier.weight(1f))
             if (actingCharId != null) {
@@ -1004,6 +1043,12 @@ fun OrdersScreen(context: ViewContext?) {
                         StandingThreshold(standingPct) { v ->
                             standingPct = v
                             scope.launch(Dispatchers.IO) { StandingOrders.thresholdPct = v }
+                        }
+                        MarginRangePicker(marginRange) { v ->
+                            marginRange = v
+                            scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(MARGIN_RANGE_SETTING, v.toString()) }
+                            // Jump distances are worked out during the fetch; the books are still cached.
+                            fetchMarketComparisons(orders)
                         }
                         Segment(stringResource(Res.string.overbid_only), showOverbidOnly) { showOverbidOnly = !showOverbidOnly }
                     }
@@ -1110,6 +1155,7 @@ fun OrdersScreen(context: ViewContext?) {
                                     comparisons = marketComparisons,
                                     competition = competitionStats,
                                     showOverbidOnly = showOverbidOnly,
+                                    marginRange = marginRange,
                                     standingPct = standingPct,
                                     selectedOrderId = selectedOrderId,
                                     activeOrderId = activeOrderId,

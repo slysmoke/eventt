@@ -1,6 +1,7 @@
 package org.eventt.features.overlay
 
 import org.eventt.core.model.eveUndercutPrice
+import org.eventt.features.orders.UndercutTicks
 
 // The Trade Calc overlay's numbers, kept out of the composables so they can be tested.
 
@@ -65,7 +66,7 @@ internal fun position(
     cost = cost,
     breakEvenOrder = cost / fees.orderSellNet.coerceAtLeast(0.01),
     breakEvenInstant = cost / fees.instantSellNet.coerceAtLeast(0.01),
-    relist = sell?.let { eveUndercutPrice(it) * fees.orderSellNet - cost },
+    relist = sell?.let { eveUndercutPrice(it, UndercutTicks.count) * fees.orderSellNet - cost },
     dump = buy?.let { it * fees.instantSellNet - cost },
 )
 

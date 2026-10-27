@@ -67,6 +67,8 @@
     <string name="tab_positions">Positions</string>
     <string name="tab_items">Items</string>
     <string name="tab_counterparties">Counterparties</string>
+    <string name="tab_stations">Stations</string>
+    <string name="col_station">Station</string>
     <string name="tab_trades">Trades</string>
     <string name="col_item">Item</string>
     <string name="col_qty">Qty</string>

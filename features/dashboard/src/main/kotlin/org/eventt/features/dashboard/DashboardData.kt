@@ -297,6 +297,37 @@ internal fun itemPnl(
             )
         }.sortedByDescending { it.profit }
 
+internal data class StationPnl(
+    val locationId: Long,
+    val name: String,
+    val qty: Int,
+    val profit: Double,
+    val marginPct: Double?,
+    val lastSold: String,
+)
+
+// Realized P&L per station/structure the items were sold at — corp traders run several hubs.
+internal fun stationPnl(
+    sells: List<CostBasisService.RealizedSellTx>,
+    from: String,
+    nameOf: (Long) -> String,
+): List<StationPnl> =
+    sells
+        .filter { it.date.take(10) >= from }
+        .groupBy { it.locationId }
+        .map { (locationId, list) ->
+            val cost = list.sumOf { it.costBasis * it.qty }
+            val profit = list.sumOf { it.profit }
+            StationPnl(
+                locationId,
+                nameOf(locationId),
+                list.sumOf { it.qty },
+                profit,
+                if (cost > 0) profit / cost * 100 else null,
+                list.maxOf { it.date },
+            )
+        }.sortedByDescending { it.profit }
+
 // One slice of the stock: a group's share of what open positions are worth (Jita net value where
 // known, cost otherwise).
 internal data class Allocation(

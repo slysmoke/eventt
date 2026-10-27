@@ -28,6 +28,7 @@ import org.eventt.ui.common.formatVolume
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.eventt.ui.theme.warningColor
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import java.util.Locale
 
@@ -161,6 +162,71 @@ internal fun StandingThreshold(
                             },
                         )
                     },
+                    onClick = {
+                        open = false
+                        onChange(v)
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** Where a buy order's margin looks for its resale price: jumps from the order's system, or the two ends. */
+internal object MarginRange {
+    const val STATION = -1
+    const val REGION = Int.MAX_VALUE
+    val CHOICES = listOf(STATION, 0, 1, 2, 3, 5, 10, REGION)
+}
+
+@Composable
+private fun marginRangeLabel(range: Int): String =
+    when (range) {
+        MarginRange.STATION -> stringResource(Res.string.margin_range_station)
+        MarginRange.REGION -> stringResource(Res.string.margin_range_region)
+        0 -> stringResource(Res.string.margin_range_system)
+        else -> pluralStringResource(Res.plurals.margin_range_jumps, range, range)
+    }
+
+@Composable
+internal fun MarginRangePicker(
+    range: Int,
+    onChange: (Int) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Tip(stringResource(Res.string.tip_margin_range)) {
+            Segment(marginRangeLabel(range), range != MarginRange.STATION) { open = true }
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            MarginRange.CHOICES.forEach { v ->
+                DropdownMenuItem(
+                    text = { Text(marginRangeLabel(v)) },
+                    onClick = {
+                        open = false
+                        onChange(v)
+                    },
+                )
+            }
+        }
+    }
+}
+
+// How many ticks the hotkey / row action steps past the best competing price (UndercutTicks).
+@Composable
+internal fun UndercutTicksPicker(
+    ticks: Int,
+    onChange: (Int) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Tip(stringResource(Res.string.tip_undercut_ticks)) {
+            Segment(pluralStringResource(Res.plurals.undercut_ticks, ticks, ticks), ticks > 1) { open = true }
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            UndercutTicks.CHOICES.forEach { v ->
+                DropdownMenuItem(
+                    text = { Text(pluralStringResource(Res.plurals.undercut_ticks, v, v)) },
                     onClick = {
                         open = false
                         onChange(v)

@@ -36,6 +36,7 @@ import org.eventt.core.model.eveOutbidPrice
 import org.eventt.core.model.eveUndercutPrice
 import org.eventt.core.model.formatEveSigFigPrice
 import org.eventt.features.orders.CostBasisService
+import org.eventt.features.orders.UndercutTicks
 import org.eventt.overlay.generated.resources.*
 import org.eventt.ui.common.AXIS_COLOR
 import org.eventt.ui.common.KV
@@ -291,10 +292,13 @@ private fun OverlayContent(
 
     // Clipboard polling — auto-assign sell/buy by EVE row format (manual fallback: copy one
     // order row in-game, this overlay picks it up within ~400ms). The parsed price is written
-    // straight back to the clipboard as its beat price (one tick under a sell, one tick over a
+    // straight back to the clipboard as its beat price (UndercutTicks ticks under a sell, over a
     // buy), so the next paste into EVE's order dialog already beats the copied order.
     var lastClipboard by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
+        // Load the Orders tab's tick setting once off the UI thread: the copy path below must not
+        // wait on the DB lock.
+        withContext(Dispatchers.IO) { UndercutTicks.count }
         while (true) {
             delay(400)
             // Off the UI thread: an X11 clipboard read waits on the owner (EVE under Wine) to answer.
@@ -325,10 +329,10 @@ private fun OverlayContent(
             if (p != null) {
                 if (p.isBuy) {
                     buy = p.toQuote()
-                    lastClipboard = copyBeatPrice(eveOutbidPrice(p.price))
+                    lastClipboard = copyBeatPrice(eveOutbidPrice(p.price, UndercutTicks.count))
                 } else {
                     sell = p.toQuote()
-                    lastClipboard = copyBeatPrice(eveUndercutPrice(p.price))
+                    lastClipboard = copyBeatPrice(eveUndercutPrice(p.price, UndercutTicks.count))
                 }
                 continue
             }
@@ -381,11 +385,11 @@ private fun OverlayContent(
             itemName = null
             when (current.autoCopy) {
                 AutoCopy.SELL -> {
-                    bestSell?.let { lastClipboard = copyBeatPrice(eveUndercutPrice(it.price)) }
+                    bestSell?.let { lastClipboard = copyBeatPrice(eveUndercutPrice(it.price, UndercutTicks.count)) }
                 }
 
                 AutoCopy.BUY -> {
-                    bestBuy?.let { lastClipboard = copyBeatPrice(eveOutbidPrice(it.price)) }
+                    bestBuy?.let { lastClipboard = copyBeatPrice(eveOutbidPrice(it.price, UndercutTicks.count)) }
                 }
 
                 AutoCopy.OFF -> {}
@@ -545,7 +549,7 @@ internal fun TradeCalcBody(
             QuoteBox(
                 stringResource(Res.string.price_sell),
                 sell,
-                sell?.let { eveUndercutPrice(it.price) },
+                sell?.let { eveUndercutPrice(it.price, UndercutTicks.count) },
                 negativeColor,
                 autoCopy = settings.autoCopy == AutoCopy.SELL,
                 onAutoCopy = { toggle(AutoCopy.SELL) },
@@ -555,7 +559,7 @@ internal fun TradeCalcBody(
             QuoteBox(
                 stringResource(Res.string.price_buy),
                 buy,
-                buy?.let { eveOutbidPrice(it.price) },
+                buy?.let { eveOutbidPrice(it.price, UndercutTicks.count) },
                 positiveColor,
                 autoCopy = settings.autoCopy == AutoCopy.BUY,
                 onAutoCopy = { toggle(AutoCopy.BUY) },

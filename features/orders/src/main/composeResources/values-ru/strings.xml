@@ -68,6 +68,13 @@
         <item quantity="other">%1$s ордера</item>
     </plurals>
     <string name="n_beaten">перебито: %1$s</string>
+    <plurals name="undercut_ticks">
+        <item quantity="one">±%1$s тик</item>
+        <item quantity="few">±%1$s тика</item>
+        <item quantity="many">±%1$s тиков</item>
+        <item quantity="other">±%1$s тика</item>
+    </plurals>
+    <string name="tip_undercut_ticks">На сколько ценовых тиков EVE хоткей и Enter сдвигают цену от лучшего конкурента: ниже лучшей продажи для sell-ордеров, выше лучшей покупки для buy-ордеров.</string>
     <string name="only_beaten">только перебитые</string>
     <string name="toggle_beaten_notif">Вкл/выкл уведомления о перебитых ордерах</string>
     <string name="recalc_pnl">Пересчитать прибыль</string>
@@ -90,6 +97,16 @@
     <string name="no_active_orders">Нет активных ордеров.</string>
     <string name="beaten_only">Только перебитые</string>
     <string name="all_orders">Все ордера</string>
+    <string name="margin_range_station">Маржа: станция</string>
+    <string name="margin_range_system">Маржа: система</string>
+    <plurals name="margin_range_jumps">
+        <item quantity="one">Маржа: ≤%1$s прыжок</item>
+        <item quantity="few">Маржа: ≤%1$s прыжка</item>
+        <item quantity="many">Маржа: ≤%1$s прыжков</item>
+        <item quantity="other">Маржа: ≤%1$s прыжка</item>
+    </plurals>
+    <string name="margin_range_region">Маржа: регион</string>
+    <string name="tip_margin_range">Где маржа buy-ордеров ищет цену перепродажи: самая дешёвая продажа на станции ордера, в пределах N прыжков от его системы или во всём регионе — для buy-ордеров в структурах рядом с торговым хабом.</string>
     <string name="overbid_only">Только перебитые</string>
     <string name="loading_orders">Загрузка ордеров…</string>
     <string name="undercut">Перебит</string>

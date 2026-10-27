@@ -170,4 +170,28 @@ class DashboardDataTest {
         shared.netWorth shouldBe 200.0
         private.netWorth shouldBe null
     }
+
+    @Test
+    fun `stationPnl groups realized profit by sale location within the range`() {
+        fun sale(
+            date: String,
+            loc: Long,
+            profit: Double,
+        ) = RealizedSellTx(date, 1, 2, sellPrice = 150.0, costBasis = 100.0, profit = profit, marginPct = 0.0, locationId = loc)
+        val rows =
+            stationPnl(
+                listOf(
+                    sale("2026-10-01", 1L, 50.0),
+                    sale("2026-10-05", 2L, 30.0),
+                    sale("2026-10-06", 1L, 20.0),
+                    sale("2026-09-01", 2L, 999.0),
+                ),
+                from = "2026-10-01",
+            ) { "S$it" }
+
+        rows.map { it.name to it.profit } shouldBe listOf("S1" to 70.0, "S2" to 30.0)
+        rows[0].qty shouldBe 4
+        rows[0].marginPct!! should (17.5 plusOrMinus 1e-9) // 70 / (100 × 4)
+        rows[0].lastSold shouldBe "2026-10-06"
+    }
 }
