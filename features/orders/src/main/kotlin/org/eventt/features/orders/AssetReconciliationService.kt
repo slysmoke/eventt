@@ -1,9 +1,14 @@
 package org.eventt.features.orders
 
 import org.eventt.core.database.AssetDao
+import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.ContractDao
+import org.eventt.core.model.CorpFeature
 import org.eventt.features.assets.fetchCharacterAssets
 import org.eventt.features.assets.fetchCorporationAssets
+import org.eventt.orders.generated.resources.Res
+import org.eventt.orders.generated.resources.failed_refresh_assets
+import org.jetbrains.compose.resources.getString
 
 // Cross-checks FIFO's "should still be holding this" quantities against what's actually sitting
 // in the character's/corp's ESI assets -- catches exactly the drift a manual write-off (see
@@ -44,6 +49,10 @@ object AssetReconciliationService {
 
                 corporationId != null -> {
                     fetchCorporationAssets(corporationId, actingCharId)
+                    // A denied corp scope comes back from ESI as an empty list, which would read as
+                    // "the corp holds nothing" and flag the whole inventory for write-off. Fail instead.
+                    val denied = CharacterDao.getDeniedCorpFeatures(actingCharId)
+                    check(CorpFeature.ASSETS !in denied && CorpFeature.ORDERS !in denied) { getString(Res.string.failed_refresh_assets) }
                     AssetDao.getByCorporation(corporationId)
                 }
 
