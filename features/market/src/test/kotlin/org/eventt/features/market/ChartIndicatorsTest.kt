@@ -30,4 +30,9 @@ class ChartIndicatorsTest {
         vwapZScore(prices, v, period = 4).last()!! shouldBe (3.0 / kotlin.math.sqrt(3.0) plusOrMinus 1e-9)
         vwapZScore(List(4) { 5.0 }, vwap(List(4) { 5.0 }, List(4) { 1.0 }, 4), 4).last() shouldBe null
     }
+
+    @Test
+    fun `ema smooths toward new values and keeps null gaps`() {
+        ema(listOf(null, 10.0, 20.0, null, 4.0), period = 3) shouldBe listOf(null, 10.0, 15.0, null, 4.0)
+    }
 }

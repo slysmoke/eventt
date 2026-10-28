@@ -52,15 +52,41 @@ internal fun vwap(
         if (vol > 0) (from..i).sumOf { values[it] * volumes[it] } / vol else (from..i).sumOf { values[it] } / period
     }
 
-// How many standard deviations price sits from its VWAP: (price - vwap) / sd, where sd is the
-// population deviation of the window's prices around that VWAP. Null while warming up or flat.
-internal fun vwapZScore(
+// Population deviation of the window's prices around that window's VWAP. Null while warming up.
+internal fun vwapSd(
     values: List<Double>,
     vwap: List<Double?>,
     period: Int = 20,
 ): List<Double?> =
     values.indices.map { i ->
         val v = vwap[i] ?: return@map null
-        val sd = sqrt((i - period + 1..i).sumOf { (values[it] - v) * (values[it] - v) } / period)
-        if (sd > 0) (values[i] - v) / sd else null
+        sqrt((i - period + 1..i).sumOf { (values[it] - v) * (values[it] - v) } / period)
     }
+
+// How many standard deviations price sits from its VWAP: (price - vwap) / sd (see vwapSd).
+// Null while warming up or flat.
+internal fun vwapZScore(
+    values: List<Double>,
+    vwap: List<Double?>,
+    period: Int = 20,
+): List<Double?> {
+    val sd = vwapSd(values, vwap, period)
+    return values.indices.map { i ->
+        val v = vwap[i] ?: return@map null
+        sd[i]?.takeIf { it > 0 }?.let { (values[i] - v) / it }
+    }
+}
+
+// Exponential smoothing of an already-computed series: alpha = 2 / (period + 1). Restarts after a
+// null, so the warm-up gap of the input stays a gap.
+internal fun ema(
+    values: List<Double?>,
+    period: Int,
+): List<Double?> {
+    val alpha = 2.0 / (period + 1)
+    var prev: Double? = null
+    return values.map { v ->
+        prev = v?.let { x -> prev?.let { it + alpha * (x - it) } ?: x }
+        prev
+    }
+}
