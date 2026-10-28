@@ -38,29 +38,29 @@ internal fun bollinger(
     }
 }
 
-// Wilder's RSI: first average is a plain mean of the first `period` changes, then smoothed.
-internal fun rsi(
+// Rolling volume-weighted average price over the last `period` trading days. A window with no
+// volume at all falls back to the plain mean.
+internal fun vwap(
     values: List<Double>,
-    period: Int = 14,
-): List<Double?> {
-    val out = MutableList<Double?>(values.size) { null }
-    if (values.size <= period) return out
-    var gain = 0.0
-    var loss = 0.0
-    for (i in 1..period) {
-        val d = values[i] - values[i - 1]
-        if (d > 0) gain += d else loss -= d
+    volumes: List<Double>,
+    period: Int = 20,
+): List<Double?> =
+    values.indices.map { i ->
+        if (i < period - 1) return@map null
+        val from = i - period + 1
+        val vol = (from..i).sumOf { volumes[it] }
+        if (vol > 0) (from..i).sumOf { values[it] * volumes[it] } / vol else (from..i).sumOf { values[it] } / period
     }
-    gain /= period
-    loss /= period
 
-    fun value() = if (loss == 0.0) 100.0 else 100.0 - 100.0 / (1.0 + gain / loss)
-    out[period] = value()
-    for (i in period + 1 until values.size) {
-        val d = values[i] - values[i - 1]
-        gain = (gain * (period - 1) + maxOf(d, 0.0)) / period
-        loss = (loss * (period - 1) + maxOf(-d, 0.0)) / period
-        out[i] = value()
+// How many standard deviations price sits from its VWAP: (price - vwap) / sd, where sd is the
+// population deviation of the window's prices around that VWAP. Null while warming up or flat.
+internal fun vwapZScore(
+    values: List<Double>,
+    vwap: List<Double?>,
+    period: Int = 20,
+): List<Double?> =
+    values.indices.map { i ->
+        val v = vwap[i] ?: return@map null
+        val sd = sqrt((i - period + 1..i).sumOf { (values[it] - v) * (values[it] - v) } / period)
+        if (sd > 0) (values[i] - v) / sd else null
     }
-    return out
-}

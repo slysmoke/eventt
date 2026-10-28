@@ -78,10 +78,12 @@ private val SMA_SLOW_COLOR = Color(0xFFBA68C8)
 private val BAND_COLOR = Color(0xFF90A4AE)
 private val SECONDARY_COLOR = Color(0xFF81C784)
 private val COST_COLOR = Color(0xFFFFD54F)
-private val RSI_COLOR = Color(0xFFFFB74D)
+private val VWAP_COLOR = Color(0xFFFFB74D)
 private val WICK_COLOR = Color(0xFFE0E0E0)
 private val AXIS_COLOR = Color(0xFF777777)
 private val GRID_COLOR = Color(0x22FFFFFF)
+private const val Z_RANGE = 3.0
+private const val VWAP_PERIOD = 40
 
 private const val THE_FORGE = 10000002
 private const val JITA_44 = 60003760L
@@ -196,7 +198,7 @@ private fun Map<String, Any?>.orderId() = (get("order_id") as? Number)?.toLong()
 
 /**
  * Trading-terminal view of one item, shared by Station Trading, Inter-Region and Materials
- * Investment: a price chart over a selectable range with SMA/Bollinger/RSI and volume, your own
+ * Investment: a price chart over a selectable range with SMA/Bollinger/VWAP and volume, your own
  * fills and open orders plotted on it, the live order book, Adam4EVE's per-side fill rate, and
  * your position. [secondaryRegionId] is null for single-region callers; Inter-Region passes both
  * sides of its route and gets the second region overlaid plus a second book.
@@ -316,7 +318,7 @@ fun ItemDetailDialog(
 }
 
 /**
- * The chart half of the item view — range/indicator toolbar, candles with SMA/Bollinger/RSI and
+ * The chart half of the item view — range/indicator toolbar, candles with SMA/Bollinger/VWAP and
  * volume, your fills and levels, Adam4EVE overlay — shared by ItemDetailDialog and the Market
  * Browser's history tab. Toolbar choices persist in settings (itemChart.*) across both.
  * [regionId]/[stationId] are the effective (PLEX-redirected) market the Adam4EVE data is read for.
@@ -341,6 +343,7 @@ internal fun ItemPriceChart(
     var showSmaFast by remember { mutableStateOf(true) }
     var showSmaSlow by remember { mutableStateOf(true) }
     var showBands by remember { mutableStateOf(false) }
+    var showVwap by remember { mutableStateOf(true) }
     var showTrades by remember { mutableStateOf(true) }
     var showA4e by remember { mutableStateOf(true) }
     var a4e by remember { mutableStateOf<Map<String, A4eDay>>(emptyMap()) }
@@ -365,6 +368,7 @@ internal fun ItemPriceChart(
             flag("sma20")?.let { showSmaFast = it }
             flag("sma50")?.let { showSmaSlow = it }
             flag("bollinger")?.let { showBands = it }
+            flag("vwap")?.let { showVwap = it }
             flag("trades")?.let { showTrades = it }
             flag("a4e")?.let { showA4e = it }
         }
@@ -413,6 +417,10 @@ internal fun ItemPriceChart(
                 showBands = it
                 save("bollinger", it)
             }
+            ToggleChip("VWAP $VWAP_PERIOD", VWAP_COLOR, showVwap) {
+                showVwap = it
+                save("vwap", it)
+            }
             if (trades != null) {
                 ToggleChip(stringResource(Res.string.my_trades_chip), COST_COLOR, showTrades) {
                     showTrades = it
@@ -446,6 +454,7 @@ internal fun ItemPriceChart(
             showSmaFast = showSmaFast,
             showSmaSlow = showSmaSlow,
             showBands = showBands,
+            showVwap = showVwap,
             trades = trades.takeIf { showTrades },
             a4e = a4e.takeIf { showA4e }.orEmpty(),
             bestBid = bestBid,
@@ -614,7 +623,8 @@ private class ChartData(
     val smaFast: List<Double?>,
     val smaSlow: List<Double?>,
     val bands: List<Band?>,
-    val rsi: List<Double?>,
+    val vwap: List<Double?>,
+    val zScore: List<Double?>,
     val volSma: List<Double?>,
     val secondary: List<Double?>,
 )
@@ -623,15 +633,17 @@ private fun buildChartData(
     history: List<MarketHistoryModel>,
     secondary: List<MarketHistoryModel>,
 ): ChartData {
-    // Indicators run over the full history, so any zoomed window has warmed-up SMA/RSI values at
+    // Indicators run over the full history, so any zoomed window has warmed-up SMA/VWAP values at
     // its left edge.
     val prices = history.map { it.average }
     val byDate = history.indices.associateBy { history[it].date.take(10) }
     val fast = sma(prices, 20)
     val slow = sma(prices, 50)
     val bands = bollinger(prices, 20)
-    val rsiAll = rsi(prices, 14)
-    val volSma = sma(history.map { it.volume.toDouble() }, 20)
+    val volumes = history.map { it.volume.toDouble() }
+    val vwapAll = vwap(prices, volumes, VWAP_PERIOD)
+    val zAll = vwapZScore(prices, vwapAll, VWAP_PERIOD)
+    val volSma = sma(volumes, 20)
     val secondaryByDate = secondary.associate { it.date.take(10) to it.average }
 
     val end =
@@ -656,7 +668,8 @@ private fun buildChartData(
         smaFast = idx.map { i -> i?.let { fast[it] } },
         smaSlow = idx.map { i -> i?.let { slow[it] } },
         bands = idx.map { i -> i?.let { bands[it] } },
-        rsi = idx.map { i -> i?.let { rsiAll[it] } },
+        vwap = idx.map { i -> i?.let { vwapAll[it] } },
+        zScore = idx.map { i -> i?.let { zAll[it] } },
         volSma = idx.map { i -> i?.let { volSma[it] } },
         secondary = days.map { secondaryByDate[it] },
     )
@@ -730,6 +743,7 @@ private fun TradingChart(
     showSmaFast: Boolean,
     showSmaSlow: Boolean,
     showBands: Boolean,
+    showVwap: Boolean,
     trades: MyTrades?,
     a4e: Map<String, A4eDay>,
     bestBid: Double?,
@@ -850,8 +864,8 @@ private fun TradingChart(
             val priceH = usable * 0.62f
             val volTop = priceTop + priceH + gap
             val volH = usable * 0.18f
-            val rsiTop = volTop + volH + gap
-            val rsiH = usable * 0.20f - priceTop
+            val zTop = volTop + volH + gap
+            val zH = usable * 0.20f - priceTop
 
             fun xFor(i: Int) = lPad + (i - view.start) / view.span * chartW
             val iFrom = floor(view.start).toInt().coerceIn(0, n - 1)
@@ -976,6 +990,7 @@ private fun TradingChart(
             clipPlot { if (secondaryLabel != null) drawSeries(data.secondary, SECONDARY_COLOR, 1.5.dp.toPx(), ::xFor, ::yP) }
             clipPlot { if (showAvgLine) drawSeries(data.rows.map { it?.average }, priceColor, 2.dp.toPx(), ::xFor, ::yP) }
             clipPlot { if (showSmaFast) drawSeries(data.smaFast, SMA_FAST_COLOR, 1.2.dp.toPx(), ::xFor, ::yP) }
+            clipPlot { if (showVwap) drawSeries(data.vwap, VWAP_COLOR, 1.2.dp.toPx(), ::xFor, ::yP) }
             clipPlot { if (showSmaSlow) drawSeries(data.smaSlow, SMA_SLOW_COLOR, 1.2.dp.toPx(), ::xFor, ::yP) }
 
             // Horizontal levels: live bid/ask, your average cost, your open orders.
@@ -1106,21 +1121,21 @@ private fun TradingChart(
             clipPlot { drawSeries(data.volSma, AXIS_COLOR, 1.dp.toPx(), ::xFor, ::yV) }
             axisLabel(textMeasurer, "$volWord " + formatVolume(maxVol.toLong()), Offset(lPad + chartW + 6.dp.toPx(), volTop), AXIS_COLOR)
 
-            // ── RSI pane with 30/70 guides.
-            fun yR(v: Double) = rsiTop + (1f - (v / 100.0).toFloat()) * rsiH
-            drawRect(RSI_COLOR.copy(alpha = 0.05f), topLeft = Offset(lPad, yR(70.0)), size = Size(chartW, yR(30.0) - yR(70.0)))
-            listOf(30.0, 50.0, 70.0).forEach { lv ->
+            // ── VWAP z-score pane, fixed ±3σ scale with ±2σ guides.
+            fun yZ(v: Double) = zTop + (1f - ((v.coerceIn(-Z_RANGE, Z_RANGE) + Z_RANGE) / (2 * Z_RANGE)).toFloat()) * zH
+            drawRect(VWAP_COLOR.copy(alpha = 0.05f), topLeft = Offset(lPad, yZ(2.0)), size = Size(chartW, yZ(-2.0) - yZ(2.0)))
+            listOf(-2.0, 0.0, 2.0).forEach { lv ->
                 drawLine(
                     GRID_COLOR,
-                    Offset(lPad, yR(lv)),
-                    Offset(lPad + chartW, yR(lv)),
+                    Offset(lPad, yZ(lv)),
+                    Offset(lPad + chartW, yZ(lv)),
                     1f,
                     pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f)),
                 )
-                axisLabel(textMeasurer, lv.toInt().toString(), Offset(lPad + chartW + 6.dp.toPx(), yR(lv) - 6.dp.toPx()), AXIS_COLOR)
+                axisLabel(textMeasurer, "%+.0f".format(lv), Offset(lPad + chartW + 6.dp.toPx(), yZ(lv) - 6.dp.toPx()), AXIS_COLOR)
             }
-            clipPlot { drawSeries(data.rsi, RSI_COLOR, 1.2.dp.toPx(), ::xFor, ::yR) }
-            axisLabel(textMeasurer, "RSI 14", Offset(lPad + 2.dp.toPx(), rsiTop), AXIS_COLOR)
+            clipPlot { drawSeries(data.zScore, VWAP_COLOR, 1.2.dp.toPx(), ::xFor, ::yZ) }
+            axisLabel(textMeasurer, "Z (VWAP $VWAP_PERIOD)", Offset(lPad + 2.dp.toPx(), zTop), AXIS_COLOR)
 
             // ── Date axis.
             val ticks = 6
@@ -1134,17 +1149,17 @@ private fun TradingChart(
             // ── Crosshair.
             hoverIndex?.let { i ->
                 val x = xFor(i)
-                drawLine(Color.White.copy(alpha = 0.35f), Offset(x, priceTop), Offset(x, rsiTop + rsiH), 1f)
+                drawLine(Color.White.copy(alpha = 0.35f), Offset(x, priceTop), Offset(x, zTop + zH), 1f)
                 data.rows[i]?.let { r -> drawCircle(priceColor, 4.dp.toPx(), Offset(x, yP(r.average))) }
             }
             // Horizontal line at the cursor, with the value it points at on the right axis —
-            // price in the price pane, volume and RSI in theirs.
+            // price in the price pane, volume and z-score in theirs.
             hoverY?.let { y ->
                 val label =
                     when (y) {
                         in priceTop..priceTop + priceH -> formatPriceAbbr(pMin + (1 - (y - priceTop) / priceH) * pRange)
                         in volTop..volTop + volH -> formatVolume(((volTop + volH - y) / volH * maxVol).toLong())
-                        in rsiTop..rsiTop + rsiH -> ((1 - (y - rsiTop) / rsiH) * 100).roundToInt().toString()
+                        in zTop..zTop + zH -> "%+.2f".format(Z_RANGE - (y - zTop) / zH * 2 * Z_RANGE)
                         else -> return@let
                     }
                 drawLine(Color.White.copy(alpha = 0.35f), Offset(lPad, y), Offset(lPad + chartW, y), 1f)
@@ -1217,7 +1232,8 @@ private fun HoverLegend(
         }
         data.smaFast[index]?.let { Text("SMA20 ${formatPriceAbbr(it)}", style = style, color = SMA_FAST_COLOR) }
         data.smaSlow[index]?.let { Text("SMA50 ${formatPriceAbbr(it)}", style = style, color = SMA_SLOW_COLOR) }
-        data.rsi[index]?.let { Text("RSI ${it.roundToInt()}", style = style, color = RSI_COLOR) }
+        data.vwap[index]?.let { Text("VWAP$VWAP_PERIOD ${formatPriceAbbr(it)}", style = style, color = VWAP_COLOR) }
+        data.zScore[index]?.let { Text("Z ${"%+.2f".format(it)}", style = style, color = VWAP_COLOR) }
         if (secondaryLabel !=
             null
         ) {

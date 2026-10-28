@@ -18,16 +18,16 @@ class ChartIndicatorsTest {
     }
 
     @Test
-    fun `rsi is 100 for a strictly rising series and 0 for a falling one`() {
-        rsi((1..20).map { it.toDouble() }).last() shouldBe 100.0
-        rsi((20 downTo 1).map { it.toDouble() }).last()!! shouldBe (0.0 plusOrMinus 1e-9)
-        rsi((1..14).map { it.toDouble() }).all { it == null } shouldBe true
+    fun `vwap weights each day by its volume`() {
+        vwap(listOf(10.0, 20.0), listOf(3.0, 1.0), period = 2) shouldBe listOf(null, 12.5)
+        vwap(listOf(10.0, 20.0), listOf(0.0, 0.0), period = 2).last() shouldBe 15.0
     }
 
     @Test
-    fun `rsi matches Wilder smoothing on a known alternating series`() {
-        // Changes alternate +1/-1: after seeding, avg gain == avg loss, so RSI sits at 50.
-        val values = (0..30).map { if (it % 2 == 0) 10.0 else 11.0 }
-        rsi(values, 14).last()!! shouldBe (50.0 plusOrMinus 5.0)
+    fun `z score measures distance from vwap in standard deviations`() {
+        val prices = listOf(10.0, 10.0, 10.0, 14.0)
+        val v = vwap(prices, List(4) { 1.0 }, period = 4) // 11.0, sd around it = sqrt(3)
+        vwapZScore(prices, v, period = 4).last()!! shouldBe (3.0 / kotlin.math.sqrt(3.0) plusOrMinus 1e-9)
+        vwapZScore(List(4) { 5.0 }, vwap(List(4) { 5.0 }, List(4) { 1.0 }, 4), 4).last() shouldBe null
     }
 }
