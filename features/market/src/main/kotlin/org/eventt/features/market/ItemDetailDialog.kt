@@ -819,8 +819,9 @@ private fun TradingChart(
     var dragX by remember { mutableStateOf<Float?>(null) }
     var lastPress by remember { mutableStateOf(0L) }
     var pressX by remember { mutableStateOf<Float?>(null) }
-    // Z level per ZSide, picked by clicking its pane: shown as price lines and highlighted candles.
-    var zLevels by remember { mutableStateOf(ZSide.entries.map { null as Double? }) }
+    // Z level per ZSide (SELL, BUY), picked by clicking its pane: shown as price lines and highlighted
+    // candles. Starts at ±1σ.
+    var zLevels by remember { mutableStateOf(listOf<Double?>(1.0, -1.0)) }
     // Each z pane's vertical extent (top, height) from the last draw, for click hit-testing.
     var zPanes by remember { mutableStateOf(ZSide.entries.map { 0f to 0f }) }
 
