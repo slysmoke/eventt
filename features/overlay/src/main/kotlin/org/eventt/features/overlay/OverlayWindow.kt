@@ -217,6 +217,18 @@ private fun copyBeatPrice(price: Double): String {
     return text
 }
 
+// Copies the auto-copy side's beat price; returns the copied text, or null when nothing was copied.
+private fun autoCopyBeatPrice(
+    side: AutoCopy,
+    bestSell: Double?,
+    bestBuy: Double?,
+): String? =
+    when (side) {
+        AutoCopy.SELL -> bestSell?.let { copyBeatPrice(eveUndercutPrice(it, UndercutTicks.count)) }
+        AutoCopy.BUY -> bestBuy?.let { copyBeatPrice(eveOutbidPrice(it, UndercutTicks.count)) }
+        AutoCopy.OFF -> null
+    }
+
 // Plain ISK total for a pasted inventory list — unlike copyBeatPrice this isn't a price tick to
 // paste into an order dialog, just the raw sum, so no EVE sigfig rounding.
 private fun copyManifestTotal(total: Double): String {
@@ -353,8 +365,12 @@ private fun OverlayContent(
             val loc = if (type.typeId == PLEX_TYPE_ID) getString(Res.string.global_market) else "Jita IV-4"
             itemName = type.name
             typeId = type.typeId
-            book.first.minByOrNull { it.first }?.let { sell = Quote(it.first, loc, PriceSource.LOOKUP, book.first) }
-            book.second.maxByOrNull { it.first }?.let { buy = Quote(it.first, loc, PriceSource.LOOKUP, book.second) }
+            val bestSell = book.first.minByOrNull { it.first }?.first
+            val bestBuy = book.second.maxByOrNull { it.first }?.first
+            sell = bestSell?.let { Quote(it, loc, PriceSource.LOOKUP, book.first) }
+            buy = bestBuy?.let { Quote(it, loc, PriceSource.LOOKUP, book.second) }
+            // Beats the Jita (PLEX: global) book, not the station the user's order is in.
+            autoCopyBeatPrice(settings.autoCopy, bestSell, bestBuy)?.let { lastClipboard = it }
         }
     }
 
@@ -383,17 +399,7 @@ private fun OverlayContent(
             buy = bestBuy?.let { Quote(it.price, "", PriceSource.FILE, buyRows.map { r -> r.price to r.volRemaining.toLong() }) }
             typeId = event.typeId
             itemName = null
-            when (current.autoCopy) {
-                AutoCopy.SELL -> {
-                    bestSell?.let { lastClipboard = copyBeatPrice(eveUndercutPrice(it.price, UndercutTicks.count)) }
-                }
-
-                AutoCopy.BUY -> {
-                    bestBuy?.let { lastClipboard = copyBeatPrice(eveOutbidPrice(it.price, UndercutTicks.count)) }
-                }
-
-                AutoCopy.OFF -> {}
-            }
+            autoCopyBeatPrice(current.autoCopy, bestSell?.price, bestBuy?.price)?.let { lastClipboard = it }
             val global = getString(Res.string.global_market)
             val (sellLoc, buyLoc, name) =
                 withContext(Dispatchers.IO) {
