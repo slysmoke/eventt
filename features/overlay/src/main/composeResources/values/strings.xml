@@ -59,7 +59,7 @@
     <string name="tc_dump_total">Dump × %1$s</string>
     <string name="tc_depth">Depth</string>
     <string name="tc_orders">%1$s sell · %2$s buy orders</string>
-    <string name="tip_auto_copy">After an order-book export, put this side's beat price on the clipboard (one tick under the best sell / over the best buy), ready to paste into the order window. Only one side at a time.</string>
+    <string name="tip_auto_copy">After an order-book export or a copied item name, put this side's beat price on the clipboard (one tick under the best sell / over the best buy), ready to paste into the order window. A copied name uses the Jita 4-4 book, not your station. Only one side at a time.</string>
     <string name="tc_copy_manifest">Copy inventory total</string>
     <string name="tip_copy_manifest">After pricing a pasted cargo list, put its total ISK on the clipboard.</string>
     <string name="tc_on">ON</string>
