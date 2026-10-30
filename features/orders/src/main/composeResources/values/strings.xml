@@ -25,6 +25,16 @@
     <string name="h_total_profit">Total Profit</string>
     <string name="h_realized_pnl">Realized P&amp;L</string>
     <string name="written_off">Written off: %1$s</string>
+    <string name="add_purchase">Add purchase</string>
+    <string name="add_purchase_title">Add purchase</string>
+    <string name="add_purchase_desc">Books items acquired outside the market — bought for PLEX in the NES, rewards, gifts — at the price you paid, so sales of them get a cost basis. No broker fee or tax is added.</string>
+    <string name="item">Item</string>
+    <string name="quantity">Quantity</string>
+    <string name="unit_price_isk">Price per unit, ISK</string>
+    <string name="date_ymd">Date (YYYY-MM-DD)</string>
+    <string name="total_isk">Total: %1$s ISK</string>
+    <string name="manual_purchases">Manual purchases</string>
+    <string name="delete">Delete</string>
     <string name="check_assets">Check assets</string>
     <string name="write_off_history">Write-off history</string>
     <string name="write_off_title">Write off %1$s</string>

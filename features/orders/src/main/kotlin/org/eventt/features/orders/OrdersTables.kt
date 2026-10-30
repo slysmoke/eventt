@@ -745,6 +745,7 @@ internal fun InventoryTable(
     val scope = rememberCoroutineScope()
 
     fun toggleSort(col: InventorySortCol) {
+    var showAddPurchase by remember { mutableStateOf(false) }
         if (sortCol == col) {
             sortDir = if (sortDir == SortDir.ASC) SortDir.DESC else SortDir.ASC
         } else {
@@ -812,6 +813,11 @@ internal fun InventoryTable(
                 TextButton(
                     enabled = actingCharId != null,
                     onClick = { showReconcile = true },
+                TextButton(
+                    // Combined view has no single owner to book the purchase against.
+                    enabled = characterId != null || corporationId != null,
+                    onClick = { showAddPurchase = true },
+                ) { Text(stringResource(Res.string.add_purchase)) }
                 ) { Text(stringResource(Res.string.check_assets)) }
                 TextButton(onClick = { showHistory = true }) { Text(stringResource(Res.string.write_off_history)) }
             }
@@ -941,6 +947,10 @@ internal fun InventoryTable(
     if (showReconcile) {
         val acting = actingCharId
         if (acting != null) {
+    if (showAddPurchase) {
+        ManualPurchaseDialog(characterId, corporationId, onDismiss = { showAddPurchase = false }, onChanged = onAdjusted)
+    }
+
             ReconcileDialog(
                 inventory = inventory,
                 sellOrders = sellOrders,
