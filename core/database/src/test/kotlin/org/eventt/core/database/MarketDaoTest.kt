@@ -60,12 +60,12 @@ class MarketDaoTest {
     }
 
     @Test
-    fun `deleteEveRefBeforeDate only removes everef rows older than the cutoff`() {
+    fun `deleteHistoryBeforeDate only removes that source's rows older than the cutoff`() {
         MarketDao.insertHistory(entry("2024-01-02")) // esi, unaffected regardless of date
         MarketDao.insertHistoryBatch(listOf(entry("2024-01-01")), source = "everef") // before cutoff, deleted
         MarketDao.insertHistoryBatch(listOf(entry("2024-01-05")), source = "everef") // on/after cutoff, kept
 
-        MarketDao.deleteEveRefBeforeDate("2024-01-02")
+        MarketDao.deleteHistoryBeforeDate("2024-01-02", source = "everef")
 
         MarketDao.getHistory(34, 10000002).map { it.date }.toSet() shouldBe setOf("2024-01-02", "2024-01-05")
     }

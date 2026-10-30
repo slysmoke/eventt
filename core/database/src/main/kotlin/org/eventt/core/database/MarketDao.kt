@@ -57,10 +57,14 @@ object MarketDao {
         }
     }
 
-    fun deleteEveRefBeforeDate(date: String) {
+    fun deleteHistoryBeforeDate(
+        date: String,
+        source: String,
+    ) {
         DatabaseManager.transaction {
-            prepareStatement("DELETE FROM market_history WHERE date < ? AND source = 'everef'").use { stmt ->
+            prepareStatement("DELETE FROM market_history WHERE date < ? AND source = ?").use { stmt ->
                 stmt.setString(1, date)
+                stmt.setString(2, source)
                 stmt.executeUpdate()
             }
         }
