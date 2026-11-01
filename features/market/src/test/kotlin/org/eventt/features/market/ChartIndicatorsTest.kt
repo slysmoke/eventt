@@ -2,6 +2,7 @@ package org.eventt.features.market
 
 import io.kotest.matchers.doubles.plusOrMinus
 import io.kotest.matchers.shouldBe
+import org.eventt.core.model.MarketHistoryModel
 import org.junit.jupiter.api.Test
 
 class ChartIndicatorsTest {
@@ -34,5 +35,17 @@ class ChartIndicatorsTest {
     @Test
     fun `ema smooths toward new values and keeps null gaps`() {
         ema(listOf(null, 10.0, 20.0, null, 4.0), period = 3) shouldBe listOf(null, 10.0, 15.0, null, 4.0)
+    }
+
+    @Test
+    fun `latestVwapZ reads newest-first history and is high after a jump, null when too short`() {
+        // Newest first: a jump on the latest day after a gently oscillating month.
+        val history =
+            (0 until 40).map { d ->
+                val avg = if (d == 0) 150.0 else 100.0 + d % 2
+                MarketHistoryModel(1, 1, "day -$d", avg, 10, 1, avg, avg)
+            }
+        (latestVwapZ(history)!! > 1.0) shouldBe true
+        latestVwapZ(history.take(10)) shouldBe null
     }
 }

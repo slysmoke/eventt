@@ -23,7 +23,6 @@ private fun candidate(
     trendPct = 0.0,
     volatilityPct = 5.0,
     dailyVolume = dailyVolume,
-    spikeDetected = false,
     position = position,
     backtest = null,
 )

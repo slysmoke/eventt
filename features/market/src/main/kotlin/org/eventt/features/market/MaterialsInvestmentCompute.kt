@@ -46,7 +46,6 @@ internal data class MaterialCandidate(
     val trendPct: Double,
     val volatilityPct: Double,
     val dailyVolume: Long,
-    val spikeDetected: Boolean,
     // Your own current holding in this item, or null when no character is selected. Anchors the
     // buy ladder to your real cost basis instead of resetting to "current price" on every re-scan,
     // and drives the sell target, To Buy and the BUY/WAIT/SELL status.
@@ -245,9 +244,8 @@ internal fun computeMaterialCandidate(
     // 0 = no floor. A flat item rarely dips far enough, or rebounds enough, to pay a round trip's fees.
     minVolatilityPct: Double = 0.0,
     historySource: String,
-    spikeFilter: SpikeFilter,
-    spikePriceMultiplier: Double,
-    spikeVolumeMultiplier: Double,
+    // Don't start buying while the latest VWAP z-score (see latestVwapZ) is above this. Null = off.
+    maxZ: Double? = null,
     excludeStructuralBreak: Boolean = true,
     // Pre-fetched and grouped by typeId once per Analyze run (one wallet-transactions read for the
     // whole scan), not looked up per-item -- see the Analyze coroutine in MaterialsInvestmentTab.
@@ -313,9 +311,7 @@ internal fun computeMaterialCandidate(
     val dailyVolume = medianDailyVolume(fullHistory, lookbackDays)
     if (!holding && dailyVolume < minDailyVol) return null
 
-    val spikeDetected = detectPriceSpike(fullHistory, spikePriceMultiplier, spikeVolumeMultiplier, lookbackDays, currentPrice)
-    if (!holding && spikeFilter == SpikeFilter.EXCLUDE && spikeDetected) return null
-    if (!holding && spikeFilter == SpikeFilter.ONLY && !spikeDetected) return null
+    if (!holding && maxZ != null && (latestVwapZ(fullHistory) ?: maxZ) > maxZ) return null
 
     val vsAvgPct = (currentPrice - avgPrice) / avgPrice * 100.0
     // Not currently cheap enough vs its own history.
@@ -345,7 +341,6 @@ internal fun computeMaterialCandidate(
         trendPct = compute7dChange(fullHistory),
         volatilityPct = volatilityPct,
         dailyVolume = dailyVolume,
-        spikeDetected = spikeDetected,
         position = position,
         backtest = backtestDipStrategy(fullHistory, lookbackDays, minDiscountPct, fees, takeProfitPct),
     )

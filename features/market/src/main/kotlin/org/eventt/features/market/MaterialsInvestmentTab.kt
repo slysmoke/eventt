@@ -101,9 +101,7 @@ internal fun MaterialsInvestmentTab(
     var minDiscountPct by remember { mutableStateOf("5") }
     var maxVolatilityPct by remember { mutableStateOf("0") }
     var minVolatilityPct by remember { mutableStateOf("0") }
-    var spikeFilter by remember { mutableStateOf(SpikeFilter.ANY) }
-    var spikePriceMultiplier by remember { mutableStateOf("1.8") }
-    var spikeVolumeMultiplier by remember { mutableStateOf("5") }
+    var maxZ by remember { mutableStateOf("") }
     var totalBudget by remember { mutableStateOf("100000000") }
     var maxItems by remember { mutableStateOf("10") }
     var maxPerItemPct by remember { mutableStateOf("25") }
@@ -134,9 +132,7 @@ internal fun MaterialsInvestmentTab(
             S.get(S.MI_MIN_DISCOUNT)?.let { minDiscountPct = it }
             S.get(S.MI_MAX_VOLATILITY)?.let { maxVolatilityPct = it }
             S.get(S.MI_MIN_VOLATILITY)?.let { minVolatilityPct = it }
-            S.get(S.MI_SPIKE_FILTER)?.let { name -> SpikeFilter.entries.find { it.name == name }?.let { spikeFilter = it } }
-            S.get(S.MI_SPIKE_PRICE_MULTIPLIER)?.let { spikePriceMultiplier = it }
-            S.get(S.MI_SPIKE_VOLUME_MULTIPLIER)?.let { spikeVolumeMultiplier = it }
+            S.get(S.MI_MAX_Z)?.let { maxZ = it }
             S.get(S.MI_TOTAL_BUDGET)?.let { totalBudget = it }
             S.get(S.MI_MAX_ITEMS)?.let { maxItems = it }
             S.get(S.MI_MAX_PER_ITEM_PCT)?.let { maxPerItemPct = it }
@@ -340,34 +336,14 @@ internal fun MaterialsInvestmentTab(
                             )
                         }
                     }
-                    Tip(stringResource(Res.string.mi_tip_spike)) {
-                        SpikeFilterChip(spikeFilter) {
-                            spikeFilter = it
-                            scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_SPIKE_FILTER, it.name) } }
-                        }
-                    }
-                    Tip(stringResource(Res.string.mi_tip_price_mult)) {
-                        ParamField(
-                            stringResource(Res.string.price_mult),
-                            spikePriceMultiplier,
-                            50.dp,
-                            enabled = spikeFilter != SpikeFilter.ANY,
-                        ) {
-                            spikePriceMultiplier = it
-                            scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_SPIKE_PRICE_MULTIPLIER, it) } }
-                        }
-                    }
-                    Tip(stringResource(Res.string.mi_tip_vol_mult)) {
-                        ParamField(
-                            stringResource(Res.string.volume_mult),
-                            spikeVolumeMultiplier,
-                            50.dp,
-                            enabled =
-                                spikeFilter != SpikeFilter.ANY,
-                        ) {
-                            spikeVolumeMultiplier = it
-                            scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_SPIKE_VOLUME_MULTIPLIER, it) } }
-                        }
+                    ParamField(
+                        stringResource(Res.string.max_z),
+                        maxZ,
+                        50.dp,
+                        tooltip = stringResource(Res.string.tip_max_z),
+                    ) {
+                        maxZ = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MAX_Z, it) } }
                     }
                 }
                 FilterActionSlot {
@@ -594,9 +570,7 @@ internal fun MaterialsInvestmentTab(
                                         val minDiscountSnap = minDiscountPct.toDoubleOrNull() ?: 0.0
                                         val maxVolatilitySnap = maxVolatilityPct.toDoubleOrNull() ?: 0.0
                                         val minVolatilitySnap = minVolatilityPct.toDoubleOrNull() ?: 0.0
-                                        val spikeFilterSnap = spikeFilter
-                                        val spikePriceMultiplierSnap = spikePriceMultiplier.toDoubleOrNull() ?: 1.8
-                                        val spikeVolumeMultiplierSnap = spikeVolumeMultiplier.toDoubleOrNull() ?: 5.0
+                                        val maxZSnap = maxZ.toDoubleOrNull()
                                         val excludeStructuralBreakSnap = excludeStructuralBreak
                                         val histSrc = withContext(Dispatchers.IO) { EveRefService.getSelectedSource() }
 
@@ -684,9 +658,7 @@ internal fun MaterialsInvestmentTab(
                                                                     maxVolatilityPct = maxVolatilitySnap,
                                                                     minVolatilityPct = minVolatilitySnap,
                                                                     historySource = histSrc,
-                                                                    spikeFilter = spikeFilterSnap,
-                                                                    spikePriceMultiplier = spikePriceMultiplierSnap,
-                                                                    spikeVolumeMultiplier = spikeVolumeMultiplierSnap,
+                                                                    maxZ = maxZSnap,
                                                                     excludeStructuralBreak = excludeStructuralBreakSnap,
                                                                     myTransactionsByType = myTransactionsByType,
                                                                     myAssetQtyByType = myAssetQtyByType,
@@ -963,18 +935,6 @@ internal fun MaterialRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
-                if (c.spikeDetected) {
-                    Tip(
-                        stringResource(Res.string.mi_tip_spike_row),
-                    ) {
-                        Icon(
-                            Icons.Default.Warning,
-                            contentDescription = stringResource(Res.string.spike_detected),
-                            modifier = Modifier.size(13.dp),
-                            tint = warningColor,
-                        )
-                    }
-                }
                 IconButton(onClick = { onShowDetails(c.typeId) }, modifier = Modifier.size(20.dp)) {
                     Icon(
                         Icons.AutoMirrored.Filled.ShowChart,

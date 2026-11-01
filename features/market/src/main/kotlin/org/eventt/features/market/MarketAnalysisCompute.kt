@@ -88,10 +88,8 @@ internal fun computeOpportunityForType(
     stationSystemId: Int? = null,
     distanceFromStation: Map<Int, Int> = emptyMap(),
     locationSystemCache: java.util.concurrent.ConcurrentHashMap<Long, Int?>? = null,
-    spikeFilter: SpikeFilter = SpikeFilter.ANY,
-    spikePriceMultiplier: Double = 1.8,
-    spikeVolumeMultiplier: Double = 5.0,
-    spikeWindowDays: Int = 7,
+    // Skip items whose latest VWAP z-score (see latestVwapZ) is above this -- don't buy high. Null = off.
+    maxZ: Double? = null,
     // Real per-side fill data for this station/type (see Adam4EveFlowService) -- when present,
     // caps estimatedDailyProfit at the slower of the two sides instead of trusting ESI's
     // region-wide, both-sides-combined history alone (issue #32).
@@ -123,15 +121,10 @@ internal fun computeOpportunityForType(
     if (netProfit < minNetProfit) return null
 
     val type = StaticDataDao.getTypeById(typeId) ?: return null
-    val history = fetchHistory(typeId, regionId, historySource, days = maxOf(30, spikeWindowDays))
+    val history = fetchHistory(typeId, regionId, historySource, days = Z_HISTORY_DAYS)
     val medianDailyVol = medianDailyVolume(history)
     if (medianDailyVol < minDailyVol && minDailyVol > 0) return null
-
-    val spikeDetected =
-        detectPriceSpike(history, spikePriceMultiplier, spikeVolumeMultiplier, spikeWindowDays, currentPrice = bestSell) ||
-            detectPriceSpike(history, spikePriceMultiplier, spikeVolumeMultiplier, spikeWindowDays, currentPrice = bestBuy)
-    if (spikeFilter == SpikeFilter.EXCLUDE && spikeDetected) return null
-    if (spikeFilter == SpikeFilter.ONLY && !spikeDetected) return null
+    if (maxZ != null && (latestVwapZ(history) ?: maxZ) > maxZ) return null
 
     // A resting buy order can sit unfilled indefinitely regardless of price, so per-side flow is
     // only ever used to shrink the estimate, never to grow it past what region history already
@@ -163,7 +156,6 @@ internal fun computeOpportunityForType(
         buyOrderCount = buys.size,
         estimatedDailyProfit = netProfit * effectiveDailyVol,
         priceChange7d = compute7dChange(history),
-        spikeDetected = spikeDetected,
     )
 }
 
@@ -364,10 +356,8 @@ internal fun computeRegionOpportunityForType(
     // cost. When on, shipping = buyPrice * shippingCostPct / 100 instead of itemVol * iskPerM3.
     shippingByCostEnabled: Boolean = false,
     shippingCostPct: Double = 0.0,
-    spikeFilter: SpikeFilter = SpikeFilter.ANY,
-    spikePriceMultiplier: Double = 1.8,
-    spikeVolumeMultiplier: Double = 5.0,
-    spikeWindowDays: Int = 7,
+    // Skip items whose latest VWAP z-score (see latestVwapZ) is above this -- don't buy high. Null = off.
+    maxZ: Double? = null,
     // Real per-side fill data (see Adam4EveFlowService) for whichever station holds *our own
     // placed order* for this trade type -- e.g. BUY_TO_SELL places a buy order at buyStationId and
     // a sell order at sellStationId, so both are relevant; SELL_TO_SELL only places a sell order at
@@ -550,18 +540,12 @@ internal fun computeRegionOpportunityForType(
     val finalNetProfit = finalGrossProfit - finalFees - shipping
     val finalMarginPct = finalNetProfit / finalSellPrice * 100.0
 
-    val sellHistory = fetchHistory(typeId, sellRegionId, historySource, days = maxOf(30, spikeWindowDays))
-    val buyHistory = fetchHistory(typeId, buyRegionId, historySource, days = maxOf(30, spikeWindowDays))
+    val sellHistory = fetchHistory(typeId, sellRegionId, historySource, days = Z_HISTORY_DAYS)
+    val buyHistory = fetchHistory(typeId, buyRegionId, historySource, days = Z_HISTORY_DAYS)
     val volSell = medianDailyVolume(sellHistory)
     val volBuy = medianDailyVolume(buyHistory)
-
-    // Either leg spiking is enough to flag the route — a manipulated price on either side makes
-    // the trade look better (or worse) than it durably is, whether or not it's already settled.
-    val spikeDetected =
-        detectPriceSpike(sellHistory, spikePriceMultiplier, spikeVolumeMultiplier, spikeWindowDays, currentPrice = finalSellPrice) ||
-            detectPriceSpike(buyHistory, spikePriceMultiplier, spikeVolumeMultiplier, spikeWindowDays, currentPrice = finalBuyPrice)
-    if (spikeFilter == SpikeFilter.EXCLUDE && spikeDetected) return null
-    if (spikeFilter == SpikeFilter.ONLY && !spikeDetected) return null
+    // The buy leg is where we'd be buying high.
+    if (maxZ != null && (latestVwapZ(buyHistory) ?: maxZ) > maxZ) return null
 
     return RegionOpportunity(
         typeId = typeId,
@@ -586,7 +570,6 @@ internal fun computeRegionOpportunityForType(
         priceChange7d = compute7dChange(sellHistory),
         buyVsAvg7dPct = compute7dAvgDeviation(buyHistory, finalBuyPrice) { it.average },
         sellVsAvg7dPct = compute7dAvgDeviation(sellHistory, finalSellPrice) { it.average },
-        spikeDetected = spikeDetected,
     )
 }
 
@@ -650,74 +633,19 @@ private fun compute7dAvgDeviation(
     return (currentPrice - avg7d) / avg7d * 100.0
 }
 
-/**
- * True when [history] shows a sharp price *or* volume spike somewhere in the window — e.g. a
- * one-off buyout or wash-trading event, not a genuine price move. Matches whether that spike has
- * since settled back down *or* is still the most recent day (a live spike is at least as
- * unreliable to trade against as one that's already reverted). Price and volume get their own
- * threshold rather than sharing one -- volume's day-to-day swing is naturally far wider than
- * price's even on an ordinary day (one buyer clearing a stack is common and not a price signal),
- * so the same multiplier for both either misses real price spikes or flags every liquid item on
- * volume noise alone. Either threshold crossing on its own is enough to flag the item.
- *
- * [currentPrice] (the live best buy/sell order, not a historical trade) is checked against the
- * window's median separately from the in-history peak check above -- ESI's daily history always
- * lags real time by about a day, so a spike that started *today* has no row in [history] yet at
- * all and the peak-vs-baseline check above is structurally blind to it. Comparing the live price
- * directly against the recent baseline catches exactly that still-forming case.
- */
-internal fun detectPriceSpike(
-    history: List<org.eventt.core.model.MarketHistoryModel>,
-    priceMultiplier: Double = 1.5,
-    volumeMultiplier: Double = 5.0,
-    windowDays: Int = 30,
-    currentPrice: Double? = null,
-): Boolean {
-    val recent = history.take(windowDays)
-    if (recent.size < 3) return false
-    if (hasOutlierPeak(recent.map { it.average }, priceMultiplier)) return true
-    if (hasOutlierPeak(recent.map { it.volume.toDouble() }, volumeMultiplier)) return true
-    if (currentPrice != null && currentPrice > 0.0) {
-        val baseline = median(recent.map { it.average })
-        if (baseline > 0.0 && currentPrice >= baseline * priceMultiplier) return true
-    }
-    return false
-}
-
-private fun median(values: List<Double>): Double {
-    if (values.isEmpty()) return 0.0
-    val sorted = values.sorted()
-    val mid = sorted.size / 2
-    return if (sorted.size % 2 == 0) (sorted[mid - 1] + sorted[mid]) / 2.0 else sorted[mid]
-}
-
-// True when the single highest value in [values] is at least [multiplier]x the median of every
-// other value — the baseline excludes the peak itself so the spike can't drag its own baseline up.
-private fun hasOutlierPeak(
-    values: List<Double>,
-    multiplier: Double,
-): Boolean {
-    val peakIdx = values.indices.maxBy { values[it] }
-    val peak = values[peakIdx]
-    if (peak <= 0.0) return false
-    val baseline = median(values.filterIndexed { i, _ -> i != peakIdx })
-    if (baseline <= 0.0) return false
-    return peak >= baseline * multiplier
-}
-
 internal fun fetchHistory(
     typeId: Int,
     regionId: Int,
     historySource: String,
-    // The 7d-change/median-volume/spike stats below all self-limit by date once they have the
-    // rows, so raising this to accommodate a wider spike window doesn't disturb them.
+    // The 7d-change/median-volume stats below all self-limit by date once they have the rows, so
+    // raising this to accommodate the z-score's VWAP window doesn't disturb them.
     days: Int = 30,
 ): List<org.eventt.core.model.MarketHistoryModel> {
     val effectiveRegionId = if (typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else regionId
     if (historySource != "esi") {
         return MarketDao.getHistory(typeId, effectiveRegionId, days)
     }
-    // A pure-arithmetic filter edit (margin/spike settings/etc.) re-runs
+    // A pure-arithmetic filter edit (margin/max Z/etc.) re-runs
     // computeOpportunityForType/computeRegionOpportunityForType — and this history lookup with
     // it — for every cached item several times in the space of a few seconds (once per debounced
     // keystroke). This short in-memory memo dedupes that burst to one real lookup per item

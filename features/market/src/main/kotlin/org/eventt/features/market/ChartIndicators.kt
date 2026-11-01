@@ -1,5 +1,6 @@
 package org.eventt.features.market
 
+import org.eventt.core.model.MarketHistoryModel
 import kotlin.math.sqrt
 
 // Pure indicator math for the item chart. Inputs are one value per *trading* day (ESI history
@@ -89,4 +90,24 @@ internal fun ema(
         prev = v?.let { x -> prev?.let { it + alpha * (x - it) } ?: x }
         prev
     }
+}
+
+// EMA period applied on top of the VWAP lines and their z-scores, to calm day-to-day jitter.
+internal const val VWAP_SMOOTH = 5
+
+// VWAP period behind the Analysis max-Z filter (the item chart's first VWAP line), and how much
+// history it fetches for it.
+internal const val Z_FILTER_PERIOD = 28
+internal const val Z_HISTORY_DAYS = 60
+
+// Latest smoothed z-score of daily averages vs their VWAP -- the right edge of the item chart's Z
+// pane. [history] is newest first, as fetchHistory returns it. Null without enough history.
+internal fun latestVwapZ(
+    history: List<MarketHistoryModel>,
+    period: Int = Z_FILTER_PERIOD,
+): Double? {
+    val rows = history.reversed()
+    val prices = rows.map { it.average }
+    val v = vwap(prices, rows.map { it.volume.toDouble() }, period)
+    return ema(vwapZScore(prices, v, period), VWAP_SMOOTH).lastOrNull()
 }

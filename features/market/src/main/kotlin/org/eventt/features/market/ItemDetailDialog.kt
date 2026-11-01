@@ -83,20 +83,16 @@ private val WICK_COLOR = Color(0xFFE0E0E0)
 private val AXIS_COLOR = Color(0xFF777777)
 private val GRID_COLOR = Color(0x22FFFFFF)
 
-// The two z-score panes: daily highs vs their VWAP (when to sell), daily lows vs theirs (when to
-// buy). Each has its own pickable level, drawn and highlighted in the side's colour.
+// The two pickable levels on the z-score pane: an upper one (when to sell) and a lower one (when
+// to buy), each drawn and highlighted in its own colour.
 private enum class ZSide(
-    val label: String,
     val color: Color,
 ) {
-    SELL("Z max · sell", Color(0xFFEF5350)),
-    BUY("Z min · buy", Color(0xFF66BB6A)),
+    SELL(Color(0xFFEF5350)),
+    BUY(Color(0xFF66BB6A)),
 }
 
 private const val Z_RANGE = 3.0
-
-// EMA period applied on top of the VWAP lines and their z-scores, to calm day-to-day jitter.
-private const val VWAP_SMOOTH = 5
 
 // Rolling VWAP lines (and their z-scores) drawn on the chart: period in trading days, colour.
 private val VWAP_LINES =
@@ -645,19 +641,12 @@ private class ChartData(
     val smaFast: List<Double?>,
     val smaSlow: List<Double?>,
     val bands: List<Band?>,
-    // One series per VWAP_LINES entry.
+    // One series per VWAP_LINES entry: the VWAP of daily averages, its deviation and z-score.
     val vwap: List<List<Double?>>,
-    // Indexed by ZSide.ordinal.
-    val zSides: List<ZSeries>,
+    val vwapSd: List<List<Double?>>,
+    val z: List<List<Double?>>,
     val volSma: List<Double?>,
     val secondary: List<Double?>,
-)
-
-// VWAP lines, deviations and z-scores of one price series (highs or lows), one per VWAP_LINES entry.
-private class ZSeries(
-    val vwap: List<List<Double?>>,
-    val sd: List<List<Double?>>,
-    val z: List<List<Double?>>,
 )
 
 private fun buildChartData(
@@ -672,9 +661,7 @@ private fun buildChartData(
     val slow = sma(prices, 50)
     val bands = bollinger(prices, 20)
     val volumes = history.map { it.volume.toDouble() }
-    val vwapAll = VWAP_LINES.map { (period) -> ema(vwap(prices, volumes, period), VWAP_SMOOTH) }
-    val highs = history.map { it.highest.takeIf { h -> h > 0 } ?: it.average }
-    val lows = history.map { it.lowest.takeIf { l -> l > 0 } ?: it.average }
+    val vwapRaw = VWAP_LINES.map { (period) -> vwap(prices, volumes, period) }
     val volSma = sma(volumes, 20)
     val secondaryByDate = secondary.associate { it.date.take(10) to it.average }
 
@@ -696,14 +683,8 @@ private fun buildChartData(
 
     fun remap(series: List<Double?>) = idx.map { i -> i?.let { series[it] } }
 
-    fun zSeries(src: List<Double>): ZSeries {
-        val raw = VWAP_LINES.map { (period) -> vwap(src, volumes, period) }
-        return ZSeries(
-            vwap = raw.map { remap(ema(it, VWAP_SMOOTH)) },
-            sd = VWAP_LINES.mapIndexed { k, (period) -> remap(ema(vwapSd(src, raw[k], period), VWAP_SMOOTH)) },
-            z = VWAP_LINES.mapIndexed { k, (period) -> remap(ema(vwapZScore(src, raw[k], period), VWAP_SMOOTH)) },
-        )
-    }
+    fun smoothed(f: (List<Double?>, Int) -> List<Double?>) =
+        VWAP_LINES.mapIndexed { k, (period) -> remap(ema(f(vwapRaw[k], period), VWAP_SMOOTH)) }
     return ChartData(
         days = days,
         rows = idx.map { i -> i?.let { history[it] } },
@@ -711,8 +692,9 @@ private fun buildChartData(
         smaFast = idx.map { i -> i?.let { fast[it] } },
         smaSlow = idx.map { i -> i?.let { slow[it] } },
         bands = idx.map { i -> i?.let { bands[it] } },
-        vwap = vwapAll.map(::remap),
-        zSides = listOf(zSeries(highs), zSeries(lows)),
+        vwap = smoothed { v, _ -> v },
+        vwapSd = smoothed { v, period -> vwapSd(prices, v, period) },
+        z = smoothed { v, period -> vwapZScore(prices, v, period) },
         volSma = idx.map { i -> i?.let { volSma[it] } },
         secondary = days.map { secondaryByDate[it] },
     )
@@ -819,11 +801,11 @@ private fun TradingChart(
     var dragX by remember { mutableStateOf<Float?>(null) }
     var lastPress by remember { mutableStateOf(0L) }
     var pressX by remember { mutableStateOf<Float?>(null) }
-    // Z level per ZSide (SELL, BUY), picked by clicking its pane: shown as price lines and highlighted
-    // candles. Starts at ±1σ.
+    // Z level per ZSide (SELL, BUY), picked by clicking the z pane above / below 0: shown as price
+    // lines and highlighted candles. Starts at ±1σ.
     var zLevels by remember { mutableStateOf(listOf<Double?>(1.0, -1.0)) }
-    // Each z pane's vertical extent (top, height) from the last draw, for click hit-testing.
-    var zPanes by remember { mutableStateOf(ZSide.entries.map { 0f to 0f }) }
+    // The z pane's vertical extent (top, height) from the last draw, for click hit-testing.
+    var zPane by remember { mutableStateOf(0f to 0f) }
 
     // Layout constants shared by drawing and hit-testing.
     val lPadDp = 8.dp
@@ -894,16 +876,14 @@ private fun TradingChart(
                         pressX = dragX
                     }.onPointerEvent(PointerEventType.Release) {
                         val pos = it.changes.first().position
-                        // A click (not a drag) in a z pane picks that side's level, snapped to 0.25σ;
-                        // clicking the current level again clears it.
-                        if (pressX?.let { x -> abs(pos.x - x) < 4f } == true) {
-                            zPanes.forEachIndexed { side, (zTop, zH) ->
-                                if (zH > 0 && pos.y in zTop..zTop + zH) {
-                                    val z = ((Z_RANGE - (pos.y - zTop) / zH * 2 * Z_RANGE) * 4).roundToInt() / 4.0
-                                    val cur = zLevels[side]
-                                    zLevels = zLevels.toMutableList().also { it[side] = if (cur != null && abs(cur - z) < 0.2) null else z }
-                                }
-                            }
+                        // A click (not a drag) in the z pane picks a level, snapped to 0.25σ: the sell
+                        // level above 0, the buy level below. Clicking the current level again clears it.
+                        val (zTop, zH) = zPane
+                        if (pressX?.let { x -> abs(pos.x - x) < 4f } == true && zH > 0 && pos.y in zTop..zTop + zH) {
+                            val z = ((Z_RANGE - (pos.y - zTop) / zH * 2 * Z_RANGE) * 4).roundToInt() / 4.0
+                            val side = if (z >= 0) ZSide.SELL.ordinal else ZSide.BUY.ordinal
+                            val cur = zLevels[side]
+                            zLevels = zLevels.toMutableList().also { it[side] = if (cur != null && abs(cur - z) < 0.2) null else z }
                         }
                         dragX = null
                         pressX = null
@@ -923,14 +903,13 @@ private fun TradingChart(
             if (chartW <= 0 || n < 2) return@Canvas
             val gap = 10.dp.toPx()
             val bottomAxis = 16.dp.toPx()
-            val usable = size.height - bottomAxis - 3 * gap
+            val usable = size.height - bottomAxis - 2 * gap
             val priceTop = 4.dp.toPx()
-            val priceH = usable * 0.54f
+            val priceH = usable * 0.58f
             val volTop = priceTop + priceH + gap
-            val volH = usable * 0.14f
-            val zH = (usable * 0.32f - priceTop) / 2
-            val zTops = ZSide.entries.map { volTop + volH + gap + it.ordinal * (zH + gap) }
-            val bottom = zTops.last() + zH
+            val volH = usable * 0.16f
+            val zTop = volTop + volH + gap
+            val zH = usable * 0.26f - priceTop
 
             fun xFor(i: Int) = lPad + (i - view.start) / view.span * chartW
             val iFrom = floor(view.start).toInt().coerceIn(0, n - 1)
@@ -997,18 +976,16 @@ private fun TradingChart(
                 }
             }
 
-            // Picked z levels: highlight days where any shown z-score of that side is at or beyond
-            // its level (in the level's direction), and draw the price each shown VWAP line of that
-            // side would need for it — all in the side's colour.
+            // Picked z levels: highlight days where any shown z-score is at or beyond a level (above
+            // the sell one, below the buy one), and draw the price each shown VWAP line would need
+            // for it — all in the level's colour.
             val zHits =
                 ZSide.entries.map { side ->
                     zLevels[side.ordinal]?.let { lv ->
                         BooleanArray(n) { i ->
                             VWAP_LINES.indices.any { k ->
                                 showVwap[k] &&
-                                    data.zSides[side.ordinal]
-                                        .z[k][i]
-                                        ?.let { z -> if (lv >= 0) z >= lv else z <= lv } == true
+                                    data.z[k][i]?.let { z -> if (side == ZSide.SELL) z >= lv else z <= lv } == true
                             }
                         }
                     }
@@ -1018,8 +995,7 @@ private fun TradingChart(
             fun highlight(
                 top: Float,
                 height: Float,
-                sides: List<ZSide> = ZSide.entries,
-            ) = sides.forEach { side ->
+            ) = ZSide.entries.forEach { side ->
                 zHits[side.ordinal]?.forEachIndexed { i, hit ->
                     if (hit && visible(i)) {
                         clipPlot {
@@ -1031,10 +1007,9 @@ private fun TradingChart(
             highlight(priceTop, priceH)
             ZSide.entries.forEach { side ->
                 val lv = zLevels[side.ordinal] ?: return@forEach
-                val zs = data.zSides[side.ordinal]
                 VWAP_LINES.forEachIndexed { k, (period) ->
                     if (!showVwap[k]) return@forEachIndexed
-                    val levelPrice = zs.vwap[k].indices.map { i -> zs.vwap[k][i]?.let { v -> zs.sd[k][i]?.let { v + lv * it } } }
+                    val levelPrice = data.vwap[k].indices.map { i -> data.vwap[k][i]?.let { v -> data.vwapSd[k][i]?.let { v + lv * it } } }
                     clipPlot { drawSeries(levelPrice, side.color.copy(alpha = 0.85f), 1.dp.toPx(), ::xFor, ::yP, dashed = true) }
                     levelPrice.subList(iFrom, iTo + 1).lastOrNull { it != null }?.let { v ->
                         axisLabel(textMeasurer, "$period", Offset(lPad + chartW - 16.dp.toPx(), yP(v) - 12.dp.toPx()), side.color)
@@ -1233,33 +1208,32 @@ private fun TradingChart(
             clipPlot { drawSeries(data.volSma, AXIS_COLOR, 1.dp.toPx(), ::xFor, ::yV) }
             axisLabel(textMeasurer, "$volWord " + formatVolume(maxVol.toLong()), Offset(lPad + chartW + 6.dp.toPx(), volTop), AXIS_COLOR)
 
-            // ── Z-score panes (max → sell, min → buy), fixed ±3σ scale with ±2σ guides.
-            zPanes = zTops.map { it to zH }
-            ZSide.entries.forEach { side ->
-                val zTop = zTops[side.ordinal]
+            // ── VWAP z-score pane, fixed ±3σ scale with ±2σ guides, plus the sell/buy levels.
+            zPane = zTop to zH
 
-                fun yZ(v: Double) = zTop + (1f - ((v.coerceIn(-Z_RANGE, Z_RANGE) + Z_RANGE) / (2 * Z_RANGE)).toFloat()) * zH
-                drawRect(side.color.copy(alpha = 0.05f), topLeft = Offset(lPad, zTop), size = Size(chartW, zH))
-                listOf(-2.0, 0.0, 2.0).forEach { lv ->
-                    drawLine(
-                        GRID_COLOR,
-                        Offset(lPad, yZ(lv)),
-                        Offset(lPad + chartW, yZ(lv)),
-                        1f,
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f)),
-                    )
-                    axisLabel(textMeasurer, "%+.0f".format(lv), Offset(lPad + chartW + 6.dp.toPx(), yZ(lv) - 6.dp.toPx()), AXIS_COLOR)
-                }
-                highlight(zTop, zH, listOf(side))
-                VWAP_LINES.forEachIndexed { k, (_, color) ->
-                    clipPlot { if (showVwap[k]) drawSeries(data.zSides[side.ordinal].z[k], color, 1.2.dp.toPx(), ::xFor, ::yZ) }
-                }
+            fun yZ(v: Double) = zTop + (1f - ((v.coerceIn(-Z_RANGE, Z_RANGE) + Z_RANGE) / (2 * Z_RANGE)).toFloat()) * zH
+            drawRect(AXIS_COLOR.copy(alpha = 0.05f), topLeft = Offset(lPad, zTop), size = Size(chartW, zH))
+            listOf(-2.0, 0.0, 2.0).forEach { lv ->
+                drawLine(
+                    GRID_COLOR,
+                    Offset(lPad, yZ(lv)),
+                    Offset(lPad + chartW, yZ(lv)),
+                    1f,
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f)),
+                )
+                axisLabel(textMeasurer, "%+.0f".format(lv), Offset(lPad + chartW + 6.dp.toPx(), yZ(lv) - 6.dp.toPx()), AXIS_COLOR)
+            }
+            highlight(zTop, zH)
+            VWAP_LINES.forEachIndexed { k, (_, color) ->
+                clipPlot { if (showVwap[k]) drawSeries(data.z[k], color, 1.2.dp.toPx(), ::xFor, ::yZ) }
+            }
+            ZSide.entries.forEach { side ->
                 zLevels[side.ordinal]?.let { lv ->
                     drawLine(side.color, Offset(lPad, yZ(lv)), Offset(lPad + chartW, yZ(lv)), 1.5.dp.toPx())
                     axisLabel(textMeasurer, "%+.2f".format(lv), Offset(lPad + chartW + 26.dp.toPx(), yZ(lv) - 6.dp.toPx()), side.color)
                 }
-                axisLabel(textMeasurer, side.label, Offset(lPad + 2.dp.toPx(), zTop), side.color)
             }
+            axisLabel(textMeasurer, "Z avg (VWAP)", Offset(lPad + 2.dp.toPx(), zTop), AXIS_COLOR)
 
             // ── Date axis.
             val ticks = 6
@@ -1273,18 +1247,17 @@ private fun TradingChart(
             // ── Crosshair.
             hoverIndex?.let { i ->
                 val x = xFor(i)
-                drawLine(Color.White.copy(alpha = 0.35f), Offset(x, priceTop), Offset(x, bottom), 1f)
+                drawLine(Color.White.copy(alpha = 0.35f), Offset(x, priceTop), Offset(x, zTop + zH), 1f)
                 data.rows[i]?.let { r -> drawCircle(priceColor, 4.dp.toPx(), Offset(x, yP(r.average))) }
             }
             // Horizontal line at the cursor, with the value it points at on the right axis —
             // price in the price pane, volume and z-score in theirs.
             hoverY?.let { y ->
-                val zTop = zTops.firstOrNull { y in it..it + zH }
                 val label =
                     when {
                         y in priceTop..priceTop + priceH -> formatPriceAbbr(pMin + (1 - (y - priceTop) / priceH) * pRange)
                         y in volTop..volTop + volH -> formatVolume(((volTop + volH - y) / volH * maxVol).toLong())
-                        zTop != null -> "%+.2f".format(Z_RANGE - (y - zTop) / zH * 2 * Z_RANGE)
+                        y in zTop..zTop + zH -> "%+.2f".format(Z_RANGE - (y - zTop) / zH * 2 * Z_RANGE)
                         else -> return@let
                     }
                 drawLine(Color.White.copy(alpha = 0.35f), Offset(lPad, y), Offset(lPad + chartW, y), 1f)
@@ -1361,17 +1334,8 @@ private fun HoverLegend(
         data.smaSlow[index]?.let { Text("SMA50 ${formatPriceAbbr(it)}", style = style, color = SMA_SLOW_COLOR) }
         VWAP_LINES.forEachIndexed { k, (period, color) ->
             data.vwap[k][index]?.let { v ->
-                val zMax =
-                    data.zSides[ZSide.SELL.ordinal]
-                        .z[k][index]
-                        ?.let { " max${"%+.2f".format(it)}" }
-                        .orEmpty()
-                val zMin =
-                    data.zSides[ZSide.BUY.ordinal]
-                        .z[k][index]
-                        ?.let { " min${"%+.2f".format(it)}" }
-                        .orEmpty()
-                Text("VWAP$period ${formatPriceAbbr(v)}$zMax$zMin", style = style, color = color)
+                val z = data.z[k][index]?.let { " Z${"%+.2f".format(it)}" }.orEmpty()
+                Text("VWAP$period ${formatPriceAbbr(v)}$z", style = style, color = color)
             }
         }
         if (secondaryLabel !=
