@@ -169,6 +169,19 @@ jobs:
           src=$(find "${{ matrix.installerDir }}" -maxdepth 1 -name "*.${{ matrix.installerExt }}" | head -n1)
           cp "$src" "eventt-${{ matrix.platform }}.${{ matrix.installerExt }}"
 
+      # packageDeb runs its own jpackage, so the short-classpath fix from createDistributable
+      # (app/build.gradle.kts) has to be applied to the .deb's launcher config here too.
+      - name: Short classpath in the .deb launcher
+        if: matrix.platform == 'linux'
+        run: |
+          d=$(mktemp -d)
+          dpkg-deb -R eventt-linux.deb "$d"
+          cfg=$(find "$d" -path '*/lib/app/eventt.cfg')
+          awk '!/^app\.classpath=/ { print; next } !done { print "app.classpath=$APPDIR/*"; done = 1 }' "$cfg" > cfg.tmp
+          cat cfg.tmp > "$cfg"
+          grep -c '^app.classpath=' "$cfg"
+          dpkg-deb -b --root-owner-group "$d" eventt-linux.deb
+
       - name: Upload installer artifact
         uses: actions/upload-artifact@v7
         with:

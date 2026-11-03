@@ -51,6 +51,31 @@ kotlin {
 
 tasks.named("compileKotlin") { dependsOn(generateAppVersion) }
 
+// jpackage's Linux launcher passes the JVM setup (the whole classpath: ~120 jars, ~18 KB) to
+// itself through a pipe and reads it with a single read(); newer kernels hand back only part of it,
+// so the launcher continues on garbage and dies in setenv (SIGSEGV before the JVM starts). One
+// wildcard entry keeps that data ~1.7 KB. Only module-info.class is duplicated across the jars,
+// so classpath order doesn't matter. The .deb gets the same rewrite in release.yml.
+tasks.matching { it.name == "createDistributable" }.configureEach {
+    // A local, not a script-level val: the doLast lambda must not capture the build script
+    // (configuration cache).
+    val launcherCfg = project.layout.buildDirectory.file("compose/binaries/main/app/eventt/lib/app/eventt.cfg")
+    doLast {
+        val cfg = launcherCfg.get().asFile
+        if (!cfg.exists()) return@doLast
+        var replaced = false
+        cfg.writeText(
+            cfg.readLines().mapNotNull { line ->
+                when {
+                    !line.startsWith("app.classpath=") -> line
+                    replaced -> null
+                    else -> "app.classpath=\$APPDIR/*".also { replaced = true }
+                }
+            }.joinToString("\n", postfix = "\n"),
+        )
+    }
+}
+
 // ktlint/detekt scan the whole Kotlin source set, which includes the generated appversion/
 // dir above — without this, Gradle flags an undeclared dependency on generateAppVersion's output.
 tasks.matching { it.name.startsWith("runKtlint") || it.name == "detekt" }.configureEach {

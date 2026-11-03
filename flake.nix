@@ -80,6 +80,13 @@
             # лаунчер ищет конфиг по имени бинарника; makeWrapper переименовывает его в .eventt-wrapped
             ln -s $out/lib/app/eventt.cfg $out/lib/app/.eventt-wrapped.cfg
 
+            # Один шаблон вместо ~120 путей к jar: лаунчер jpackage читает свои данные из pipe одним
+            # read(), и на новых ядрах длинный classpath приходит обрезанным -> SIGSEGV в setenv.
+            # Релизы с 1.0.20 уже собраны так; для более старых это и есть исправление.
+            awk '!/^app\.classpath=/ { print; next } !done { print "app.classpath=$APPDIR/*"; done = 1 }' \
+              $out/lib/app/eventt.cfg > eventt.cfg.tmp
+            install -m444 eventt.cfg.tmp $out/lib/app/eventt.cfg
+
             # jpackage app-image не создаёт .desktop/иконку в XDG-путях (это делает только
             # --type deb/rpm) — добавляем вручную, чтобы приложение появилось в меню.
             install -Dm444 $out/lib/eventt.png $out/share/icons/hicolor/128x128/apps/eventt.png
