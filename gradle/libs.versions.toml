@@ -20,10 +20,14 @@ mockk = "1.14.11"
 kotest = "6.2.3"
 turbine = "1.2.1"
 quartz = "1.13.1"
+# 1.1.0 is the last release built on Compose 1.11 (1.2 needs 1.12).
+richeditor = "1.1.0"
 
 [libraries]
 # Nostr (P2P Market — Phase 0 spike)
 quartz-jvm = { module = "com.vitorpamplona.quartz:quartz-jvm", version.ref = "quartz" }
+# WYSIWYG Markdown editor (chat suggestions)
+richeditor = { module = "com.mohamedrejeb.richeditor:richeditor-compose", version.ref = "richeditor" }
 # Compose
 compose-desktop = { module = "org.jetbrains.compose.desktop:desktop", version.ref = "compose" }
 compose-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "compose-material3" }

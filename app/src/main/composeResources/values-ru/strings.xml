@@ -70,4 +70,5 @@
     <string name="upd_cant_write_jar">Нет прав на запись в %1$s. Скачайте обновление вручную: %2$s</string>
     <string name="server_offline_title">Сервер EVE недоступен</string>
     <string name="server_offline_desc">Ежедневный даунтайм или сбой. Показаны данные из кэша; запросы к ESI приостановлены и повторяются раз в минуту, пока сервер не вернётся.</string>
+    <string name="screen_chat">Чат</string>
 </resources>

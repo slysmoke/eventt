@@ -68,4 +68,5 @@
     <string name="upd_cant_write_jar">Can't write to %1$s. Download the update manually: %2$s</string>
     <string name="server_offline_title">EVE server is offline</string>
     <string name="server_offline_desc">Daily downtime or an outage. Showing cached data; ESI requests are paused and retried every minute until the server is back.</string>
+    <string name="screen_chat">Chat</string>
 </resources>

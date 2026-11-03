@@ -17,5 +17,8 @@ dependencies {
     implementation(compose.desktop.currentOs)
     implementation(libs.compose.material3)
     implementation(libs.compose.components.resources)
+    // Only its Basic* (foundation) composables are used; keep our material3 instead of its alpha.
+    implementation(libs.richeditor) { exclude(group = "org.jetbrains.compose.material3") }
+    testImplementation(libs.quartz.jvm) // keys for the chat render test
     testImplementation(libs.compose.ui.test) // headless render test of the leaderboard
 }
