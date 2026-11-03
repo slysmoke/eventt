@@ -11,10 +11,15 @@ import org.eventt.core.database.ActiveOrderDao
 import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.CorporationDao
 import org.eventt.core.database.StaticDataDao
+import org.eventt.core.model.stringBlocking
 import org.eventt.features.orders.CostBasisService
 import org.eventt.features.orders.MarketWatchService
+import org.eventt.overlay.generated.resources.*
 import java.net.InetSocketAddress
 import java.time.Duration
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.concurrent.Executors
 
 private const val AUTOSTART_SETTING = "stream_overlay.autostart"
@@ -25,6 +30,13 @@ data class StreamOverlayStats(
     val profitSession: Double,
     val relistsSession: Int,
     val elapsedSeconds: Long,
+    // Chart x-axis length: the session so far, or the whole N-day window.
+    val spanSeconds: Long,
+    // Shown in the header instead of the clock for N-day periods.
+    val periodLabel: String?,
+    val pnlLabel: String,
+    val rateSeconds: Long,
+    val rateLabel: String,
     // Live snapshot of the current order book (every local character/corp, not session-scoped —
     // these describe standing orders right now, not what changed since the session started).
     val sellOrdersCount: Int,
@@ -33,7 +45,58 @@ data class StreamOverlayStats(
     val expectedProfit: Double,
     val relistFeesPaid: Double,
     val beatenCount: Int,
+    // Confirmed (wallet-transaction) sells this session.
+    val revenueSession: Double,
+    val winningTrades: Int,
+    val recentSales: List<OverlaySale>,
+    val topItems: List<OverlayItem>,
+    val profitSeries: List<OverlayPoint>,
 )
+
+@Serializable
+data class OverlaySale(
+    val typeId: Int,
+    val name: String,
+    val qty: Int,
+    val price: Double,
+    val profit: Double,
+    // Local HH:mm.
+    val at: String,
+)
+
+@Serializable
+data class OverlayItem(
+    val typeId: Int,
+    val name: String,
+    val qty: Int,
+    val profit: Double,
+)
+
+@Serializable
+data class OverlayPoint(
+    val t: Long,
+    val v: Double,
+)
+
+// Same layout as the dates CostBasisService stores, so plain string comparison orders them.
+private val KEY: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
+
+private val PNL_LABELS =
+    mapOf(
+        OverlayPeriod.SESSION to Res.string.so_pnl,
+        OverlayPeriod.DAY to Res.string.so_pnl_24h,
+        OverlayPeriod.WEEK to Res.string.so_pnl_7d,
+        OverlayPeriod.MONTH to Res.string.so_pnl_30d,
+    )
+private val LAST_LABELS =
+    mapOf(
+        OverlayPeriod.DAY to Res.string.so_last_24h,
+        OverlayPeriod.WEEK to Res.string.so_last_7d,
+        OverlayPeriod.MONTH to Res.string.so_last_30d,
+    )
+
+private const val RECENT_SALES = 6
+private const val TOP_ITEMS = 3
 
 /**
  * Local-only HTTP server for an OBS Browser Source overlay (issue #15) — same
@@ -95,6 +158,7 @@ object StreamOverlayServer {
         val iskInOrders: Double = 0.0,
         val expectedProfit: Double = 0.0,
         val relistFees: Double = 0.0,
+        val sells: List<CostBasisService.RealizedSellTx> = emptyList(),
     ) {
         operator fun plus(o: Totals) =
             Totals(
@@ -105,6 +169,7 @@ object StreamOverlayServer {
                 iskInOrders + o.iskInOrders,
                 expectedProfit + o.expectedProfit,
                 relistFees + o.relistFees,
+                sells + o.sells,
             )
     }
 
@@ -116,6 +181,8 @@ object StreamOverlayServer {
     // shows. Summing independent per-entity results avoids that entirely.
     private fun accumulate(
         since: String,
+        // Exclusive end of a finished fixed window; null = up to now.
+        until: String?,
         characterId: Int?,
         corporationId: Int?,
         // Whose tax/broker-fee settings apply — the character itself in personal mode, or (same
@@ -131,7 +198,9 @@ object StreamOverlayServer {
                 brokerFeePct = StaticDataDao.getCharBrokersFee(actingCharId),
             )
         val fifo = CostBasisService.compute(characterId = characterId, corporationId = corporationId, taxConfig = taxConfig)
-        val sellsThisSession = fifo.realizedSells.filter { it.date >= since }
+        // FIFO runs over the whole history, so a sale in the window of stock bought before it
+        // still carries that stock's real (older) cost.
+        val sellsThisSession = fifo.realizedSells.filter { it.date >= since && (until == null || it.date < until) }
 
         // Same "active" filter OrdersSummaryBar/MarketWatchService apply — active_orders can hold
         // rows in a non-"active" ESI state (expired/cancelled) briefly before they roll into
@@ -144,16 +213,22 @@ object StreamOverlayServer {
         // above, per type. max() rather than +: once a wallet-transactions sync (ESI cache ~1h+)
         // confirms a type's real sells, that number is truth and must replace the estimate, not
         // stack with it — the estimate only fills the gap before that sync lands.
+        // ponytail: fills since the overlay started; a rolling window shorter than the app's uptime
+        // could count an hour-old fill that is already outside it until the wallet sync confirms.
         val provisionalProfitByType =
-            sellOrders
-                .groupBy { it.typeId }
-                .mapValues { (_, orders) ->
-                    orders.sumOf { order ->
-                        val costBasis = fifo.inventory[order.typeId]?.avgCostBasis ?: return@sumOf 0.0
-                        val filled = StreamOverlaySession.provisionalFilledQty(order.orderId, order.volumeTotal - order.volumeRemaining)
-                        (order.price * fifo.taxConfig.sellMultiplier - costBasis) * filled
+            if (until != null) {
+                emptyMap()
+            } else {
+                sellOrders
+                    .groupBy { it.typeId }
+                    .mapValues { (_, orders) ->
+                        orders.sumOf { order ->
+                            val costBasis = fifo.inventory[order.typeId]?.avgCostBasis ?: return@sumOf 0.0
+                            val filled = StreamOverlaySession.provisionalFilledQty(order.orderId, order.volumeTotal - order.volumeRemaining)
+                            (order.price * fifo.taxConfig.sellMultiplier - costBasis) * filled
+                        }
                     }
-                }
+            }
         val confirmedProfitByType = sellsThisSession.groupBy { it.typeId }.mapValues { (_, sells) -> sells.sumOf { it.profit } }
         val blendedProfit =
             (provisionalProfitByType.keys + confirmedProfitByType.keys)
@@ -175,24 +250,41 @@ object StreamOverlayServer {
                     (order.price * fifo.taxConfig.sellMultiplier - costBasis) * order.volumeRemaining
                 },
             relistFees = activeOrders.sumOf { it.relistFeesPaid },
+            sells = sellsThisSession,
         )
     }
 
     private fun currentStats(): StreamOverlayStats {
-        val since = StreamOverlaySession.startedAtKey
+        val w = StreamOverlayConfig.window()
+        val since = w.since.format(KEY)
+        val until = w.until?.format(KEY)
         val characters = CharacterDao.getAll()
 
         var totals = Totals()
-        characters.forEach { totals += accumulate(since, characterId = it.id, corporationId = null, actingCharId = it.id) }
+        characters.forEach { totals += accumulate(since, until, characterId = it.id, corporationId = null, actingCharId = it.id) }
         CorporationDao.actingPairsForTracked(characters).forEach { (corpId, actingId) ->
-            totals += accumulate(since, characterId = null, corporationId = corpId, actingCharId = actingId)
+            totals += accumulate(since, until, characterId = null, corporationId = corpId, actingCharId = actingId)
         }
 
+        val elapsed = w.elapsedSeconds
+        val multiDay = (w.period.days ?: 0) > 1
+        val names =
+            totals.sells
+                .map { it.typeId }
+                .distinct()
+                .associateWith { StaticDataDao.getTypeName(it) ?: "#$it" }
         return StreamOverlayStats(
             tradesSession = totals.trades,
             profitSession = totals.profit,
-            relistsSession = StreamOverlaySession.relistsSinceStart(),
-            elapsedSeconds = Duration.between(StreamOverlaySession.startedAt, java.time.LocalDateTime.now()).seconds,
+            // Dated relist log, so any period counts them (logged from Nov 2026 on; older relists were never dated).
+            relistsSession = ActiveOrderDao.relistsBetween(w.since.toMillis(), w.until?.toMillis() ?: Long.MAX_VALUE).first,
+            elapsedSeconds = elapsed,
+            spanSeconds = w.spanSeconds,
+            periodLabel = periodLabel(w),
+            pnlLabel = stringBlocking(PNL_LABELS.getValue(w.period)),
+            // Long periods read better per day than per hour.
+            rateSeconds = if (multiDay) 86_400 else 3_600,
+            rateLabel = stringBlocking(if (multiDay) Res.string.so_per_day else Res.string.so_per_hour),
             sellOrdersCount = totals.sellOrders,
             buyOrdersCount = totals.buyOrders,
             iskInOrders = totals.iskInOrders,
@@ -202,7 +294,59 @@ object StreamOverlayServer {
             // background sweep — same number that drives the Orders tab's nav badge, just read
             // here instead of recomputed.
             beatenCount = MarketWatchService.beatenCount.value,
+            revenueSession = totals.sells.sumOf { it.sellPrice * it.qty },
+            winningTrades = totals.sells.count { it.profit > 0 },
+            recentSales =
+                totals.sells.sortedByDescending { it.date }.take(RECENT_SALES).map {
+                    OverlaySale(it.typeId, names.getValue(it.typeId), it.qty, it.sellPrice, it.profit, saleTime(it.date, multiDay))
+                },
+            topItems =
+                totals.sells
+                    .groupBy { it.typeId }
+                    .map { (typeId, sells) ->
+                        OverlayItem(typeId, names.getValue(typeId), sells.sumOf { it.qty }, sells.sumOf { it.profit })
+                    }.sortedByDescending { it.profit }
+                    .take(TOP_ITEMS),
+            profitSeries =
+                if (w.period == OverlayPeriod.SESSION) {
+                    StreamOverlaySession.recordProfit(elapsed, totals.profit)
+                } else {
+                    periodSeries(totals.sells, w, totals.profit)
+                },
         )
+    }
+
+    private fun LocalDateTime.toMillis() = atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+
+    // "21:42", or "03.11 21:42" when the period spans days.
+    private fun saleTime(
+        date: String,
+        withDay: Boolean,
+    ) = (if (withDay) date.substring(8, 10) + "." + date.substring(5, 7) + " " else "") + date.drop(11).take(5)
+
+    // Header text in place of the session clock: "Last 7 days" or "Day 3 of 30"; null = the clock.
+    private fun periodLabel(w: OverlayWindow): String? {
+        val days = w.period.days ?: return null
+        if (!w.fixed) return stringBlocking(LAST_LABELS.getValue(w.period))
+        val day = (w.elapsedSeconds / 86_400 + 1).coerceAtMost(days)
+        return stringBlocking(Res.string.so_day_of, day.toString(), days.toString())
+    }
+
+    /** Cumulative confirmed profit through the window, ending on [total] (which may include estimates). */
+    internal fun periodSeries(
+        sells: List<CostBasisService.RealizedSellTx>,
+        w: OverlayWindow,
+        total: Double,
+    ): List<OverlayPoint> {
+        var sum = 0.0
+        val points =
+            listOf(OverlayPoint(0, 0.0)) +
+                sells.sortedBy { it.date }.map {
+                    sum += it.profit
+                    val at = LocalDateTime.parse(it.date, KEY)
+                    OverlayPoint(Duration.between(w.since, at).seconds.coerceIn(0, w.spanSeconds), sum)
+                }
+        return if (points.last().v == total) points else points + OverlayPoint(w.elapsedSeconds, total)
     }
 
     private fun sendResponse(

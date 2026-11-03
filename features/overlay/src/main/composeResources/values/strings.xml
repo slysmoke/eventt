@@ -1,15 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="so_session">Session</string>
     <string name="so_trades">Trades</string>
-    <string name="so_profit">Profit</string>
     <string name="so_relists">Relists</string>
-    <string name="so_sell_orders">Sell Orders</string>
-    <string name="so_buy_orders">Buy Orders</string>
+    <string name="so_sell_orders">Sell orders</string>
+    <string name="so_buy_orders">Buy orders</string>
     <string name="so_beaten">Beaten</string>
-    <string name="so_isk_in_orders">ISK in Orders</string>
-    <string name="so_expected_profit">Expected Profit</string>
-    <string name="so_relist_fees">Relist Fees</string>
+    <string name="so_isk_in_orders">In orders</string>
+    <string name="so_expected_profit">Expected</string>
+    <string name="so_relist_fees">Relist fees</string>
     <string name="overlay_window_title">EVE Trade Overlay</string>
     <string name="global_market">Global market</string>
     <string name="unknown_type_id">Unknown (%1$s)</string>
@@ -78,4 +76,22 @@
     <string name="tip_manual_cost">What one unit cost you, all-in (include the broker fee if you bought with a buy order).</string>
     <string name="tc_fees_from_char">Fees from the selected character (Settings › Character Fees): broker %1$s, sales tax %2$s.</string>
     <string name="tc_auto_copy">AUTO-COPY</string>
+    <string name="so_live">LIVE</string>
+    <string name="so_title">EVE Trading</string>
+    <string name="so_pnl">Session P&amp;L</string>
+    <string name="so_per_hour">/ hour</string>
+    <string name="so_win_rate">Win rate</string>
+    <string name="so_revenue">Revenue</string>
+    <string name="so_recent_sales">Recent sales</string>
+    <string name="so_waiting">Waiting for the first sale…</string>
+    <string name="so_top_items">Top items</string>
+    <string name="so_order_book">Order book</string>
+    <string name="so_per_day">/ day</string>
+    <string name="so_pnl_24h">P&amp;L · 24 hours</string>
+    <string name="so_pnl_7d">P&amp;L · 7 days</string>
+    <string name="so_pnl_30d">P&amp;L · 30 days</string>
+    <string name="so_last_24h">Last 24 hours</string>
+    <string name="so_last_7d">Last 7 days</string>
+    <string name="so_last_30d">Last 30 days</string>
+    <string name="so_day_of">Day %1$s of %2$s</string>
 </resources>

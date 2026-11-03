@@ -1,15 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="so_session">Сессия</string>
     <string name="so_trades">Сделки</string>
-    <string name="so_profit">Прибыль</string>
-    <string name="so_relists">Перевыставления</string>
-    <string name="so_sell_orders">Ордера на продажу</string>
-    <string name="so_buy_orders">Ордера на покупку</string>
+    <string name="so_relists">Перевыст.</string>
+    <string name="so_sell_orders">На продажу</string>
+    <string name="so_buy_orders">На покупку</string>
     <string name="so_beaten">Перебиты</string>
-    <string name="so_isk_in_orders">ISK в ордерах</string>
-    <string name="so_expected_profit">Ожидаемая прибыль</string>
-    <string name="so_relist_fees">Комиссии за перевыставление</string>
+    <string name="so_isk_in_orders">В ордерах</string>
+    <string name="so_expected_profit">Ожидается</string>
+    <string name="so_relist_fees">Комиссии</string>
     <string name="overlay_window_title">Торговый оверлей EVE</string>
     <string name="global_market">Глобальный рынок</string>
     <string name="unknown_type_id">Неизвестно (%1$s)</string>
@@ -78,4 +76,22 @@
     <string name="tip_manual_cost">Во сколько вам обошлась одна единица, со всеми расходами (добавьте брокерскую комиссию, если покупали через ордер).</string>
     <string name="tc_fees_from_char">Комиссии выбранного персонажа (Настройки › Комиссии персонажа): брокер %1$s, налог с продаж %2$s.</string>
     <string name="tc_auto_copy">АВТОКОПИЯ</string>
+    <string name="so_live">LIVE</string>
+    <string name="so_title">Торговля в EVE</string>
+    <string name="so_pnl">Прибыль за сессию</string>
+    <string name="so_per_hour">/ час</string>
+    <string name="so_win_rate">В плюс</string>
+    <string name="so_revenue">Выручка</string>
+    <string name="so_recent_sales">Последние продажи</string>
+    <string name="so_waiting">Ждём первую продажу…</string>
+    <string name="so_top_items">Топ предметов</string>
+    <string name="so_order_book">Ордера</string>
+    <string name="so_per_day">/ день</string>
+    <string name="so_pnl_24h">Прибыль за 24 часа</string>
+    <string name="so_pnl_7d">Прибыль за 7 дней</string>
+    <string name="so_pnl_30d">Прибыль за 30 дней</string>
+    <string name="so_last_24h">Последние 24 часа</string>
+    <string name="so_last_7d">Последние 7 дней</string>
+    <string name="so_last_30d">Последние 30 дней</string>
+    <string name="so_day_of">День %1$s из %2$s</string>
 </resources>

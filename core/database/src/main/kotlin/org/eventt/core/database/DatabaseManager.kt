@@ -544,6 +544,17 @@ object DatabaseManager {
                     relist_fees_paid REAL DEFAULT 0.0
                 )
                 """.trimIndent(),
+                // One row per detected relist (ActiveOrderDao.bumpRelistStats), so relists can be
+                // counted over any time range; active_orders only keeps a running total per order.
+                """
+                CREATE TABLE IF NOT EXISTS relist_events (
+                    order_id INTEGER NOT NULL,
+                    character_id INTEGER NOT NULL,
+                    at INTEGER NOT NULL,
+                    fee REAL NOT NULL
+                )
+                """.trimIndent(),
+                "CREATE INDEX IF NOT EXISTS idx_relist_events_at ON relist_events(at)",
                 // Currently active orders — a full snapshot per character/corp, replaced wholesale
                 // on every ESI/Marketlogs-file refresh (not append-only like order_history), so the
                 // Orders screen has something to show instantly on startup before the next live fetch.

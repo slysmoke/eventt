@@ -2,6 +2,7 @@ package org.eventt.features.overlay
 
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import org.eventt.core.database.DatabaseManager
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
@@ -41,6 +42,7 @@ class StreamOverlayServerTest {
         val response = get("/")
         response.statusCode() shouldBe 200
         response.body() shouldContain "background: transparent"
+        response.body() shouldNotContain "{{"
         response.body() shouldContain "/api/stats"
     }
 
@@ -57,5 +59,14 @@ class StreamOverlayServerTest {
         response.body() shouldContain "\"expectedProfit\":0.0"
         response.body() shouldContain "\"relistFeesPaid\":0.0"
         response.body() shouldContain "\"beatenCount\":0"
+        response.body() shouldContain "\"recentSales\":[]"
+        response.body() shouldContain "\"profitSeries\":[{\"t\":0,\"v\":0.0}]"
+    }
+
+    @Test
+    fun `the OBS size follows the shown sections`() {
+        // Measured in Chromium: the full panel is 838px tall plus a 14px margin on each side.
+        StreamOverlayPage.obsSize(emptySet()) shouldBe (428 to 866)
+        StreamOverlayPage.obsSize(setOf("chart", "sales", "top", "orders")) shouldBe (428 to 230)
     }
 }
