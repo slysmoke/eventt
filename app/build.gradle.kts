@@ -130,7 +130,20 @@ compose.desktop {
             description = "Desktop trading toolkit for EVE Online"
             vendor = "EVE Night Trade Tools"
 
-            modules("java.sql", "java.naming", "jdk.httpserver")
+            // The jlink'd runtime only has these: a class from any other JDK module crashes the
+            // installed app (never `gradlew run`, which uses the full JDK). java.net.http was
+            // missing and took down the Leaderboard's giveaway fetch (#53). Re-check with
+            // `./gradlew :app:suggestRuntimeModules` after adding a JDK API.
+            modules(
+                "java.instrument",
+                "java.naming",
+                "java.net.http",
+                "java.prefs",
+                "java.sql",
+                "jdk.httpserver",
+                "jdk.security.auth",
+                "jdk.unsupported",
+            )
 
             windows {
                 // Installs to %LOCALAPPDATA% instead of Program Files so the app can
