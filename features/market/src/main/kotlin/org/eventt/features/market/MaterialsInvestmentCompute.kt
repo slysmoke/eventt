@@ -46,7 +46,6 @@ internal data class MaterialCandidate(
     val trendPct: Double,
     val volatilityPct: Double,
     val dailyVolume: Long,
-    val spikeDetected: Boolean,
     // Your own current holding in this item, or null when no character is selected. Anchors the
     // buy ladder to your real cost basis instead of resetting to "current price" on every re-scan,
     // and drives the sell target, To Buy and the BUY/WAIT/SELL status.
@@ -245,9 +244,8 @@ internal fun computeMaterialCandidate(
     // 0 = no floor. A flat item rarely dips far enough, or rebounds enough, to pay a round trip's fees.
     minVolatilityPct: Double = 0.0,
     historySource: String,
-    spikeFilter: SpikeFilter,
-    spikePriceMultiplier: Double,
-    spikeVolumeMultiplier: Double,
+    // Don't start buying while the latest VWAP z-score (see latestVwapZ) is above this. Null = off.
+    maxZ: Double? = null,
     excludeStructuralBreak: Boolean = true,
     // Pre-fetched and grouped by typeId once per Analyze run (one wallet-transactions read for the
     // whole scan), not looked up per-item -- see the Analyze coroutine in MaterialsInvestmentTab.
@@ -313,9 +311,7 @@ internal fun computeMaterialCandidate(
     val dailyVolume = medianDailyVolume(fullHistory, lookbackDays)
     if (!holding && dailyVolume < minDailyVol) return null
 
-    val spikeDetected = detectPriceSpike(fullHistory, spikePriceMultiplier, spikeVolumeMultiplier, lookbackDays, currentPrice)
-    if (!holding && spikeFilter == SpikeFilter.EXCLUDE && spikeDetected) return null
-    if (!holding && spikeFilter == SpikeFilter.ONLY && !spikeDetected) return null
+    if (!holding && maxZ != null && (latestVwapZ(fullHistory) ?: maxZ) > maxZ) return null
 
     val vsAvgPct = (currentPrice - avgPrice) / avgPrice * 100.0
     // Not currently cheap enough vs its own history.
@@ -345,7 +341,6 @@ internal fun computeMaterialCandidate(
         trendPct = compute7dChange(fullHistory),
         volatilityPct = volatilityPct,
         dailyVolume = dailyVolume,
-        spikeDetected = spikeDetected,
         position = position,
         backtest = backtestDipStrategy(fullHistory, lookbackDays, minDiscountPct, fees, takeProfitPct),
     )
@@ -448,6 +443,21 @@ internal data class LadderLevel(
 // BUYING / ON_SALE: you already have orders working on that side -- nothing to do but wait for fills.
 internal enum class MaterialAction { BUY, BUYING, WAIT, SELL, ON_SALE }
 
+// Why a held position is WAIT rather than BUY, most fundamental blocker first.
+internal enum class WaitReason {
+    // Price isn't below its own market average, so it gets no budget share at all.
+    NO_DISCOUNT,
+
+    // Discounted, but ranked outside the top Max items by opportunity.
+    NOT_RANKED,
+
+    // Held cost + open buy orders already fill its budget share.
+    FULL,
+
+    // Share left, but the bid isn't a ladder step under your average cost yet.
+    NOT_DEEP_ENOUGH,
+}
+
 // Take-profit plan for a held position: sell the whole stack in one order (EVE can't import a
 // multi-rung sell list, so a split ladder only meant more manual order edits).
 internal data class SellTarget(
@@ -471,6 +481,11 @@ internal data class AllocatedMaterial(
     val ladder: List<LadderLevel>,
     val sellTarget: SellTarget?,
     val action: MaterialAction?,
+    val waitReason: WaitReason? = null,
+    // Held cost (incl. buy broker fee) plus ISK in open buy orders -- for the WAIT explanation.
+    val committedIsk: Double = 0.0,
+    // Bid at or below which a held position tops up again (avg cost minus one ladder step).
+    val topUpPrice: Double? = null,
 )
 
 /**
@@ -551,7 +566,12 @@ internal fun allocateBudget(
                 0.0
             }
         val inBuyOrders = position?.buyOrderIsk ?: 0.0
-        val toBuy = (allocated - heldCost - inBuyOrders).coerceAtLeast(0.0)
+        // Only average down, and only once price is a full ladder step under the cost basis --
+        // topping up near or above it barely moves (or raises) the average.
+        val topUpPrice = position?.avgBuyPrice?.takeIf { position.qtyHeld > 0 }?.let { it * (1.0 - ladderStepPct / 100.0) }
+        val notDeepEnough = topUpPrice != null && c.currentPrice > topUpPrice
+        val room = (allocated - heldCost - inBuyOrders).coerceAtLeast(0.0)
+        val toBuy = if (notDeepEnough) 0.0 else room
         val unlisted = position?.let { it.qtyHeld - it.listedQty } ?: 0L
         val sell = buildSellTarget(c, fees, takeProfitPct)
         val action =
@@ -570,6 +590,14 @@ internal fun allocateBudget(
                 else -> null
             }
         if (action == null) return@mapNotNull null
+        val waitReason =
+            when {
+                action != MaterialAction.WAIT -> null
+                allocated <= 0.0 && c.vsAvgPct >= 0.0 -> WaitReason.NO_DISCOUNT
+                allocated <= 0.0 -> WaitReason.NOT_RANKED
+                room <= 1.0 -> WaitReason.FULL
+                else -> WaitReason.NOT_DEEP_ENOUGH
+            }
         AllocatedMaterial(
             candidate = c,
             allocatedIsk = allocated,
@@ -578,6 +606,9 @@ internal fun allocateBudget(
             ladder = if (action == MaterialAction.BUY) buildLadder(c, toBuy, ladderLevels, ladderStepPct, fees) else emptyList(),
             sellTarget = sell,
             action = action,
+            waitReason = waitReason,
+            committedIsk = heldCost + inBuyOrders,
+            topUpPrice = topUpPrice,
         )
     }
 }

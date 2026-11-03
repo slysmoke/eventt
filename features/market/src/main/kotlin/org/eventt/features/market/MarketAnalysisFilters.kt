@@ -662,57 +662,6 @@ internal fun TradeTypeChip(
     }
 }
 
-// ─── Price-spike filter chip (tri-state: any / exclude / only) ────────────
-
-@Composable
-internal fun SpikeFilterChip(
-    selected: SpikeFilter,
-    onSelect: (SpikeFilter) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    FilterControl(stringResource(Res.string.price_spike), tooltip = stringResource(Res.string.tip_price_spike)) {
-        Box {
-            ChipSurface(onClick = { expanded = !expanded }, width = 150.dp) {
-                Text(
-                    stringResource(selected.label),
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                Icon(
-                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    null,
-                    Modifier.size(14.dp),
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                )
-            }
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-                modifier = Modifier.width(180.dp),
-            ) {
-                SpikeFilter.entries.forEach { f ->
-                    DropdownMenuItem(
-                        text = { Text(stringResource(f.label), style = MaterialTheme.typography.bodySmall) },
-                        onClick = {
-                            onSelect(f)
-                            expanded = false
-                        },
-                        leadingIcon =
-                            if (f == selected) {
-                                { Icon(Icons.Default.Check, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary) }
-                            } else {
-                                null
-                            },
-                    )
-                }
-            }
-        }
-    }
-}
-
 // ─── Compact number field ─────────────────────────────────────────────────
 
 @Composable

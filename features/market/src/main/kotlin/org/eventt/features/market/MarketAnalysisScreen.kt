@@ -44,9 +44,6 @@ data class StationOpportunity(
     val buyOrderCount: Int,
     val estimatedDailyProfit: Double,
     val priceChange7d: Double = Double.NaN,
-    // True when the item's price history shows a sharp spike (e.g. a one-off buyout), settled
-    // or still ongoing — see detectPriceSpike.
-    val spikeDetected: Boolean = false,
 )
 
 data class RegionOpportunity(
@@ -89,9 +86,6 @@ data class RegionOpportunity(
     // not just the best ask). See compute7dAvgDeviation.
     val buyVsAvg7dPct: Double = Double.NaN,
     val sellVsAvg7dPct: Double = Double.NaN,
-    // True when either region's price history shows a sharp spike, settled or still ongoing —
-    // see detectPriceSpike.
-    val spikeDetected: Boolean = false,
 )
 
 // ─── Sort / trade-type enums ───────────────────────────────────────────────
@@ -129,16 +123,6 @@ internal enum class InterRegionTradeType(
     // don't care about capturing margin at the source station, just about a cheap, low-competition
     // fill. Sell leg is a placed sell order at the destination, same as BUY_TO_SELL.
     SAFE_BUY_TO_SELL(Res.string.tt_safe_buy_to_sell),
-}
-
-// Tri-state: don't care either way, cut items whose recent price history shows a spike, or
-// show only those — see detectPriceSpike for what qualifies.
-internal enum class SpikeFilter(
-    val label: StringResource,
-) {
-    ANY(Res.string.spike_any),
-    EXCLUDE(Res.string.spike_exclude),
-    ONLY(Res.string.spike_only),
 }
 
 // The effective daily volume for a station opportunity once the volume modifier is applied —
@@ -299,10 +283,7 @@ internal object S {
     const val ST_VOL_CAP_PCT = "analysis.s.volCapPct"
     const val ST_COPY_VOLUME = "analysis.s.copyVolume"
     const val ST_SKIP_EXISTING = "analysis.s.skipExisting"
-    const val ST_SPIKE_FILTER = "analysis.s.spikeFilter"
-    const val ST_SPIKE_PRICE_MULTIPLIER = "analysis.s.spikePriceMultiplier"
-    const val ST_SPIKE_VOLUME_MULTIPLIER = "analysis.s.spikeVolumeMultiplier"
-    const val ST_SPIKE_WINDOW_DAYS = "analysis.s.spikeWindowDays"
+    const val ST_MAX_Z = "analysis.s.maxZ"
     const val ST_USE_ADAM4EVE = "analysis.s.useAdam4Eve"
 
     // Inter-region keys
@@ -324,10 +305,7 @@ internal object S {
     const val IR_VOL_CAP_PCT = "analysis.r.volCapPct"
     const val IR_COPY_VOLUME = "analysis.r.copyVolume"
     const val IR_SKIP_EXISTING = "analysis.r.skipExisting"
-    const val IR_SPIKE_FILTER = "analysis.r.spikeFilter"
-    const val IR_SPIKE_PRICE_MULTIPLIER = "analysis.r.spikePriceMultiplier"
-    const val IR_SPIKE_VOLUME_MULTIPLIER = "analysis.r.spikeVolumeMultiplier"
-    const val IR_SPIKE_WINDOW_DAYS = "analysis.r.spikeWindowDays"
+    const val IR_MAX_Z = "analysis.r.maxZ"
     const val IR_PRESETS = "analysis.r.presets"
     const val IR_USE_ADAM4EVE = "analysis.r.useAdam4Eve"
 
@@ -342,9 +320,7 @@ internal object S {
     const val MI_MIN_DISCOUNT = "analysis.m.minDiscount"
     const val MI_MAX_VOLATILITY = "analysis.m.maxVolatility"
     const val MI_MIN_VOLATILITY = "analysis.m.minVolatility"
-    const val MI_SPIKE_FILTER = "analysis.m.spikeFilter"
-    const val MI_SPIKE_PRICE_MULTIPLIER = "analysis.m.spikePriceMultiplier"
-    const val MI_SPIKE_VOLUME_MULTIPLIER = "analysis.m.spikeVolumeMultiplier"
+    const val MI_MAX_Z = "analysis.m.maxZ"
     const val MI_TOTAL_BUDGET = "analysis.m.totalBudget"
     const val MI_MAX_ITEMS = "analysis.m.maxItems"
     const val MI_MAX_PER_ITEM_PCT = "analysis.m.maxPerItemPct"

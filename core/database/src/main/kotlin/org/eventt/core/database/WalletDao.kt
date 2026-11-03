@@ -4,6 +4,9 @@ import org.eventt.core.model.DailyWalletEntry
 import org.eventt.core.model.WalletSummary
 import org.eventt.core.model.utcToLocalDateTime
 
+// location_name marking a hand-booked purchase (negative synthetic id, so no broker fee/tax in FIFO).
+const val MANUAL_LOCATION_NAME = "Manual"
+
 object WalletDao {
     // Both transactions and journal are keyed by ESI's own id (transaction_id/entry_id), so a
     // personal sync re-inserting a row that's already attributed to a corporation would silently
@@ -164,6 +167,57 @@ object WalletDao {
                 stmt.executeQuery().use { rs -> if (rs.next()) rs.getString("date") else null }
             }
         }
+
+    /** A purchase booked by hand (Orders › Inventory › Add purchase) — bought outside the market, e.g. for PLEX in the NES. */
+    data class ManualPurchase(
+        val transactionId: Long,
+        val date: String,
+        val typeName: String,
+        val quantity: Int,
+        val unitPrice: Double,
+    )
+
+    fun getManualPurchases(
+        characterId: Int?,
+        corporationId: Int?,
+    ): List<ManualPurchase> =
+        DatabaseManager.transaction {
+            val where = buildWhereClause(characterId, corporationId)
+            val cond = "location_name = ? AND transaction_id < 0"
+            prepareStatement(
+                "SELECT transaction_id, date, type_name, quantity, unit_price FROM transactions " +
+                    (if (where.sql.isEmpty()) "WHERE $cond" else "${where.sql} AND $cond") + " ORDER BY date DESC",
+            ).use { stmt ->
+                where.params.forEachIndexed { i, param -> stmt.setObject(i + 1, param) }
+                stmt.setString(where.params.size + 1, MANUAL_LOCATION_NAME)
+                stmt.executeQuery().use { rs ->
+                    buildList {
+                        while (rs.next()) {
+                            add(
+                                ManualPurchase(
+                                    rs.getLong("transaction_id"),
+                                    rs.getString("date"),
+                                    rs.getString("type_name"),
+                                    rs.getInt("quantity"),
+                                    rs.getDouble("unit_price"),
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+    /** Deletes a manual purchase only — never a real ESI or P2P transaction. */
+    fun deleteManualPurchase(transactionId: Long) {
+        DatabaseManager.transaction {
+            prepareStatement("DELETE FROM transactions WHERE transaction_id = ? AND transaction_id < 0 AND location_name = ?").use { stmt ->
+                stmt.setLong(1, transactionId)
+                stmt.setString(2, MANUAL_LOCATION_NAME)
+                stmt.executeUpdate()
+            }
+        }
+    }
 
     /** Who a transaction (P2P-synthetic or real) currently counts against — null if it's attributed to neither. */
     fun getAttribution(transactionId: Long): TransactionAttribution? =

@@ -189,7 +189,6 @@ class AnalysisScreenTest {
             trendPct = -2.1,
             volatilityPct = 6.4,
             dailyVolume = 900_000,
-            spikeDetected = id == 2,
             position = held,
             backtest = BacktestResult(14, 3, 11.0, -6.0),
         ),

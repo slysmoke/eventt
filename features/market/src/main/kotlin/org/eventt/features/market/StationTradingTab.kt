@@ -83,10 +83,7 @@ internal fun StationTradingTab(
     var volCapPct by remember { mutableStateOf("10") }
     var copyVolumeEnabled by remember { mutableStateOf(true) }
     var skipExistingOrders by remember { mutableStateOf(false) }
-    var spikeFilter by remember { mutableStateOf(SpikeFilter.ANY) }
-    var spikePriceMultiplier by remember { mutableStateOf("1.8") }
-    var spikeVolumeMultiplier by remember { mutableStateOf("5") }
-    var spikeWindowDays by remember { mutableStateOf("7") }
+    var maxZ by remember { mutableStateOf("") }
     var useAdam4Eve by remember { mutableStateOf(false) }
     var histSourceIsEsi by remember { mutableStateOf(false) }
     var detailTypeId by remember { mutableStateOf<Int?>(null) }
@@ -109,10 +106,7 @@ internal fun StationTradingTab(
             S.get(S.ST_VOL_CAP_PCT)?.let { volCapPct = it }
             S.get(S.ST_COPY_VOLUME)?.let { copyVolumeEnabled = it == "true" }
             S.get(S.ST_SKIP_EXISTING)?.let { skipExistingOrders = it == "true" }
-            S.get(S.ST_SPIKE_FILTER)?.let { name -> SpikeFilter.entries.find { it.name == name }?.let { spikeFilter = it } }
-            S.get(S.ST_SPIKE_PRICE_MULTIPLIER)?.let { spikePriceMultiplier = it }
-            S.get(S.ST_SPIKE_VOLUME_MULTIPLIER)?.let { spikeVolumeMultiplier = it }
-            S.get(S.ST_SPIKE_WINDOW_DAYS)?.let { spikeWindowDays = it }
+            S.get(S.ST_MAX_Z)?.let { maxZ = it }
             S.get(S.ST_USE_ADAM4EVE)?.let { useAdam4Eve = it == "true" }
             if (charId != null) {
                 brokerFeePct = StaticDataDao.getCharBrokersFee(charId)
@@ -330,40 +324,14 @@ internal fun StationTradingTab(
                             modifier = Modifier.size(24.dp),
                         )
                     }
-                    SpikeFilterChip(spikeFilter) {
-                        spikeFilter = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_SPIKE_FILTER, it.name) } }
-                    }
                     ParamField(
-                        stringResource(Res.string.price_mult),
-                        spikePriceMultiplier,
+                        stringResource(Res.string.max_z),
+                        maxZ,
                         50.dp,
-                        enabled = spikeFilter != SpikeFilter.ANY,
-                        tooltip = stringResource(Res.string.tip_price_mult),
+                        tooltip = stringResource(Res.string.tip_max_z),
                     ) {
-                        spikePriceMultiplier = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_SPIKE_PRICE_MULTIPLIER, it) } }
-                    }
-                    ParamField(
-                        stringResource(Res.string.volume_mult),
-                        spikeVolumeMultiplier,
-                        50.dp,
-                        enabled =
-                            spikeFilter != SpikeFilter.ANY,
-                        tooltip = stringResource(Res.string.tip_volume_mult),
-                    ) {
-                        spikeVolumeMultiplier = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_SPIKE_VOLUME_MULTIPLIER, it) } }
-                    }
-                    ParamField(
-                        stringResource(Res.string.spike_days),
-                        spikeWindowDays,
-                        60.dp,
-                        enabled = spikeFilter != SpikeFilter.ANY,
-                        tooltip = stringResource(Res.string.tip_spike_days),
-                    ) {
-                        spikeWindowDays = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_SPIKE_WINDOW_DAYS, it) } }
+                        maxZ = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.ST_MAX_Z, it) } }
                     }
                     FilterDivider()
                     // Toggles whether the hotkey's second press copies the suggested volume, or just
@@ -459,10 +427,7 @@ internal fun StationTradingTab(
                                         val brokerFeePctD = brokerFeePct
                                         val salesTaxPctD = salesTaxPct
                                         val stationIdSnap = stationId
-                                        val spikeFilterSnap = spikeFilter
-                                        val spikePriceMultiplierSnap = spikePriceMultiplier.toDoubleOrNull() ?: 1.8
-                                        val spikeVolumeMultiplierSnap = spikeVolumeMultiplier.toDoubleOrNull() ?: 5.0
-                                        val spikeWindowDaysSnap = spikeWindowDays.toIntOrNull() ?: 7
+                                        val maxZSnap = maxZ.toDoubleOrNull()
                                         val histSrc = withContext(Dispatchers.IO) { EveRefService.getSelectedSource() }
                                         val useAdam4EveSnap = useAdam4Eve
 
@@ -570,10 +535,7 @@ internal fun StationTradingTab(
                                                                                 emptyMap()
                                                                             },
                                                                         locationSystemCache = locationSystemCache,
-                                                                        spikeFilter = spikeFilterSnap,
-                                                                        spikePriceMultiplier = spikePriceMultiplierSnap,
-                                                                        spikeVolumeMultiplier = spikeVolumeMultiplierSnap,
-                                                                        spikeWindowDays = spikeWindowDaysSnap,
+                                                                        maxZ = maxZSnap,
                                                                         adam4EveFlow = adam4EveFlow[typeId],
                                                                     )
                                                                 // Protect shared list mutation on IO, then update Compose state on Main

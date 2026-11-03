@@ -81,7 +81,7 @@ object EveRefService {
 
                 setState(0.02f, stringBlocking(Res.string.er_cleaning))
                 EveRefDao.deleteBeforeDate(cutoffDate.toString())
-                MarketDao.deleteEveRefBeforeDate(cutoffDate.toString())
+                MarketDao.deleteHistoryBeforeDate(cutoffDate.toString(), source = "everef")
 
                 setState(0.05f, stringBlocking(Res.string.er_fetching_index))
                 val filesToDownload = findMissingFiles(cutoffDate, endDate)

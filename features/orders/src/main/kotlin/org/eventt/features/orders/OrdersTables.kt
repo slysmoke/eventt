@@ -142,7 +142,10 @@ internal fun computeSellMetrics(
     val netSellPrice = order.price * taxConfig.sellMultiplier
     // Whole remaining position, not per-unit: profit/margin should reflect what this order
     // actually nets after the relist fees already sunk into it, not just its current listed price.
-    val totalProfit = costBasis?.let { order.volumeRemaining * (netSellPrice - it) - order.relistFeesPaid }
+    // Only the remaining units' share of the relist fees: on a mostly-filled order the full sum
+    // was paid across volumes long since sold, and charging it all to the tail reads as a loss.
+    val sunkFees = if (order.volumeTotal > 0) order.relistFeesPaid * order.volumeRemaining / order.volumeTotal else 0.0
+    val totalProfit = costBasis?.let { order.volumeRemaining * (netSellPrice - it) - sunkFees }
     val marginPct =
         costBasis?.let { cb ->
             totalProfit?.let { p -> if (cb > 0 && order.volumeRemaining > 0) p / (cb * order.volumeRemaining) * 100 else null }
@@ -165,7 +168,7 @@ internal fun computeSellMetrics(
                             relistDiscountPct = relistDiscountPct,
                         )
                     val bestProfit =
-                        order.volumeRemaining * (bestSell * taxConfig.sellMultiplier - cb) - order.relistFeesPaid - modFee
+                        order.volumeRemaining * (bestSell * taxConfig.sellMultiplier - cb) - sunkFees - modFee
                     bestProfit / (cb * order.volumeRemaining) * 100
                 } else {
                     null
@@ -180,7 +183,7 @@ internal fun computeSellMetrics(
             costBasis = costBasis,
             brokerFeePct = taxConfig.brokerFeePct,
             relistCount = order.relistCount,
-            relistFeesPaid = order.relistFeesPaid,
+            relistFeesPaid = sunkFees,
             relistDiscountPct = relistDiscountPct,
         )
     val isBeaten = comparison?.bestSell != null && comparison.bestSell < order.price
@@ -742,6 +745,7 @@ internal fun InventoryTable(
     var writeOffDefaultQty by remember { mutableStateOf(0) }
     var showHistory by remember { mutableStateOf(false) }
     var showReconcile by remember { mutableStateOf(false) }
+    var showAddPurchase by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     fun toggleSort(col: InventorySortCol) {
@@ -809,6 +813,11 @@ internal fun InventoryTable(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row {
+                TextButton(
+                    // Combined view has no single owner to book the purchase against.
+                    enabled = characterId != null || corporationId != null,
+                    onClick = { showAddPurchase = true },
+                ) { Text(stringResource(Res.string.add_purchase)) }
                 TextButton(
                     enabled = actingCharId != null,
                     onClick = { showReconcile = true },
@@ -936,6 +945,10 @@ internal fun InventoryTable(
             onDismiss = { showHistory = false },
             onUndone = onAdjusted,
         )
+    }
+
+    if (showAddPurchase) {
+        ManualPurchaseDialog(characterId, corporationId, onDismiss = { showAddPurchase = false }, onChanged = onAdjusted)
     }
 
     if (showReconcile) {

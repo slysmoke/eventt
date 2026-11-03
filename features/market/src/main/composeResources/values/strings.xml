@@ -32,15 +32,11 @@
     <string name="search_station">Search station…</string>
     <string name="no_stations_region">No stations in this region</string>
     <string name="trade_type">Trade Type</string>
-    <string name="price_spike">Price Spike</string>
     <string name="tt_sell_to_buy">Sell → Buy (instant)</string>
     <string name="tt_sell_to_sell">Sell → Sell Order</string>
     <string name="tt_buy_to_buy">Buy Order → Buy</string>
     <string name="tt_buy_to_sell">Buy → Sell (orders)</string>
     <string name="tt_safe_buy_to_sell">Safe Buy → Sell (orders)</string>
-    <string name="spike_any">Any</string>
-    <string name="spike_exclude">Exclude spikes</string>
-    <string name="spike_only">Only spikes</string>
     <string name="tab_station_trading">Station Trading</string>
     <string name="tab_inter_region">Inter-Region</string>
     <string name="tab_long_term">Long-Term Investment (WIP)</string>
@@ -53,9 +49,6 @@
     <string name="min_margin_pct">Min Margin %</string>
     <string name="skip_owned">Skip Owned Items</string>
     <string name="a4e_flow">Adam4EVE Flow</string>
-    <string name="price_mult">Price ×</string>
-    <string name="volume_mult">Volume ×</string>
-    <string name="spike_days">Spike Days</string>
     <string name="copy_vol">Copy Vol</string>
     <string name="stop">Stop</string>
     <string name="analyzing">Analyzing…</string>
@@ -220,9 +213,6 @@
     <string name="max_volatility_pct">Max Volatility %</string>
     <string name="mi_tip_1y_lows">Skip items whose current price is at or below their own lowest recorded price in roughly the last year. A break to a new multi-month low looks like structural decline (e.g. made obsolete by a balance patch), not a routine dip worth feeding the buy ladder.</string>
     <string name="exclude_1y_lows">Exclude 1y Lows</string>
-    <string name="mi_tip_spike">Filters out items whose recent price/volume history shows a sharp one-off spike (e.g. a buyout or wash trading).</string>
-    <string name="mi_tip_price_mult">A day's price counts as a spike if it's at least this many times the surrounding baseline.</string>
-    <string name="mi_tip_vol_mult">A day's trade volume counts as a spike if it's at least this many times the surrounding baseline.</string>
     <string name="mi_tip_budget">Total ISK you want invested across these items, including what you already hold -- a target exposure, not new money. Split across the picked candidates below, weighted by discount depth × daily traded ISK value; each item's To Buy is its share minus what you already hold.</string>
     <string name="budget_isk">Budget (ISK)</string>
     <string name="mi_tip_max_items">How many of the top-ranked candidates get a share of the budget -- ranked by real ISK opportunity (discount % × daily traded value), not by raw discount % alone, so a deep discount on a thin/illiquid item doesn't crowd out a shallower discount on a liquid, high-value one.</string>
@@ -284,8 +274,6 @@
     <string name="act_sell">Sell: selling at the lowest ask already nets your cost (incl. buy broker fee) + take-profit, after sales tax and broker fee.</string>
     <string name="act_buying">Buying: your buy orders already cover the rest of this item's allocation.</string>
     <string name="act_on_sale">On sale: your stock is listed in sell orders -- waiting for fills.</string>
-    <string name="mi_tip_spike_row">Recent price or volume spike detected -- a sharp one-off jump (e.g. a single large buyout, or wash trading) rather than an organic move. Doesn't exclude the item by itself (Spike Filter is set to "Any"); check the price chart (chart icon next to the name) before trusting the ladder on this one.</string>
-    <string name="spike_detected">Recent price spike detected</string>
     <string name="mi_tip_row_alerts">Create price alerts (Alerts tab) for this item: remaining buy-ladder rungs (top buy order falls to the rung) and, for a held position, the sell target (lowest ask rises to it). Skips levels already crossed and alerts that already exist.</string>
     <string name="create_alerts_row">Create alerts for this item's buy ladder</string>
     <string name="mi_tip_ladder">Target price for a standing buy order → ISK to spend at that rung, broker fee included (the rung's quantity leaves room for it). * = already at/above the current top bid, so it's actionable right now rather than a future target.</string>
@@ -325,9 +313,6 @@
     <string name="tip_vol_pct">When checked, scales the daily volume by this % — e.g. 20 if you expect to get about a fifth of the market. Affects Est. Daily and the copied quantity.</string>
     <string name="tip_skip_owned">Hide items you already have active orders for.</string>
     <string name="tip_a4e_flow">Cap volume by real per-station buy/sell fills from Adam4EVE instead of trusting region-wide history. Uses a third-party service.</string>
-    <string name="tip_price_mult">A day counts as a price spike if its price is at least this many times the surrounding baseline.</string>
-    <string name="tip_volume_mult">A day counts as a volume spike if its traded volume is at least this many times the surrounding baseline.</string>
-    <string name="tip_spike_days">How many recent days of history are checked for spikes.</string>
     <string name="tip_copy_vol">Whether the hotkey's second press copies the suggested quantity, or just moves to the next item.</string>
     <string name="tip_max_margin">When checked, the assumed sell price is capped at buy price + this %, so a thin or unreliable destination market can't inflate the profit.</string>
     <string name="tip_isk_m3">Hauling cost per m³ of cargo, used to price shipping.</string>
@@ -338,7 +323,6 @@
     <string name="tip_presets">Saved buy/sell region + station routes — load one to switch quickly.</string>
     <string name="tip_spread">Gap between the best sell and best buy price, as % of the sell price. A wide spread leaves room for station trading.</string>
     <string name="tip_trade_type">How each leg is traded. "Sell" = take the lowest sell order (instant buy); "Buy" = hit the highest buy order (instant sell); "order" = place your own order and wait. Safe Buy → Sell prices your buy order below what local traders could profit from, so it's rarely outbid.</string>
-    <string name="tip_price_spike">Items whose recent history shows a sharp one-off spike (a buyout, wash trading) can look profitable when they aren't. Exclude them, show only them, or ignore.</string>
     <string name="tip_al_target">The alert fires once the watched price goes below (or above) this value. Checked every 5 minutes while the app is running.</string>
     <string name="save_station_preset">Save Station Preset</string>
     <string name="eg_jita_station">e.g. Jita 4-4</string>
@@ -351,7 +335,7 @@
     <string name="mi_guide_what_title">What this tab is for</string>
     <string name="mi_guide_what">A slow strategy measured in weeks and months: buy items while they are unusually cheap compared with their own recent price, hold them, and sell once the price recovers. You don't fight for the top of the order book every few minutes — you place standing buy orders on a price ladder, wait for fills, then sell the whole stack at a target price.</string>
     <string name="mi_guide_steps_title">Step by step</string>
-    <string name="mi_guide_steps">1. Pick the region and, ideally, the station where you will hold the stock (save it as a preset). Pick a category — Manufacture &amp; Research › Materials is the classic choice: steady demand, deep markets.\n2. Filters: Lookback d sets what counts as "normal" price; Min Discount % is how far below that average an item must be; Min/Max Volatility cut items that barely move or swing wildly; keep Exclude 1y Lows on to skip items in structural decline; use the spike filter to drop manipulated history.\n3. Money: Budget is your total target exposure including what you already hold, not new money. Max Items, Max %/Item and Liquidity d stop one item from eating the whole budget or more than its market can absorb.\n4. Press Analyze. Items are ranked by real ISK opportunity; To Buy is what is left to spend on each.\n5. Place the buy ladder: tick rows, then press the hotkey — the first press opens the item's market window and copies the rung price, the second copies the quantity. Paste both into EVE's buy order.\n6. Create alerts (Alerts button) so you hear about rungs being reached and sell targets being hit without watching the screen.\n7. Re-run Analyze every few days. Items you hold stay in the list even if they no longer pass the filters, so you never lose sight of a position.\n8. When the row turns to Sell, list the whole stack in one sell order at or above the target.</string>
+    <string name="mi_guide_steps">1. Pick the region and, ideally, the station where you will hold the stock (save it as a preset). Pick a category — Manufacture &amp; Research › Materials is the classic choice: steady demand, deep markets.\n2. Filters: Lookback d sets what counts as "normal" price; Min Discount % is how far below that average an item must be; Min/Max Volatility cut items that barely move or swing wildly; keep Exclude 1y Lows on to skip items in structural decline; set Max Z to skip items trading above their VWAP.\n3. Money: Budget is your total target exposure including what you already hold, not new money. Max Items, Max %/Item and Liquidity d stop one item from eating the whole budget or more than its market can absorb.\n4. Press Analyze. Items are ranked by real ISK opportunity; To Buy is what is left to spend on each.\n5. Place the buy ladder: tick rows, then press the hotkey — the first press opens the item's market window and copies the rung price, the second copies the quantity. Paste both into EVE's buy order.\n6. Create alerts (Alerts button) so you hear about rungs being reached and sell targets being hit without watching the screen.\n7. Re-run Analyze every few days. Items you hold stay in the list even if they no longer pass the filters, so you never lose sight of a position.\n8. When the row turns to Sell, list the whole stack in one sell order at or above the target.</string>
     <string name="mi_guide_columns_title">Reading the row</string>
     <string name="mi_guide_columns">• The icon before the name is the action: Buy (below its budget share — place the ladder), Buying (your buy orders already cover it), Wait (position full, target not reached), Sell (selling now clears cost + take-profit), On sale (listed, waiting for fills).\n• Buy: price→ISK under the name is the ladder; * marks a rung that is already at or above the current top bid.\n• Sell: qty @ ≥price is the sell target; "now" is the net profit if you sold everything at the current lowest ask.\n• Backtest replays this exact strategy on the item's own history. A negative first number means it hasn't paid off for this item before — treat it with suspicion.\n• Hover any column header or filter for its exact meaning.</string>
     <string name="mi_guide_mix_title">Don't mix it with quick trading — why</string>
@@ -383,4 +367,14 @@
     <string name="kpi_held_pnl">Held P&amp;L now</string>
     <string name="panel_opportunities">Opportunities</string>
     <string name="panel_candidates">Candidates</string>
+    <string name="max_z">Max Z</string>
+    <string name="tip_max_z">Skip items whose z-score (daily average vs its 28-day VWAP, as on the item chart) is above this: don't buy high. Empty = off.</string>
+    <string name="mi_filter_action">Action</string>
+    <string name="mi_filter_buy">Buy</string>
+    <string name="mi_filter_wait">Wait</string>
+    <string name="mi_filter_sell">Sell</string>
+    <string name="wait_no_discount">Wait: price isn't below its market average (vs avg %1$s), so it gets no budget share.</string>
+    <string name="wait_not_ranked">Wait: discounted, but outside the top Max items by opportunity -- no budget share.</string>
+    <string name="wait_full">Wait: position is full -- %1$s held + in buy orders of its %2$s budget share.</string>
+    <string name="wait_not_deep">Wait: bid %1$s is not a ladder step under your average cost -- tops up at %2$s or lower.</string>
 </resources>

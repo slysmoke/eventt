@@ -25,6 +25,16 @@
     <string name="h_total_profit">Прибыль всего</string>
     <string name="h_realized_pnl">Реализ. прибыль</string>
     <string name="written_off">Списано: %1$s</string>
+    <string name="add_purchase">Добавить покупку</string>
+    <string name="add_purchase_title">Добавить покупку</string>
+    <string name="add_purchase_desc">Записывает предметы, полученные не через рынок — купленные за PLEX в NES, награды, подарки — по цене, которую вы заплатили, чтобы у их продаж была себестоимость. Брокерская комиссия и налог не добавляются.</string>
+    <string name="item">Предмет</string>
+    <string name="quantity">Количество</string>
+    <string name="unit_price_isk">Цена за штуку, ISK</string>
+    <string name="date_ymd">Дата (ГГГГ-ММ-ДД)</string>
+    <string name="total_isk">Итого: %1$s ISK</string>
+    <string name="manual_purchases">Ручные покупки</string>
+    <string name="delete">Удалить</string>
     <string name="check_assets">Сверить с имуществом</string>
     <string name="write_off_history">История списаний</string>
     <string name="write_off_title">Списать %1$s</string>

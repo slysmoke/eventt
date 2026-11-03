@@ -64,6 +64,7 @@ import org.eventt.ui.common.outline
 import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.eventt.ui.theme.warningColor
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 import java.util.Locale
@@ -101,9 +102,7 @@ internal fun MaterialsInvestmentTab(
     var minDiscountPct by remember { mutableStateOf("5") }
     var maxVolatilityPct by remember { mutableStateOf("0") }
     var minVolatilityPct by remember { mutableStateOf("0") }
-    var spikeFilter by remember { mutableStateOf(SpikeFilter.ANY) }
-    var spikePriceMultiplier by remember { mutableStateOf("1.8") }
-    var spikeVolumeMultiplier by remember { mutableStateOf("5") }
+    var maxZ by remember { mutableStateOf("") }
     var totalBudget by remember { mutableStateOf("100000000") }
     var maxItems by remember { mutableStateOf("10") }
     var maxPerItemPct by remember { mutableStateOf("25") }
@@ -121,6 +120,8 @@ internal fun MaterialsInvestmentTab(
     var fees by remember { mutableStateOf(MaterialFees()) }
     var sortCol by remember { mutableStateOf(MaterialSortCol.ALLOCATED) }
     var sortAsc by remember { mutableStateOf(false) }
+    // Empty = show every action.
+    var actionFilter by remember { mutableStateOf<Set<MaterialActionFilter>>(emptySet()) }
     var detailTypeId by remember { mutableStateOf<Int?>(null) }
     var settingsLoaded by remember { mutableStateOf(false) }
 
@@ -134,9 +135,7 @@ internal fun MaterialsInvestmentTab(
             S.get(S.MI_MIN_DISCOUNT)?.let { minDiscountPct = it }
             S.get(S.MI_MAX_VOLATILITY)?.let { maxVolatilityPct = it }
             S.get(S.MI_MIN_VOLATILITY)?.let { minVolatilityPct = it }
-            S.get(S.MI_SPIKE_FILTER)?.let { name -> SpikeFilter.entries.find { it.name == name }?.let { spikeFilter = it } }
-            S.get(S.MI_SPIKE_PRICE_MULTIPLIER)?.let { spikePriceMultiplier = it }
-            S.get(S.MI_SPIKE_VOLUME_MULTIPLIER)?.let { spikeVolumeMultiplier = it }
+            S.get(S.MI_MAX_Z)?.let { maxZ = it }
             S.get(S.MI_TOTAL_BUDGET)?.let { totalBudget = it }
             S.get(S.MI_MAX_ITEMS)?.let { maxItems = it }
             S.get(S.MI_MAX_PER_ITEM_PCT)?.let { maxPerItemPct = it }
@@ -229,13 +228,18 @@ internal fun MaterialsInvestmentTab(
                 fees = fees,
             )
         }
-    val sorted = remember(allocated, sortCol, sortAsc) { sortMaterials(allocated, sortCol, sortAsc) }
+    val sorted =
+        remember(allocated, sortCol, sortAsc, actionFilter) {
+            sortMaterials(allocated, sortCol, sortAsc).filter { a ->
+                actionFilter.isEmpty() || actionFilter.any { a.action in it.actions }
+            }
+        }
 
     // Drop stale picks after a re-scan or budget/ladder change drops an item out of `allocated`
     // entirely -- otherwise a checked-but-vanished row would silently keep feeding stale rungs
     // into the hotkey queue below.
-    LaunchedEffect(allocated) {
-        val stillPresent = allocated.map { it.candidate.typeId }.toSet()
+    LaunchedEffect(sorted) {
+        val stillPresent = sorted.map { it.candidate.typeId }.toSet()
         if (selectedTypeIds.any { it !in stillPresent }) selectedTypeIds = selectedTypeIds intersect stillPresent
     }
 
@@ -340,34 +344,14 @@ internal fun MaterialsInvestmentTab(
                             )
                         }
                     }
-                    Tip(stringResource(Res.string.mi_tip_spike)) {
-                        SpikeFilterChip(spikeFilter) {
-                            spikeFilter = it
-                            scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_SPIKE_FILTER, it.name) } }
-                        }
-                    }
-                    Tip(stringResource(Res.string.mi_tip_price_mult)) {
-                        ParamField(
-                            stringResource(Res.string.price_mult),
-                            spikePriceMultiplier,
-                            50.dp,
-                            enabled = spikeFilter != SpikeFilter.ANY,
-                        ) {
-                            spikePriceMultiplier = it
-                            scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_SPIKE_PRICE_MULTIPLIER, it) } }
-                        }
-                    }
-                    Tip(stringResource(Res.string.mi_tip_vol_mult)) {
-                        ParamField(
-                            stringResource(Res.string.volume_mult),
-                            spikeVolumeMultiplier,
-                            50.dp,
-                            enabled =
-                                spikeFilter != SpikeFilter.ANY,
-                        ) {
-                            spikeVolumeMultiplier = it
-                            scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_SPIKE_VOLUME_MULTIPLIER, it) } }
-                        }
+                    ParamField(
+                        stringResource(Res.string.max_z),
+                        maxZ,
+                        50.dp,
+                        tooltip = stringResource(Res.string.tip_max_z),
+                    ) {
+                        maxZ = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_MAX_Z, it) } }
                     }
                 }
                 FilterActionSlot {
@@ -470,6 +454,20 @@ internal fun MaterialsInvestmentTab(
                         ParamField(stringResource(Res.string.ladder_step_pct), ladderStepPct, 55.dp) {
                             ladderStepPct = it
                             scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_LADDER_STEP_PCT, it) } }
+                        }
+                    }
+                    FilterDivider()
+                    FilterControl(stringResource(Res.string.mi_filter_action)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            MaterialActionFilter.entries.forEach { f ->
+                                val on = f in actionFilter
+                                FilterChip(
+                                    selected = on,
+                                    onClick = { actionFilter = if (on) actionFilter - f else actionFilter + f },
+                                    label = { Text(stringResource(f.label), style = MaterialTheme.typography.labelMedium) },
+                                    modifier = Modifier.height(FilterFieldHeight),
+                                )
+                            }
                         }
                     }
                     FilterDivider()
@@ -594,9 +592,7 @@ internal fun MaterialsInvestmentTab(
                                         val minDiscountSnap = minDiscountPct.toDoubleOrNull() ?: 0.0
                                         val maxVolatilitySnap = maxVolatilityPct.toDoubleOrNull() ?: 0.0
                                         val minVolatilitySnap = minVolatilityPct.toDoubleOrNull() ?: 0.0
-                                        val spikeFilterSnap = spikeFilter
-                                        val spikePriceMultiplierSnap = spikePriceMultiplier.toDoubleOrNull() ?: 1.8
-                                        val spikeVolumeMultiplierSnap = spikeVolumeMultiplier.toDoubleOrNull() ?: 5.0
+                                        val maxZSnap = maxZ.toDoubleOrNull()
                                         val excludeStructuralBreakSnap = excludeStructuralBreak
                                         val histSrc = withContext(Dispatchers.IO) { EveRefService.getSelectedSource() }
 
@@ -684,9 +680,7 @@ internal fun MaterialsInvestmentTab(
                                                                     maxVolatilityPct = maxVolatilitySnap,
                                                                     minVolatilityPct = minVolatilitySnap,
                                                                     historySource = histSrc,
-                                                                    spikeFilter = spikeFilterSnap,
-                                                                    spikePriceMultiplier = spikePriceMultiplierSnap,
-                                                                    spikeVolumeMultiplier = spikeVolumeMultiplierSnap,
+                                                                    maxZ = maxZSnap,
                                                                     excludeStructuralBreak = excludeStructuralBreakSnap,
                                                                     myTransactionsByType = myTransactionsByType,
                                                                     myAssetQtyByType = myAssetQtyByType,
@@ -744,7 +738,7 @@ internal fun MaterialsInvestmentTab(
             )
         } else {
             Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                MaterialsKpis(sorted, totalBudget.toDoubleOrNull() ?: 0.0)
+                MaterialsKpis(allocated, totalBudget.toDoubleOrNull() ?: 0.0)
                 Panel(stringResource(Res.string.panel_candidates), Modifier.fillMaxSize()) {
                     MaterialsHeader(
                         sort = sortCol,
@@ -924,7 +918,35 @@ internal fun MaterialRow(
                             }
 
                             MaterialAction.WAIT -> {
-                                stringResource(Res.string.act_wait)
+                                when (alloc.waitReason) {
+                                    WaitReason.NO_DISCOUNT -> {
+                                        stringResource(Res.string.wait_no_discount, "${String.format(Locale.US, "%+.1f", c.vsAvgPct)}%")
+                                    }
+
+                                    WaitReason.NOT_RANKED -> {
+                                        stringResource(Res.string.wait_not_ranked)
+                                    }
+
+                                    WaitReason.FULL -> {
+                                        stringResource(
+                                            Res.string.wait_full,
+                                            formatPriceAbbr(alloc.committedIsk),
+                                            formatPriceAbbr(alloc.allocatedIsk),
+                                        )
+                                    }
+
+                                    WaitReason.NOT_DEEP_ENOUGH -> {
+                                        stringResource(
+                                            Res.string.wait_not_deep,
+                                            formatPriceAbbr(c.currentPrice),
+                                            formatPriceAbbr(alloc.topUpPrice ?: 0.0),
+                                        )
+                                    }
+
+                                    null -> {
+                                        stringResource(Res.string.act_wait)
+                                    }
+                                }
                             }
 
                             MaterialAction.SELL -> {
@@ -963,18 +985,6 @@ internal fun MaterialRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
-                if (c.spikeDetected) {
-                    Tip(
-                        stringResource(Res.string.mi_tip_spike_row),
-                    ) {
-                        Icon(
-                            Icons.Default.Warning,
-                            contentDescription = stringResource(Res.string.spike_detected),
-                            modifier = Modifier.size(13.dp),
-                            tint = warningColor,
-                        )
-                    }
-                }
                 IconButton(onClick = { onShowDetails(c.typeId) }, modifier = Modifier.size(20.dp)) {
                     Icon(
                         Icons.AutoMirrored.Filled.ShowChart,
@@ -1300,4 +1310,14 @@ private fun MaterialsGuideDialog(onDismiss: () -> Unit) {
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.mi_guide_close)) } },
     )
+}
+
+// Row filter by what to do with an item; BUYING/ON_SALE (orders already working) group with their side.
+private enum class MaterialActionFilter(
+    val label: StringResource,
+    val actions: Set<MaterialAction>,
+) {
+    BUY(Res.string.mi_filter_buy, setOf(MaterialAction.BUY, MaterialAction.BUYING)),
+    WAIT(Res.string.mi_filter_wait, setOf(MaterialAction.WAIT)),
+    SELL(Res.string.mi_filter_sell, setOf(MaterialAction.SELL, MaterialAction.ON_SALE)),
 }

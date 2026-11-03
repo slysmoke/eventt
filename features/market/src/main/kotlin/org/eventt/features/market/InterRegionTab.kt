@@ -108,10 +108,7 @@ internal fun InterRegionTab(
     var volCapPct by remember { mutableStateOf("10") }
     var copyVolumeEnabled by remember { mutableStateOf(true) }
     var skipExistingOrders by remember { mutableStateOf(false) }
-    var spikeFilter by remember { mutableStateOf(SpikeFilter.ANY) }
-    var spikePriceMultiplier by remember { mutableStateOf("1.8") }
-    var spikeVolumeMultiplier by remember { mutableStateOf("5") }
-    var spikeWindowDays by remember { mutableStateOf("7") }
+    var maxZ by remember { mutableStateOf("") }
     var useAdam4Eve by remember { mutableStateOf(false) }
     var histSourceIsEsi by remember { mutableStateOf(false) }
     var routePresets by remember { mutableStateOf<List<RoutePreset>>(emptyList()) }
@@ -143,10 +140,7 @@ internal fun InterRegionTab(
             S.get(S.IR_VOL_CAP_PCT)?.let { volCapPct = it }
             S.get(S.IR_COPY_VOLUME)?.let { copyVolumeEnabled = it == "true" }
             S.get(S.IR_SKIP_EXISTING)?.let { skipExistingOrders = it == "true" }
-            S.get(S.IR_SPIKE_FILTER)?.let { name -> SpikeFilter.entries.find { it.name == name }?.let { spikeFilter = it } }
-            S.get(S.IR_SPIKE_PRICE_MULTIPLIER)?.let { spikePriceMultiplier = it }
-            S.get(S.IR_SPIKE_VOLUME_MULTIPLIER)?.let { spikeVolumeMultiplier = it }
-            S.get(S.IR_SPIKE_WINDOW_DAYS)?.let { spikeWindowDays = it }
+            S.get(S.IR_MAX_Z)?.let { maxZ = it }
             S.get(S.IR_USE_ADAM4EVE)?.let { useAdam4Eve = it == "true" }
             routePresets = decodeRoutePresets(S.get(S.IR_PRESETS))
             if (charId != null) {
@@ -255,9 +249,7 @@ internal fun InterRegionTab(
         val marginLimitD = marginLimitPct.toDoubleOrNull() ?: 0.0
         val iskPerM3D = iskPerM3.toDoubleOrNull() ?: 1000.0
         val shippingCostPctD = shippingCostPct.toDoubleOrNull() ?: 0.0
-        val spikePriceMultiplierD = spikePriceMultiplier.toDoubleOrNull() ?: 1.8
-        val spikeVolumeMultiplierD = spikeVolumeMultiplier.toDoubleOrNull() ?: 5.0
-        val spikeWindowDaysD = spikeWindowDays.toIntOrNull() ?: 7
+        val maxZD = maxZ.toDoubleOrNull()
         scope.launch(Dispatchers.Default) {
             val locationSystemCache = java.util.concurrent.ConcurrentHashMap<Long, Int?>()
             val recomputed =
@@ -290,10 +282,7 @@ internal fun InterRegionTab(
                             locationSystemCache = locationSystemCache,
                             shippingByCostEnabled = shippingByCostEnabled,
                             shippingCostPct = shippingCostPctD,
-                            spikeFilter = spikeFilter,
-                            spikePriceMultiplier = spikePriceMultiplierD,
-                            spikeVolumeMultiplier = spikeVolumeMultiplierD,
-                            spikeWindowDays = spikeWindowDaysD,
+                            maxZ = maxZD,
                             buyStationFlow = cache.buyStationFlow[typeId],
                             sellStationFlow = cache.sellStationFlow[typeId],
                         )
@@ -317,10 +306,7 @@ internal fun InterRegionTab(
         maxCargoM3,
         shippingByCostEnabled,
         shippingCostPct,
-        spikeFilter,
-        spikePriceMultiplier,
-        spikeVolumeMultiplier,
-        spikeWindowDays,
+        maxZ,
     ) {
         if (cachedAnalysis == null || isAnalyzing) return@LaunchedEffect
         delay(400)
@@ -554,40 +540,14 @@ internal fun InterRegionTab(
                             modifier = Modifier.size(24.dp),
                         )
                     }
-                    SpikeFilterChip(spikeFilter) {
-                        spikeFilter = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SPIKE_FILTER, it.name) } }
-                    }
                     ParamField(
-                        stringResource(Res.string.price_mult),
-                        spikePriceMultiplier,
+                        stringResource(Res.string.max_z),
+                        maxZ,
                         50.dp,
-                        enabled = spikeFilter != SpikeFilter.ANY,
-                        tooltip = stringResource(Res.string.tip_price_mult),
+                        tooltip = stringResource(Res.string.tip_max_z),
                     ) {
-                        spikePriceMultiplier = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SPIKE_PRICE_MULTIPLIER, it) } }
-                    }
-                    ParamField(
-                        stringResource(Res.string.volume_mult),
-                        spikeVolumeMultiplier,
-                        50.dp,
-                        enabled =
-                            spikeFilter != SpikeFilter.ANY,
-                        tooltip = stringResource(Res.string.tip_volume_mult),
-                    ) {
-                        spikeVolumeMultiplier = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SPIKE_VOLUME_MULTIPLIER, it) } }
-                    }
-                    ParamField(
-                        stringResource(Res.string.spike_days),
-                        spikeWindowDays,
-                        60.dp,
-                        enabled = spikeFilter != SpikeFilter.ANY,
-                        tooltip = stringResource(Res.string.tip_spike_days),
-                    ) {
-                        spikeWindowDays = it
-                        scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_SPIKE_WINDOW_DAYS, it) } }
+                        maxZ = it
+                        scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_MAX_Z, it) } }
                     }
                     FilterDivider()
                     // Toggles whether the hotkey's second press copies the suggested volume, or just
@@ -662,10 +622,7 @@ internal fun InterRegionTab(
                                     val salesTaxD = salesTaxPct
                                     val buyStSnap = buyStationId
                                     val sellStSnap = sellStationId
-                                    val spikeFilterSnap = spikeFilter
-                                    val spikePriceMultiplierSnap = spikePriceMultiplier.toDoubleOrNull() ?: 1.8
-                                    val spikeVolumeMultiplierSnap = spikeVolumeMultiplier.toDoubleOrNull() ?: 5.0
-                                    val spikeWindowDaysSnap = spikeWindowDays.toIntOrNull() ?: 7
+                                    val maxZSnap = maxZ.toDoubleOrNull()
                                     val useAdam4EveSnap = useAdam4Eve
                                     val histSrc = withContext(Dispatchers.IO) { EveRefService.getSelectedSource() }
                                     try {
@@ -844,10 +801,7 @@ internal fun InterRegionTab(
                                                                         locationSystemCache = locationSystemCache,
                                                                         shippingByCostEnabled = shippingByCostEnabled,
                                                                         shippingCostPct = shippingCostPctD,
-                                                                        spikeFilter = spikeFilterSnap,
-                                                                        spikePriceMultiplier = spikePriceMultiplierSnap,
-                                                                        spikeVolumeMultiplier = spikeVolumeMultiplierSnap,
-                                                                        spikeWindowDays = spikeWindowDaysSnap,
+                                                                        maxZ = maxZSnap,
                                                                         buyStationFlow = buyStationFlow[typeId],
                                                                         sellStationFlow = sellStationFlow[typeId],
                                                                     )

@@ -12,6 +12,7 @@ class OrdersTablesTest {
         price: Double,
         volumeRemaining: Int = 10,
         relistFeesPaid: Double = 0.0,
+        volumeTotal: Int = volumeRemaining,
     ) = CharacterOrder(
         orderId = 1L,
         typeId = 34,
@@ -20,7 +21,7 @@ class OrdersTablesTest {
         regionId = 10000002,
         stationName = "Jita IV - Moon 4",
         price = price,
-        volumeTotal = 10,
+        volumeTotal = volumeTotal,
         volumeRemaining = volumeRemaining,
         isBuyOrder = false,
         duration = 90,
@@ -78,5 +79,25 @@ class OrdersTablesTest {
         // Same as above but profit is additionally reduced by the 300 already paid:
         // 18153.84 - 300 = 17853.84; margin = 17853.84 / 50000 * 100 = 35.71%
         metrics.bestMarginPct.shouldNotBeNull() should (35.7077 plusOrMinus TOLERANCE)
+    }
+
+    // Relist fees were paid while the whole order was listed; with 99% already sold, only the
+    // remaining 1% share belongs against the tail, not the full sum.
+    @Test
+    fun `totalProfit charges only the remaining units' share of past relist fees`() {
+        val order = sellOrder(price = 6.00, volumeRemaining = 100, volumeTotal = 10_000, relistFeesPaid = 10_000.0)
+        val metrics =
+            computeSellMetrics(
+                order = order,
+                inventory = emptyMap(),
+                historyCostBasis = mapOf(34 to 5.00),
+                taxConfig = CostBasisService.TaxConfig(salesTaxPct = 0.0, brokerFeePct = 0.0),
+                comparisons = emptyMap(),
+                competition = emptyMap(),
+                relistDiscountPct = 0.0,
+            )
+
+        // 100 * (6 - 5) - 10000 * 100 / 10000 = 0
+        metrics.totalProfit.shouldNotBeNull() should (0.0 plusOrMinus TOLERANCE)
     }
 }

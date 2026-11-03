@@ -12,6 +12,7 @@ import org.eventt.app.generated.resources.*
 import org.eventt.core.cache.EsiCacheManager
 import org.eventt.core.database.AppLanguage
 import org.eventt.core.database.DatabaseManager
+import org.eventt.core.database.MarketDao
 import org.eventt.core.http.EveHttpClient
 import org.eventt.core.marketlogs.MarketLogWatcher
 import org.eventt.core.model.AppPaths
@@ -32,6 +33,7 @@ import org.eventt.ui.EventtApp
 import org.jetbrains.compose.resources.painterResource
 import java.io.File
 import java.io.RandomAccessFile
+import java.time.LocalDate
 import javax.swing.JOptionPane
 import kotlin.system.exitProcess
 
@@ -55,6 +57,8 @@ private fun acquireSingleInstanceLockOrExit() {
     }
     singleInstanceLock = raf
 }
+
+private const val ESI_HISTORY_MONTHS = 14L
 
 fun main() {
     // Linux/XWayland (seen on Hyprland + NVIDIA): with vsync on, skiko's shared frame loop blocks
@@ -127,6 +131,11 @@ fun main() {
     // ~A year of Adam4EVE per-side fill history for the item chart — weekly files backfill once,
     // then the current week's daily files top it up. See A4eHistorySync.
     A4eHistorySync.start()
+    // ESI daily history is never re-fetched past ~1 year, so without this it only grows (it was
+    // most of a ~1 GB DB). The item chart's "All" range (450 days) shows these 14 months.
+    CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+        runCatching { MarketDao.deleteHistoryBeforeDate(LocalDate.now().minusMonths(ESI_HISTORY_MONTHS).toString(), source = "esi") }
+    }
     // Keeps the P2P Market active identity following whichever character (or corp's acting
     // character) is selected in the main nav — there's no separate manual picker for it anymore.
     CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { NostrIdentityService.followAppCharacterSelection() }
