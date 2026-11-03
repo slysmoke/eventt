@@ -1,5 +1,5 @@
 [versions]
-kotlin = "2.4.10"
+kotlin = "2.4.20"
 compose = "1.11.1"
 # Since Compose 1.8 material3 no longer tracks the plugin version.
 compose-material3 = "1.9.0"
