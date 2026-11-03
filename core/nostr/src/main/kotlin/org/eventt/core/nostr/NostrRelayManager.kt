@@ -50,6 +50,10 @@ private const val RECEIPTS_SUBSCRIPTION_ID = "p2pmarket-receipts"
 private const val PRESENCE_SUBSCRIPTION_ID = "p2pmarket-presence"
 private const val LEADERBOARD_SUBSCRIPTION_ID = "p2pmarket-leaderboard"
 private const val GIVEAWAY_SUBSCRIPTION_ID = "p2pmarket-giveaway"
+private const val CHAT_SUBSCRIPTION_ID = "p2pmarket-chat"
+
+// Most relays cap a REQ at 500 anyway; older history just isn't loaded.
+private const val CHAT_HISTORY_LIMIT = 500
 private const val GIFT_WRAP_KIND = 1059
 private const val EXPIRED_HOLD_SWEEP_MILLIS = 10L * 60 * 1000
 
@@ -341,6 +345,32 @@ object NostrRelayManager {
                             forFilters: List<Filter>?,
                         ) {
                             GiveawayService.onEvent(event)
+                        }
+                    },
+                )
+
+                // Chat rooms: messages and votes, plus members on their own filter so a busy
+                // room's history limit never crowds them out (all tagged CHAT_T_TAG).
+                val chatFilters =
+                    listOf(
+                        Filter(
+                            kinds = listOf(CHAT_MESSAGE_KIND, CHAT_REACTION_KIND),
+                            tags = mapOf("t" to listOf(CHAT_T_TAG)),
+                            limit = CHAT_HISTORY_LIMIT,
+                        ),
+                        Filter(kinds = listOf(CHAT_MEMBER_KIND), tags = mapOf("d" to listOf(CHAT_MEMBER_D_TAG))),
+                    )
+                c.subscribe(
+                    CHAT_SUBSCRIPTION_ID,
+                    relayUrls.associateWith { chatFilters },
+                    object : SubscriptionListener {
+                        override fun onEvent(
+                            event: Event,
+                            isLive: Boolean,
+                            relay: NormalizedRelayUrl,
+                            forFilters: List<Filter>?,
+                        ) {
+                            ChatService.onEvent(event)
                         }
                     },
                 )

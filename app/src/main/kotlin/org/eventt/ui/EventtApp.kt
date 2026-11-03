@@ -75,6 +75,8 @@ import org.eventt.features.orders.OrdersScreen
 import org.eventt.features.orders.WalletSyncService
 import org.eventt.features.overlay.OverlayController
 import org.eventt.features.overlay.OverlayWindow
+import org.eventt.features.p2pmarket.ChatNavBadge
+import org.eventt.features.p2pmarket.ChatScreen
 import org.eventt.features.p2pmarket.CountBadge
 import org.eventt.features.p2pmarket.GiveawayNavBadge
 import org.eventt.features.p2pmarket.LeaderboardScreen
@@ -105,6 +107,7 @@ enum class AppScreen(
     CHARACTERS(Res.string.screen_characters, Icons.Default.Person),
     MARKET(Res.string.screen_market, Icons.Default.Store),
     P2P_MARKET(Res.string.screen_p2p_market, Icons.AutoMirrored.Filled.CompareArrows),
+    CHAT(Res.string.screen_chat, Icons.Default.Forum),
     ANALYSIS(Res.string.screen_analysis, Icons.Default.Analytics),
     ASSETS(Res.string.screen_assets, Icons.Default.Inventory),
     WALLET(Res.string.screen_wallet, Icons.Default.AccountBalance),
@@ -928,6 +931,7 @@ private fun Sidebar(
                             CountBadge(rememberPendingBuyRequestCount())
                         }
                         if (screen == AppScreen.LEADERBOARD) GiveawayNavBadge()
+                        if (screen == AppScreen.CHAT) ChatNavBadge()
                         if (screen == AppScreen.ORDERS) {
                             // Currently-beaten orders across every character — fed by
                             // MarketWatchService's background sweep, so it's live even
@@ -1380,6 +1384,7 @@ private fun ScreenContent(
                             AppScreen.TOOLS -> ToolsScreen(context = selectedContext)
                             AppScreen.P2P_MARKET -> P2pMarketScreen()
                             AppScreen.LEADERBOARD -> LeaderboardScreen()
+                            AppScreen.CHAT -> ChatScreen()
                             AppScreen.SETTINGS -> SettingsScreen()
                         }
                     }

@@ -253,4 +253,37 @@
     <string name="gw_last_block">Last block</string>
     <string name="gw_ago">%1$s ago</string>
     <string name="gw_tip_blocks">Bitcoin blocks come about every 10 minutes on average, but at random: half an hour or an hour without one happens. Results are drawn the moment the named block is out.</string>
+    <string name="tab_chat">Chat</string>
+    <string name="chat_general">General</string>
+    <string name="chat_ideas">Suggestions</string>
+    <string name="chat_public_note">Public: anyone on Nostr can read it.</string>
+    <string name="chat_message_placeholder">Write a message… (@ to mention, Shift+Enter for a new line)</string>
+    <string name="chat_comment_placeholder">Write a comment…</string>
+    <string name="chat_back_to_ideas">All suggestions</string>
+    <string name="chat_comments">Comments</string>
+    <string name="chat_no_ideas">No suggestions yet -- be the first.</string>
+    <string name="chat_new_idea">New suggestion</string>
+    <string name="chat_idea_title">Title</string>
+    <string name="chat_idea_body">Describe what should change and why…</string>
+    <string name="chat_post_idea">Publish</string>
+    <string name="chat_cancel">Cancel</string>
+    <plurals name="chat_comment_count">
+        <item quantity="one">%1$s comment</item>
+        <item quantity="other">%1$s comments</item>
+    </plurals>
+    <string name="chat_join_title">Trader chat</string>
+    <string name="chat_join_body">Talk to other EVEntt traders and suggest improvements to the app. Turn the chat on to see the conversation and appear in the member list -- you can leave at any time.</string>
+    <string name="chat_join">Turn chat on</string>
+    <string name="chat_leave">Leave chat</string>
+    <string name="chat_members">Members — %1$s · %2$s online</string>
+    <string name="chat_you">(you)</string>
+    <string name="chat_reply">Reply</string>
+    <string name="chat_replying_to">Replying to</string>
+    <string name="chat_reply_missing">Original message not loaded</string>
+    <string name="chat_today">Today</string>
+    <string name="chat_yesterday">Yesterday</string>
+    <string name="chat_empty">No messages yet -- say hi.</string>
+    <string name="chat_sort_top">Top</string>
+    <string name="chat_sort_new">New</string>
+    <string name="chat_markdown_note">Formatting is kept in any Nostr client (Markdown).</string>
 </resources>
