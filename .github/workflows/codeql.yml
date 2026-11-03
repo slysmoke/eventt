@@ -11,6 +11,7 @@ on:
     paths-ignore: ['flake.nix', 'flake.lock']
   schedule:
     - cron: '39 21 * * 0'
+  workflow_dispatch:
 
 concurrency:
   group: codeql-${{ github.ref }}
