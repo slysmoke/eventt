@@ -1,10 +1,14 @@
 name: CodeQL
 
+# Nix packaging (the release bot's flake bump) has nothing to analyse. Only CodeQL skips it:
+# CI's "test" check is required on main, so build.yml must still run for the bot's PR.
 on:
   push:
     branches: [main]
+    paths-ignore: ['flake.nix', 'flake.lock']
   pull_request:
     branches: [main]
+    paths-ignore: ['flake.nix', 'flake.lock']
   schedule:
     - cron: '39 21 * * 0'
 
