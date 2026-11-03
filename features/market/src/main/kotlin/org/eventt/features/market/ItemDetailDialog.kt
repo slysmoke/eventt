@@ -167,20 +167,26 @@ internal fun loadMyTrades(
     corpId: Int?,
     typeId: Int,
     regionId: Int,
+    // Dashboard "All" view: every character and corporation (both DAO filters null).
+    combined: Boolean = false,
 ): MyTrades {
-    val txs =
-        (if (corpId != null) WalletDao.getAllTransactions(corporationId = corpId) else WalletDao.getAllTransactions(characterId = charId))
-            .filter { it.typeId == typeId }
+    val qChar = charId.takeIf { corpId == null && !combined }
+    val qCorp = corpId.takeIf { !combined }
+    val txs = WalletDao.getAllTransactions(qChar, qCorp).filter { it.typeId == typeId }
     val basis = txCostBasis(txs)
     val openOrders =
-        (if (corpId != null) ActiveOrderDao.getAll(corporationId = corpId) else ActiveOrderDao.getAll(characterId = charId))
+        ActiveOrderDao
+            .getAll(qChar, qCorp)
             .filter { it.typeId == typeId && it.state == "active" }
     // Physical stock, not net(buys - sells): materials often arrive via mining/reprocessing with no
     // transaction at all (same reasoning as MaterialPosition.qtyHeld). Plus whatever's listed in
     // sell orders, which EVE escrows out of the hangar.
     val held =
-        (if (corpId != null) AssetDao.getByCorporation(corpId) else AssetDao.getByCharacter(charId))
-            .filter { it.typeId == typeId }
+        when {
+            combined -> AssetDao.getAll()
+            corpId != null -> AssetDao.getByCorporation(corpId)
+            else -> AssetDao.getByCharacter(charId)
+        }.filter { it.typeId == typeId }
             .sumOf { it.quantity.toLong() } +
             openOrders.filter { !it.isBuyOrder }.sumOf { it.volumeRemaining.toLong() }
     return MyTrades(
@@ -233,6 +239,8 @@ fun ItemDetailDialog(
     charId: Int?,
     // Corp view: show the corporation's fills/orders/assets (charId is then the acting member).
     corporationId: Int? = null,
+    // Dashboard "All" view: fills/orders/assets of every character and corporation.
+    combined: Boolean = false,
     onDismiss: () -> Unit,
 ) {
     var isLoading by remember { mutableStateOf(true) }
@@ -265,7 +273,7 @@ fun ItemDetailDialog(
                 secondaryOrders = emptyList()
                 secondaryHistory = emptyList()
             }
-            myTrades = charId?.let { runCatching { loadMyTrades(it, corporationId, typeId, effPrimaryRegion) }.getOrNull() }
+            myTrades = charId?.let { runCatching { loadMyTrades(it, corporationId, typeId, effPrimaryRegion, combined) }.getOrNull() }
         }
         isLoading = false
     }

@@ -255,6 +255,7 @@ fun DashboardScreen(
             primaryStationId = t.stationId,
             charId = actingCharId,
             corporationId = corpId.takeIf { !combined },
+            combined = combined,
             onDismiss = { chartTarget = null },
         )
     }
