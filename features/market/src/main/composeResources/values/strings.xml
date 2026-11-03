@@ -369,4 +369,12 @@
     <string name="panel_candidates">Candidates</string>
     <string name="max_z">Max Z</string>
     <string name="tip_max_z">Skip items whose z-score (daily average vs its 28-day VWAP, as on the item chart) is above this: don't buy high. Empty = off.</string>
+    <string name="mi_filter_action">Action</string>
+    <string name="mi_filter_buy">Buy</string>
+    <string name="mi_filter_wait">Wait</string>
+    <string name="mi_filter_sell">Sell</string>
+    <string name="wait_no_discount">Wait: price isn't below its market average (vs avg %1$s), so it gets no budget share.</string>
+    <string name="wait_not_ranked">Wait: discounted, but outside the top Max items by opportunity -- no budget share.</string>
+    <string name="wait_full">Wait: position is full -- %1$s held + in buy orders of its %2$s budget share.</string>
+    <string name="wait_not_deep">Wait: bid %1$s is not a ladder step under your average cost -- tops up at %2$s or lower.</string>
 </resources>

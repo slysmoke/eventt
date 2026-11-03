@@ -72,18 +72,18 @@ class AllocateBudgetTest {
 
     @Test
     fun `rungs still below the live price stay as future targets after the crossed ones merge`() {
-        // Cost basis 10, live bid 9.6: rung 10 is crossed, 9.5 and 9.0 are still ahead.
+        // Cost basis 10, live bid 9.4: rungs 10 and 9.5 are crossed, 9.0 is still ahead.
         val held = MaterialPosition(qtyHeld = 100, avgBuyPrice = 10.0)
-        val c = candidate(typeId = 1, currentPrice = 9.6, vsAvgPct = -20.0, dailyVolume = 1000, position = held)
+        val c = candidate(typeId = 1, currentPrice = 9.4, vsAvgPct = -20.0, dailyVolume = 1000, position = held)
 
         val ladder =
             allocateBudget(listOf(c), totalBudget = 1_000_000.0, maxItems = 1, 100.0, 30.0, ladderLevels = 3, ladderStepPct = 5.0)
                 .first()
                 .ladder
 
-        ladder.map { it.triggerPrice } shouldBe listOf(9.6, 9.5, 9.0)
-        ladder.map { it.alreadyTriggered } shouldBe listOf(true, false, false)
-        ladder.map { it.level } shouldBe listOf(1, 2, 3)
+        ladder.map { it.triggerPrice } shouldBe listOf(9.4, 9.0)
+        ladder.map { it.alreadyTriggered } shouldBe listOf(true, false)
+        ladder.map { it.level } shouldBe listOf(1, 2)
     }
 
     @Test
@@ -108,6 +108,52 @@ class AllocateBudgetTest {
         r.toBuyIsk shouldBe 0.0
         r.ladder.size shouldBe 0
         r.action shouldBe MaterialAction.WAIT
+    }
+
+    @Test
+    fun `held position only tops up once price is a full ladder step under its cost basis`() {
+        val held = MaterialPosition(qtyHeld = 100, avgBuyPrice = 10.0)
+
+        fun at(price: Double) =
+            allocateBudget(
+                listOf(candidate(typeId = 1, currentPrice = price, vsAvgPct = -20.0, dailyVolume = 1000, position = held)),
+                totalBudget = 1_000_000.0,
+                maxItems = 1,
+                100.0,
+                30.0,
+                3,
+                5.0,
+            ).single()
+
+        // Above cost, and under cost but less than the 5% step: wait.
+        listOf(10.5, 9.6).forEach { at(it).action shouldBe MaterialAction.WAIT }
+        at(9.6).toBuyIsk shouldBe 0.0
+        // 5% under the 10 cost basis: buy.
+        at(9.5).action shouldBe MaterialAction.BUY
+    }
+
+    @Test
+    fun `WAIT carries the reason it isn't buying`() {
+        val held = MaterialPosition(qtyHeld = 100, avgBuyPrice = 10.0)
+
+        fun reason(
+            price: Double,
+            vsAvg: Double,
+            budget: Double,
+        ) = allocateBudget(
+            listOf(candidate(typeId = 1, currentPrice = price, vsAvgPct = vsAvg, dailyVolume = 1000, position = held)),
+            totalBudget = budget,
+            maxItems = 1,
+            100.0,
+            30.0,
+            3,
+            5.0,
+        ).single().waitReason
+
+        reason(9.0, vsAvg = 2.0, budget = 1_000_000.0) shouldBe WaitReason.NO_DISCOUNT
+        reason(9.0, vsAvg = -20.0, budget = 0.0) shouldBe WaitReason.NOT_RANKED
+        reason(9.0, vsAvg = -20.0, budget = 1000.0) shouldBe WaitReason.FULL
+        reason(9.8, vsAvg = -20.0, budget = 1_000_000.0) shouldBe WaitReason.NOT_DEEP_ENOUGH
     }
 
     @Test
@@ -219,8 +265,10 @@ class AllocateBudgetTest {
                 100.0,
                 30.0,
                 ladderLevels = 1,
-                ladderStepPct = 5.0,
+                // No step gate, so the held position at its own cost still tops up.
+                ladderStepPct = 0.0,
                 fees = fees,
+                takeProfitPct = 5.0,
             ).single()
 
         // Held stack cost 100 * 10 * 1.03 = 1030, so 970 left to buy.

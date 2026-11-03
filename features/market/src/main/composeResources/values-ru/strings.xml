@@ -369,4 +369,12 @@
     <string name="panel_candidates">Кандидаты</string>
     <string name="max_z">Макс Z</string>
     <string name="tip_max_z">Пропускать предметы, у которых z-score (средняя цена дня против VWAP 28, как на графике предмета) выше этого значения: не покупать дорого. Пусто — выключено.</string>
+    <string name="mi_filter_action">Действие</string>
+    <string name="mi_filter_buy">Покупать</string>
+    <string name="mi_filter_wait">Ждать</string>
+    <string name="mi_filter_sell">Продавать</string>
+    <string name="wait_no_discount">Ждать: цена не ниже средней рыночной (vs avg %1$s) — доли бюджета нет.</string>
+    <string name="wait_not_ranked">Ждать: есть скидка, но предмет не вошёл в топ Max items по возможности — доли бюджета нет.</string>
+    <string name="wait_full">Ждать: позиция заполнена — %1$s в товаре и ордерах из доли %2$s.</string>
+    <string name="wait_not_deep">Ждать: бид %1$s ещё не на шаг лесенки ниже вашей средней — докупка от %2$s и ниже.</string>
 </resources>
