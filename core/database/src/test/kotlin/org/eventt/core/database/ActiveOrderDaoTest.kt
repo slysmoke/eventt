@@ -210,4 +210,19 @@ class ActiveOrderDaoTest {
         stored.relistCount shouldBe 1
         stored.relistFeesPaid shouldBe 100.0
     }
+
+    @Test
+    fun `each applied relist is logged with its time and fee, rejected ones are not`() {
+        // Far past the other tests' timestamps: the database is shared within the class.
+        val t0 = 1_000_000_000_000L
+        ActiveOrderDao.replaceAll(characterId = 1, records = listOf(record(1)))
+
+        ActiveOrderDao.bumpRelistStats(orderId = 1, characterId = 1, newPrice = 110.0, addedFee = 100.0, asOf = t0 + 1_000L)
+        ActiveOrderDao.bumpRelistStats(orderId = 1, characterId = 1, newPrice = 110.0, addedFee = 100.0, asOf = t0 + 1_500L)
+        ActiveOrderDao.bumpRelistStats(orderId = 1, characterId = 1, newPrice = 120.0, addedFee = 40.0, asOf = t0 + 2_000L)
+
+        ActiveOrderDao.relistsBetween(t0) shouldBe (2 to 140.0)
+        ActiveOrderDao.relistsBetween(t0 + 1_001) shouldBe (1 to 40.0)
+        ActiveOrderDao.relistsBetween(t0, t0 + 2_000) shouldBe (1 to 100.0)
+    }
 }

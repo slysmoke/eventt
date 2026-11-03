@@ -77,4 +77,23 @@ class StreamOverlaySessionTest {
 
         StreamOverlaySession.provisionalFilledQty(ORDER_ID, currentFilled = 50) shouldBe 0
     }
+
+    @Test
+    fun `the profit curve records changes only and thins itself on long sessions`() {
+        every { ActiveOrderDao.getAll() } returns emptyList()
+        StreamOverlaySession.reset()
+
+        StreamOverlaySession.recordProfit(10, 0.0) shouldBe listOf(OverlayPoint(0, 0.0))
+        // Snapped to the minute, and a second change in the same minute replaces the point.
+        StreamOverlaySession.recordProfit(70, 5.0).last() shouldBe OverlayPoint(60, 5.0)
+        StreamOverlaySession.recordProfit(100, 7.0) shouldBe listOf(OverlayPoint(0, 0.0), OverlayPoint(60, 7.0))
+        StreamOverlaySession.recordProfit(130, 7.0).size shouldBe 2
+
+        val long = (1..2000).map { StreamOverlaySession.recordProfit(it * 60L, it.toDouble()) }.last()
+        (long.size <= 600) shouldBe true
+        long.first() shouldBe OverlayPoint(0, 0.0)
+        long.last() shouldBe OverlayPoint(2000 * 60L, 2000.0)
+        StreamOverlaySession.reset()
+        StreamOverlaySession.recordProfit(1, 0.0) shouldBe listOf(OverlayPoint(0, 0.0))
+    }
 }

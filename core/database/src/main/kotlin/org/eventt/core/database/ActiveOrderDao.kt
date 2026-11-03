@@ -200,9 +200,33 @@ object ActiveOrderDao {
                 ps.setDouble(6, newPrice)
                 ps.setLong(7, asOf)
                 ps.executeUpdate()
+            }.let { updated ->
+                if (updated == 0) return@transaction
+                prepareStatement("INSERT INTO relist_events (order_id, character_id, at, fee) VALUES (?, ?, ?, ?)").use { ps ->
+                    ps.setLong(1, orderId)
+                    ps.setInt(2, characterId)
+                    ps.setLong(3, asOf)
+                    ps.setDouble(4, addedFee)
+                    ps.executeUpdate()
+                }
             }
         }
     }
+
+    /** Relists detected in [fromMillis, toMillis) (epoch ms) and the fees they cost. */
+    fun relistsBetween(
+        fromMillis: Long,
+        toMillis: Long = Long.MAX_VALUE,
+    ): Pair<Int, Double> =
+        DatabaseManager.transaction {
+            prepareStatement("SELECT COUNT(*), COALESCE(SUM(fee), 0) FROM relist_events WHERE at >= ? AND at < ?").use { ps ->
+                ps.setLong(1, fromMillis)
+                ps.setLong(2, toMillis)
+                val rs = ps.executeQuery()
+                rs.next()
+                rs.getInt(1) to rs.getDouble(2)
+            }
+        }
 
     fun getAll(
         characterId: Int? = null,

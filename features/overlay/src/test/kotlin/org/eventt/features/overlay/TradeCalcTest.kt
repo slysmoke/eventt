@@ -10,14 +10,26 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import io.kotest.matchers.doubles.plusOrMinus
 import io.kotest.matchers.shouldBe
+import org.eventt.core.database.DatabaseManager
 import org.eventt.core.model.eveUndercutPrice
 import org.eventt.ui.theme.DarkColorScheme
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import java.io.File
 import javax.imageio.ImageIO
 
 @OptIn(ExperimentalTestApi::class)
 class TradeCalcTest {
+    companion object {
+        // position() reads the undercut-ticks setting: never from the real app database.
+        @BeforeAll
+        @JvmStatic
+        fun setUp() {
+            DatabaseManager.close()
+            DatabaseManager.initialize(":memory:")
+        }
+    }
+
     private val fees = Fees(broker = 0.03, tax = 0.08)
 
     @Test

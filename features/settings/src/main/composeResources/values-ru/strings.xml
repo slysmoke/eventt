@@ -89,7 +89,7 @@
     <string name="relay_disconnected">Отключено</string>
     <string name="relay_not_connected">Ещё не подключено</string>
     <string name="overlay_title">Оверлей для стрима (OBS)</string>
-    <string name="overlay_desc">Отдаёт прозрачную анимированную страницу-оверлей (сделки за сессию, прибыль, таймер, перевыставления) для источника «Браузер» в OBS. Только локально — снаружи этой машины ничего не доступно.</string>
+    <string name="overlay_desc">Живая панель сессии для Browser Source в OBS: прибыль за сессию с графиком и ISK в час, последние продажи, топ предметов и ваши ордера. Прозрачный фон, только локально -- снаружи компьютера недоступно.</string>
     <string name="stop">Остановить</string>
     <string name="start">Запустить</string>
     <string name="reset_session">Сбросить сессию</string>
@@ -104,4 +104,20 @@
     <string name="sec_hotkeys">Клавиши и оверлей</string>
     <string name="sec_p2p">P2P рынок</string>
     <string name="sec_data">Источники данных</string>
+    <string name="overlay_sections">Секции:</string>
+    <string name="overlay_sec_chart">График</string>
+    <string name="overlay_sec_sales">Последние продажи</string>
+    <string name="overlay_sec_top">Топ предметов</string>
+    <string name="overlay_sec_orders">Ордера</string>
+    <string name="overlay_obs_size">В OBS: добавьте Browser Source с этим адресом, ширина %1$s, высота %2$s. Размер панели не меняется; при смене секций меняется высота.</string>
+    <string name="overlay_period">Считать:</string>
+    <string name="overlay_period_session">Сессия</string>
+    <string name="overlay_period_24h">24 часа</string>
+    <string name="overlay_period_7d">7 дней</string>
+    <string name="overlay_period_30d">30 дней</string>
+    <string name="overlay_count">Окно:</string>
+    <string name="overlay_rolling">Последние %1$s</string>
+    <string name="overlay_from_today">С сегодня</string>
+    <string name="overlay_from_date">С %1$s</string>
+    <string name="overlay_restart_today">Начать заново с сегодня</string>
 </resources>
