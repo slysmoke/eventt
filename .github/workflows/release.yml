@@ -38,11 +38,8 @@ jobs:
             installerExt: msi
 
           # No universal (fat) binary — jpackage/Skiko natives are tied to the JDK's arch, so
-          # Intel and Apple Silicon are built and shipped separately. GitHub retired the hosted
-          # Intel macOS runner, so both variants now build on the same Apple Silicon runner;
-          # the x64 leg forces setup-java to install an x64 JDK, which macOS runs under Rosetta
-          # 2 (preinstalled on this runner image) — Rosetta only translates the *build*, the
-          # jpackage output embeds that x64 JVM and is a genuinely native Intel app. UpdateChecker
+          # Intel and Apple Silicon are built and shipped separately, each on its own runner
+          # (macos-26-intel / macos-latest) with a JDK of that arch. UpdateChecker
           # matches the asset filename on "macos-x64"/"macos-arm64", so these platform values
           # must stay in sync with app/src/main/kotlin/org/eventt/update/UpdateChecker.kt.
           - os: macos-26-intel
@@ -72,14 +69,8 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
           architecture: ${{ matrix.javaArch }}
+          cache: gradle
 
-      - uses: actions/cache@v6
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ matrix.platform }}-${{ hashFiles('**/*.gradle.kts', 'gradle/libs.versions.toml') }}
-          restore-keys: gradle-${{ matrix.platform }}-
 
       # Skipped on workflow_dispatch (manual test runs) — jpackage needs a numeric version,
       # and a branch name like "main" isn't one, so those runs keep gradle.properties' default.
@@ -202,6 +193,13 @@ jobs:
           path: eventt-${{ matrix.platform }}.jar
           retention-days: 1
 
+      # The Gradle daemon keeps files in ~/.gradle open; on Windows that made the post-job cache
+      # save fail (tar exit 2) and the next build start cold.
+      - name: Stop Gradle daemon
+        if: always()
+        shell: bash
+        run: ./gradlew --stop
+
   # ── Create GitHub Release ─────────────────────────────────────────────────
   # Skipped on workflow_dispatch (manual test runs) — only real tag pushes publish a release.
   release:
@@ -288,4 +286,4 @@ jobs:
           gh pr create --base main --head "$BRANCH" \
             --title "flake: bump to $GITHUB_REF_NAME" \
             --body "Automated flake.nix version/hash bump for $GITHUB_REF_NAME."
-          gh pr merge "$BRANCH" --auto --squash
+          gh pr merge "$BRANCH" --auto --squash --delete-branch
