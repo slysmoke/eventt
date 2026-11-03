@@ -10,6 +10,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
@@ -898,58 +900,59 @@ private fun Sidebar(
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
             }
 
-            // Navigation items
-            AppScreen.entries.forEach { screen ->
-                val isSelected = selectedScreen == screen
-                val backgroundColor = if (isSelected) eveColors.accentColor.copy(alpha = 0.15f) else Color.Transparent
-                val contentColor = if (isSelected) eveColors.accentColor else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            // Navigation items -- scroll when the window is too short for all of them.
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                AppScreen.entries.forEach { screen ->
+                    val isSelected = selectedScreen == screen
+                    val backgroundColor = if (isSelected) eveColors.accentColor.copy(alpha = 0.15f) else Color.Transparent
+                    val contentColor = if (isSelected) eveColors.accentColor else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
 
-                Surface(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
-                    color = backgroundColor,
-                    shape = MaterialTheme.shapes.small,
-                    onClick = { onScreenSelected(screen) },
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
+                        color = backgroundColor,
+                        shape = MaterialTheme.shapes.small,
+                        onClick = { onScreenSelected(screen) },
                     ) {
-                        Icon(
-                            imageVector = screen.icon,
-                            contentDescription = null,
-                            tint = contentColor,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(screen.label),
-                            color = contentColor,
-                            style = MaterialTheme.typography.labelMedium,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (screen == AppScreen.P2P_MARKET) {
-                            CountBadge(rememberPendingBuyRequestCount())
-                        }
-                        if (screen == AppScreen.LEADERBOARD) GiveawayNavBadge()
-                        if (screen == AppScreen.CHAT) ChatNavBadge()
-                        if (screen == AppScreen.ORDERS) {
-                            // Currently-beaten orders across every character — fed by
-                            // MarketWatchService's background sweep, so it's live even
-                            // before the Orders screen has ever been opened.
-                            val beaten by MarketWatchService.beatenCount.collectAsState()
-                            CountBadge(beaten)
-                        }
-                        if (screen == AppScreen.CONTRACTS) {
-                            // Contracts whose status changed since the tab was last viewed — fed
-                            // by ContractWatchService's opt-in background sweep, cleared above.
-                            val changed by ContractWatchService.changedCount.collectAsState()
-                            CountBadge(changed)
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                imageVector = screen.icon,
+                                contentDescription = null,
+                                tint = contentColor,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = stringResource(screen.label),
+                                color = contentColor,
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (screen == AppScreen.P2P_MARKET) {
+                                CountBadge(rememberPendingBuyRequestCount())
+                            }
+                            if (screen == AppScreen.LEADERBOARD) GiveawayNavBadge()
+                            if (screen == AppScreen.CHAT) ChatNavBadge()
+                            if (screen == AppScreen.ORDERS) {
+                                // Currently-beaten orders across every character — fed by
+                                // MarketWatchService's background sweep, so it's live even
+                                // before the Orders screen has ever been opened.
+                                val beaten by MarketWatchService.beatenCount.collectAsState()
+                                CountBadge(beaten)
+                            }
+                            if (screen == AppScreen.CONTRACTS) {
+                                // Contracts whose status changed since the tab was last viewed — fed
+                                // by ContractWatchService's opt-in background sweep, cleared above.
+                                val changed by ContractWatchService.changedCount.collectAsState()
+                                CountBadge(changed)
+                            }
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
             HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
             SidebarFeedbackButton(eveColors = eveColors)
             SidebarVersionFooter(eveColors = eveColors)
