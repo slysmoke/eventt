@@ -1,6 +1,7 @@
 package org.eventt.features.p2pmarket
 
 import org.eventt.core.esi.EsiClient
+import org.eventt.core.model.AppLog
 import org.eventt.core.model.PLEX_MARKET_REGION_ID
 import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.nostr.OrderSide
@@ -32,6 +33,21 @@ private fun effectiveMarketRegion(
 
 private fun referencePriceRegion(typeId: Int): Int = if (typeId == PLEX_TYPE_ID) PLEX_MARKET_REGION_ID else THE_FORGE_REGION_ID
 
+// Null on no orders or any ESI failure: callers run in composition scopes, where an escaping
+// exception (e.g. EsiOfflineException during downtime) surfaces as Compose's window error dialog.
+private fun bestMarketPrice(
+    regionId: Int,
+    typeId: Int,
+    side: OrderSide,
+): Double? =
+    runCatching {
+        val prices =
+            EsiClient
+                .getMarketRegionOrders(regionId, orderType = if (side == OrderSide.SELL) "sell" else "buy", typeId = typeId)
+                .mapNotNull { (it["price"] as? Number)?.toDouble() }
+        if (side == OrderSide.SELL) prices.minOrNull() else prices.maxOrNull()
+    }.onFailure { AppLog.warn("P2P", "market price", it) }.getOrNull()
+
 /**
  * Live "-X% vs market" badge — computed at render time against the order's own region (that's
  * the actual value proposition: skip the tax/broker fee you'd pay trading in that exact region on
@@ -54,13 +70,7 @@ object SavingsBadgeService {
         orderPrice: Double,
         salesTaxPct: Double,
     ): SavingsResult? {
-        val marketOrderType = if (side == OrderSide.SELL) "sell" else "buy"
-        val marketPrice =
-            EsiClient
-                .getMarketRegionOrders(effectiveMarketRegion(typeId, regionId), orderType = marketOrderType, typeId = typeId)
-                .mapNotNull { (it["price"] as? Number)?.toDouble() }
-                .let { if (side == OrderSide.SELL) it.minOrNull() else it.maxOrNull() }
-                ?: return null
+        val marketPrice = bestMarketPrice(effectiveMarketRegion(typeId, regionId), typeId, side) ?: return null
 
         val savingsPct =
             when (side) {
@@ -97,7 +107,7 @@ object SavingsBadgeService {
      * skills/standings move them well away from the 8%/3% bases. Priced off The Forge regardless
      * of which region the order is actually being posted to (see [THE_FORGE_REGION_ID]) —
      * [typeId] alone decides the reference region. Null if The Forge has no orders for this type
-     * yet (nothing to base a suggestion on).
+     * yet or ESI can't be reached (nothing to base a suggestion on).
      */
     fun recommendedPrice(
         typeId: Int,
@@ -105,13 +115,7 @@ object SavingsBadgeService {
         salesTaxPct: Double,
         brokerFeePct: Double,
     ): RecommendedPrice? {
-        val marketOrderType = if (side == OrderSide.SELL) "sell" else "buy"
-        val marketPrice =
-            EsiClient
-                .getMarketRegionOrders(referencePriceRegion(typeId), orderType = marketOrderType, typeId = typeId)
-                .mapNotNull { (it["price"] as? Number)?.toDouble() }
-                .let { if (side == OrderSide.SELL) it.minOrNull() else it.maxOrNull() }
-                ?: return null
+        val marketPrice = bestMarketPrice(referencePriceRegion(typeId), typeId, side) ?: return null
 
         val adjustmentPct = if (side == OrderSide.SELL) salesTaxPct else brokerFeePct
         val price = marketPrice * (1 - adjustmentPct / 100.0)
