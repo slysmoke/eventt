@@ -22,7 +22,7 @@ filter_commits = false
 tag_pattern = "v[0-9]*"
 sort_commits = "oldest"
 commit_parsers = [
-  { message = "^(Bump|Merge pull request|Merge remote-tracking|flake:|CI:)", skip = true },
+  { message = "^(Bump|Merge pull request|Merge remote-tracking|Merge branch|flake:|CI:)", skip = true },
   { message = "^Add", group = "Added" },
   { message = "^Fix", group = "Fixed" },
   { message = "^(Improve|Rework|Unify|Migrate|Switch|Trim|Pin)", group = "Changed" },
