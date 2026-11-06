@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
@@ -17,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -191,16 +194,50 @@ private fun Toolbar(state: RichTextState) {
     }
 }
 
-/** Unread @mentions of any of our identities, for the nav item. */
+/** For chat members only: a dot on new messages, a number once any of them @mentions one of our identities. */
 @Composable
-fun ChatNavBadge() {
-    val messages by ChatService.messages.collectAsState()
-    val seenAt by ChatService.mentionsSeenAt.collectAsState()
+fun ChatNavBadge(chatOpen: Boolean) {
+    val members by ChatService.members.collectAsState()
     var mine by remember { mutableStateOf(emptySet<String>()) }
-    LaunchedEffect(Unit) {
-        ChatService.loadMentionsSeenAt()
+    var joined by remember { mutableStateOf(false) }
+    // setJoined stores the flag before it updates members, so this sees every toggle.
+    LaunchedEffect(members) {
         mine = withContext(Dispatchers.IO) { NostrIdentityService.listIdentities().map { it.pubkey }.toSet() }
+        joined = NostrIdentityService.getActiveIdentity()?.let { ChatService.isJoined(it.pubkey) } ?: false
     }
-    val since = seenAt ?: return
-    CountBadge(messages.values.count { m -> m.createdAt > since && m.pubkey !in mine && m.mentions.any { it in mine } })
+    ChatNavBadge(chatOpen, joined, mine)
+}
+
+@Composable
+internal fun ChatNavBadge(
+    chatOpen: Boolean,
+    joined: Boolean,
+    mine: Set<String>,
+) {
+    val messages by ChatService.messages.collectAsState()
+    val seenAt by ChatService.seenAt.collectAsState()
+    // Here, not in ChatScreen: screens stay mounted after their first visit, so it can't tell it's on screen.
+    LaunchedEffect(chatOpen, messages.size) {
+        ChatService.loadSeenAt()
+        if (chatOpen) ChatService.markSeen()
+    }
+    val since = seenAt
+    if (!joined || since == null) return
+    val unread = remember(messages, mine, since) { ChatService.unread(messages.values, mine, since) }
+    when {
+        unread.mentions > 0 -> {
+            CountBadge(unread.mentions)
+        }
+
+        unread.any -> {
+            val description = stringResource(Res.string.chat_new_messages)
+            Box(
+                Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.error)
+                    .semantics { contentDescription = description },
+            )
+        }
+    }
 }

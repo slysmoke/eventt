@@ -2,6 +2,7 @@ package org.eventt.core.nostr
 
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
+import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
@@ -70,6 +71,32 @@ class ChatServiceTest {
 
         reply.replyToId shouldBe parent.id
         reply.mentions shouldBe listOf(alice.pubKey, "carol")
+    }
+
+    @Test
+    fun `unread counts new messages from others and numbers only the mentions of us`() {
+        fun msg(
+            signer: NostrSignerSync,
+            at: Long,
+            mentions: List<String> = emptyList(),
+        ) = ChatService.parseMessage(
+            ChatService.buildMessage(signer, "x", null, ChatRoom.GENERAL, "hi", mentions = mentions, createdAt = at),
+        )!!
+        val me = setOf(alice.pubKey)
+        val seen = 1000L
+        val now = 2000L
+
+        ChatService.unread(listOf(msg(bob, seen)), me, seen, now) shouldBe ChatUnread(false, 0)
+        ChatService.unread(listOf(msg(alice, seen + 1)), me, seen, now) shouldBe ChatUnread(false, 0)
+        ChatService.unread(listOf(msg(bob, seen + 1)), me, seen, now) shouldBe ChatUnread(true, 0)
+        ChatService.unread(
+            listOf(msg(bob, seen + 1), msg(bob, seen + 2, listOf(alice.pubKey)), msg(bob, seen + 3, listOf("carol"))),
+            me,
+            seen,
+            now,
+        ) shouldBe ChatUnread(true, 1)
+        // Forged far-future timestamp: would otherwise stay unread however often the chat is opened.
+        ChatService.unread(listOf(msg(bob, now + 10_000, listOf(alice.pubKey))), me, seen, now) shouldBe ChatUnread(false, 0)
     }
 
     @Test

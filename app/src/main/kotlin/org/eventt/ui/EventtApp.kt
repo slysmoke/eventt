@@ -934,7 +934,7 @@ private fun Sidebar(
                                 CountBadge(rememberPendingBuyRequestCount())
                             }
                             if (screen == AppScreen.LEADERBOARD) GiveawayNavBadge()
-                            if (screen == AppScreen.CHAT) ChatNavBadge()
+                            if (screen == AppScreen.CHAT) ChatNavBadge(chatOpen = isSelected)
                             if (screen == AppScreen.ORDERS) {
                                 // Currently-beaten orders across every character — fed by
                                 // MarketWatchService's background sweep, so it's live even

@@ -157,8 +157,6 @@ internal fun ChatLayout(
     var myPubkeys by remember { mutableStateOf(setOf(me.pubkey)) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { myPubkeys = myPubkeys + withContext(Dispatchers.IO) { NostrIdentityService.listIdentities().map { it.pubkey } } }
-    // Mentions count as read while the chat is open.
-    LaunchedEffect(messages.size) { ChatService.markMentionsSeen() }
 
     fun send(
         text: String,

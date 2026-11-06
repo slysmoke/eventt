@@ -257,6 +257,7 @@
     <string name="chat_general">Общий</string>
     <string name="chat_ideas">Предложения</string>
     <string name="chat_public_note">Публично: читать может любой в Nostr.</string>
+    <string name="chat_new_messages">Новые сообщения</string>
     <string name="chat_message_placeholder">Напишите сообщение… (@ — упомянуть, Shift+Enter — новая строка)</string>
     <string name="chat_comment_placeholder">Напишите комментарий…</string>
     <string name="chat_back_to_ideas">Все предложения</string>

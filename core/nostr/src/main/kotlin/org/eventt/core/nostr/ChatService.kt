@@ -30,7 +30,12 @@ const val CHAT_TOPIC_MAX_LENGTH = 20000
 const val CHAT_TITLE_MAX_LENGTH = 120
 
 private const val JOINED_SETTING = "chat_joined_"
-private const val MENTIONS_SEEN_SETTING = "chat_mentions_seen_at"
+
+// Key predates the all-messages badge; kept so upgrades don't turn the whole history unread.
+private const val SEEN_SETTING = "chat_mentions_seen_at"
+
+// Timestamps further ahead than this (forged or a broken clock) never count as unread.
+private const val MAX_CLOCK_SKEW_SECONDS = 5 * 60L
 
 /**
  * The two rooms. NIP-28 roots a channel at a kind-40 creation event; ours are fixed ids instead,
@@ -76,6 +81,12 @@ data class ChatMember(
     val updatedAt: Long,
 )
 
+/** What the nav badge shows: a dot for [any] new message, a number for [mentions] of us. */
+data class ChatUnread(
+    val any: Boolean,
+    val mentions: Int,
+)
+
 object ChatService {
     private val _messages = MutableStateFlow<Map<String, ChatMessage>>(emptyMap())
     val messages: StateFlow<Map<String, ChatMessage>> = _messages.asStateFlow()
@@ -87,9 +98,9 @@ object ChatService {
     private val _members = MutableStateFlow<Map<String, ChatMember>>(emptyMap())
     val members: StateFlow<Map<String, ChatMember>> = _members.asStateFlow()
 
-    // Mentions of us newer than this are unread (the nav badge).
-    private val _mentionsSeenAt = MutableStateFlow<Long?>(null)
-    val mentionsSeenAt: StateFlow<Long?> = _mentionsSeenAt.asStateFlow()
+    // Messages newer than this are unread (the nav badge).
+    private val _seenAt = MutableStateFlow<Long?>(null)
+    val seenAt: StateFlow<Long?> = _seenAt.asStateFlow()
 
     suspend fun post(
         identity: NostrIdentity,
@@ -140,15 +151,29 @@ object ChatService {
         NostrRelayManager.publish(event)
     }
 
-    suspend fun loadMentionsSeenAt() {
-        if (_mentionsSeenAt.value != null) return
-        _mentionsSeenAt.value = withContext(Dispatchers.IO) { StaticDataDao.getSetting(MENTIONS_SEEN_SETTING)?.toLongOrNull() ?: 0L }
+    suspend fun loadSeenAt() {
+        if (_seenAt.value != null) return
+        _seenAt.value = withContext(Dispatchers.IO) { StaticDataDao.getSetting(SEEN_SETTING)?.toLongOrNull() ?: 0L }
     }
 
-    suspend fun markMentionsSeen() {
+    suspend fun markSeen() {
         val now = System.currentTimeMillis() / 1000
-        _mentionsSeenAt.value = now
-        withContext(Dispatchers.IO) { StaticDataDao.setSetting(MENTIONS_SEEN_SETTING, now.toString()) }
+        // A sender's clock running a little ahead must not leave a message we just showed unread.
+        val newest = _messages.value.values.maxOfOrNull { m -> m.createdAt.takeIf { it <= now + MAX_CLOCK_SKEW_SECONDS } ?: 0L } ?: 0L
+        val seen = maxOf(now, newest)
+        _seenAt.value = seen
+        withContext(Dispatchers.IO) { StaticDataDao.setSetting(SEEN_SETTING, seen.toString()) }
+    }
+
+    /** Our own posts never count, from any of our identities ([mine]). */
+    fun unread(
+        messages: Collection<ChatMessage>,
+        mine: Set<String>,
+        seenAt: Long,
+        now: Long = System.currentTimeMillis() / 1000,
+    ): ChatUnread {
+        val new = messages.filter { it.createdAt > seenAt && it.createdAt <= now + MAX_CLOCK_SKEW_SECONDS && it.pubkey !in mine }
+        return ChatUnread(new.isNotEmpty(), new.count { m -> m.mentions.any { it in mine } })
     }
 
     fun buildMessage(
