@@ -299,10 +299,15 @@ class CostBasisServiceTest {
     }
 
     @Test
-    fun `pnlForOrder returns null when nothing matches after the date filter`() {
-        val profit = CostBasisService.pnlForOrder(sampleResult(), TYPE_ID, issuedDate = "2024-01-03", filledQty = 5)
+    fun `pnlForOrder walks back past issued for a repriced order's earlier fills`() {
+        // ESI moved `issued` to the last modify (01-03); the fills happened before it.
+        val (profit, _) =
+            CostBasisService
+                .pnlForOrder(sampleResult(), TYPE_ID, issuedDate = "2024-01-03", filledQty = 12)
+                .shouldNotBeNull()
 
-        profit.shouldBeNull()
+        // newest first: all 100.0 of 01-02, then 2/5 of 01-01's 50.0
+        profit should (120.0 plusOrMinus TOLERANCE)
     }
 
     @Test

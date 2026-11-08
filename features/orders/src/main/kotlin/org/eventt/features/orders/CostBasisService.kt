@@ -275,10 +275,10 @@ object CostBasisService {
     ): Pair<Double, Double>? {
         if (filledQty <= 0) return null
         val localIssuedDate = issuedDate.utcToLocalDateTime()
-        val sells =
-            result.realizedByType[typeId]
-                ?.filter { it.date >= localIssuedDate }
-                ?: return null
+        // ESI resets `issued` on every price modify, so a repriced order's earlier fills sit before
+        // it. Take sells from `issued` forward first, then walk back from `issued` for the rest.
+        val (before, after) = result.realizedByType[typeId]?.partition { it.date < localIssuedDate } ?: return null
+        val sells = after + before.asReversed()
 
         var remaining = filledQty
         var totalProfit = 0.0
