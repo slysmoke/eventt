@@ -153,7 +153,14 @@ internal fun ChatLayout(
     val messages by ChatService.messages.collectAsState()
     val votes by ChatService.votes.collectAsState()
     val allMembers by ChatService.members.collectAsState()
-    val members = remember(allMembers) { allMembers.values.filter { it.joined } }
+    // A character that lost its key (reinstall, another PC) rejoins under a new pubkey: show it once, newest key wins.
+    val members =
+        remember(allMembers) {
+            allMembers.values
+                .filter { it.joined }
+                .groupBy { it.charId ?: it.pubkey }
+                .map { (_, keys) -> keys.maxBy { it.updatedAt } }
+        }
     var myPubkeys by remember { mutableStateOf(setOf(me.pubkey)) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { myPubkeys = myPubkeys + withContext(Dispatchers.IO) { NostrIdentityService.listIdentities().map { it.pubkey } } }
