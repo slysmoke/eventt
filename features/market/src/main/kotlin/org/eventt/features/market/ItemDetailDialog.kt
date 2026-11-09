@@ -1369,7 +1369,7 @@ private fun TradingChart(
             }
 
             // ── Margin ruler: change from the first point to the second, and the net margin of
-            // buying at the lower price and selling at the higher one after broker fee + sales tax.
+            // buying at the first point and selling at the second after broker fee + sales tax.
             ruler?.let { (a, b) ->
                 val xa = lPad + (a.day - view.start) / view.span * chartW
                 val xb = lPad + (b.day - view.start) / view.span * chartW
@@ -1383,16 +1383,17 @@ private fun TradingChart(
                     drawCircle(col, 3.dp.toPx(), Offset(xb, yb))
                 }
                 val diff = b.price - a.price
-                val net =
+                // (cost, profit) per unit; net of fees when known, raw otherwise.
+                val (cost, profit) =
                     fees?.let { (buyFee, sellFee) ->
-                        val cost = minOf(a.price, b.price) * (1 + buyFee / 100)
-                        (maxOf(a.price, b.price) * (1 - sellFee / 100) - cost) / cost * 100
-                    }
+                        val c = a.price * (1 + buyFee / 100)
+                        c to b.price * (1 - sellFee / 100) - c
+                    } ?: (a.price to diff)
                 val label =
                     buildString {
-                        append(signedPct(diff / a.price * 100))
-                        append(" (").append(if (diff >= 0) "+" else "−").append(formatPriceAbbr(abs(diff))).append(")")
-                        net?.let { append(" · $netWord ").append(signedPct(it)) }
+                        if (fees != null) append("$netWord ")
+                        append(signedPct(profit / cost * 100))
+                        append(" (").append(if (profit >= 0) "+" else "−").append(formatPriceAbbr(abs(profit))).append(")")
                         append(" · ").append(abs(b.day - a.day).roundToInt()).append(daysWord)
                     }
                 val lm = textMeasurer.measure(label, TextStyle(fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold))
