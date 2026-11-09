@@ -80,6 +80,13 @@ object PendingOrdersQueue {
     /** When on, the hotkey cycles only orders currently beaten by a competitor. Toggled from the UI. */
     @Volatile var onlyBeaten: Boolean = false
 
+    /**
+     * When on, the hotkey visits one order per item (same character, type, side and region): EVE
+     * opens the same market window for all of them, so the rest are just extra keystrokes. The
+     * kept one is the most urgent (beaten sort first).
+     */
+    @Volatile var skipDuplicates: Boolean = false
+
     // One-shot override set by selecting a row in OrdersScreen: the next hotkey press acts on
     // this order (then the cycle continues from there) instead of wherever the cycle left off.
     @Volatile private var nextOrderId: Long? = null
@@ -97,7 +104,10 @@ object PendingOrdersQueue {
     private val _currentOrderId = MutableStateFlow<Long?>(null)
     val currentOrderId: StateFlow<Long?> = _currentOrderId
 
-    private fun active(): List<PendingOrder> = if (onlyBeaten) queue.filter { it.isBeaten } else queue
+    private fun active(): List<PendingOrder> {
+        val q = if (onlyBeaten) queue.filter { it.isBeaten } else queue
+        return if (skipDuplicates) q.distinctBy { listOf(it.charId, it.typeId, it.isBuyOrder, it.regionId) } else q
+    }
 
     // Index of the order the next hotkey press will act on: the one after the last-processed
     // order, by id. If that order left the queue (no longer beaten, filter change), indexOfFirst

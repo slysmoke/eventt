@@ -17,6 +17,7 @@ import org.eventt.core.model.stringBlocking
 import org.eventt.orders.generated.resources.*
 
 internal const val NOTIFY_BEATEN_SETTING = "orders.notify_beaten"
+internal const val SKIP_DUPLICATES_SETTING = "orders.skip_duplicates"
 
 /**
  * App-lifetime market watcher (same start()/stop()-from-Main.kt shape as MarketLogWatcher): every

@@ -82,6 +82,8 @@
     </plurals>
     <string name="tip_undercut_ticks">How many EVE price ticks the hotkey and Enter step past the best competing order: under the best sell for sell orders, above the best bid for buy orders.</string>
     <string name="only_beaten">only beaten</string>
+    <string name="skip_duplicates">one per item</string>
+    <string name="skip_duplicates_tip">Hotkey skips extra orders for the same item (same character, side and region) — it visits only the most urgent one</string>
     <string name="toggle_beaten_notif">Toggle beaten-order notifications</string>
     <string name="recalc_pnl">Recalculate P&amp;L</string>
     <string name="refresh_prices">Refresh Prices</string>

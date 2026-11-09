@@ -356,6 +356,11 @@ fun OrdersScreen(context: ViewContext?) {
 
     // Ctrl+Z cycles only beaten orders when on (mirrors PendingOrdersQueue.onlyBeaten).
     var onlyBeaten by remember { mutableStateOf(PendingOrdersQueue.onlyBeaten) }
+    var skipDuplicates by remember { mutableStateOf(PendingOrdersQueue.skipDuplicates) }
+    LaunchedEffect(Unit) {
+        skipDuplicates = withContext(Dispatchers.IO) { StaticDataDao.getSetting(SKIP_DUPLICATES_SETTING) == "true" }
+        PendingOrdersQueue.skipDuplicates = skipDuplicates
+    }
     var undercutTicks by remember { mutableStateOf(1) }
     LaunchedEffect(Unit) { undercutTicks = withContext(Dispatchers.IO) { UndercutTicks.count } }
 
@@ -938,6 +943,13 @@ fun OrdersScreen(context: ViewContext?) {
                 Segment(stringResource(Res.string.only_beaten), onlyBeaten) {
                     onlyBeaten = !onlyBeaten
                     PendingOrdersQueue.onlyBeaten = onlyBeaten
+                }
+                Tip(stringResource(Res.string.skip_duplicates_tip)) {
+                    Segment(stringResource(Res.string.skip_duplicates), skipDuplicates) {
+                        skipDuplicates = !skipDuplicates
+                        PendingOrdersQueue.skipDuplicates = skipDuplicates
+                        scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(SKIP_DUPLICATES_SETTING, skipDuplicates.toString()) }
+                    }
                 }
                 UndercutTicksPicker(undercutTicks) { v ->
                     undercutTicks = v

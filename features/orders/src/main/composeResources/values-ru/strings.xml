@@ -86,6 +86,8 @@
     </plurals>
     <string name="tip_undercut_ticks">На сколько ценовых тиков EVE хоткей и Enter сдвигают цену от лучшего конкурента: ниже лучшей продажи для sell-ордеров, выше лучшей покупки для buy-ордеров.</string>
     <string name="only_beaten">только перебитые</string>
+    <string name="skip_duplicates">по одному на предмет</string>
+    <string name="skip_duplicates_tip">Хоткей пропускает лишние ордера на тот же предмет (тот же персонаж, сторона и регион) — открывает только самый срочный</string>
     <string name="toggle_beaten_notif">Вкл/выкл уведомления о перебитых ордерах</string>
     <string name="recalc_pnl">Пересчитать прибыль</string>
     <string name="refresh_prices">Обновить цены</string>

@@ -26,6 +26,7 @@ class PendingOrdersQueueTest {
     fun tearDown() {
         PendingOrdersQueue.clear()
         PendingOrdersQueue.onlyBeaten = false
+        PendingOrdersQueue.skipDuplicates = false
         unmockkObject(EsiClient)
     }
 
@@ -70,10 +71,11 @@ class PendingOrdersQueueTest {
         id: Long,
         typeName: String,
         isBeaten: Boolean,
+        typeId: Int = id.toInt(),
     ) = PendingOrder(
         charId = 1,
         orderId = id,
-        typeId = 34,
+        typeId = typeId,
         typeName = typeName,
         isBuyOrder = false,
         regionId = 10000002,
@@ -162,6 +164,27 @@ class PendingOrdersQueueTest {
                 order(10, "Isogen", isBeaten = false),
                 order(20, "Tritanium", isBeaten = true),
                 order(30, "Zydrine", isBeaten = true),
+            ),
+        )
+
+        PendingOrdersQueue.size shouldBe 2
+
+        PendingOrdersQueue.processNext()
+        PendingOrdersQueue.currentOrderId.value shouldBe 20L
+        PendingOrdersQueue.processNext()
+        PendingOrdersQueue.currentOrderId.value shouldBe 30L
+        PendingOrdersQueue.processNext()
+        PendingOrdersQueue.currentOrderId.value shouldBe 20L
+    }
+
+    @Test
+    fun `skipDuplicates cycles one order per item, keeping the beaten one`() {
+        PendingOrdersQueue.skipDuplicates = true
+        PendingOrdersQueue.update(
+            listOf(
+                order(10, "Tritanium", isBeaten = false, typeId = 34),
+                order(20, "Tritanium", isBeaten = true, typeId = 34),
+                order(30, "Zydrine", isBeaten = false, typeId = 39),
             ),
         )
 
