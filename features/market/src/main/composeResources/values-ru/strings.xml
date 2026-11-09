@@ -162,6 +162,14 @@
     <string name="chart_my_buy">мой П</string>
     <string name="chart_my_sell">мой Пр</string>
     <string name="chart_vol">Объём</string>
+    <string name="chart_ruler_net">чистыми</string>
+    <string name="chart_break_even">БУ</string>
+    <string name="chart_days_short">д</string>
+    <string name="chart_controls_tip">Колесо: масштаб по времени · Перетаскивание: сдвиг
+Ctrl+колесо или колесо/перетаскивание по шкале цен: масштаб цен
+Shift+перетаскивание или правой кнопкой: линейка маржи (чистыми = купить по нижней цене, продать по верхней, за вычетом брокерской комиссии и налога); клик — убрать
+Ctrl+клик: линия-алерт (срабатывает, когда лучший ask пересечёт её; видна во вкладке Алерты); Ctrl+клик по ней — убрать
+Двойной клик: сброс</string>
     <string name="no_trades">нет сделок</string>
     <string name="leg_avg">средн. %1$s</string>
     <string name="leg_ccp">CCP макс. %1$s  мин. %2$s</string>

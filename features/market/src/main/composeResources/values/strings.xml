@@ -162,6 +162,14 @@
     <string name="chart_my_buy">my B</string>
     <string name="chart_my_sell">my S</string>
     <string name="chart_vol">Vol</string>
+    <string name="chart_ruler_net">net</string>
+    <string name="chart_break_even">BE</string>
+    <string name="chart_days_short">d</string>
+    <string name="chart_controls_tip">Wheel: zoom time · Drag: pan
+Ctrl+wheel or wheel/drag on the price axis: zoom prices
+Shift+drag or right-drag: margin ruler (net = buy at the low end, sell at the high end, after broker fee and sales tax); click to clear
+Ctrl+click: add a price alert line (fires when the best ask crosses it, listed on the Alerts tab); Ctrl+click it again to remove
+Double-click: reset</string>
     <string name="no_trades">no trades</string>
     <string name="leg_avg">avg %1$s</string>
     <string name="leg_ccp">CCP H %1$s  L %2$s</string>

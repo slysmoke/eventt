@@ -26,7 +26,10 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isPrimaryPressed
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -44,6 +47,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.ActiveOrderDao
+import org.eventt.core.database.AlertDao
 import org.eventt.core.database.AssetDao
 import org.eventt.core.database.MarketDao
 import org.eventt.core.database.StaticDataDao
@@ -52,9 +56,11 @@ import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.MarketHistoryModel
 import org.eventt.core.model.PLEX_MARKET_REGION_ID
 import org.eventt.core.model.PLEX_TYPE_ID
+import org.eventt.core.model.PriceAlertModel
 import org.eventt.market.generated.resources.*
 import org.eventt.ui.common.ContentCard
 import org.eventt.ui.common.EmptyState
+import org.eventt.ui.common.Tip
 import org.eventt.ui.common.TypeIcon
 import org.eventt.ui.common.formatIsk
 import org.eventt.ui.common.formatPriceAbbr
@@ -63,10 +69,12 @@ import org.eventt.ui.theme.negativeColor
 import org.eventt.ui.theme.positiveColor
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
+import java.math.MathContext
 import java.time.LocalDate
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -152,6 +160,8 @@ internal data class MyTrades(
     val avgBuyPrice: Double?,
     val realizedPnl: Double?,
     val sellFeePct: Double,
+    // Broker fee alone: what placing a buy order costs.
+    val buyFeePct: Double,
     val transactions: List<WalletDao.RawTxRecord>,
     val openOrders: List<ActiveOrderDao.ActiveOrderRecord>,
     // Fills/orders in the charted region. Fills elsewhere (inter-region trading) are still plotted,
@@ -194,6 +204,7 @@ internal fun loadMyTrades(
         avgBuyPrice = basis.avgCost,
         realizedPnl = basis.realized.takeIf { txs.any { !it.isBuy } },
         sellFeePct = StaticDataDao.getCharSalesTax(charId) + StaticDataDao.getCharBrokersFee(charId),
+        buyFeePct = StaticDataDao.getCharBrokersFee(charId),
         transactions = txs,
         openOrders = openOrders,
         regionTransactions = txs.filter { regionOf(it.locationId).let { r -> r == null || r == regionId } },
@@ -370,6 +381,10 @@ internal fun ItemPriceChart(
     var showVwap by remember { mutableStateOf(VWAP_LINES.map { true }) }
     var showTrades by remember { mutableStateOf(true) }
     var showA4e by remember { mutableStateOf(true) }
+    // Ctrl+click levels are price alerts on this item and region (the same ones the Alerts tab
+    // lists), so a level fires a notification when the best ask crosses it.
+    var userLevels by remember(typeId) { mutableStateOf(emptyList<PriceAlertModel>()) }
+    val alertRevision by AlertDao.revision.collectAsState()
     var a4e by remember { mutableStateOf<Map<String, A4eDay>>(emptyMap()) }
     val a4eSync by A4eHistorySync.state.collectAsState()
     // ponytail: test override — region-wide Adam4EVE in The Forge sums ~350 stations/structures,
@@ -396,6 +411,16 @@ internal fun ItemPriceChart(
             flag("trades")?.let { showTrades = it }
             flag("a4e")?.let { showA4e = it }
         }
+    }
+
+    LaunchedEffect(typeId, regionId, alertRevision) {
+        userLevels =
+            withContext(Dispatchers.IO) {
+                runCatching { AlertDao.getEnabled() }.getOrDefault(emptyList()).filter {
+                    // Region 0 is AlertMonitor's default, The Forge.
+                    it.typeId == typeId && !it.triggered && (it.regionId.takeIf { r -> r > 0 } ?: THE_FORGE) == regionId
+                }
+            }
     }
 
     // Local Adam4EVE history — re-read as the background sync lands more files.
@@ -469,6 +494,9 @@ internal fun ItemPriceChart(
                 color = AXIS_COLOR,
                 modifier = Modifier.align(Alignment.CenterVertically),
             )
+            Tip(stringResource(Res.string.chart_controls_tip), Modifier.align(Alignment.CenterVertically)) {
+                Text("ⓘ", style = MaterialTheme.typography.labelMedium, color = AXIS_COLOR)
+            }
         }
         Spacer(Modifier.height(6.dp))
         TradingChart(
@@ -485,6 +513,24 @@ internal fun ItemPriceChart(
             a4e = a4e.takeIf { showA4e }.orEmpty(),
             bestBid = bestBid,
             bestAsk = bestAsk,
+            fees = trades?.let { it.buyFeePct to it.sellFeePct },
+            userLevels = userLevels,
+            onAddLevel = { price ->
+                // Above the market it fires when the ask rises to the line, below when it falls to it.
+                val ref = bestAsk ?: bestBid ?: history.lastOrNull()?.average ?: price
+                scope.launch(Dispatchers.IO) {
+                    AlertDao.insert(
+                        PriceAlertModel(
+                            typeId = typeId,
+                            typeName = StaticDataDao.getTypeName(typeId).orEmpty(),
+                            targetPrice = price,
+                            condition = if (price >= ref) "above" else "below",
+                            regionId = regionId,
+                        ),
+                    )
+                }
+            },
+            onRemoveLevel = { alert -> scope.launch(Dispatchers.IO) { AlertDao.delete(alert.id) } },
             modifier = Modifier.fillMaxWidth().weight(1f),
         )
     }
@@ -742,6 +788,49 @@ internal data class ChartView(
 
 private const val MIN_VIEW_DAYS = 7f
 
+private val USER_LEVEL_COLOR = Color(0xFF90A4AE)
+
+private enum class DragMode { PAN, AXIS, RULER }
+
+// One end of the margin ruler, in data coordinates so it follows pan/zoom.
+private data class RulerEnd(
+    val day: Float,
+    val price: Double,
+)
+
+// Price pane geometry and scale from the last draw, for pointer handlers. Plain fields, not
+// state: written during draw, and reading it must not trigger a redraw.
+private class PricePane {
+    var top = 0f
+    var height = 0f
+    var min = 0.0
+    var max = 1.0
+
+    fun priceAt(y: Float) = min + (1 - (y - top) / height) * (max - min)
+
+    fun yAt(v: Double) = top + (1f - ((v - min) / (max - min).coerceAtLeast(1e-12)).toFloat()) * height
+
+    // (lo, hi) stretched by f around the price p (factor > 1 zooms out).
+    fun zoom(
+        lo: Double,
+        hi: Double,
+        p: Double,
+        f: Double,
+    ) = p - (p - lo) * f to p + (hi - p) * f
+
+    // (lo, hi) moved by dy pixels.
+    fun shift(
+        lo: Double,
+        hi: Double,
+        dy: Float,
+    ): Pair<Double, Double> {
+        val d = dy / height * (hi - lo)
+        return lo + d to hi + d
+    }
+
+    operator fun contains(y: Float) = height > 0 && y in top..top + height
+}
+
 internal fun presetView(
     n: Int,
     days: Int,
@@ -781,6 +870,11 @@ private fun TradingChart(
     a4e: Map<String, A4eDay>,
     bestBid: Double?,
     bestAsk: Double?,
+    // (buy, sell) fee %, for the ruler's net margin; null hides it.
+    fees: Pair<Double, Double>?,
+    userLevels: List<PriceAlertModel>,
+    onAddLevel: (Double) -> Unit,
+    onRemoveLevel: (PriceAlertModel) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (history.isEmpty()) {
@@ -814,6 +908,13 @@ private fun TradingChart(
     var zLevels by remember { mutableStateOf(listOf<Double?>(1.0, -1.0)) }
     // The z pane's vertical extent (top, height) from the last draw, for click hit-testing.
     var zPane by remember { mutableStateOf(0f to 0f) }
+    val pane = remember { PricePane() }
+    // Manual price range (min, max); null = auto-fit the visible days. Set by Ctrl+wheel / wheel or
+    // drag on the price axis; double-click returns to auto.
+    var yRange by remember(data, range) { mutableStateOf<Pair<Double, Double>?>(null) }
+    var ruler by remember(data) { mutableStateOf<Pair<RulerEnd, RulerEnd>?>(null) }
+    var dragMode by remember { mutableStateOf<DragMode?>(null) }
+    var dragY by remember { mutableStateOf(0f) }
 
     // Layout constants shared by drawing and hit-testing.
     val lPadDp = 8.dp
@@ -832,6 +933,12 @@ private fun TradingChart(
 
     fun anchorOf(x: Float) = ((x - with(density) { lPadDp.toPx() }) / plotWidth()).coerceIn(0f, 1f)
 
+    fun onPriceAxis(p: Offset) = p.y in pane && p.x > with(density) { lPadDp.toPx() } + plotWidth()
+
+    fun rulerEnd(p: Offset) = RulerEnd(view.start + anchorOf(p.x) * view.span, pane.priceAt(p.y.coerceIn(pane.top, pane.top + pane.height)))
+
+    fun currentRange() = yRange ?: (pane.min to pane.max)
+
     Column(modifier = modifier) {
         // Legend strip: follows the crosshair, or shows the latest day when not hovering.
         HoverLegend(
@@ -848,9 +955,12 @@ private fun TradingChart(
 
         // DrawScope isn't composable — resolve the chart's text up front.
         val costWord = stringResource(Res.string.chart_cost)
+        val beWord = stringResource(Res.string.chart_break_even)
         val myBuyWord = stringResource(Res.string.chart_my_buy)
         val mySellWord = stringResource(Res.string.chart_my_sell)
         val volWord = stringResource(Res.string.chart_vol)
+        val netWord = stringResource(Res.string.chart_ruler_net)
+        val daysWord = stringResource(Res.string.chart_days_short)
         Canvas(
             modifier =
                 Modifier
@@ -858,29 +968,61 @@ private fun TradingChart(
                     .weight(1f)
                     .onSizeChanged { canvasWidth = it.width }
                     .onPointerEvent(PointerEventType.Move) {
-                        val x =
-                            it.changes
-                                .first()
-                                .position.x
+                        val pos = it.changes.first().position
                         val from = dragX
-                        if (from != null && it.buttons.isPrimaryPressed && plotWidth() > 0) {
-                            view = view.panned(-(x - from) / plotWidth() * view.span, n)
-                            dragX = x
+                        if (from != null && plotWidth() > 0) {
+                            when (dragMode) {
+                                DragMode.PAN -> {
+                                    if (it.buttons.isPrimaryPressed) {
+                                        view = view.panned(-(pos.x - from) / plotWidth() * view.span, n)
+                                        // Once scaled by hand, dragging also pans the price axis.
+                                        yRange?.let { (lo, hi) -> yRange = pane.shift(lo, hi, pos.y - dragY) }
+                                    }
+                                }
+
+                                // Drag down squeezes the range (zoom out), up stretches it.
+                                DragMode.AXIS -> {
+                                    val (lo, hi) = currentRange()
+                                    yRange = pane.zoom(lo, hi, pane.priceAt(pane.top + pane.height / 2), exp((pos.y - dragY) * 0.01))
+                                }
+
+                                DragMode.RULER -> {
+                                    ruler = ruler?.let { r -> r.first to rulerEnd(pos) }
+                                }
+
+                                null -> {}
+                            }
+                            dragX = pos.x
+                            dragY = pos.y
                         }
-                        hoverX = x
-                        hoverY =
-                            it.changes
-                                .first()
-                                .position.y
+                        hoverX = pos.x
+                        hoverY = pos.y
                     }.onPointerEvent(PointerEventType.Press) {
+                        val pos = it.changes.first().position
                         val now = System.currentTimeMillis()
-                        // Double-click: back to the selected range preset.
-                        if (now - lastPress < 350) view = presetView(n, range.days)
+                        // Double-click: back to the selected range preset and auto price scale.
+                        if (now - lastPress < 350) {
+                            view = presetView(n, range.days)
+                            yRange = null
+                        }
                         lastPress = now
-                        dragX =
-                            it.changes
-                                .first()
-                                .position.x
+                        dragMode =
+                            when {
+                                onPriceAxis(pos) -> {
+                                    DragMode.AXIS
+                                }
+
+                                pos.y in pane && (it.keyboardModifiers.isShiftPressed || it.buttons.isSecondaryPressed) -> {
+                                    ruler = rulerEnd(pos) to rulerEnd(pos)
+                                    DragMode.RULER
+                                }
+
+                                else -> {
+                                    DragMode.PAN
+                                }
+                            }
+                        dragX = pos.x
+                        dragY = pos.y
                         pressX = dragX
                     }.onPointerEvent(PointerEventType.Release) {
                         val pos = it.changes.first().position
@@ -893,16 +1035,43 @@ private fun TradingChart(
                             val cur = zLevels[side]
                             zLevels = zLevels.toMutableList().also { it[side] = if (cur != null && abs(cur - z) < 0.2) null else z }
                         }
+                        val priceClick = dragMode == DragMode.PAN && pressX?.let { x -> abs(pos.x - x) < 4f } == true && pos.y in pane
+                        if (priceClick && it.keyboardModifiers.isCtrlPressed) {
+                            // Ctrl+click: add a price alert here, or remove the one under the cursor.
+                            val hit = userLevels.firstOrNull { lv -> abs(pane.yAt(lv.targetPrice) - pos.y) < 5f }
+                            if (hit != null) {
+                                onRemoveLevel(hit)
+                            } else {
+                                onAddLevel(
+                                    pane
+                                        .priceAt(pos.y)
+                                        .toBigDecimal()
+                                        .round(MathContext(4))
+                                        .toDouble(),
+                                )
+                            }
+                        } else if (priceClick) {
+                            ruler = null // a plain click in the price pane clears the ruler
+                        }
                         dragX = null
                         pressX = null
+                        dragMode = null
                     }.onPointerEvent(PointerEventType.Scroll) {
                         val c = it.changes.first()
-                        // Wheel down zooms out, up zooms in, anchored on the day under the cursor.
-                        view = view.zoomed(1.15f.pow(c.scrollDelta.y), anchorOf(c.position.x), n)
+                        val f = 1.15.pow(c.scrollDelta.y.toDouble())
+                        if (onPriceAxis(c.position) || (c.position.y in pane && it.keyboardModifiers.isCtrlPressed)) {
+                            // Vertical zoom, anchored on the price under the cursor.
+                            val (lo, hi) = currentRange()
+                            yRange = pane.zoom(lo, hi, pane.priceAt(c.position.y), f)
+                        } else {
+                            // Wheel down zooms out, up zooms in, anchored on the day under the cursor.
+                            view = view.zoomed(f.toFloat(), anchorOf(c.position.x), n)
+                        }
                     }.onPointerEvent(PointerEventType.Exit) {
                         hoverX = null
                         hoverY = null
                         dragX = null
+                        dragMode = null
                     },
         ) {
             val lPad = lPadDp.toPx()
@@ -927,8 +1096,12 @@ private fun TradingChart(
 
             fun clipPlot(block: DrawScope.() -> Unit) = clipRect(lPad, 0f, lPad + chartW, size.height, block = block)
 
+            fun clipPrice(block: DrawScope.() -> Unit) = clipRect(lPad, priceTop, lPad + chartW, priceTop + priceH, block = block)
+
             // ── Price pane range: daily highs/lows plus any overlay that's within reason, so a
             // far-off stale order or cost line doesn't squash the actual price action flat.
+            // Lowest sell price that returns the average cost after sales tax + broker fee.
+            val breakEven = trades?.takeIf { it.qtyHeld > 0 }?.avgBuyPrice?.let { it / (1 - trades.sellFeePct / 100) }
             val core =
                 data.rows.subList(iFrom, iTo + 1).filterNotNull().flatMap {
                     listOf(it.average, it.highest.takeIf { h -> h > 0 } ?: it.average, it.lowest.takeIf { l -> l > 0 } ?: it.average)
@@ -941,6 +1114,8 @@ private fun TradingChart(
                     bestBid?.let { add(it) }
                     bestAsk?.let { add(it) }
                     trades?.avgBuyPrice?.let { add(it) }
+                    breakEven?.let { add(it) }
+                    userLevels.forEach { add(it.targetPrice) }
                     trades?.regionOrders?.forEach { add(it.price) }
                     data.days.subList(iFrom, iTo + 1).forEach { d ->
                         a4e[d]?.let { day ->
@@ -955,16 +1130,19 @@ private fun TradingChart(
                         }
                     }
                 }.filter { it in coreMin * 0.75..coreMax * 1.25 }
-            val pMin = minOf(coreMin, extras.minOrNull() ?: coreMin) * 0.985
-            val pMax = maxOf(coreMax, extras.maxOrNull() ?: coreMax) * 1.015
-            val pRange = (pMax - pMin).coerceAtLeast(1e-9)
+            val pMin = yRange?.first ?: (minOf(coreMin, extras.minOrNull() ?: coreMin) * 0.985)
+            val pMax = yRange?.second ?: (maxOf(coreMax, extras.maxOrNull() ?: coreMax) * 1.015)
+            pane.top = priceTop
+            pane.height = priceH
+            pane.min = pMin
+            pane.max = pMax
 
-            fun yP(v: Double) = priceTop + (1f - ((v - pMin) / pRange).toFloat()) * priceH
+            fun yP(v: Double) = pane.yAt(v)
 
             // Grid + right-hand price axis.
             for (g in 0..4) {
-                val v = pMin + pRange * g / 4
-                val y = yP(v)
+                val y = priceTop + priceH * (4 - g) / 4
+                val v = pane.priceAt(y)
                 drawLine(GRID_COLOR, Offset(lPad, y), Offset(lPad + chartW, y), 1f)
                 axisLabel(textMeasurer, formatPriceAbbr(v), Offset(lPad + chartW + 6.dp.toPx(), y - 6.dp.toPx()), AXIS_COLOR)
             }
@@ -980,7 +1158,7 @@ private fun TradingChart(
                             pts.reversed().forEach { (i, b) -> lineTo(xFor(i), yP(b.lower)) }
                             close()
                         }
-                    clipPlot { drawPath(path, BAND_COLOR.copy(alpha = 0.12f)) }
+                    clipPrice { drawPath(path, BAND_COLOR.copy(alpha = 0.12f)) }
                 }
             }
 
@@ -1018,7 +1196,7 @@ private fun TradingChart(
                 VWAP_LINES.forEachIndexed { k, (period) ->
                     if (!showVwap[k]) return@forEachIndexed
                     val levelPrice = data.vwap[k].indices.map { i -> data.vwap[k][i]?.let { v -> data.vwapSd[k][i]?.let { v + lv * it } } }
-                    clipPlot { drawSeries(levelPrice, side.color.copy(alpha = 0.85f), 1.dp.toPx(), ::xFor, ::yP, dashed = true) }
+                    clipPrice { drawSeries(levelPrice, side.color.copy(alpha = 0.85f), 1.dp.toPx(), ::xFor, ::yP, dashed = true) }
                     levelPrice.subList(iFrom, iTo + 1).lastOrNull { it != null }?.let { v ->
                         axisLabel(textMeasurer, "$period", Offset(lPad + chartW - 16.dp.toPx(), yP(v) - 12.dp.toPx()), side.color)
                     }
@@ -1032,61 +1210,63 @@ private fun TradingChart(
             val barW = (chartW / (view.span + 1) * 0.6f).coerceIn(1f, 12.dp.toPx())
             val tick = barW / 2 + 3.dp.toPx()
 
-            fun yClamped(v: Double) = yP(v).coerceIn(priceTop, priceTop + priceH)
-            data.days.forEachIndexed { i, d ->
-                if (!visible(i)) return@forEachIndexed
-                val day = a4e[d] ?: return@forEachIndexed
-                val lo = day.low ?: return@forEachIndexed
-                val hi = day.high ?: return@forEachIndexed
-                drawLine(
-                    WICK_COLOR.copy(alpha = 0.6f),
-                    Offset(xFor(i), yClamped(hi)),
-                    Offset(xFor(i), yClamped(lo)),
-                    strokeWidth = 1.dp.toPx(),
-                )
-            }
-            data.rows.forEachIndexed { i, r ->
-                if (r == null || !visible(i)) return@forEachIndexed
-                val x = xFor(i)
-                val open = data.open[i] ?: r.average
-                val color = if (r.average >= open) upColor else downColor
-                if (r.highest > 0 && r.lowest > 0) {
-                    drawLine(color, Offset(x, yClamped(r.highest)), Offset(x, yClamped(r.lowest)), strokeWidth = 1.5.dp.toPx())
-                }
-                val top = yClamped(maxOf(open, r.average))
-                val bottom = maxOf(yClamped(minOf(open, r.average)), top + 1.dp.toPx()) // flat day still visible
-                drawRect(color, topLeft = Offset(x - barW / 2, top), size = Size(barW, bottom - top))
-            }
-            // Adam4EVE side VWAP ticks on top: bid fills left, ask fills right.
-            data.days.forEachIndexed { i, d ->
-                if (!visible(i)) return@forEachIndexed
-                val day = a4e[d] ?: return@forEachIndexed
-                val x = xFor(i)
-                day.bid?.let {
+            fun yClamped(v: Double) = yP(v).coerceIn(priceTop - 4f, priceTop + priceH + 4f)
+            clipPrice {
+                data.days.forEachIndexed { i, d ->
+                    if (!visible(i)) return@forEachIndexed
+                    val day = a4e[d] ?: return@forEachIndexed
+                    val lo = day.low ?: return@forEachIndexed
+                    val hi = day.high ?: return@forEachIndexed
                     drawLine(
-                        WICK_COLOR,
-                        Offset(x - tick, yClamped(it.vwap)),
-                        Offset(x - barW / 2, yClamped(it.vwap)),
-                        strokeWidth = 2.dp.toPx(),
+                        WICK_COLOR.copy(alpha = 0.6f),
+                        Offset(xFor(i), yClamped(hi)),
+                        Offset(xFor(i), yClamped(lo)),
+                        strokeWidth = 1.dp.toPx(),
                     )
                 }
-                day.ask?.let {
-                    drawLine(
-                        WICK_COLOR,
-                        Offset(x + barW / 2, yClamped(it.vwap)),
-                        Offset(x + tick, yClamped(it.vwap)),
-                        strokeWidth = 2.dp.toPx(),
-                    )
+                data.rows.forEachIndexed { i, r ->
+                    if (r == null || !visible(i)) return@forEachIndexed
+                    val x = xFor(i)
+                    val open = data.open[i] ?: r.average
+                    val color = if (r.average >= open) upColor else downColor
+                    if (r.highest > 0 && r.lowest > 0) {
+                        drawLine(color, Offset(x, yClamped(r.highest)), Offset(x, yClamped(r.lowest)), strokeWidth = 1.5.dp.toPx())
+                    }
+                    val top = yClamped(maxOf(open, r.average))
+                    val bottom = maxOf(yClamped(minOf(open, r.average)), top + 1.dp.toPx()) // flat day still visible
+                    drawRect(color, topLeft = Offset(x - barW / 2, top), size = Size(barW, bottom - top))
+                }
+                // Adam4EVE side VWAP ticks on top: bid fills left, ask fills right.
+                data.days.forEachIndexed { i, d ->
+                    if (!visible(i)) return@forEachIndexed
+                    val day = a4e[d] ?: return@forEachIndexed
+                    val x = xFor(i)
+                    day.bid?.let {
+                        drawLine(
+                            WICK_COLOR,
+                            Offset(x - tick, yClamped(it.vwap)),
+                            Offset(x - barW / 2, yClamped(it.vwap)),
+                            strokeWidth = 2.dp.toPx(),
+                        )
+                    }
+                    day.ask?.let {
+                        drawLine(
+                            WICK_COLOR,
+                            Offset(x + barW / 2, yClamped(it.vwap)),
+                            Offset(x + tick, yClamped(it.vwap)),
+                            strokeWidth = 2.dp.toPx(),
+                        )
+                    }
                 }
             }
 
-            clipPlot { if (secondaryLabel != null) drawSeries(data.secondary, SECONDARY_COLOR, 1.5.dp.toPx(), ::xFor, ::yP) }
-            clipPlot { if (showAvgLine) drawSeries(data.rows.map { it?.average }, priceColor, 2.dp.toPx(), ::xFor, ::yP) }
-            clipPlot { if (showSmaFast) drawSeries(data.smaFast, SMA_FAST_COLOR, 1.2.dp.toPx(), ::xFor, ::yP) }
+            clipPrice { if (secondaryLabel != null) drawSeries(data.secondary, SECONDARY_COLOR, 1.5.dp.toPx(), ::xFor, ::yP) }
+            clipPrice { if (showAvgLine) drawSeries(data.rows.map { it?.average }, priceColor, 2.dp.toPx(), ::xFor, ::yP) }
+            clipPrice { if (showSmaFast) drawSeries(data.smaFast, SMA_FAST_COLOR, 1.2.dp.toPx(), ::xFor, ::yP) }
             VWAP_LINES.forEachIndexed { k, (_, color) ->
-                clipPlot { if (showVwap[k]) drawSeries(data.vwap[k], color, 1.2.dp.toPx(), ::xFor, ::yP) }
+                clipPrice { if (showVwap[k]) drawSeries(data.vwap[k], color, 1.2.dp.toPx(), ::xFor, ::yP) }
             }
-            clipPlot { if (showSmaSlow) drawSeries(data.smaSlow, SMA_SLOW_COLOR, 1.2.dp.toPx(), ::xFor, ::yP) }
+            clipPrice { if (showSmaSlow) drawSeries(data.smaSlow, SMA_SLOW_COLOR, 1.2.dp.toPx(), ::xFor, ::yP) }
 
             // Horizontal levels: live bid/ask, your average cost, your open orders.
             fun level(
@@ -1119,8 +1299,25 @@ private fun TradingChart(
                     dashed = true,
                 )
             }
+            breakEven?.let { level(it, COST_COLOR.copy(alpha = 0.6f), "$beWord ${formatPriceAbbr(it)}", dashed = false) }
             trades?.regionOrders?.forEach { o ->
                 level(o.price, if (o.isBuyOrder) upColor else downColor, if (o.isBuyOrder) myBuyWord else mySellWord, dashed = true)
+            }
+            userLevels.forEach {
+                level(
+                    it.targetPrice,
+                    USER_LEVEL_COLOR,
+                    (
+                        if (it.condition ==
+                            "above"
+                        ) {
+                            "▲ "
+                        } else {
+                            "▼ "
+                        }
+                    ) + formatPriceAbbr(it.targetPrice),
+                    dashed = false,
+                )
             }
 
             // Your fills: ▲ buys / ▼ sells at the day's VWAP, sized by quantity — solid in this
@@ -1169,6 +1366,45 @@ private fun TradingChart(
                 marker(otherSellFills, up = false, hollow = true)
                 marker(buyFills, up = true)
                 marker(sellFills, up = false)
+            }
+
+            // ── Margin ruler: change from the first point to the second, and the net margin of
+            // buying at the lower price and selling at the higher one after broker fee + sales tax.
+            ruler?.let { (a, b) ->
+                val xa = lPad + (a.day - view.start) / view.span * chartW
+                val xb = lPad + (b.day - view.start) / view.span * chartW
+                val ya = yP(a.price)
+                val yb = yP(b.price)
+                val col = if (b.price >= a.price) upColor else downColor
+                clipPrice {
+                    drawRect(col.copy(alpha = 0.12f), Offset(minOf(xa, xb), minOf(ya, yb)), Size(abs(xb - xa), abs(yb - ya)))
+                    drawLine(col, Offset(xa, ya), Offset(xb, yb), 1.5.dp.toPx())
+                    drawCircle(col, 3.dp.toPx(), Offset(xa, ya))
+                    drawCircle(col, 3.dp.toPx(), Offset(xb, yb))
+                }
+                val diff = b.price - a.price
+                val net =
+                    fees?.let { (buyFee, sellFee) ->
+                        val cost = minOf(a.price, b.price) * (1 + buyFee / 100)
+                        (maxOf(a.price, b.price) * (1 - sellFee / 100) - cost) / cost * 100
+                    }
+                val label =
+                    buildString {
+                        append(signedPct(diff / a.price * 100))
+                        append(" (").append(if (diff >= 0) "+" else "−").append(formatPriceAbbr(abs(diff))).append(")")
+                        net?.let { append(" · $netWord ").append(signedPct(it)) }
+                        append(" · ").append(abs(b.day - a.day).roundToInt()).append(daysWord)
+                    }
+                val lm = textMeasurer.measure(label, TextStyle(fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold))
+                val w = lm.size.width + 8.dp.toPx()
+                val h = lm.size.height + 4.dp.toPx()
+                val tl =
+                    Offset(
+                        (xb + 8.dp.toPx()).coerceIn(lPad, (lPad + chartW - w).coerceAtLeast(lPad)),
+                        (if (b.price >= a.price) yb - h - 6.dp.toPx() else yb + 6.dp.toPx()).coerceIn(priceTop, priceTop + priceH - h),
+                    )
+                drawRect(col, tl, Size(w, h))
+                drawText(lm, topLeft = tl + Offset(4.dp.toPx(), 2.dp.toPx()))
             }
 
             // ── Volume pane.
@@ -1263,7 +1499,7 @@ private fun TradingChart(
             hoverY?.let { y ->
                 val label =
                     when {
-                        y in priceTop..priceTop + priceH -> formatPriceAbbr(pMin + (1 - (y - priceTop) / priceH) * pRange)
+                        y in priceTop..priceTop + priceH -> formatPriceAbbr(pane.priceAt(y))
                         y in volTop..volTop + volH -> formatVolume(((volTop + volH - y) / volH * maxVol).toLong())
                         y in zTop..zTop + zH -> "%+.2f".format(Z_RANGE - (y - zTop) / zH * 2 * Z_RANGE)
                         else -> return@let
