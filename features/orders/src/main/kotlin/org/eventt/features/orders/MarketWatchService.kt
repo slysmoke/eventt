@@ -18,6 +18,7 @@ import org.eventt.orders.generated.resources.*
 
 internal const val NOTIFY_BEATEN_SETTING = "orders.notify_beaten"
 internal const val SKIP_DUPLICATES_SETTING = "orders.skip_duplicates"
+internal const val ONLY_BEATEN_SETTING = "orders.only_beaten"
 
 /**
  * App-lifetime market watcher (same start()/stop()-from-Main.kt shape as MarketLogWatcher): every

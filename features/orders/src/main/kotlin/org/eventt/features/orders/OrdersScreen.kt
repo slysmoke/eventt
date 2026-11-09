@@ -360,6 +360,8 @@ fun OrdersScreen(context: ViewContext?) {
     LaunchedEffect(Unit) {
         skipDuplicates = withContext(Dispatchers.IO) { StaticDataDao.getSetting(SKIP_DUPLICATES_SETTING) == "true" }
         PendingOrdersQueue.skipDuplicates = skipDuplicates
+        onlyBeaten = withContext(Dispatchers.IO) { StaticDataDao.getSetting(ONLY_BEATEN_SETTING) == "true" }
+        PendingOrdersQueue.onlyBeaten = onlyBeaten
     }
     var undercutTicks by remember { mutableStateOf(1) }
     LaunchedEffect(Unit) { undercutTicks = withContext(Dispatchers.IO) { UndercutTicks.count } }
@@ -943,6 +945,7 @@ fun OrdersScreen(context: ViewContext?) {
                 Segment(stringResource(Res.string.only_beaten), onlyBeaten) {
                     onlyBeaten = !onlyBeaten
                     PendingOrdersQueue.onlyBeaten = onlyBeaten
+                    scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(ONLY_BEATEN_SETTING, onlyBeaten.toString()) }
                 }
                 Tip(stringResource(Res.string.skip_duplicates_tip)) {
                     Segment(stringResource(Res.string.skip_duplicates), skipDuplicates) {
