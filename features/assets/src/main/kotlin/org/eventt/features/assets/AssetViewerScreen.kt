@@ -44,6 +44,7 @@ import org.eventt.ui.theme.warningColor
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 private const val THE_FORGE_REGION_ID = 10000002
 private const val JITA_44_STATION_ID = 60003760L
@@ -544,6 +545,8 @@ private fun resolveRootLocation(
     return locationId to locationType
 }
 
+private val unresolvableStructures: MutableSet<Long> = ConcurrentHashMap.newKeySet()
+
 // Resolves a location_id to a name/system/region — covers both NPC stations and player
 // structures/citadels, since CitadelService stores citadel names in the same static_stations
 // table (see core/staticdata/CitadelService.kt). Callers must pass the *root* location_type
@@ -555,18 +558,17 @@ private fun resolveLocation(
 ): StaticStationModel? {
     StaticDataDao.getStationById(locationId)?.let { return it }
 
-    if (locationType != "station") {
-        println("[Assets] Not resolving $locationId — location_type is '$locationType', not 'station'")
-        return null
-    }
-    if (characterId == null) {
-        println("[Assets] Skipping ESI structure lookup for $locationId — no character token available")
-        return null
-    }
+    // ESI reports Upwell structures as location_type "item", so a chain that stopped on "item"
+    // (parent not in the batch) is almost always a citadel.
+    if (locationType != "station" && locationType != "item") return null
+    if (characterId == null || locationId in unresolvableStructures) return null
 
     return try {
         val info = EsiClient.getStructureInfo(locationId, characterId)
         if (info == null) {
+            // No docking access (403) or not a structure. Remember it so periodic asset refreshes
+            // don't burn ESI's error limit retrying. ponytail: per-process, a restart retries.
+            unresolvableStructures += locationId
             println("[Assets] getStructureInfo($locationId) returned null (no docking access or lookup failed)")
             return null
         }
