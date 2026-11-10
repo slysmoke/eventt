@@ -13,6 +13,7 @@ import org.eventt.core.auth.SsoAuthManager
 import org.eventt.core.cache.CacheState
 import org.eventt.core.cache.EsiCacheManager
 import org.eventt.core.database.CharacterDao
+import org.eventt.core.database.StaticDataDao
 import org.eventt.core.http.EveHttpClient
 import org.eventt.core.model.AppLog
 import org.eventt.core.model.CorpFeature
@@ -32,6 +33,7 @@ object EsiClient {
     // the real ESI. Never reassigned in production.
     internal var esiBaseUrl = "https://esi.evetech.net/latest"
     private const val ESI_DATASOURCE = "tranquility"
+    private const val STRUCTURE_DENIED_RETRY_MS = 7L * 24 * 60 * 60 * 1000
 
     val json =
         Json {
@@ -610,6 +612,11 @@ object EsiClient {
         structureId: Long,
         characterId: Int,
     ): Map<String, Any?>? {
+        // A 403 is remembered per character+structure in settings so every startup doesn't re-hit
+        // (and re-log) the same denied citadels; retried weekly in case docking access is granted.
+        val deniedKey = "structure_denied.$characterId.$structureId"
+        val deniedAt = StaticDataDao.getSetting(deniedKey)?.toLongOrNull()
+        if (deniedAt != null && System.currentTimeMillis() - deniedAt < STRUCTURE_DENIED_RETRY_MS) return null
         return try {
             val token = SsoAuthManager.ensureTokenFresh(characterId)
             if (token == null) {
@@ -617,7 +624,11 @@ object EsiClient {
                 return null
             }
             val (body, _) = getRaw("/universe/structures/$structureId/", accessToken = token, characterId = characterId)
+            if (deniedAt != null) StaticDataDao.setSetting(deniedKey, "")
             body.parseToMap()
+        } catch (e: EsiForbiddenException) {
+            StaticDataDao.setSetting(deniedKey, System.currentTimeMillis().toString())
+            null
         } catch (e: Exception) {
             println("[ESI] getStructureInfo($structureId) failed: ${e.message}")
             null

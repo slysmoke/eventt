@@ -567,7 +567,7 @@ private fun resolveLocation(
         val info = EsiClient.getStructureInfo(locationId, characterId)
         if (info == null) {
             // No docking access (403) or not a structure. Remember it so periodic asset refreshes
-            // don't burn ESI's error limit retrying. ponytail: per-process, a restart retries.
+            // don't burn ESI's error limit retrying (403s are also persisted in getStructureInfo).
             unresolvableStructures += locationId
             println("[Assets] getStructureInfo($locationId) returned null (no docking access or lookup failed)")
             return null
