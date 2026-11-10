@@ -667,12 +667,11 @@ internal fun fetchHistory(
         try {
             val (entries, fromCache) = EsiClient.getMarketRegionHistoryChecked(effectiveRegionId, typeId)
             // fromCache means this response is byte-for-byte what we already stored last time --
-            // skip re-writing every day of it (each insertHistory is its own SQLite transaction;
-            // for a long-lived item that's hundreds of them, on every single one of these calls).
+            // skip re-writing it.
             if (!fromCache) {
-                entries.forEach { entry ->
-                    runCatching {
-                        MarketDao.insertHistory(
+                runCatching {
+                    MarketDao.insertHistoryBatch(
+                        entries.map { entry ->
                             org.eventt.core.model.MarketHistoryModel(
                                 typeId = typeId,
                                 regionId = effectiveRegionId,
@@ -682,9 +681,9 @@ internal fun fetchHistory(
                                 orderCount = (entry["order_count"] as? Number)?.toLong() ?: 0L,
                                 highest = (entry["highest"] as? Number)?.toDouble() ?: 0.0,
                                 lowest = (entry["lowest"] as? Number)?.toDouble() ?: 0.0,
-                            ),
-                        )
-                    }
+                            )
+                        },
+                    )
                 }
             }
             MarketDao.getHistoryBySource(typeId, effectiveRegionId, days, source = "esi")
