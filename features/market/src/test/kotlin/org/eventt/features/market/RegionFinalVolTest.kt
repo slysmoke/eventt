@@ -81,3 +81,46 @@ class RegionFinalVolTest {
         regionFinalVol(o, InterRegionTradeType.SELL_TO_BUY, volCapEnabled = false, volCapPct = 100.0) shouldBe 50L
     }
 }
+
+class RestockTest {
+    private fun sale(
+        day: String,
+        qty: Int,
+        location: Long = 1,
+        typeId: Int = 34,
+        isBuy: Boolean = false,
+    ) = org.eventt.core.database.WalletDao.RawTxRecord(
+        date = "${day}T10:00:00",
+        typeId = typeId,
+        typeName = "",
+        quantity = qty,
+        unitPrice = 1.0,
+        isBuy = isBuy,
+        locationId = location,
+    )
+
+    private val today = java.time.LocalDate.parse("2026-11-10")
+
+    @Test
+    fun `need is cover days of own destination sales less stock`() {
+        val txs =
+            listOf(
+                sale("2026-09-01", 30), // 60 units over the 20 days the item was selling = 3/day
+                sale("2026-09-20", 30),
+                sale("2026-09-10", 500, location = 2), // sold elsewhere
+                sale("2026-09-10", 500, isBuy = true),
+                sale("2026-05-01", 500), // before the history window
+                sale("2026-10-01", 14, typeId = 35), // fully covered by stock
+            )
+        val r = computeRestock(txs, { it == 1L }, mapOf(34 to 12L, 35 to 100L), today, historyDays = 90, coverDays = 10)
+        r.keys shouldBe setOf(34)
+        r.getValue(34) shouldBe Restock(need = 18, perDay = 3.0, stock = 12)
+    }
+
+    @Test
+    fun `restock need replaces the volume estimate but not the order book limit`() {
+        val o = opp(dailyVolume = 100, profitableVolume = 50).copy(restock = Restock(need = 70, perDay = 5.0, stock = 0))
+        regionFinalVol(o, InterRegionTradeType.BUY_TO_SELL, volCapEnabled = false, volCapPct = 10.0) shouldBe 70L
+        regionFinalVol(o, InterRegionTradeType.SELL_TO_SELL, volCapEnabled = false, volCapPct = 10.0) shouldBe 50L
+    }
+}

@@ -376,6 +376,12 @@ Double-click: reset</string>
     <string name="panel_opportunities">Opportunities</string>
     <string name="panel_candidates">Candidates</string>
     <string name="max_z">Max Z</string>
+    <string name="restock_days">Restock, days</string>
+    <string name="restock_history">History, days</string>
+    <string name="restock_cell">%1$s/d · %2$s</string>
+    <string name="restock_nothing">Nothing to restock: no sales at the destination in that period, or stock still covers them</string>
+    <string name="tip_restock">Show only items you already sell at the destination and size Qty to Buy to cover this many days of your own sales there, less what you already hold: sell orders and items at the destination, items and open buy orders at the source. Under the quantity: your sales per day · stock counted. Goods in a courier contract are not visible, so analyze again after they arrive.</string>
+    <string name="tip_restock_history">How far back to look for your sales at the destination. The pace is measured from your first to your last sale in this period, so a paused route keeps the pace it had.</string>
     <string name="tip_max_z">Skip items whose z-score (daily average vs its 28-day VWAP, as on the item chart) is above this: don't buy high. Empty = off.</string>
     <string name="mi_filter_action">Action</string>
     <string name="mi_filter_buy">Buy</string>

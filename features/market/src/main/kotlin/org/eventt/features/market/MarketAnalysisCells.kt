@@ -421,11 +421,22 @@ internal fun RegionRow(
             color = AXIS_COLOR,
             modifier = Modifier.width(70.dp),
         )
-        NumText(
-            if (qtyToBuy > 0) formatVolume(qtyToBuy) else "—",
-            bold = true,
-            modifier = Modifier.width(85.dp),
-        )
+        Column(Modifier.width(85.dp), horizontalAlignment = Alignment.End) {
+            NumText(
+                if (qtyToBuy > 0) formatVolume(qtyToBuy) else "—",
+                bold = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            opp.restock?.let { r ->
+                Text(
+                    stringResource(Res.string.restock_cell, String.format(Locale.US, "%.1f", r.perDay), formatVolume(r.stock)),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontFamily = Mono,
+                    color = AXIS_COLOR,
+                    maxLines = 1,
+                )
+            }
+        }
         PriceText(dailyProfit, Color(0xFF4DABF7), Modifier.width(95.dp), bold = true)
     }
     HorizontalDivider(thickness = 0.5.dp, color = outline().copy(alpha = 0.2f))

@@ -86,6 +86,9 @@ data class RegionOpportunity(
     // not just the best ask). See compute7dAvgDeviation.
     val buyVsAvg7dPct: Double = Double.NaN,
     val sellVsAvg7dPct: Double = Double.NaN,
+    // Set in Inter-Region's restock mode: the quantity then comes from your own sales at the
+    // destination instead of a share of market volume -- see regionFinalVol.
+    val restock: Restock? = null,
 )
 
 // ─── Sort / trade-type enums ───────────────────────────────────────────────
@@ -194,6 +197,12 @@ internal fun regionFinalVol(
     volCapEnabled: Boolean,
     volCapPct: Double,
 ): Long {
+    // Restock mode: your own sales pace replaces the vol/day and Adam4EVE estimates, but a real
+    // order book still can't supply more than it holds at a profit.
+    opp.restock?.let { r ->
+        val ownOrdersBothLegs = tradeType == InterRegionTradeType.BUY_TO_SELL || tradeType == InterRegionTradeType.SAFE_BUY_TO_SELL
+        return if (ownOrdersBothLegs) r.need else minOf(opp.profitableVolume, r.need)
+    }
     val base =
         when (tradeType) {
             InterRegionTradeType.BUY_TO_SELL, InterRegionTradeType.SAFE_BUY_TO_SELL -> regionEffVol(opp, volCapEnabled, volCapPct)
@@ -308,6 +317,9 @@ internal object S {
     const val IR_MAX_Z = "analysis.r.maxZ"
     const val IR_PRESETS = "analysis.r.presets"
     const val IR_USE_ADAM4EVE = "analysis.r.useAdam4Eve"
+    const val IR_RESTOCK = "analysis.r.restock"
+    const val IR_RESTOCK_DAYS = "analysis.r.restockDays"
+    const val IR_RESTOCK_HISTORY = "analysis.r.restockHistory"
 
     // Materials investment (DCA) keys
     const val MI_REGION = "analysis.m.region"

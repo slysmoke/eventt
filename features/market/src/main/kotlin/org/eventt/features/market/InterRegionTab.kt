@@ -110,6 +110,11 @@ internal fun InterRegionTab(
     var skipExistingOrders by remember { mutableStateOf(false) }
     var maxZ by remember { mutableStateOf("") }
     var useAdam4Eve by remember { mutableStateOf(false) }
+    // Restock mode: only items you already sell at the destination, sized by your own sales
+    // there less the stock you still hold -- see loadRestock.
+    var restockEnabled by remember { mutableStateOf(false) }
+    var restockDays by remember { mutableStateOf("14") }
+    var restockHistory by remember { mutableStateOf("90") }
     var histSourceIsEsi by remember { mutableStateOf(false) }
     var routePresets by remember { mutableStateOf<List<RoutePreset>>(emptyList()) }
     var showSavePresetDialog by remember { mutableStateOf(false) }
@@ -142,6 +147,9 @@ internal fun InterRegionTab(
             S.get(S.IR_SKIP_EXISTING)?.let { skipExistingOrders = it == "true" }
             S.get(S.IR_MAX_Z)?.let { maxZ = it }
             S.get(S.IR_USE_ADAM4EVE)?.let { useAdam4Eve = it == "true" }
+            S.get(S.IR_RESTOCK)?.let { restockEnabled = it == "true" }
+            S.get(S.IR_RESTOCK_DAYS)?.let { restockDays = it }
+            S.get(S.IR_RESTOCK_HISTORY)?.let { restockHistory = it }
             routePresets = decodeRoutePresets(S.get(S.IR_PRESETS))
             if (charId != null) {
                 brokerFeePct = StaticDataDao.getCharBrokersFee(charId)
@@ -285,7 +293,7 @@ internal fun InterRegionTab(
                             maxZ = maxZD,
                             buyStationFlow = cache.buyStationFlow[typeId],
                             sellStationFlow = cache.sellStationFlow[typeId],
-                        )
+                        )?.withRestock(cache.restock)
                     }.sortedByDescending { it.netProfit }
             withContext(Dispatchers.Main) {
                 results = recomputed
@@ -540,6 +548,31 @@ internal fun InterRegionTab(
                             modifier = Modifier.size(24.dp),
                         )
                     }
+                    CheckboxParamField(
+                        label = stringResource(Res.string.restock_days),
+                        tooltip = stringResource(Res.string.tip_restock),
+                        checked = restockEnabled,
+                        onCheckedChange = {
+                            restockEnabled = it
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_RESTOCK, it.toString()) } }
+                        },
+                        value = restockDays,
+                        onValueChange = { v ->
+                            restockDays = v
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_RESTOCK_DAYS, v) } }
+                        },
+                    )
+                    if (restockEnabled) {
+                        ParamField(
+                            stringResource(Res.string.restock_history),
+                            restockHistory,
+                            60.dp,
+                            tooltip = stringResource(Res.string.tip_restock_history),
+                        ) {
+                            restockHistory = it
+                            scope.launch { withContext(Dispatchers.IO) { S.set(S.IR_RESTOCK_HISTORY, it) } }
+                        }
+                    }
                     ParamField(
                         stringResource(Res.string.max_z),
                         maxZ,
@@ -671,8 +704,35 @@ internal fun InterRegionTab(
                                         // Region-scoped, not character-scoped, on EITHER leg: excludes
                                         // a type if any locally-known character/corp already has an
                                         // active order for it in the buy region or the sell region.
+                                        val restock: Map<Int, Restock>? =
+                                            if (restockEnabled) {
+                                                val sellStationIds = sellStations.map { it.stationId }.toSet()
+                                                val history = restockHistory.toIntOrNull() ?: 90
+                                                val cover = restockDays.toIntOrNull() ?: 14
+                                                withContext(Dispatchers.IO) {
+                                                    loadRestock(
+                                                        buyRegionId,
+                                                        buyStSnap,
+                                                        sellRegionId,
+                                                        sellStSnap,
+                                                        sellStationIds,
+                                                        history,
+                                                        cover,
+                                                    )
+                                                }
+                                            } else {
+                                                null
+                                            }
+                                        if (restock != null && restock.isEmpty()) {
+                                            statusMsg = stringBlocking(Res.string.restock_nothing)
+                                            return@launch
+                                        }
+                                        // Restock mode ignores "skip owned": what you already hold
+                                        // is subtracted from the need instead of hiding the item.
                                         val typeIds =
-                                            if (skipExistingOrders) {
+                                            if (restock != null) {
+                                                allTypeIds.filter { it in restock }
+                                            } else if (skipExistingOrders) {
                                                 val excluded =
                                                     withContext(Dispatchers.IO) {
                                                         ActiveOrderDao
@@ -713,7 +773,7 @@ internal fun InterRegionTab(
                                         // paginated all-orders fetches (one per region) beat two HTTP
                                         // requests per type.
                                         val bulk: Pair<Map<Int, List<Map<String, Any?>>>, Map<Int, List<Map<String, Any?>>>>? =
-                                            if (filterGroupIds == null || typeIds.size > BULK_ORDER_FETCH_THRESHOLD) {
+                                            if ((filterGroupIds == null && restock == null) || typeIds.size > BULK_ORDER_FETCH_THRESHOLD) {
                                                 statusMsg = stringBlocking(Res.string.fetching_all_named, buyName)
                                                 val buyAll = withContext(Dispatchers.IO) { EsiClient.getMarketRegionOrders(buyRegionId) }
                                                 statusMsg = stringBlocking(Res.string.fetching_all_named, sellName)
@@ -804,7 +864,7 @@ internal fun InterRegionTab(
                                                                         maxZ = maxZSnap,
                                                                         buyStationFlow = buyStationFlow[typeId],
                                                                         sellStationFlow = sellStationFlow[typeId],
-                                                                    )
+                                                                    )?.withRestock(restock)
                                                                 val (sorted, c, f) =
                                                                     mutex.withLock {
                                                                         checked++
@@ -853,6 +913,7 @@ internal fun InterRegionTab(
                                                 sellDistanceFromStation = sellDistances,
                                                 buyStationFlow = buyStationFlow,
                                                 sellStationFlow = sellStationFlow,
+                                                restock = restock,
                                             )
                                     } catch (e: CancellationException) {
                                         statusMsg = stringBlocking(Res.string.stopped_found, results.size)
@@ -1099,7 +1160,10 @@ private data class CachedAnalysisInput(
     val sellDistanceFromStation: Map<Int, Int>,
     val buyStationFlow: Map<Int, StationFlow> = emptyMap(),
     val sellStationFlow: Map<Int, StationFlow> = emptyMap(),
+    val restock: Map<Int, Restock>? = null,
 )
+
+private fun RegionOpportunity.withRestock(restock: Map<Int, Restock>?) = if (restock == null) this else copy(restock = restock[typeId])
 
 // ─── Saved routes (buy region/station + sell region/station), for repeat trade lanes ──────
 
