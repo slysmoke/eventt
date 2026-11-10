@@ -136,6 +136,10 @@ object StreamOverlayPage {
           .rate { text-align: right; font-size: 13px; font-weight: 600; }
           .rate .muted { font-size: 11px; font-weight: 500; }
           #chart { display: block; width: 100%; height: 64px; margin-top: 10px; overflow: visible; }
+          /* Colors in CSS, not SVG attributes: OBS's older CEF ignores var() in presentation attributes. */
+          #chart stop { stop-color: var(--accent); }
+          #line { stroke: var(--accent); }
+          #dot { fill: var(--accent); }
 
           /* Tiles */
           .tiles { display: grid; grid-template-columns: repeat(4, 1fr); }
@@ -200,14 +204,14 @@ object StreamOverlayPage {
             <svg id="chart" viewBox="0 0 368 64" preserveAspectRatio="none">
               <defs>
                 <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0" stop-color="var(--accent)" stop-opacity="0.35"/>
-                  <stop offset="1" stop-color="var(--accent)" stop-opacity="0"/>
+                  <stop offset="0" stop-opacity="0.35"/>
+                  <stop offset="1" stop-opacity="0"/>
                 </linearGradient>
               </defs>
               <line id="zero" x1="0" x2="368" stroke="rgba(255,255,255,0.15)" stroke-dasharray="3 4"/>
               <path id="area" fill="url(#fill)"/>
-              <path id="line" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-              <circle id="dot" r="3.5" fill="var(--accent)"/>
+              <path id="line" fill="none" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+              <circle id="dot" r="3.5"/>
             </svg>
           </section>
 
