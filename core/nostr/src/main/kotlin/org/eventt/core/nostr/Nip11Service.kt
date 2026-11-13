@@ -49,12 +49,12 @@ object Nip11Service {
             .build()
     }
 
-    /** Refreshes every relay whose NIP-11 data is missing or older than a day; no-op otherwise. */
+    /** Refreshes every enabled relay whose NIP-11 data is missing or older than a day; no-op otherwise. */
     suspend fun refreshStale() {
         val nowSec = System.currentTimeMillis() / 1000
         val stale =
             withContext(Dispatchers.IO) { NostrRelayDao.getAll() }
-                .filter { (it.nip11FetchedAt ?: 0) < nowSec - REFRESH_MAX_AGE_SECONDS }
+                .filter { it.enabled && (it.nip11FetchedAt ?: 0) < nowSec - REFRESH_MAX_AGE_SECONDS }
         var updatedAny = false
         stale.forEach { relay ->
             val doc = fetch(relay.url) ?: return@forEach

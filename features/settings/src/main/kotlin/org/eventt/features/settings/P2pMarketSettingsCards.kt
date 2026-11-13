@@ -176,7 +176,7 @@ internal fun NostrRelaysCard() {
                         }
                     },
                 )
-                Column(modifier = Modifier.fillMaxWidth().padding(start = 4.dp)) {
+                Column(modifier = Modifier.weight(1f).padding(start = 4.dp)) {
                     Text(relay.url, style = MaterialTheme.typography.bodySmall)
                     RelayStatusLabel(relay)
                     RelayNipWarningLabel(relay)
