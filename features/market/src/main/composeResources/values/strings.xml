@@ -238,7 +238,7 @@ Double-click: reset</string>
     <string name="check_rows">check rows →</string>
     <string name="no_rungs">no rungs</string>
     <string name="mi_tip_copy_vol">Whether the second hotkey press (per rung) also copies the suggested quantity, or just advances.</string>
-    <string name="mi_tip_alerts">Create alerts for every checked row at once (all rows if none are checked): buy-ladder rungs plus sell targets for held positions. Existing identical alerts are skipped. AlertMonitor fetches each item's order book once, however many alerts it has.</string>
+    <string name="mi_tip_alerts">Create alerts for every checked row at once (all rows if none are checked): buy-ladder rungs plus, for held positions, a sell alert where the 28-day VWAP z-score reaches +1 (never below break-even). Existing identical alerts are skipped. AlertMonitor fetches each item's order book once, however many alerts it has.</string>
     <string name="alerts">Alerts</string>
     <string name="alerts_set_items">%1$s alert(s) set for %2$s item(s)</string>
     <string name="all_n">All (%1$s)</string>
@@ -282,7 +282,12 @@ Double-click: reset</string>
     <string name="act_sell">Sell: selling at the lowest ask already nets your cost (incl. buy broker fee) + take-profit, after sales tax and broker fee.</string>
     <string name="act_buying">Buying: your buy orders already cover the rest of this item's allocation.</string>
     <string name="act_on_sale">On sale: your stock is listed in sell orders -- waiting for fills.</string>
-    <string name="mi_tip_row_alerts">Create price alerts (Alerts tab) for this item: remaining buy-ladder rungs (top buy order falls to the rung) and, for a held position, the sell target (lowest ask rises to it). Skips levels already crossed and alerts that already exist.</string>
+    <string name="mi_ignored">Ignored</string>
+    <string name="mi_tip_ignored">Items you hid from the list. The budget is re-split without them over the last scan. Click one to bring it back.</string>
+    <string name="mi_unignore">Show %1$s again</string>
+    <string name="mi_unignore_all">Show all again</string>
+    <string name="mi_tip_ignore">Ignore this item: hide it and re-split the budget among the rest (no re-scan). Bring it back from Ignored in the filter bar.</string>
+    <string name="mi_tip_row_alerts">Create price alerts (Alerts tab) for this item: remaining buy-ladder rungs (top buy order falls to the rung) and, for a held position, a sell alert when the lowest ask reaches the price where the 28-day VWAP z-score is +1 (never below break-even). Skips levels already crossed and alerts that already exist.</string>
     <string name="create_alerts_row">Create alerts for this item's buy ladder</string>
     <string name="mi_tip_ladder">Target price for a standing buy order → ISK to spend at that rung, broker fee included (the rung's quantity leaves room for it). * = already at/above the current top bid, so it's actionable right now rather than a future target.</string>
     <string name="ladder_buy_prefix">Buy:</string>

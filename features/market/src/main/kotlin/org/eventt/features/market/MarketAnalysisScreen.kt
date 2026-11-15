@@ -341,6 +341,7 @@ internal object S {
     const val MI_LADDER_STEP_PCT = "analysis.m.ladderStepPct"
     const val MI_EXCLUDE_STRUCTURAL_BREAK = "analysis.m.excludeStructuralBreak"
     const val MI_COPY_VOLUME = "analysis.m.copyVolume"
+    const val MI_IGNORED = "analysis.m.ignored"
 
     fun get(key: String): String? = StaticDataDao.getSetting(key)
 

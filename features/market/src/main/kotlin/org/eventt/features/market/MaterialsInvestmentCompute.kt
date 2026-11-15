@@ -53,6 +53,8 @@ internal data class MaterialCandidate(
     // Replaying this same discount rule over up to a year of this item's own history, or null when
     // there isn't enough history to do that meaningfully. Illustrative, not a guarantee.
     val backtest: BacktestResult?,
+    // Price where the raw 28-day VWAP z-score hits +1 (see vwapBandPrice) -- the sell alert's level.
+    val zSellPrice: Double? = null,
 )
 
 // Your current holding in one item -- physical stock plus listed sell orders, the moving-average
@@ -343,6 +345,7 @@ internal fun computeMaterialCandidate(
         dailyVolume = dailyVolume,
         position = position,
         backtest = backtestDipStrategy(fullHistory, lookbackDays, minDiscountPct, fees, takeProfitPct),
+        zSellPrice = vwapBandPrice(fullHistory, 1.0),
     )
 }
 
@@ -464,6 +467,8 @@ internal data class SellTarget(
     val qty: Long,
     // Lowest sell price that clears your average cost + take-profit % after sales tax and broker fee.
     val targetPrice: Double,
+    // Lowest sell price that gets your average cost back after all fees (take-profit 0).
+    val breakEvenPrice: Double,
     // Net profit (after fees) selling the whole stack at the current lowest ask, and as % of cost.
     // Null when nobody is selling to price against.
     val profitNow: Double?,
@@ -671,6 +676,7 @@ internal fun buildSellTarget(
     return SellTarget(
         qty = position.qtyHeld,
         targetPrice = target,
+        breakEvenPrice = avgCost / fees.sellMultiplier,
         profitNow = profitNow,
         profitNowPct = profitNow?.let { it / (avgCost * position.qtyHeld) * 100.0 },
     )

@@ -100,6 +100,21 @@ internal const val VWAP_SMOOTH = 5
 internal const val Z_FILTER_PERIOD = 28
 internal const val Z_HISTORY_DAYS = 60
 
+// Price at which today's raw (unsmoothed) z-score vs the latest [period]-day VWAP equals [z]:
+// vwap + z * sd. What a price alert can watch for "z reached +1". Null without enough history or flat.
+internal fun vwapBandPrice(
+    history: List<MarketHistoryModel>,
+    z: Double,
+    period: Int = Z_FILTER_PERIOD,
+): Double? {
+    val rows = history.take(period)
+    if (rows.size < period) return null
+    val prices = rows.map { it.average }
+    val v = vwap(prices, rows.map { it.volume.toDouble() }, period).last() ?: return null
+    val sd = sqrt(prices.sumOf { (it - v) * (it - v) } / period)
+    return if (sd > 0) v + z * sd else null
+}
+
 // Latest smoothed z-score of daily averages vs their VWAP -- the right edge of the item chart's Z
 // pane. [history] is newest first, as fetchHistory returns it. Null without enough history.
 internal fun latestVwapZ(

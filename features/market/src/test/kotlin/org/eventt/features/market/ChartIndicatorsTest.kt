@@ -48,4 +48,29 @@ class ChartIndicatorsTest {
         (latestVwapZ(history)!! > 1.0) shouldBe true
         latestVwapZ(history.take(10)) shouldBe null
     }
+
+    @Test
+    fun `vwapBandPrice is where the raw z-score of today's window equals z`() {
+        // Newest first, alternating 90/110 with uneven volume.
+        val history =
+            (0 until 40).map { d ->
+                (
+                    if (d % 2 ==
+                        0
+                    ) {
+                        90.0
+                    } else {
+                        110.0
+                    }
+                ).let { MarketHistoryModel(1, 1, "d$d", it, 10L + d % 3, 1, it, it) }
+            }
+        val p = vwapBandPrice(history, 1.0)!!
+        val rows = history.take(Z_FILTER_PERIOD).reversed()
+        val prices = rows.map { it.average }
+        val v = vwap(prices, rows.map { it.volume.toDouble() }, Z_FILTER_PERIOD)
+        val sd = vwapSd(prices, v, Z_FILTER_PERIOD).last()!!
+        p shouldBe (v.last()!! + sd plusOrMinus 1e-9)
+        vwapBandPrice(history.take(10), 1.0) shouldBe null
+        vwapBandPrice(List(30) { MarketHistoryModel(1, 1, "d", 5.0, 1, 1, 5.0, 5.0) }, 1.0) shouldBe null
+    }
 }

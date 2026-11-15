@@ -205,7 +205,14 @@ class AnalysisScreenTest {
             listOf(
                 material(1, "Isogen", 45.0, MaterialAction.BUY),
                 material(2, "Nocxium", 380.0, MaterialAction.WAIT, MaterialPosition(40_000, 400.0)),
-                material(3, "Zydrine", 900.0, MaterialAction.SELL, MaterialPosition(10_000, 700.0), SellTarget(10_000, 840.0, 1.6e6, 22.0)),
+                material(
+                    3,
+                    "Zydrine",
+                    900.0,
+                    MaterialAction.SELL,
+                    MaterialPosition(10_000, 700.0),
+                    SellTarget(10_000, 840.0, 720.0, 1.6e6, 22.0),
+                ),
             )
         runDesktopComposeUiTest(1400, 380) {
             setContent {
@@ -215,7 +222,7 @@ class AnalysisScreenTest {
                             MaterialsKpis(rows, 100e6)
                             Panel("Candidates", Modifier.fillMaxSize()) {
                                 MaterialsHeader(MaterialSortCol.ALLOCATED, false, false, {}, {})
-                                rows.forEach { MaterialRow(it, it.action == MaterialAction.BUY, {}, it.candidate.typeId == 3, {}, {}) }
+                                rows.forEach { MaterialRow(it, it.action == MaterialAction.BUY, {}, it.candidate.typeId == 3, {}, {}, {}) }
                             }
                         }
                     }

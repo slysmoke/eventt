@@ -116,6 +116,8 @@ internal fun MaterialsInvestmentTab(
     var analyzeJob by remember { mutableStateOf<Job?>(null) }
     var statusMsg by remember { mutableStateOf("") }
     var candidates by remember { mutableStateOf<List<MaterialCandidate>>(emptyList()) }
+    // Items left out of the budget split and the table; typeId -> name (for the restore menu).
+    var ignored by remember { mutableStateOf<Map<Int, String>>(emptyMap()) }
     // Selected character's sales tax / broker fee (defaults without one), read at Analyze time.
     var fees by remember { mutableStateOf(MaterialFees()) }
     var sortCol by remember { mutableStateOf(MaterialSortCol.ALLOCATED) }
@@ -144,6 +146,7 @@ internal fun MaterialsInvestmentTab(
             S.get(S.MI_LADDER_STEP_PCT)?.let { ladderStepPct = it }
             S.get(S.MI_EXCLUDE_STRUCTURAL_BREAK)?.let { excludeStructuralBreak = it == "true" }
             S.get(S.MI_COPY_VOLUME)?.let { copyVolumeEnabled = it == "true" }
+            ignored = decodeIgnored(S.get(S.MI_IGNORED))
             settingsLoaded = true
         }
     }
@@ -156,6 +159,11 @@ internal fun MaterialsInvestmentTab(
             stationId = null
             scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_STATION, "") } }
         }
+    }
+
+    fun saveIgnored(updated: Map<Int, String>) {
+        ignored = updated
+        scope.launch { withContext(Dispatchers.IO) { S.set(S.MI_IGNORED, encodeIgnored(updated)) } }
     }
 
     fun savePresets(updated: List<StationPreset>) {
@@ -216,9 +224,10 @@ internal fun MaterialsInvestmentTab(
     }
 
     val allocated =
-        remember(candidates, totalBudget, maxItems, maxPerItemPct, liquidityDays, ladderLevels, ladderStepPct, fees) {
+        remember(candidates, ignored, totalBudget, maxItems, maxPerItemPct, liquidityDays, ladderLevels, ladderStepPct, fees) {
+            // Re-split over the last scan's data -- ignoring an item frees its share for the rest.
             allocateBudget(
-                candidates = candidates,
+                candidates = candidates.filter { it.typeId !in ignored },
                 totalBudget = totalBudget.toDoubleOrNull() ?: 0.0,
                 maxItems = maxItems.toIntOrNull() ?: 10,
                 maxPerItemPct = maxPerItemPct.toDoubleOrNull() ?: 25.0,
@@ -537,6 +546,40 @@ internal fun MaterialsInvestmentTab(
                         }
                     }
                 }
+                if (ignored.isNotEmpty()) {
+                    Tip(stringResource(Res.string.mi_tip_ignored)) {
+                        FilterControl(stringResource(Res.string.mi_ignored)) {
+                            var open by remember { mutableStateOf(false) }
+                            Box {
+                                OutlinedButton(
+                                    onClick = { open = true },
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                    modifier = Modifier.height(FilterFieldHeight),
+                                ) {
+                                    Icon(Icons.Default.VisibilityOff, null, Modifier.size(14.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("${ignored.size} ▾", style = MaterialTheme.typography.labelMedium)
+                                }
+                                DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(Res.string.mi_unignore_all), fontWeight = FontWeight.SemiBold) },
+                                        onClick = {
+                                            open = false
+                                            saveIgnored(emptyMap())
+                                        },
+                                    )
+                                    HorizontalDivider(color = outline())
+                                    ignored.entries.sortedBy { it.value }.forEach { (id, name) ->
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(Res.string.mi_unignore, name)) },
+                                            onClick = { saveIgnored(ignored - id) },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 if (statusMsg.isNotEmpty()) {
                     val errorPrefix = stringResource(Res.string.status_error, "")
                     FilterActionSlot {
@@ -767,6 +810,7 @@ internal fun MaterialsInvestmentTab(
                                 },
                                 isActiveInQueue = alloc.candidate.typeId == activeQueueTypeId,
                                 onShowDetails = { detailTypeId = it },
+                                onIgnore = { saveIgnored(ignored + (alloc.candidate.typeId to alloc.candidate.typeName)) },
                                 onCreateAlerts = {
                                     scope.launch {
                                         val n = withContext(Dispatchers.IO) { createAlerts(listOf(alloc), regionId, charId) }
@@ -863,7 +907,7 @@ internal fun MaterialsHeader(
             ) {
                 MCol(stringResource(Res.string.m_to_buy), MaterialSortCol.ALLOCATED, sort, asc, onSort, Modifier.width(80.dp))
             }
-            Spacer(Modifier.width(28.dp))
+            Spacer(Modifier.width(56.dp))
         }
         HorizontalDivider(color = outline())
     }
@@ -887,6 +931,7 @@ internal fun MaterialRow(
     onCheckedChange: (Boolean) -> Unit,
     isActiveInQueue: Boolean,
     onShowDetails: (Int) -> Unit,
+    onIgnore: () -> Unit,
     onCreateAlerts: () -> Unit,
 ) {
     val c = alloc.candidate
@@ -1118,6 +1163,16 @@ internal fun MaterialRow(
                     )
                 }
             }
+            Tip(stringResource(Res.string.mi_tip_ignore)) {
+                IconButton(onClick = onIgnore, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        Icons.Default.VisibilityOff,
+                        contentDescription = stringResource(Res.string.mi_tip_ignore),
+                        modifier = Modifier.size(15.dp),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    )
+                }
+            }
         }
         if (alloc.ladder.isNotEmpty()) {
             Tip(
@@ -1239,20 +1294,23 @@ private fun ladderAlerts(
                 )
         }
     }
-    // Held position: one "lowest ask rose to my sell target" alert -- the signal to go sell.
-    alloc.sellTarget?.takeIf { alloc.action != MaterialAction.SELL }?.let { st ->
+    // Held position: one "lowest ask rose to where z = +1" alert -- the signal to go sell. Never
+    // below break-even, so a weak market can't call a sale at a loss; the take-profit target
+    // stands in when there isn't 28 days of history for a z-score.
+    alloc.sellTarget?.takeIf { alloc.action != MaterialAction.SELL }?.let { tp ->
+        val st = maxOf(alloc.candidate.zSellPrice ?: tp.targetPrice, tp.breakEvenPrice)
         val duplicate =
             existing.any {
                 !it.triggered && it.typeId == alloc.candidate.typeId && it.regionId == effRegion &&
                     it.condition == "above" && it.orderType == "sell" &&
-                    kotlin.math.abs(it.targetPrice - st.targetPrice) < 0.01
+                    kotlin.math.abs(it.targetPrice - st) < 0.01
             }
         if (!duplicate) {
             toInsert +=
                 PriceAlertModel(
                     typeId = alloc.candidate.typeId,
                     typeName = alloc.candidate.typeName,
-                    targetPrice = st.targetPrice,
+                    targetPrice = st,
                     condition = "above",
                     regionId = effRegion,
                     orderType = "sell",
@@ -1275,6 +1333,18 @@ private fun createAlerts(
     AlertDao.insertAll(alerts)
     return alerts.size
 }
+
+// "id\tname" per line; names keep the restore menu readable when a re-scan no longer finds the item.
+private fun encodeIgnored(m: Map<Int, String>) = m.entries.joinToString("\n") { "${it.key}\t${it.value}" }
+
+private fun decodeIgnored(s: String?): Map<Int, String> =
+    s
+        .orEmpty()
+        .lines()
+        .mapNotNull { line ->
+            val (id, name) = line.split('\t', limit = 2).takeIf { it.size == 2 } ?: return@mapNotNull null
+            id.toIntOrNull()?.let { it to name }
+        }.toMap()
 
 private val GUIDE_SECTIONS =
     listOf(
