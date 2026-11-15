@@ -263,6 +263,7 @@
     <string name="chat_done">Готово</string>
     <string name="chat_mark_done">Отметить готовым</string>
     <string name="chat_reopen">Вернуть в работу</string>
+    <string name="chat_post_as">Писать от</string>
     <string name="chat_back_to_ideas">Все предложения</string>
     <string name="chat_comments">Комментарии</string>
     <string name="chat_no_ideas">Предложений пока нет -- будьте первым.</string>

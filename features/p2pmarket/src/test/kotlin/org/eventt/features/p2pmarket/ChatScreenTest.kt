@@ -30,6 +30,8 @@ class ChatScreenTest {
         val now = System.currentTimeMillis() / 1000
         val meKey = KeyPair()
         val me = NostrIdentity(QuartzGateway.pubKeyHex(meKey), "Sasha Winston", meKey, 2113351129)
+        val altKey = KeyPair()
+        val ids = listOf(me, NostrIdentity(QuartzGateway.pubKeyHex(altKey), "Alt Trader", altKey, null))
         val people = listOf(me.label to meKey, "Li Slysmoke" to KeyPair(), "Ash Knight" to KeyPair(), "Old Timer" to KeyPair())
         val signers = people.associate { (n, k) -> n to QuartzGateway.signerFor(k) }
         people.forEachIndexed { i, (n, _) ->
@@ -94,9 +96,9 @@ class ChatScreenTest {
 
         val out = File("build/chat-screens").apply { mkdirs() }
         listOf<Pair<String, @androidx.compose.runtime.Composable () -> Unit>>(
-            "general" to { ChatLayout(me) {} },
-            "ideas" to { ChatLayout(me, ChatRoom.IDEAS) {} },
-            "topic" to { ChatLayout(me, ChatRoom.IDEAS, topic) {} },
+            "general" to { ChatLayout(me, ids, {}) {} },
+            "ideas" to { ChatLayout(me, ids, {}, ChatRoom.IDEAS) {} },
+            "topic" to { ChatLayout(me, ids, {}, ChatRoom.IDEAS, topic) {} },
             "editor" to { IdeaEditor(Modifier, {}) { _, _ -> } },
             "join" to { JoinCard {} },
         ).forEach { (name, content) ->

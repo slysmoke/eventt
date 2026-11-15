@@ -15,6 +15,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -45,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.eventt.core.database.StaticDataDao
 import org.eventt.core.nostr.CHAT_MAX_LENGTH
 import org.eventt.core.nostr.ChatMember
 import org.eventt.core.nostr.ChatMessage
@@ -71,6 +74,9 @@ import java.time.format.FormatStyle
 private val zone = ZoneId.systemDefault()
 private val hhmm = DateTimeFormatter.ofPattern("HH:mm").withZone(zone)
 
+// Which character the chat posts as; independent of the main nav's selection.
+private const val CHAT_IDENTITY_SETTING = "chat_identity"
+
 // Consecutive messages by one author within this window share one header.
 private const val GROUP_SECONDS = 5 * 60
 
@@ -82,13 +88,26 @@ private fun nameColor(pubkey: String) = Color.hsl((pubkey.hashCode().mod(360)).t
 @Composable
 fun ChatScreen() {
     var me by remember { mutableStateOf<NostrIdentity?>(null) }
+    var identities by remember { mutableStateOf<List<NostrIdentity>>(emptyList()) }
     // null = still loading.
     var joined by remember { mutableStateOf<Boolean?>(null) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
-        val id = withContext(Dispatchers.IO) { NostrIdentityService.getActiveIdentity() }
+        val all = NostrIdentityService.ensureIdentitiesForAllCharacters()
+        val saved = withContext(Dispatchers.IO) { StaticDataDao.getSetting(CHAT_IDENTITY_SETTING) }
+        val id = all.find { it.pubkey == saved } ?: NostrIdentityService.getActiveIdentity()
+        identities = all
         me = id
         joined = id?.let { ChatService.isJoined(it.pubkey) } ?: false
+    }
+
+    // Already in the chat, so the newly picked character joins too.
+    fun switchTo(next: NostrIdentity) {
+        me = next
+        scope.launch {
+            withContext(Dispatchers.IO) { StaticDataDao.setSetting(CHAT_IDENTITY_SETTING, next.pubkey) }
+            if (!ChatService.isJoined(next.pubkey)) ChatService.setJoined(next, true)
+        }
     }
     val id = me
     when {
@@ -110,10 +129,53 @@ fun ChatScreen() {
         }
 
         else -> {
-            ChatLayout(id) {
+            ChatLayout(id, identities, ::switchTo) {
                 scope.launch {
                     ChatService.setJoined(id, false)
                     joined = false
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun IdentityPicker(
+    me: NostrIdentity,
+    identities: List<NostrIdentity>,
+    onPick: (NostrIdentity) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(stringResource(Res.string.chat_post_as), style = MaterialTheme.typography.bodySmall, color = AXIS_COLOR)
+        Box {
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .border(1.dp, outline(), RoundedCornerShape(6.dp))
+                    .clickable { expanded = true }
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CharacterPortrait(me.characterId, 18.dp, Modifier.clip(CircleShape))
+                Text(me.label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                Text("▾", style = MaterialTheme.typography.labelMedium, color = AXIS_COLOR)
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                identities.forEach { id ->
+                    DropdownMenuItem(
+                        text = {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                CharacterPortrait(id.characterId, 20.dp, Modifier.clip(CircleShape))
+                                Text(id.label, fontWeight = if (id.pubkey == me.pubkey) FontWeight.Bold else null)
+                            }
+                        },
+                        onClick = {
+                            expanded = false
+                            if (id.pubkey != me.pubkey) onPick(id)
+                        },
+                    )
                 }
             }
         }
@@ -141,6 +203,8 @@ internal fun JoinCard(onJoin: () -> Unit) {
 @Composable
 internal fun ChatLayout(
     me: NostrIdentity,
+    identities: List<NostrIdentity>,
+    onSwitchIdentity: (NostrIdentity) -> Unit,
     // Start somewhere other than General (the headless render test).
     startRoom: ChatRoom = ChatRoom.GENERAL,
     startTopicId: String? = null,
@@ -187,6 +251,8 @@ internal fun ChatLayout(
         Column(Modifier.weight(1f).fillMaxHeight().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(Res.string.tab_chat), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.width(16.dp))
+                if (identities.size > 1) IdentityPicker(me, identities, onSwitchIdentity)
                 Spacer(Modifier.weight(1f))
                 Text(stringResource(Res.string.chat_public_note), style = MaterialTheme.typography.bodySmall, color = AXIS_COLOR)
             }

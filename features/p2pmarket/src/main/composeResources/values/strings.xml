@@ -263,6 +263,7 @@
     <string name="chat_done">Done</string>
     <string name="chat_mark_done">Mark done</string>
     <string name="chat_reopen">Reopen</string>
+    <string name="chat_post_as">Post as</string>
     <string name="chat_back_to_ideas">All suggestions</string>
     <string name="chat_comments">Comments</string>
     <string name="chat_no_ideas">No suggestions yet -- be the first.</string>
