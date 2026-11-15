@@ -54,6 +54,23 @@ class ChatServiceTest {
     }
 
     @Test
+    fun `only the organiser's newest done mark counts and it never counts as a vote`() {
+        val adminSigner = QuartzGateway.signerFor(KeyPair())
+        ChatService.statusAuthor = adminSigner.pubKey
+        val topic = ChatService.parseMessage(ChatService.buildMessage(alice, "Alice", null, ChatRoom.IDEAS, "x", title = "Done test"))!!
+
+        ChatService.onEvent(ChatService.buildDone(bob, topic, true, createdAt = 300))
+        ChatService.done.value[topic.id].shouldBeNull()
+
+        ChatService.onEvent(ChatService.buildDone(adminSigner, topic, false, createdAt = 200))
+        ChatService.onEvent(ChatService.buildDone(adminSigner, topic, true, createdAt = 100))
+        ChatService.done.value[topic.id]!!.value shouldBe 0
+        ChatService.onEvent(ChatService.buildDone(adminSigner, topic, true, createdAt = 250))
+        ChatService.done.value[topic.id]!!.value shouldBe 1
+        ChatService.votes.value[topic.id].shouldBeNull()
+    }
+
+    @Test
     fun `a reply quotes its parent and tags its author and the mentioned`() {
         val parent = ChatService.parseMessage(ChatService.buildMessage(alice, "Alice", null, ChatRoom.GENERAL, "wts"))!!
         val reply =

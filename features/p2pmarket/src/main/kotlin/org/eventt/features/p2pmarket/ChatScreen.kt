@@ -51,6 +51,7 @@ import org.eventt.core.nostr.ChatMessage
 import org.eventt.core.nostr.ChatRoom
 import org.eventt.core.nostr.ChatService
 import org.eventt.core.nostr.ChatVote
+import org.eventt.core.nostr.GIVEAWAY_ADMIN_PUBKEY
 import org.eventt.core.nostr.NostrIdentity
 import org.eventt.core.nostr.NostrIdentityService
 import org.eventt.core.nostr.PresenceService
@@ -152,6 +153,8 @@ internal fun ChatLayout(
     var insert by remember { mutableStateOf<String?>(null) }
     val messages by ChatService.messages.collectAsState()
     val votes by ChatService.votes.collectAsState()
+    val doneMarks by ChatService.done.collectAsState()
+    val done = remember(doneMarks) { doneMarks.filterValues { it.value == 1 }.keys }
     val allMembers by ChatService.members.collectAsState()
     // A character that lost its key (reinstall, another PC) rejoins under a new pubkey: show it once, newest key wins.
     val members =
@@ -164,6 +167,7 @@ internal fun ChatLayout(
     var myPubkeys by remember { mutableStateOf(setOf(me.pubkey)) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { myPubkeys = myPubkeys + withContext(Dispatchers.IO) { NostrIdentityService.listIdentities().map { it.pubkey } } }
+    val isAdmin = GIVEAWAY_ADMIN_PUBKEY in myPubkeys
 
     fun send(
         text: String,
@@ -211,7 +215,27 @@ internal fun ChatLayout(
                     val comments = inRoom.filter { it.topicId == topic.id }
                     MessageFeed(comments, messages, myPubkeys, names, Modifier.weight(1f), startAtBottom = false, header = {
                         item(key = "topic") {
-                            TopicHeader(topic, votes[topic.id].orEmpty(), me.pubkey, comments.size, { openTopicId = null }) {
+                            val onToggleDone: (() -> Unit)? =
+                                if (isAdmin) {
+                                    {
+                                        scope.launch {
+                                            NostrIdentityService.getIdentityByPubkey(GIVEAWAY_ADMIN_PUBKEY)?.let {
+                                                ChatService.setDone(it, topic, topic.id !in done)
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    null
+                                }
+                            TopicHeader(
+                                topic,
+                                votes[topic.id].orEmpty(),
+                                me.pubkey,
+                                comments.size,
+                                topic.id in done,
+                                onToggleDone,
+                                { openTopicId = null },
+                            ) {
                                 scope.launch { ChatService.vote(me, topic, it) }
                             }
                         }
@@ -225,7 +249,7 @@ internal fun ChatLayout(
                 }
 
                 else -> {
-                    IdeasList(inRoom, votes, me.pubkey, Modifier.weight(1f), onOpen = { openTopicId = it }, onVote = { t, v ->
+                    IdeasList(inRoom, votes, done, me.pubkey, Modifier.weight(1f), onOpen = { openTopicId = it }, onVote = { t, v ->
                         scope.launch { ChatService.vote(me, t, v) }
                     }) { title, body -> send(body, title = title) }
                 }
@@ -675,6 +699,7 @@ private fun plainPreview(md: String) =
 private fun IdeasList(
     inRoom: List<ChatMessage>,
     votes: Map<String, Map<String, ChatVote>>,
+    done: Set<String>,
     myPubkey: String,
     modifier: Modifier,
     onOpen: (String) -> Unit,
@@ -695,11 +720,14 @@ private fun IdeasList(
         inRoom
             .filter { it.topicId == null }
             .sortedWith(
-                if (newestFirst) {
-                    compareByDescending { it.createdAt }
-                } else {
-                    compareByDescending<ChatMessage> { score(votes[it.id]) }.thenByDescending { it.createdAt }
-                },
+                // Done ones sink below the open ones.
+                compareBy<ChatMessage> { it.id in done }.then(
+                    if (newestFirst) {
+                        compareByDescending { it.createdAt }
+                    } else {
+                        compareByDescending<ChatMessage> { score(votes[it.id]) }.thenByDescending { it.createdAt }
+                    },
+                ),
             )
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -727,7 +755,10 @@ private fun IdeasList(
                 ) {
                     VoteBox(votes[t.id].orEmpty(), myPubkey) { onVote(t, it) }
                     Column(Modifier.weight(1f).clickable { onOpen(t.id) }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(t.title.orEmpty(), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (t.id in done) DoneBadge()
+                            Text(t.title.orEmpty(), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        }
                         Text(
                             plainPreview(t.content),
                             style = MaterialTheme.typography.bodySmall,
@@ -766,6 +797,9 @@ private fun TopicHeader(
     votes: Map<String, ChatVote>,
     myPubkey: String,
     commentCount: Int,
+    isDone: Boolean,
+    // Null unless we hold the organiser's key.
+    onToggleDone: (() -> Unit)?,
     onBack: () -> Unit,
     onVote: (Int) -> Unit,
 ) {
@@ -780,7 +814,14 @@ private fun TopicHeader(
             VoteBox(votes, myPubkey, onVote)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(topic.title.orEmpty(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-                AuthorLine(topic, commentCount)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (isDone) DoneBadge()
+                    AuthorLine(topic, commentCount)
+                    Spacer(Modifier.weight(1f))
+                    onToggleDone?.let {
+                        ActionButton(stringResource(if (isDone) Res.string.chat_reopen else Res.string.chat_mark_done), onClick = it)
+                    }
+                }
                 MarkdownView(topic.content)
             }
         }
@@ -793,6 +834,20 @@ private fun TopicHeader(
         )
         HorizontalDivider(color = outline())
     }
+}
+
+@Composable
+private fun DoneBadge() {
+    Text(
+        "✓ " + stringResource(Res.string.chat_done),
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Bold,
+        color = positiveColor,
+        modifier =
+            Modifier
+                .border(1.dp, positiveColor.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                .padding(horizontal = 6.dp, vertical = 1.dp),
+    )
 }
 
 /** ▲ score ▼, your vote lit up. */

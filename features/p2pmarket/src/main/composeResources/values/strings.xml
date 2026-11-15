@@ -260,6 +260,9 @@
     <string name="chat_new_messages">New messages</string>
     <string name="chat_message_placeholder">Write a message… (@ to mention, Shift+Enter for a new line)</string>
     <string name="chat_comment_placeholder">Write a comment…</string>
+    <string name="chat_done">Done</string>
+    <string name="chat_mark_done">Mark done</string>
+    <string name="chat_reopen">Reopen</string>
     <string name="chat_back_to_ideas">All suggestions</string>
     <string name="chat_comments">Comments</string>
     <string name="chat_no_ideas">No suggestions yet -- be the first.</string>

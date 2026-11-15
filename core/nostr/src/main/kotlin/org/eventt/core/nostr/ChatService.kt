@@ -95,6 +95,13 @@ object ChatService {
     private val _votes = MutableStateFlow<Map<String, Map<String, ChatVote>>>(emptyMap())
     val votes: StateFlow<Map<String, Map<String, ChatVote>>> = _votes.asStateFlow()
 
+    // topic id -> the organiser's latest done/open mark.
+    private val _done = MutableStateFlow<Map<String, ChatVote>>(emptyMap())
+    val done: StateFlow<Map<String, ChatVote>> = _done.asStateFlow()
+
+    // Only this key's done marks count; tests swap in a key they can sign with.
+    internal var statusAuthor = GIVEAWAY_ADMIN_PUBKEY
+
     private val _members = MutableStateFlow<Map<String, ChatMember>>(emptyMap())
     val members: StateFlow<Map<String, ChatMember>> = _members.asStateFlow()
 
@@ -134,6 +141,17 @@ object ChatService {
         value: Int,
     ) {
         val event = buildVote(QuartzGateway.signerFor(identity.keyPair), topic, value)
+        onEvent(event)
+        NostrRelayManager.publish(event)
+    }
+
+    /** Marks a suggestion done (or reopens it); only counts when [identity] is the organiser. */
+    suspend fun setDone(
+        identity: NostrIdentity,
+        topic: ChatMessage,
+        done: Boolean,
+    ) {
+        val event = buildDone(QuartzGateway.signerFor(identity.keyPair), topic, done)
         onEvent(event)
         NostrRelayManager.publish(event)
     }
@@ -210,6 +228,20 @@ object ChatService {
         topic: ChatMessage,
         value: Int,
         createdAt: Long = System.currentTimeMillis() / 1000,
+    ): Event = buildReaction(signer, topic, if (value > 0) "+" else "-", createdAt)
+
+    fun buildDone(
+        signer: NostrSignerSync,
+        topic: ChatMessage,
+        done: Boolean,
+        createdAt: Long = System.currentTimeMillis() / 1000,
+    ): Event = buildReaction(signer, topic, if (done) "done" else "open", createdAt)
+
+    private fun buildReaction(
+        signer: NostrSignerSync,
+        topic: ChatMessage,
+        content: String,
+        createdAt: Long,
     ): Event =
         QuartzGateway.signEvent(
             signer,
@@ -221,7 +253,7 @@ object ChatService {
                 arrayOf("k", CHAT_MESSAGE_KIND.toString()),
                 arrayOf("t", CHAT_T_TAG),
             ),
-            if (value > 0) "+" else "-",
+            content,
         )
 
     fun buildMember(
@@ -312,9 +344,24 @@ object ChatService {
                 val topic = event.tags.lastOrNull { it.size >= 2 && it[0] == "e" }?.get(1) ?: return
                 val value =
                     when (event.content) {
-                        "+" -> 1
-                        "-" -> -1
-                        else -> return
+                        "+" -> {
+                            1
+                        }
+
+                        "-" -> {
+                            -1
+                        }
+
+                        "done", "open" -> {
+                            if (event.pubKey != statusAuthor) return
+                            val mark = ChatVote(if (event.content == "done") 1 else 0, event.createdAt)
+                            _done.update { all -> if ((all[topic]?.createdAt ?: -1) > mark.createdAt) all else all + (topic to mark) }
+                            return
+                        }
+
+                        else -> {
+                            return
+                        }
                     }
                 _votes.update { all ->
                     val forTopic = all[topic].orEmpty()
