@@ -24,6 +24,8 @@ class LeaderboardServiceTest {
                 profitFactor30d = 3.2,
                 sells30d = 155,
                 turnover30d = 4.2e10,
+                quality7d = TradeQuality(55.0, 3.5, 1.4, 20, 9e9),
+                quality365d = TradeQuality(70.0, 11.0, null, 4000, 8e11),
                 daily30d = listOf(0.0, -5.0, 1e9),
                 netWorth = 9.2e11,
             )

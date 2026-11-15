@@ -130,7 +130,7 @@
     <string name="lb_30_days">30 дней</string>
     <string name="lb_365_days">365 дней</string>
     <string name="trader_leaderboard">Рейтинг трейдеров</string>
-    <string name="lb_desc">Публикует сводные торговые показатели по всем локальным персонажам и корпорациям: реализованную прибыль и ROI за 7/30/365 дней, качество торговли и прибыль по дням за 30 дней, а капитал — только если отмечено; никогда инвентарь или открытые ордера. После выбора персонажа публикуется примерно раз в 2 часа.</string>
+    <string name="lb_desc">Публикует сводные торговые показатели по всем локальным персонажам и корпорациям: реализованную прибыль, ROI и качество торговли за 7/30/365 дней, прибыль по дням за 30 дней, а капитал — только если отмечено; никогда инвентарь или открытые ордера. После выбора персонажа публикуется примерно раз в 2 часа.</string>
     <string name="no_characters_yet">Персонажи EVE ещё не добавлены — сначала добавьте персонажа на вкладке «Персонажи».</string>
     <string name="publish_as">Публиковать как</string>
     <string name="off">Выкл.</string>
@@ -162,7 +162,7 @@
     <string name="lb_col_win">Win</string>
     <string name="lb_col_margin">Маржа</string>
     <string name="lb_col_pf">PF</string>
-    <string name="lb_pf_tip">Профит-фактор за 30 дней: сумма прибыли прибыльных продаж ÷ сумма убытка убыточных. Больше 1 — зарабатывает больше, чем теряет; 2 — на каждый 1 ISK убытка приходится 2 ISK прибыли. Пусто, если убыточных продаж не было.</string>
+    <string name="lb_pf_tip">Профит-фактор за выбранный период: сумма прибыли прибыльных продаж ÷ сумма убытка убыточных. Больше 1 — зарабатывает больше, чем теряет; 2 — на каждый 1 ISK убытка приходится 2 ISK прибыли. Пусто, если убыточных продаж не было.</string>
     <string name="lb_col_turnover">Оборот</string>
     <string name="lb_col_net_worth">Капитал</string>
     <string name="lb_col_30d">30 дней</string>
@@ -172,11 +172,11 @@
     <string name="lb_pnl_30d">P&amp;L за 30 дней</string>
     <string name="lb_pnl_365d">P&amp;L за 365 дней</string>
     <string name="lb_roi_7_30_365">ROI 7 / 30 / 365</string>
-    <string name="lb_win_rate">Доля прибыльных (30д)</string>
-    <string name="lb_margin">Маржа к себест. (30д)</string>
-    <string name="lb_profit_factor">Профит-фактор (30д)</string>
-    <string name="lb_sells">Продаж (30д)</string>
-    <string name="lb_turnover">Оборот (30д)</string>
+    <string name="lb_win_rate">Доля прибыльных (%1$s)</string>
+    <string name="lb_margin">Маржа к себест. (%1$s)</string>
+    <string name="lb_profit_factor">Профит-фактор (%1$s)</string>
+    <string name="lb_sells">Продаж (%1$s)</string>
+    <string name="lb_turnover">Оборот (%1$s)</string>
     <string name="lb_net_worth">Капитал</string>
     <string name="lb_not_shared">не раскрыт</string>
     <string name="lb_publishing">Публикация</string>

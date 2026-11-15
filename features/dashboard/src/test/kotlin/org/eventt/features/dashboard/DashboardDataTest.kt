@@ -167,6 +167,7 @@ class DashboardDataTest {
         listOf(shared.pnl7d, shared.pnl30d, shared.pnl365d) shouldBe listOf(7.0, 30.0, 40.0)
         shared.roi30dPct!! should (30.0 plusOrMinus 1e-9)
         shared.daily30d.size shouldBe 30
+        listOf(shared.quality7d.sells, shared.sells30d, shared.quality365d.sells) shouldBe listOf(7, 30, 40)
         shared.netWorth shouldBe 200.0
         private.netWorth shouldBe null
     }

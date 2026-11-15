@@ -33,6 +33,15 @@ const val LEADERBOARD_D_TAG = "eventt-leaderboard-v2"
 // Cap on a foreign entry's daily series — anything longer is someone else's malformed event.
 private const val MAX_DAILY_POINTS = 60
 
+/** Trade quality over one window; every field is null when the publisher's client didn't send it. */
+data class TradeQuality(
+    val winRatePct: Double? = null,
+    val marginPct: Double? = null,
+    val profitFactor: Double? = null,
+    val sells: Int? = null,
+    val turnover: Double? = null,
+)
+
 /**
  * What a trader publishes. Only the three P&L figures are required — everything else was added
  * later as optional tags, so an entry from an older client parses with them null/empty, and older
@@ -52,11 +61,16 @@ data class LeaderboardStats(
     val profitFactor30d: Double? = null,
     val sells30d: Int? = null,
     val turnover30d: Double? = null,
+    // The same for the other two windows — newer tags still, so empty from clients that only send 30d.
+    val quality7d: TradeQuality = TradeQuality(),
+    val quality365d: TradeQuality = TradeQuality(),
     // Realized P&L per day, oldest first, ending on the publish day.
     val daily30d: List<Double> = emptyList(),
     // Only when the trader opted in to sharing it.
     val netWorth: Double? = null,
-)
+) {
+    val quality30d get() = TradeQuality(winRate30dPct, margin30dPct, profitFactor30d, sells30d, turnover30d)
+}
 
 data class LeaderboardEntry(
     val pubkey: String,
@@ -171,6 +185,13 @@ object LeaderboardService {
         opt("profit_factor_30d", stats.profitFactor30d)
         opt("sells_30d", stats.sells30d)
         opt("turnover_30d", stats.turnover30d)
+        for ((suffix, q) in listOf("7d" to stats.quality7d, "365d" to stats.quality365d)) {
+            opt("win_rate_$suffix", q.winRatePct)
+            opt("margin_$suffix", q.marginPct)
+            opt("profit_factor_$suffix", q.profitFactor)
+            opt("sells_$suffix", q.sells)
+            opt("turnover_$suffix", q.turnover)
+        }
         // Whole ISK is plenty for a sparkline and keeps the event small.
         if (stats.daily30d.isNotEmpty()) opt("pnl_daily_30d", stats.daily30d.joinToString(",") { it.roundToLong().toString() })
         opt("net_worth", stats.netWorth)
@@ -214,6 +235,15 @@ object LeaderboardService {
             // Optional tags parse leniently: a bad one is dropped, not the whole entry.
             fun num(name: String) = tag(name)?.toDoubleOrNull()?.takeIf { it.isFinite() }
 
+            fun quality(suffix: String) =
+                TradeQuality(
+                    num("win_rate_$suffix"),
+                    num("margin_$suffix"),
+                    num("profit_factor_$suffix"),
+                    tag("sells_$suffix")?.toIntOrNull(),
+                    num("turnover_$suffix"),
+                )
+
             LeaderboardEntry(
                 pubkey = event.pubKey,
                 traderChar = tag("trader_char") ?: "",
@@ -231,6 +261,8 @@ object LeaderboardService {
                         profitFactor30d = num("profit_factor_30d"),
                         sells30d = tag("sells_30d")?.toIntOrNull(),
                         turnover30d = num("turnover_30d"),
+                        quality7d = quality("7d"),
+                        quality365d = quality("365d"),
                         daily30d =
                             tag("pnl_daily_30d")
                                 ?.split(",")

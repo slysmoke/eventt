@@ -12,6 +12,7 @@ import org.eventt.core.database.StaticDataDao
 import org.eventt.core.nostr.LeaderboardService
 import org.eventt.core.nostr.LeaderboardStats
 import org.eventt.core.nostr.NostrIdentityService
+import org.eventt.core.nostr.TradeQuality
 import org.eventt.features.orders.WalletSyncService
 
 private const val LEADERBOARD_REPUBLISH_MILLIS = 2L * 3600 * 1000
@@ -80,6 +81,8 @@ internal fun leaderboardStats(
     val week = over(7)
     val month = over(30)
     val year = over(365)
+
+    fun RangeStats.quality() = TradeQuality(winRatePct, marginPct, profitFactor, sells, turnover)
     return LeaderboardStats(
         pnl7d = week.realized,
         pnl30d = month.realized,
@@ -92,6 +95,8 @@ internal fun leaderboardStats(
         profitFactor30d = month.profitFactor,
         sells30d = month.sells,
         turnover30d = month.turnover,
+        quality7d = week.quality(),
+        quality365d = year.quality(),
         daily30d = s.days.takeLast(30).map { it.realized },
         netWorth =
             s.days

@@ -2,6 +2,7 @@ package org.eventt.features.p2pmarket
 
 import org.eventt.core.nostr.LeaderboardEntry
 import org.eventt.core.nostr.LeaderboardStats
+import org.eventt.core.nostr.TradeQuality
 import org.eventt.p2pmarket.generated.resources.*
 import org.jetbrains.compose.resources.StringResource
 
@@ -15,10 +16,11 @@ internal enum class LbWindow(
     val days: Int,
     val pnl: (LeaderboardStats) -> Double,
     val roi: (LeaderboardStats) -> Double?,
+    val quality: (LeaderboardStats) -> TradeQuality,
 ) {
-    WEEK(Res.string.lb_7_days, "7d", 7, { it.pnl7d }, { it.roi7dPct }),
-    MONTH(Res.string.lb_30_days, "30d", 30, { it.pnl30d }, { it.roi30dPct }),
-    YEAR(Res.string.lb_365_days, "365d", 365, { it.pnl365d }, { it.roi365dPct }),
+    WEEK(Res.string.lb_7_days, "7d", 7, { it.pnl7d }, { it.roi7dPct }, { it.quality7d }),
+    MONTH(Res.string.lb_30_days, "30d", 30, { it.pnl30d }, { it.roi30dPct }, { it.quality30d }),
+    YEAR(Res.string.lb_365_days, "365d", 365, { it.pnl365d }, { it.roi365dPct }, { it.quality365d }),
 }
 
 internal data class Ranked(

@@ -139,6 +139,7 @@ internal fun LeaderboardContent(
                 } else {
                     TraderCard(
                         focus,
+                        window,
                         now,
                         winsBy[focus.entry.pubkey],
                         focus.entry.pubkey in golden,
@@ -248,14 +249,14 @@ private fun RankingTable(
                 Col(stringResource(Res.string.lb_col_trader), 2.2f, end = false) { it.entry.displayName().lowercase() },
                 Col(stringResource(Res.string.lb_col_pnl), 1.1f) { window.pnl(it.entry.stats) },
                 Col(stringResource(Res.string.lb_col_roi), 0.8f) { window.roi(it.entry.stats) },
-                Col(stringResource(Res.string.lb_col_win), 0.6f) { it.entry.stats.winRate30dPct },
-                Col(stringResource(Res.string.lb_col_margin), 0.7f) { it.entry.stats.margin30dPct },
+                Col(stringResource(Res.string.lb_col_win), 0.6f) { window.quality(it.entry.stats).winRatePct },
+                Col(stringResource(Res.string.lb_col_margin), 0.7f) { window.quality(it.entry.stats).marginPct },
                 Col(
                     stringResource(Res.string.lb_col_pf),
                     0.6f,
                     tip = stringResource(Res.string.lb_pf_tip),
-                ) { it.entry.stats.profitFactor30d },
-                Col(stringResource(Res.string.lb_col_turnover), 0.9f) { it.entry.stats.turnover30d },
+                ) { window.quality(it.entry.stats).profitFactor },
+                Col(stringResource(Res.string.lb_col_turnover), 0.9f) { window.quality(it.entry.stats).turnover },
                 Col(stringResource(Res.string.lb_col_net_worth), 0.9f) { it.entry.stats.netWorth },
                 Col(stringResource(Res.string.lb_col_30d), 1.1f),
                 Col(stringResource(Res.string.lb_col_updated), 0.6f) { it.entry.updatedAt },
@@ -272,6 +273,7 @@ private fun RankingTable(
         val s = r.entry.stats
         val dim = AXIS_COLOR.takeIf { r.stale }
         val pnl = window.pnl(s)
+        val q = window.quality(s)
         listOf(
             Cell("${r.rank}", dim ?: AXIS_COLOR),
             Cell(
@@ -306,10 +308,10 @@ private fun RankingTable(
             },
             Cell(signed(pnl), dim ?: pnlColor(pnl)),
             Cell(pctOrDash(window.roi(s)), dim ?: pnlColor(window.roi(s))),
-            Cell(plainPct(s.winRate30dPct), dim),
-            Cell(pctOrDash(s.margin30dPct), dim ?: pnlColor(s.margin30dPct)),
-            Cell(ratio(s.profitFactor30d), dim),
-            Cell(s.turnover30d?.let(::formatIsk) ?: "—", dim),
+            Cell(plainPct(q.winRatePct), dim),
+            Cell(pctOrDash(q.marginPct), dim ?: pnlColor(q.marginPct)),
+            Cell(ratio(q.profitFactor), dim),
+            Cell(q.turnover?.let(::formatIsk) ?: "—", dim),
             Cell(s.netWorth?.let(::formatIsk) ?: "—", dim),
             Cell("") { Sparkline(s.daily30d, Modifier.fillMaxWidth().height(16.dp)) },
             Cell(agoText(r.entry.updatedAt, now), if (r.stale) negativeColor else AXIS_COLOR),
@@ -346,11 +348,14 @@ private fun Sparkline(
 @Composable
 private fun TraderCard(
     r: Ranked,
+    window: LbWindow,
     now: Long,
     wins: Wins?,
     gold: Boolean,
 ) {
     val s = r.entry.stats
+    val q = window.quality(s)
+    val period = stringResource(window.label)
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             CharacterPortrait(r.entry.traderCharId, 56.dp)
@@ -393,11 +398,11 @@ private fun TraderCard(
             listOf(s.roi7dPct, s.roi30dPct, s.roi365dPct).joinToString(" / ", transform = ::pctOrDash),
         )
         Spacer(Modifier.height(4.dp))
-        KV(stringResource(Res.string.lb_win_rate), plainPct(s.winRate30dPct))
-        KV(stringResource(Res.string.lb_margin), pctOrDash(s.margin30dPct), pnlColor(s.margin30dPct))
-        KV(stringResource(Res.string.lb_profit_factor), ratio(s.profitFactor30d))
-        KV(stringResource(Res.string.lb_sells), s.sells30d?.toString() ?: "—")
-        KV(stringResource(Res.string.lb_turnover), s.turnover30d?.let(::formatIsk) ?: "—")
+        KV(stringResource(Res.string.lb_win_rate, period), plainPct(q.winRatePct))
+        KV(stringResource(Res.string.lb_margin, period), pctOrDash(q.marginPct), pnlColor(q.marginPct))
+        KV(stringResource(Res.string.lb_profit_factor, period), ratio(q.profitFactor))
+        KV(stringResource(Res.string.lb_sells, period), q.sells?.toString() ?: "—")
+        KV(stringResource(Res.string.lb_turnover, period), q.turnover?.let(::formatIsk) ?: "—")
         KV(stringResource(Res.string.lb_net_worth), s.netWorth?.let(::formatIsk) ?: stringResource(Res.string.lb_not_shared))
         Spacer(Modifier.height(4.dp))
         KV(
