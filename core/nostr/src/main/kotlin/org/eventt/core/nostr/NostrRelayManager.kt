@@ -349,17 +349,23 @@ object NostrRelayManager {
                     },
                 )
 
-                // Chat rooms: messages and votes, plus members on their own filter so a busy
-                // room's history limit never crowds them out (all tagged CHAT_T_TAG).
-                val chatFilters =
-                    listOf(
+                // One filter per room, one for votes/done marks (only suggestions get those) and one
+                // for members: each gets its own history limit, so General chatter never crowds
+                // suggestions out and votes never crowd out messages (all tagged CHAT_T_TAG).
+                val roomFilters =
+                    ChatRoom.entries.map { room ->
                         Filter(
-                            kinds = listOf(CHAT_MESSAGE_KIND, CHAT_REACTION_KIND),
-                            tags = mapOf("t" to listOf(CHAT_T_TAG)),
+                            kinds = listOf(CHAT_MESSAGE_KIND),
+                            tags = mapOf("t" to listOf(CHAT_T_TAG), "e" to listOf(room.channelId)),
                             limit = CHAT_HISTORY_LIMIT,
-                        ),
-                        Filter(kinds = listOf(CHAT_MEMBER_KIND), tags = mapOf("d" to listOf(CHAT_MEMBER_D_TAG))),
-                    )
+                        )
+                    }
+                val chatFilters =
+                    roomFilters +
+                        listOf(
+                            Filter(kinds = listOf(CHAT_REACTION_KIND), tags = mapOf("t" to listOf(CHAT_T_TAG)), limit = CHAT_HISTORY_LIMIT),
+                            Filter(kinds = listOf(CHAT_MEMBER_KIND), tags = mapOf("d" to listOf(CHAT_MEMBER_D_TAG))),
+                        )
                 c.subscribe(
                     CHAT_SUBSCRIPTION_ID,
                     relayUrls.associateWith { chatFilters },
