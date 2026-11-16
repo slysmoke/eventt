@@ -76,4 +76,32 @@ class BacktestDipStrategyTest {
         // Same 1M re-used twice at +25% each, vs 1M peak capital.
         swing.pnlPct shouldBe (50.0 plusOrMinus 1e-9)
     }
+
+    @Test
+    fun `the z sell exit closes the position when the price swings a typical move above its VWAP`() {
+        // One buy at 8 under a flat 10, one day at 11 (z far above +1), then back to 10.
+        val prices = List(30) { 10.0 } + listOf(8.0, 10.0, 10.0, 11.0) + List(5) { 10.0 }
+        val history = prices.mapIndexed { i, p -> row((prices.size - 1 - i).toLong(), p) }
+
+        val hold = backtestDipStrategy(history, lookbackDays = 30, minDiscountPct = 15.0)!!
+        val zExit = backtestDipStrategy(history, lookbackDays = 30, minDiscountPct = 15.0, sellAtZ = 1.0)!!
+
+        hold.roundTrips shouldBe 0
+        zExit.roundTrips shouldBe 1
+        zExit.pnlPct shouldBe (37.5 plusOrMinus 1e-9) // bought at 8, sold at 11
+    }
+
+    @Test
+    fun `max z stops buying once the dip has become the usual price`() {
+        // Drops from 20 to ~10 and stays: still 15% under the 60-day average for weeks, but after
+        // the 28-day VWAP catches up the z-score hovers around 0, so a -0.5 cap stops the buying.
+        val prices = List(60) { 20.0 } + List(40) { if (it % 2 == 0) 10.5 else 9.5 }
+        val history = prices.mapIndexed { i, p -> row((prices.size - 1 - i).toLong(), p) }
+
+        val open = backtestDipStrategy(history, lookbackDays = 60, minDiscountPct = 15.0)!!
+        val capped = backtestDipStrategy(history, lookbackDays = 60, minDiscountPct = 15.0, maxZ = -0.5)!!
+
+        open.buySignals shouldBe 40
+        (capped.buySignals in 1 until 40) shouldBe true
+    }
 }

@@ -344,8 +344,8 @@ internal fun computeMaterialCandidate(
         volatilityPct = volatilityPct,
         dailyVolume = dailyVolume,
         position = position,
-        backtest = backtestDipStrategy(fullHistory, lookbackDays, minDiscountPct, fees, takeProfitPct),
-        zSellPrice = vwapBandPrice(fullHistory, 1.0),
+        backtest = backtestDipStrategy(fullHistory, lookbackDays, minDiscountPct, fees, takeProfitPct, maxZ, Z_SELL),
+        zSellPrice = vwapBandPrice(fullHistory, Z_SELL),
     )
 }
 
@@ -371,11 +371,17 @@ internal data class BacktestResult(
 // setting because there's nothing meaningful to tune it to.
 private const val BACKTEST_ISK_PER_SIGNAL = 1_000_000.0
 
+// The z-score the sell alert watches for, and the backtest's z exit.
+private const val Z_SELL = 1.0
+
 /**
  * Replays this tab's strategy over an item's own daily history: buy a fixed notional (+ broker
  * fee) on every day the average sits [minDiscountPct] under the trailing [lookbackDays] average,
  * and — when [takeProfitPct] is set — sell the whole position the first day selling would net
  * cost + that %, after tax and broker fee, then start over. Null takeProfitPct = buy and hold.
+ * The 28-day VWAP z-score joins in the way it does live: no buys while the smoothed z is above
+ * [maxZ] (the Max Z filter), and a sell as soon as the raw z reaches [sellAtZ] without a loss
+ * (the sell alert with its break-even floor) — whichever exit comes first.
  * Daily average prices, not real fills: illustrative, not a guarantee.
  */
 internal fun backtestDipStrategy(
@@ -384,9 +390,14 @@ internal fun backtestDipStrategy(
     minDiscountPct: Double,
     fees: MaterialFees = MaterialFees.NONE,
     takeProfitPct: Double? = null,
+    maxZ: Double? = null,
+    sellAtZ: Double? = null,
 ): BacktestResult? {
     val asc = history.sortedBy { it.date }
     if (asc.size < lookbackDays + BACKTEST_MIN_RUNWAY_DAYS) return null // not enough history to replay the rule meaningfully
+    val prices = asc.map { it.average }
+    val rawZ = vwapZScore(prices, vwap(prices, asc.map { it.volume.toDouble() }, Z_FILTER_PERIOD), Z_FILTER_PERIOD)
+    val smoothZ = ema(rawZ, VWAP_SMOOTH)
 
     var qty = 0.0
     var openCost = 0.0
@@ -402,14 +413,17 @@ internal fun backtestDipStrategy(
         val price = asc[i].average
         if (price <= 0.0) continue
         val proceeds = qty * price * fees.sellMultiplier
-        if (takeProfitPct != null && qty > 0 && proceeds >= openCost * (1.0 + takeProfitPct / 100.0)) {
+        val takeProfit = takeProfitPct != null && proceeds >= openCost * (1.0 + takeProfitPct / 100.0)
+        val zSell = sellAtZ != null && proceeds >= openCost && (rawZ[i] ?: Double.NEGATIVE_INFINITY) >= sellAtZ
+        if (qty > 0 && (takeProfit || zSell)) {
             realized += proceeds - openCost
             qty = 0.0
             openCost = 0.0
             trips++
         } else {
             val windowAvg = asc.subList(i - lookbackDays, i).map { it.average }.average()
-            if (windowAvg > 0.0 && price <= windowAvg * (1.0 - minDiscountPct / 100.0)) {
+            val zOk = maxZ == null || (smoothZ[i] ?: maxZ) <= maxZ
+            if (zOk && windowAvg > 0.0 && price <= windowAvg * (1.0 - minDiscountPct / 100.0)) {
                 qty += BACKTEST_ISK_PER_SIGNAL / (price * fees.buyMultiplier)
                 openCost += BACKTEST_ISK_PER_SIGNAL
                 peakCapital = maxOf(peakCapital, openCost)

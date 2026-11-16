@@ -1349,6 +1349,7 @@ private fun decodeIgnored(s: String?): Map<Int, String> =
 private val GUIDE_SECTIONS =
     listOf(
         Res.string.mi_guide_what_title to Res.string.mi_guide_what,
+        Res.string.mi_guide_z_title to Res.string.mi_guide_z,
         Res.string.mi_guide_steps_title to Res.string.mi_guide_steps,
         Res.string.mi_guide_columns_title to Res.string.mi_guide_columns,
         Res.string.mi_guide_mix_title to Res.string.mi_guide_mix,
