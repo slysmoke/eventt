@@ -242,6 +242,7 @@ internal fun MarketBody(
                     color = AXIS_COLOR,
                 )
             }
+            OpenInGameButton(type.typeId, size = 28.dp)
             Segment(stringResource(Res.string.orders), !showHistory) { showHistory = false }
             Segment(stringResource(Res.string.history), showHistory) { showHistory = true }
             Spacer(Modifier.width(8.dp))

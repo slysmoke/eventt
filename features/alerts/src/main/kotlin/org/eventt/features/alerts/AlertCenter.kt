@@ -23,6 +23,7 @@ import org.eventt.core.database.ViewContext
 import org.eventt.core.model.ALERT_CATEGORY_INVESTMENT
 import org.eventt.core.model.PriceAlertModel
 import org.eventt.features.market.ItemDetailDialog
+import org.eventt.features.market.OpenInGameButton
 import org.eventt.ui.common.TypeIcon
 import org.eventt.ui.common.formatPriceAbbr
 import org.eventt.ui.theme.negativeColor
@@ -154,6 +155,8 @@ private fun TriggeredRow(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.primary,
         )
+        Spacer(Modifier.width(4.dp))
+        OpenInGameButton(a.typeId, size = 28.dp)
         IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
             Icon(Icons.Default.Close, stringResource(Res.string.dismiss), Modifier.size(14.dp))
         }

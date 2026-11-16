@@ -17,6 +17,7 @@
     <string name="col_net_vol">Net×Vol</string>
     <string name="orders_sell_buy">Orders (sell/buy)</string>
     <string name="open_chart">Open chart</string>
+    <string name="open_in_game">Open the market window in EVE (the selected character must be logged in)</string>
     <string name="order_counts">%1$ss / %2$sb</string>
     <string name="vs_7d">%1$s% vs 7d</string>
     <string name="n_selected">%1$s selected</string>

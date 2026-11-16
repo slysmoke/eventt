@@ -576,7 +576,9 @@ private fun Header(
             Text(typeName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text(regionLabel, style = MaterialTheme.typography.labelSmall, color = AXIS_COLOR)
         }
-        Spacer(Modifier.width(28.dp))
+        Spacer(Modifier.width(4.dp))
+        OpenInGameButton(typeId, size = 32.dp)
+        Spacer(Modifier.width(20.dp))
         HeaderQuote(stringResource(Res.string.q_bid), book.bestBid?.let { formatIsk(it) } ?: "—", positiveColor)
         HeaderQuote(stringResource(Res.string.q_ask), book.bestAsk?.let { formatIsk(it) } ?: "—", negativeColor)
         val bid = book.bestBid

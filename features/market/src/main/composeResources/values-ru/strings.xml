@@ -17,6 +17,7 @@
     <string name="col_net_vol">Чист.×объём</string>
     <string name="orders_sell_buy">Ордера (sell/buy)</string>
     <string name="open_chart">Открыть график</string>
+    <string name="open_in_game">Открыть окно рынка в EVE (выбранный персонаж должен быть в игре)</string>
     <string name="order_counts">%1$ss / %2$sb</string>
     <string name="vs_7d">%1$s% к 7 дн.</string>
     <string name="n_selected">выбрано: %1$s</string>

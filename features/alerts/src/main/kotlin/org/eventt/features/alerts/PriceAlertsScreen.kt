@@ -29,6 +29,7 @@ import org.eventt.core.model.PLEX_MARKET_REGION_ID
 import org.eventt.core.model.PLEX_TYPE_ID
 import org.eventt.core.model.PriceAlertModel
 import org.eventt.core.model.pluralBlocking
+import org.eventt.features.market.OpenInGameButton
 import org.eventt.ui.common.*
 import org.eventt.ui.common.Tip
 import org.eventt.ui.theme.negativeColor
@@ -528,6 +529,7 @@ private fun GroupRow(
                     tint = MaterialTheme.colorScheme.primary,
                 )
             }
+            OpenInGameButton(group.typeId)
         }
         Text("${group.alerts.size}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(COL_ALERTS))
         Text(
