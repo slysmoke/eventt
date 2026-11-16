@@ -95,8 +95,12 @@ private val LAST_LABELS =
         OverlayPeriod.MONTH to Res.string.so_last_30d,
     )
 
-private const val RECENT_SALES = 6
-private const val TOP_ITEMS = 3
+private const val RECENT_SALES = 3
+private const val TOP_ITEMS = 6
+
+// Wallet transactions land in hourly batches (ESI cache), so the sales feed replays them one hour
+// late: a 19:10 sale shows up at 20:10 — one at a time instead of all at once.
+private val FEED_DELAY: Duration = Duration.ofHours(1)
 
 /**
  * Local-only HTTP server for an OBS Browser Source overlay (issue #15) — same
@@ -159,6 +163,8 @@ object StreamOverlayServer {
         val expectedProfit: Double = 0.0,
         val relistFees: Double = 0.0,
         val sells: List<CostBasisService.RealizedSellTx> = emptyList(),
+        // Sells from FEED_DELAY before the window on: what the delayed sales feed draws from.
+        val feed: List<CostBasisService.RealizedSellTx> = emptyList(),
     ) {
         operator fun plus(o: Totals) =
             Totals(
@@ -170,6 +176,7 @@ object StreamOverlayServer {
                 expectedProfit + o.expectedProfit,
                 relistFees + o.relistFees,
                 sells + o.sells,
+                feed + o.feed,
             )
     }
 
@@ -200,6 +207,7 @@ object StreamOverlayServer {
         val fifo = CostBasisService.compute(characterId = characterId, corporationId = corporationId, taxConfig = taxConfig)
         // FIFO runs over the whole history, so a sale in the window of stock bought before it
         // still carries that stock's real (older) cost.
+        val feedSince = LocalDateTime.parse(since, KEY).minus(FEED_DELAY).format(KEY)
         val sellsThisSession = fifo.realizedSells.filter { it.date >= since && (until == null || it.date < until) }
 
         // Same "active" filter OrdersSummaryBar/MarketWatchService apply — active_orders can hold
@@ -251,6 +259,7 @@ object StreamOverlayServer {
                 },
             relistFees = activeOrders.sumOf { it.relistFeesPaid },
             sells = sellsThisSession,
+            feed = fifo.realizedSells.filter { it.date >= feedSince },
         )
     }
 
@@ -268,8 +277,9 @@ object StreamOverlayServer {
 
         val elapsed = w.elapsedSeconds
         val multiDay = (w.period.days ?: 0) > 1
+        val feed = replayFeed(totals.feed, w.until ?: LocalDateTime.now())
         val names =
-            totals.sells
+            (totals.sells + feed)
                 .map { it.typeId }
                 .distinct()
                 .associateWith { StaticDataDao.getTypeName(it) ?: "#$it" }
@@ -297,7 +307,7 @@ object StreamOverlayServer {
             revenueSession = totals.sells.sumOf { it.sellPrice * it.qty },
             winningTrades = totals.sells.count { it.profit > 0 },
             recentSales =
-                totals.sells.sortedByDescending { it.date }.take(RECENT_SALES).map {
+                feed.map {
                     OverlaySale(it.typeId, names.getValue(it.typeId), it.qty, it.sellPrice, it.profit, saleTime(it.date, multiDay))
                 },
             topItems =
@@ -330,6 +340,15 @@ object StreamOverlayServer {
         if (!w.fixed) return stringBlocking(LAST_LABELS.getValue(w.period))
         val day = (w.elapsedSeconds / 86_400 + 1).coerceAtMost(days)
         return stringBlocking(Res.string.so_day_of, day.toString(), days.toString())
+    }
+
+    /** The newest sales whose replay moment (sale time + FEED_DELAY) has come by [now]. */
+    internal fun replayFeed(
+        sells: List<CostBasisService.RealizedSellTx>,
+        now: LocalDateTime,
+    ): List<CostBasisService.RealizedSellTx> {
+        val cutoff = now.minus(FEED_DELAY).format(KEY)
+        return sells.filter { it.date <= cutoff }.sortedByDescending { it.date }.take(RECENT_SALES)
     }
 
     /** Cumulative confirmed profit through the window, ending on [total] (which may include estimates). */

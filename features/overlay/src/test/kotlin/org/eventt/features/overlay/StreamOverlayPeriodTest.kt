@@ -58,4 +58,19 @@ class StreamOverlayPeriodTest {
                 OverlayPoint(w.elapsedSeconds, 9.0),
             )
     }
+
+    @Test
+    fun `the sales feed shows a sale one hour after it happened, newest first`() {
+        fun sale(date: String) = CostBasisService.RealizedSellTx(date, 34, 1, 10.0, 5.0, 1.0, 0.0)
+        val sells = listOf(sale("2026-11-10T19:10:00"), sale("2026-11-10T19:40:00"))
+
+        fun at(
+            hour: Int,
+            minute: Int,
+        ) = StreamOverlayServer.replayFeed(sells, LocalDateTime.of(2026, 11, 10, hour, minute)).map { it.date.substring(11, 16) }
+
+        at(20, 0) shouldBe emptyList()
+        at(20, 10) shouldBe listOf("19:10")
+        at(20, 40) shouldBe listOf("19:40", "19:10")
+    }
 }

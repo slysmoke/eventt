@@ -16,10 +16,13 @@ object StreamOverlayPage {
     private const val H_PNL = 168
     private const val H_PNL_NO_CHART = 100
     private const val H_TILES = 56
-    private const val SALE_ROWS = 6
+    private const val SALE_ROWS = 3
     private const val H_SALE = 44
     private const val H_SALES = 46 + SALE_ROWS * H_SALE
-    private const val H_TOP = 142
+    private const val TOP_ROWS = 6
+
+    // 39px a row keeps the full panel at its old 428×866, so OBS sources need no resize.
+    private const val H_TOP = 40 + TOP_ROWS * 39
     private const val H_ORDERS = 116
 
     /** Browser Source size (width to height) for a panel with [hidden] sections (?hide= keys). */
@@ -167,7 +170,7 @@ object StreamOverlayPage {
           .empty { font-size: 12px; color: var(--muted); padding: 4px 0; }
 
           /* Top items */
-          .top { display: flex; flex-direction: column; gap: 6px; }
+          .top { display: flex; flex-direction: column; gap: 8.5px; }
           .top .row { display: grid; grid-template-columns: 16px 22px 1fr auto; gap: 8px; align-items: center; font-size: 12px; }
           .top .rank { color: var(--muted); font-weight: 700; }
           .top .icon { width: 22px; height: 22px; border-radius: 4px; }
@@ -222,14 +225,14 @@ object StreamOverlayPage {
             <div class="tile"><div class="k">{{relists}}</div><div class="v num" id="relists">0</div></div>
           </div>
 
-          <section id="sec-sales">
-            <div class="caption"><span>{{recentSales}}</span></div>
-            <div id="sales"><div class="empty">{{waiting}}</div></div>
-          </section>
-
           <section id="sec-top">
             <div class="caption"><span>{{topItems}}</span></div>
             <div class="top" id="top"><div class="empty">{{waiting}}</div></div>
+          </section>
+
+          <section id="sec-sales">
+            <div class="caption"><span>{{recentSales}}</span></div>
+            <div id="sales"><div class="empty">{{waiting}}</div></div>
           </section>
 
           <section id="sec-orders">
