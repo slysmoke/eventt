@@ -85,6 +85,11 @@ private fun day(sec: Long) = Instant.ofEpochSecond(sec).atZone(zone).toLocalDate
 /** Stable per-author name colour, readable on both themes. */
 private fun nameColor(pubkey: String) = Color.hsl((pubkey.hashCode().mod(360)).toFloat(), 0.55f, 0.6f)
 
+private suspend fun leaveOthers(
+    all: List<NostrIdentity>,
+    keep: NostrIdentity,
+) = all.filter { it.pubkey != keep.pubkey && ChatService.isJoined(it.pubkey) }.forEach { ChatService.setJoined(it, false) }
+
 @Composable
 fun ChatScreen() {
     var me by remember { mutableStateOf<NostrIdentity?>(null) }
@@ -99,14 +104,18 @@ fun ChatScreen() {
         identities = all
         me = id
         joined = id?.let { ChatService.isJoined(it.pubkey) } ?: false
+        // Characters picked before this rule existed are still listed: take them out once.
+        if (id != null && joined == true) leaveOthers(all, id)
     }
 
-    // Already in the chat, so the newly picked character joins too.
+    // Already in the chat, so the newly picked character joins too -- and the previous one leaves:
+    // the member list shows one of our characters, the one we post as.
     fun switchTo(next: NostrIdentity) {
         me = next
         scope.launch {
             withContext(Dispatchers.IO) { StaticDataDao.setSetting(CHAT_IDENTITY_SETTING, next.pubkey) }
             if (!ChatService.isJoined(next.pubkey)) ChatService.setJoined(next, true)
+            leaveOthers(identities, next)
         }
     }
     val id = me
