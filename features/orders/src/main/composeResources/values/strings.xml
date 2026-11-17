@@ -187,7 +187,7 @@
     <string name="dist_top">top</string>
     <string name="hide_standing">Hide standing</string>
     <string name="tip_hide_standing">Hides standing orders: the ones you flagged long-term and, on the Buy tab, dip orders under the standing threshold.</string>
-    <string name="tip_long_term">Long-term (standing) order: click to switch. While on, the order is not shown as beaten, is left out of the hotkey cycle and the beaten notification, and out of the Dashboard's attention list. Lasts until the order closes. Shift+click sets every row from the last one you clicked to this one.</string>
+    <string name="tip_long_term">Long-term (standing) order: click to switch. While on, the order is not shown as beaten, is left out of the hotkey cycle and the beaten notification, and out of the Dashboard's attention list. Lasts until the order closes. To switch several at once, pick the rows first (drag the mouse across them; Ctrl+click adds a row, Shift+click takes a range), then click the icon on any of them.</string>
     <string name="standing_tag">standing</string>
     <string name="s_escrow">Escrow</string>
     <string name="s_standing">Standing</string>

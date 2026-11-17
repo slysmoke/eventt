@@ -44,13 +44,34 @@ class StandingOrdersTest {
     }
 
     @Test
-    fun `shift-click takes every shown row between the last clicked one and this one`() {
-        val shown = listOf(5L, 3L, 9L, 7L)
-        longTermRange(shown, anchor = 9L, clicked = 5L, shift = true) shouldBe listOf(5L, 3L, 9L)
-        longTermRange(shown, anchor = 3L, clicked = 7L, shift = true) shouldBe listOf(3L, 9L, 7L)
-        longTermRange(shown, anchor = 3L, clicked = 7L, shift = false) shouldBe listOf(7L)
-        // The anchor row is filtered out or was never set: just the clicked row.
-        longTermRange(shown, anchor = 1L, clicked = 7L, shift = true) shouldBe listOf(7L)
-        longTermRange(shown, anchor = null, clicked = 7L, shift = true) shouldBe listOf(7L)
+    fun `ctrl and shift clicks pick rows for a bulk action, a plain click drops the pick`() {
+        val pick = RowPick().apply { visible = listOf(5L, 3L, 9L, 7L) }
+
+        pick.click(3L, ctrl = false, shift = false) shouldBe false
+        pick.ids shouldBe emptySet()
+        // Shift takes the range from the last clicked row, in the shown order.
+        pick.click(7L, ctrl = false, shift = true) shouldBe true
+        pick.ids shouldBe setOf(3L, 9L, 7L)
+        pick.click(9L, ctrl = true, shift = false) shouldBe true
+        pick.ids shouldBe setOf(3L, 7L)
+
+        // The flag on a picked row goes to the whole pick, on another row to that row alone.
+        pick.targets(7L).toSet() shouldBe setOf(3L, 7L)
+        pick.targets(5L) shouldBe listOf(5L)
+        // Rows filtered out of view since being picked are left alone.
+        pick.visible = listOf(7L, 5L)
+        pick.targets(7L).toSet() shouldBe setOf(7L)
+
+        pick.click(5L, ctrl = false, shift = false)
+        pick.ids shouldBe emptySet()
+
+        // Dragging from one shown row to another picks everything between, in either direction.
+        pick.visible = listOf(5L, 3L, 9L, 7L)
+        pick.drag(from = 2, to = 0)
+        pick.ids shouldBe setOf(5L, 3L, 9L)
+        pick.drag(from = 2, to = 3)
+        pick.ids shouldBe setOf(9L, 7L)
+        pick.drag(from = -1, to = 3)
+        pick.ids shouldBe setOf(9L, 7L)
     }
 }

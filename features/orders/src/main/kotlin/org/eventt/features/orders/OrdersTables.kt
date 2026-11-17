@@ -372,8 +372,9 @@ internal fun SellOrdersTable(
             val idx = sorted.indexOfFirst { it.order.orderId == activeOrderId }
             if (idx >= 0) listState.ensureVisible(idx)
         }
-        val visibleIds = remember(sorted) { sorted.map { it.order.orderId } }
-        LazyColumn(state = listState) {
+        val pick = remember { RowPick() }
+        pick.visible = remember(sorted) { sorted.map { it.order.orderId } }
+        LazyColumn(state = listState, modifier = Modifier.dragPick(pick, listState)) {
             items(sorted, key = { it.order.orderId }) { m ->
                 SellOrderRow(
                     metrics = m,
@@ -381,7 +382,7 @@ internal fun SellOrdersTable(
                     isActiveInGame = activeOrderId == m.order.orderId,
                     onSelect = { onSelect(m.order.orderId) },
                     onAction = { onAction(m.order) },
-                    visibleIds = visibleIds,
+                    pick = pick,
                 )
                 HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
             }
@@ -575,8 +576,9 @@ internal fun BuyOrdersTable(
             val idx = sorted.indexOfFirst { it.order.orderId == activeOrderId }
             if (idx >= 0) listState.ensureVisible(idx)
         }
-        val visibleIds = remember(sorted) { sorted.map { it.order.orderId } }
-        LazyColumn(state = listState) {
+        val pick = remember { RowPick() }
+        pick.visible = remember(sorted) { sorted.map { it.order.orderId } }
+        LazyColumn(state = listState, modifier = Modifier.dragPick(pick, listState)) {
             items(sorted, key = { it.order.orderId }) { m ->
                 BuyOrderRow(
                     metrics = m,
@@ -584,7 +586,7 @@ internal fun BuyOrdersTable(
                     isActiveInGame = activeOrderId == m.order.orderId,
                     onSelect = { onSelect(m.order.orderId) },
                     onAction = { onAction(m.order) },
-                    visibleIds = visibleIds,
+                    pick = pick,
                 )
                 HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
             }

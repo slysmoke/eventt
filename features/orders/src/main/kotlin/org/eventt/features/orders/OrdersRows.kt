@@ -4,7 +4,12 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.ShowChart
@@ -12,14 +17,21 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.input.pointer.isShiftPressed
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -43,6 +55,7 @@ import java.util.Locale
 
 // ── Rows ──────────────────────────────────────────────────────────────────
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal fun SellOrderRow(
     metrics: SellOrderMetrics,
@@ -50,9 +63,9 @@ internal fun SellOrderRow(
     isActiveInGame: Boolean,
     onSelect: () -> Unit,
     onAction: () -> Unit,
-    // Order ids as the table shows them, for the long-term flag's Shift+click range.
-    visibleIds: List<Long> = emptyList(),
+    pick: RowPick = remember { RowPick() },
 ) {
+    val window = LocalWindowInfo.current
     val order = metrics.order
     val comparison = metrics.comparison
     val costBasis = metrics.costBasis
@@ -66,7 +79,7 @@ internal fun SellOrderRow(
     val rowBg =
         when {
             isActiveInGame -> ACTIVE_IN_GAME.copy(alpha = 0.15f)
-            isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+            isSelected || order.orderId in pick.ids -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
             else -> Color.Transparent
         }
 
@@ -75,8 +88,10 @@ internal fun SellOrderRow(
             Modifier
                 .fillMaxWidth()
                 .background(rowBg)
-                .clickable { onSelect() }
-                .onRightClick {
+                .clickable {
+                    val keys = window.keyboardModifiers
+                    if (!pick.click(order.orderId, keys.isCtrlPressed || keys.isMetaPressed, keys.isShiftPressed)) onSelect()
+                }.onRightClick {
                     ItemDetailRequest.target =
                         ItemDetailTarget(order.typeId, order.typeName, order.regionId, order.locationId.takeIf { !order.isBuyOrder })
                 }.padding(horizontal = 8.dp, vertical = 3.dp),
@@ -184,7 +199,7 @@ internal fun SellOrderRow(
             color = timeLeftColor(order.timeLeftSeconds),
         )
 
-        LongTermToggle(order.orderId, visibleIds)
+        LongTermToggle(order.orderId, pick)
         // Action button: open market in-game + copy overbid price
         IconButton(modifier = Modifier.size(24.dp), onClick = onAction) {
             Icon(
@@ -385,38 +400,94 @@ private fun TooltipStatLine(
     }
 }
 
-// The row whose long-term flag was clicked last: the other end of a Shift+click range.
-private var longTermAnchor: Long? = null
+/**
+ * Rows picked with the mouse for a bulk action (the long-term flag): dragging across rows picks
+ * them, Ctrl+click adds or removes a row, Shift+click takes every row from the last clicked one to
+ * this one, a plain click drops the pick.
+ */
+internal class RowPick {
+    var ids by mutableStateOf(emptySet<Long>())
+        private set
 
-/** [clicked] alone, or with [shift] every row from [anchor] to it in the shown order ([visibleIds]). */
-internal fun longTermRange(
-    visibleIds: List<Long>,
-    anchor: Long?,
-    clicked: Long,
-    shift: Boolean,
-): List<Long> {
-    val from = visibleIds.indexOf(anchor)
-    val to = visibleIds.indexOf(clicked)
-    return if (shift && from >= 0 && to >= 0) visibleIds.subList(minOf(from, to), maxOf(from, to) + 1) else listOf(clicked)
+    // Order ids as the table shows them; the table refreshes it on every sort or filter.
+    var visible: List<Long> = emptyList()
+    private var anchor: Long? = null
+
+    /** False for a plain click: the row's own click (single select) should run. */
+    fun click(
+        id: Long,
+        ctrl: Boolean,
+        shift: Boolean,
+    ): Boolean {
+        val from = visible.indexOf(anchor)
+        val to = visible.indexOf(id)
+        ids =
+            when {
+                shift && from >= 0 && to >= 0 -> ids + visible.subList(minOf(from, to), maxOf(from, to) + 1)
+                shift || ctrl -> if (id in ids) ids - id else ids + id
+                else -> emptySet()
+            }
+        anchor = id
+        return shift || ctrl
+    }
+
+    /** Dragging the mouse from one shown row to another picks everything between them. */
+    fun drag(
+        from: Int,
+        to: Int,
+    ) {
+        if (from !in visible.indices || to !in visible.indices) return
+        ids = visible.subList(minOf(from, to), maxOf(from, to) + 1).toSet()
+        anchor = visible[from]
+    }
+
+    /** What an action on row [id] applies to: the whole pick when the row is part of it. */
+    fun targets(id: Long): Collection<Long> = if (id in ids) ids.intersect(visible.toSet()) else listOf(id)
 }
 
+// ponytail: no auto-scroll while dragging past the edge of the list -- Shift+click reaches rows
+// that are off screen; add scrolling here if long lists make that a nuisance.
+internal fun Modifier.dragPick(
+    pick: RowPick,
+    listState: LazyListState,
+): Modifier =
+    pointerInput(pick, listState) {
+        // The row under y; above or below the list it is the first or last row on screen.
+        fun rowAt(y: Float) =
+            listState.layoutInfo.visibleItemsInfo.let { rows ->
+                (
+                    rows.firstOrNull { y < it.offset + it.size }
+                        ?: rows.lastOrNull()
+                )?.index
+                    ?: -1
+            }
+        awaitEachGesture {
+            // The row under the press itself: by the time the drag is recognised the pointer has moved on.
+            val down = awaitFirstDown(requireUnconsumed = false)
+            val start = rowAt(down.position.y)
+            val first = awaitTouchSlopOrCancellation(down.id) { change, _ -> change.consume() } ?: return@awaitEachGesture
+            pick.drag(start, rowAt(first.position.y))
+            drag(first.id) {
+                pick.drag(start, rowAt(it.position.y))
+                it.consume()
+            }
+        }
+    }
+
 // Flags the order long-term by hand (see StandingOrders.manual); lit while the flag is on.
-// Shift+click gives the same state to every row between the last clicked one and this one.
-@OptIn(ExperimentalComposeUiApi::class)
+// Clicked on a picked row, it gives the same state to every picked row.
 @Composable
 private fun LongTermToggle(
     orderId: Long,
-    visibleIds: List<Long>,
+    pick: RowPick,
 ) {
     val on = orderId in StandingOrders.manual.collectAsState().value
     val scope = rememberCoroutineScope()
-    val window = LocalWindowInfo.current
     Tip(stringResource(Res.string.tip_long_term)) {
         IconButton(
             modifier = Modifier.size(24.dp),
             onClick = {
-                val ids = longTermRange(visibleIds, longTermAnchor, orderId, window.keyboardModifiers.isShiftPressed)
-                longTermAnchor = orderId
+                val ids = pick.targets(orderId)
                 scope.launch(Dispatchers.IO) { StandingOrders.setManual(ids, !on) }
             },
         ) {
@@ -479,6 +550,7 @@ private fun RelistCell(
     }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal fun BuyOrderRow(
     metrics: BuyOrderMetrics,
@@ -486,9 +558,9 @@ internal fun BuyOrderRow(
     isActiveInGame: Boolean,
     onSelect: () -> Unit,
     onAction: () -> Unit,
-    // Order ids as the table shows them, for the long-term flag's Shift+click range.
-    visibleIds: List<Long> = emptyList(),
+    pick: RowPick = remember { RowPick() },
 ) {
+    val window = LocalWindowInfo.current
     val order = metrics.order
     val comparison = metrics.comparison
     val isOverbid = metrics.isOverbid
@@ -499,7 +571,7 @@ internal fun BuyOrderRow(
     val rowBg =
         when {
             isActiveInGame -> ACTIVE_IN_GAME.copy(alpha = 0.15f)
-            isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+            isSelected || order.orderId in pick.ids -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
             else -> Color.Transparent
         }
 
@@ -508,8 +580,10 @@ internal fun BuyOrderRow(
             Modifier
                 .fillMaxWidth()
                 .background(rowBg)
-                .clickable { onSelect() }
-                .onRightClick {
+                .clickable {
+                    val keys = window.keyboardModifiers
+                    if (!pick.click(order.orderId, keys.isCtrlPressed || keys.isMetaPressed, keys.isShiftPressed)) onSelect()
+                }.onRightClick {
                     ItemDetailRequest.target =
                         ItemDetailTarget(order.typeId, order.typeName, order.regionId, order.locationId.takeIf { !order.isBuyOrder })
                 }.padding(horizontal = 8.dp, vertical = 3.dp),
@@ -605,7 +679,7 @@ internal fun BuyOrderRow(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        LongTermToggle(order.orderId, visibleIds)
+        LongTermToggle(order.orderId, pick)
         IconButton(modifier = Modifier.size(24.dp), onClick = onAction) {
             Icon(
                 Icons.Default.OpenInBrowser,
