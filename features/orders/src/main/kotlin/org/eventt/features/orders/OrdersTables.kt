@@ -125,6 +125,8 @@ internal data class SellOrderMetrics(
     val isBeaten: Boolean,
     val competition: CompetitionService.Stats?,
     val distancePct: Double? = null,
+    // Flagged long-term by hand (see StandingOrders): never beaten.
+    val isStanding: Boolean = false,
 )
 
 internal fun computeSellMetrics(
@@ -186,7 +188,8 @@ internal fun computeSellMetrics(
             relistFeesPaid = sunkFees,
             relistDiscountPct = relistDiscountPct,
         )
-    val isBeaten = comparison?.bestSell != null && comparison.bestSell < order.price
+    val isStanding = StandingOrders.isManual(order.orderId)
+    val isBeaten = comparison?.bestSell != null && comparison.bestSell < order.price && !isStanding
     val competitionStats = competition[order.typeId to order.locationId]
     return SellOrderMetrics(
         order,
@@ -200,6 +203,7 @@ internal fun computeSellMetrics(
         isBeaten,
         competitionStats,
         distancePct(order.price, isBuy = false, comparison),
+        isStanding,
     )
 }
 
@@ -220,9 +224,12 @@ internal fun SellOrdersTable(
     activeOrderId: Long?,
     onSelect: (Long) -> Unit,
     onAction: (CharacterOrder) -> Unit,
+    hideStanding: Boolean = false,
 ) {
+    val longTerm by StandingOrders.manual.collectAsState()
     val metrics =
         remember(
+            longTerm,
             orders,
             inventory,
             historyCostBasis,
@@ -243,7 +250,7 @@ internal fun SellOrdersTable(
                 )
             }
         }
-    val visible = if (showBeatenOnly) metrics.filter { it.isBeaten } else metrics
+    val visible = metrics.filter { (!showBeatenOnly || it.isBeaten) && !(hideStanding && it.isStanding) }
     val sorted = sortSellMetrics(visible, sortCol, sortDir)
 
     Column {
@@ -354,7 +361,7 @@ internal fun SellOrdersTable(
                 Modifier.weight(1.5f),
                 tooltip = stringResource(Res.string.tip_o_time_left),
             )
-            StaticHeader("", Modifier.width(24.dp))
+            StaticHeader("", Modifier.width(48.dp))
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         val listState = rememberLazyListState()
@@ -365,6 +372,7 @@ internal fun SellOrdersTable(
             val idx = sorted.indexOfFirst { it.order.orderId == activeOrderId }
             if (idx >= 0) listState.ensureVisible(idx)
         }
+        val visibleIds = remember(sorted) { sorted.map { it.order.orderId } }
         LazyColumn(state = listState) {
             items(sorted, key = { it.order.orderId }) { m ->
                 SellOrderRow(
@@ -373,6 +381,7 @@ internal fun SellOrdersTable(
                     isActiveInGame = activeOrderId == m.order.orderId,
                     onSelect = { onSelect(m.order.orderId) },
                     onAction = { onAction(m.order) },
+                    visibleIds = visibleIds,
                 )
                 HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
             }
@@ -413,7 +422,7 @@ internal fun computeBuyMetrics(
         }
     val marginPct = computeMarginPct(order.price, resale, taxConfig)
     val bestMarginPct = computeBestMarginPct(comparison, taxConfig, resale)
-    val isStanding = StandingOrders.isStanding(order.price, comparison?.bestBuy)
+    val isStanding = StandingOrders.isManual(order.orderId) || StandingOrders.isStanding(order.price, comparison?.bestBuy)
     val isOverbid = comparison?.bestBuy != null && comparison.bestBuy > order.price && !isStanding
     // Buy competition is scoped to the region, matching recordTopSnapshots.
     val competitionStats = competition[order.typeId to order.regionId.toLong()]
@@ -446,12 +455,14 @@ internal fun BuyOrdersTable(
     onSelect: (Long) -> Unit,
     onAction: (CharacterOrder) -> Unit,
     marginRange: Int = MarginRange.STATION,
+    hideStanding: Boolean = false,
 ) {
+    val longTerm by StandingOrders.manual.collectAsState()
     val metrics =
-        remember(orders, taxConfig, comparisons, competition, standingPct, marginRange) {
+        remember(longTerm, orders, taxConfig, comparisons, competition, standingPct, marginRange) {
             orders.map { computeBuyMetrics(it, taxConfig, comparisons, competition, marginRange) }
         }
-    val visible = if (showOverbidOnly) metrics.filter { it.isOverbid } else metrics
+    val visible = metrics.filter { (!showOverbidOnly || it.isOverbid) && !(hideStanding && it.isStanding) }
     val sorted = sortBuyMetrics(visible, sortCol, sortDir)
 
     Column {
@@ -553,7 +564,7 @@ internal fun BuyOrdersTable(
                 Modifier.weight(1.5f),
                 tooltip = stringResource(Res.string.tip_o_age),
             )
-            StaticHeader("", Modifier.width(24.dp))
+            StaticHeader("", Modifier.width(48.dp))
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         val listState = rememberLazyListState()
@@ -564,6 +575,7 @@ internal fun BuyOrdersTable(
             val idx = sorted.indexOfFirst { it.order.orderId == activeOrderId }
             if (idx >= 0) listState.ensureVisible(idx)
         }
+        val visibleIds = remember(sorted) { sorted.map { it.order.orderId } }
         LazyColumn(state = listState) {
             items(sorted, key = { it.order.orderId }) { m ->
                 BuyOrderRow(
@@ -572,6 +584,7 @@ internal fun BuyOrdersTable(
                     isActiveInGame = activeOrderId == m.order.orderId,
                     onSelect = { onSelect(m.order.orderId) },
                     onAction = { onAction(m.order) },
+                    visibleIds = visibleIds,
                 )
                 HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
             }

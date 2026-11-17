@@ -29,4 +29,28 @@ class StandingOrdersTest {
         formatDistance(2.43, signed = true) shouldBe "+2.4%"
         formatDistance(12.0, signed = false) shouldBe "12.0%"
     }
+
+    @Test
+    fun `an order flagged long-term by hand is standing whatever its price`() {
+        StandingOrders.isManual(42L) shouldBe false
+        StandingOrders.mark(listOf(42L), true)
+        try {
+            StandingOrders.isManual(42L) shouldBe true
+            StandingOrders.isManual(43L) shouldBe false
+        } finally {
+            StandingOrders.mark(listOf(42L), false)
+        }
+        StandingOrders.isManual(42L) shouldBe false
+    }
+
+    @Test
+    fun `shift-click takes every shown row between the last clicked one and this one`() {
+        val shown = listOf(5L, 3L, 9L, 7L)
+        longTermRange(shown, anchor = 9L, clicked = 5L, shift = true) shouldBe listOf(5L, 3L, 9L)
+        longTermRange(shown, anchor = 3L, clicked = 7L, shift = true) shouldBe listOf(3L, 9L, 7L)
+        longTermRange(shown, anchor = 3L, clicked = 7L, shift = false) shouldBe listOf(7L)
+        // The anchor row is filtered out or was never set: just the clicked row.
+        longTermRange(shown, anchor = 1L, clicked = 7L, shift = true) shouldBe listOf(7L)
+        longTermRange(shown, anchor = null, clicked = 7L, shift = true) shouldBe listOf(7L)
+    }
 }

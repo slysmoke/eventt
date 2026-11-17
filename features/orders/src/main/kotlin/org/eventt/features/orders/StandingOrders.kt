@@ -1,5 +1,8 @@
 package org.eventt.features.orders
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import org.eventt.core.database.StaticDataDao
 import java.util.Locale
 import kotlin.math.abs
@@ -10,11 +13,13 @@ import kotlin.math.abs
  * something to react to. A buy order at least [thresholdPct] under the best competing bid counts
  * as standing and is left out of everything that chases outbid orders: the overbid flag and
  * filter, the Ctrl+Z queue's beaten list, the beaten tray notification and the Dashboard's
- * "needs attention". 0 turns the rule off.
+ * "needs attention". 0 turns the rule off. Any order, sell or buy, can also be flagged standing by
+ * hand (see [manual]).
  */
 object StandingOrders {
     private const val SETTING = "orders.standing_buy_pct"
     private const val DEFAULT_PCT = 0.0
+    private const val MANUAL_SETTING = "orders.long_term_ids"
 
     // Read from settings once, then kept in memory — every beaten check in the app goes through here.
     @Volatile
@@ -26,6 +31,37 @@ object StandingOrders {
             cached = value
             StaticDataDao.setSetting(SETTING, value.toString())
         }
+
+    // Orders flagged long-term by hand, either side: standing whatever their price, and also kept
+    // out of the hotkey cycle. Order ids survive price changes, so the flag lasts until the order closes.
+    // ponytail: ids of closed orders stay in the setting (EVE never reuses one); prune against the
+    // active orders if the list ever gets long.
+    private val manualIds by lazy {
+        MutableStateFlow(
+            runCatching { StaticDataDao.getSetting(MANUAL_SETTING) }
+                .getOrNull()
+                .orEmpty()
+                .split(',')
+                .mapNotNull { it.toLongOrNull() }
+                .toSet(),
+        )
+    }
+    val manual: StateFlow<Set<Long>> get() = manualIds
+
+    fun isManual(orderId: Long): Boolean = orderId in manualIds.value
+
+    internal fun mark(
+        orderIds: Collection<Long>,
+        on: Boolean,
+    ) = manualIds.update { if (on) it + orderIds else it - orderIds.toSet() }
+
+    fun setManual(
+        orderIds: Collection<Long>,
+        on: Boolean,
+    ) {
+        mark(orderIds, on)
+        StaticDataDao.setSetting(MANUAL_SETTING, manualIds.value.joinToString(","))
+    }
 
     fun isStanding(
         ownPrice: Double,

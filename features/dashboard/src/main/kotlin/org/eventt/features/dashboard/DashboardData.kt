@@ -114,7 +114,9 @@ internal fun loadOrderRows(
     return ActiveOrderDao.getAll(characterId, corporationId).filter { it.state == "active" }.map { o ->
         val scopeId = if (o.isBuyOrder) o.regionId.toLong() else o.locationId
         val snap = MarketTopSnapshotDao.getWindow(o.typeId, scopeId, o.isBuyOrder, since).lastOrNull()
-        val standing = o.isBuyOrder && snap != null && !snap.bestIsMine && StandingOrders.isStanding(o.price, snap.bestPrice)
+        val standing =
+            StandingOrders.isManual(o.orderId) ||
+                (o.isBuyOrder && snap != null && !snap.bestIsMine && StandingOrders.isStanding(o.price, snap.bestPrice))
         val outbid =
             snap != null && !snap.bestIsMine && !standing && (if (o.isBuyOrder) snap.bestPrice > o.price else snap.bestPrice < o.price)
         val expires =

@@ -65,6 +65,7 @@ internal val ACTIVE_IN_GAME = Color(0xFF4A90D9) // blue — currently open in EV
 
 private const val DEFAULT_REGION_ID = 10000002 // The Forge (Jita) — fallback for inventory items with no active order/region context
 private const val SHOW_BEATEN_ONLY_SETTING = "orders.show_beaten_only"
+private const val HIDE_STANDING_SETTING = "orders.hide_standing"
 private const val MARGIN_RANGE_SETTING = "orders.buy_margin_range"
 
 internal data class CharacterOrder(
@@ -233,7 +234,9 @@ internal fun CharacterOrder.undercutPrice(comp: MarketComparison?): Double {
 }
 
 internal fun CharacterOrder.isBeatenBy(comp: MarketComparison?): Boolean =
-    if (isBuyOrder) {
+    if (StandingOrders.isManual(orderId)) {
+        false
+    } else if (isBuyOrder) {
         comp?.bestBuy?.let { it > price && !StandingOrders.isStanding(price, it) } ?: false
     } else {
         comp?.bestSell?.let { it < price } ?: false
@@ -344,6 +347,9 @@ fun OrdersScreen(context: ViewContext?) {
     // Buy orders at least this far under the best bid are standing dip orders (see StandingOrders).
     var standingPct by remember { mutableStateOf(0.0) }
     LaunchedEffect(Unit) { standingPct = withContext(Dispatchers.IO) { StandingOrders.thresholdPct } }
+    val longTerm by StandingOrders.manual.collectAsState()
+    var hideStanding by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { hideStanding = withContext(Dispatchers.IO) { StaticDataDao.getSetting(HIDE_STANDING_SETTING) == "true" } }
 
     // Market comparison data — loaded after orders, shown as overbid indicators. Refreshed on
     // order load, via the manual "Refresh Prices" button, and automatically once the ESI cache
@@ -828,7 +834,7 @@ fun OrdersScreen(context: ViewContext?) {
     // Keep the global hotkey queue in sync with the active tab + market comparison data.
     // Tab 0 = sell orders only, Tab 1 = buy orders only, other tabs = all.
     // Beaten orders sort first so the most urgent ones cycle first.
-    LaunchedEffect(context, orders, marketComparisons, activeTab, issuerFilter, standingPct) {
+    LaunchedEffect(context, orders, marketComparisons, activeTab, issuerFilter, standingPct, longTerm) {
         val cid = actingCharId ?: return@LaunchedEffect
         val tabFiltered =
             applyIssuerFilter(
@@ -840,7 +846,8 @@ fun OrdersScreen(context: ViewContext?) {
             )
         val pending =
             tabFiltered
-                .filter { it.state == "active" }
+                // Hand-flagged long-term orders are not something to cycle through.
+                .filter { it.state == "active" && it.orderId !in longTerm }
                 .map { order ->
                     val comp = marketComparisons[order.typeId to order.locationId]
                     val isBeaten = order.isBeatenBy(comp)
@@ -922,7 +929,7 @@ fun OrdersScreen(context: ViewContext?) {
                         1 -> orders.filter { it.isBuyOrder && it.state == "active" }
                         else -> orders.filter { it.state == "active" }
                     },
-                )
+                ).filter { it.orderId !in longTerm }
             val beatenCount = tabActive.count { it.isBeatenBy(marketComparisons[it.typeId to it.locationId]) }
             if (tabActive.isNotEmpty() && actingCharId != null) {
                 val hotkeyLabel by HotkeyBindings.queueLabel.collectAsState()
@@ -1048,6 +1055,14 @@ fun OrdersScreen(context: ViewContext?) {
                 Modifier.weight(1f).fillMaxHeight(),
                 header = {
                     Spacer(Modifier.weight(1f))
+                    if (activeTab <= 1) {
+                        Tip(stringResource(Res.string.tip_hide_standing)) {
+                            Segment(stringResource(Res.string.hide_standing), hideStanding) {
+                                hideStanding = !hideStanding
+                                scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(HIDE_STANDING_SETTING, hideStanding.toString()) }
+                            }
+                        }
+                    }
                     if (activeTab == 0) {
                         Segment(stringResource(Res.string.beaten_only), showBeatenOnly) {
                             showBeatenOnly = !showBeatenOnly
@@ -1155,6 +1170,7 @@ fun OrdersScreen(context: ViewContext?) {
                                     competition = competitionStats,
                                     relistDiscountPct = relistDiscountPct,
                                     showBeatenOnly = showBeatenOnly,
+                                    hideStanding = hideStanding,
                                     selectedOrderId = selectedOrderId,
                                     activeOrderId = activeOrderId,
                                     onSelect = { id -> selectedOrderId = if (selectedOrderId == id) null else id },
@@ -1170,6 +1186,7 @@ fun OrdersScreen(context: ViewContext?) {
                                     comparisons = marketComparisons,
                                     competition = competitionStats,
                                     showOverbidOnly = showOverbidOnly,
+                                    hideStanding = hideStanding,
                                     marginRange = marginRange,
                                     standingPct = standingPct,
                                     selectedOrderId = selectedOrderId,

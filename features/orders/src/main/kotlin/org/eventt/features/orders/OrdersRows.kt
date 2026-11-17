@@ -11,19 +11,27 @@ import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.input.pointer.isShiftPressed
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.eventt.core.database.AppState
 import org.eventt.core.database.OrderHistoryDao
 import org.eventt.orders.generated.resources.*
 import org.eventt.ui.common.Mono
+import org.eventt.ui.common.Tip
 import org.eventt.ui.common.formatIsk
 import org.eventt.ui.common.onRightClick
 import org.eventt.ui.theme.negativeColor
@@ -42,6 +50,8 @@ internal fun SellOrderRow(
     isActiveInGame: Boolean,
     onSelect: () -> Unit,
     onAction: () -> Unit,
+    // Order ids as the table shows them, for the long-term flag's Shift+click range.
+    visibleIds: List<Long> = emptyList(),
 ) {
     val order = metrics.order
     val comparison = metrics.comparison
@@ -137,7 +147,7 @@ internal fun SellOrderRow(
             }
         }
 
-        DistanceCell(metrics.distancePct, standing = false, modifier = Modifier.weight(1.1f))
+        DistanceCell(metrics.distancePct, standing = metrics.isStanding, modifier = Modifier.weight(1.1f))
 
         RelistCell(order.relistCount, order.relistFeesPaid, metrics.updatesRemaining, modifier = Modifier.weight(1.8f))
 
@@ -174,6 +184,7 @@ internal fun SellOrderRow(
             color = timeLeftColor(order.timeLeftSeconds),
         )
 
+        LongTermToggle(order.orderId, visibleIds)
         // Action button: open market in-game + copy overbid price
         IconButton(modifier = Modifier.size(24.dp), onClick = onAction) {
             Icon(
@@ -374,6 +385,51 @@ private fun TooltipStatLine(
     }
 }
 
+// The row whose long-term flag was clicked last: the other end of a Shift+click range.
+private var longTermAnchor: Long? = null
+
+/** [clicked] alone, or with [shift] every row from [anchor] to it in the shown order ([visibleIds]). */
+internal fun longTermRange(
+    visibleIds: List<Long>,
+    anchor: Long?,
+    clicked: Long,
+    shift: Boolean,
+): List<Long> {
+    val from = visibleIds.indexOf(anchor)
+    val to = visibleIds.indexOf(clicked)
+    return if (shift && from >= 0 && to >= 0) visibleIds.subList(minOf(from, to), maxOf(from, to) + 1) else listOf(clicked)
+}
+
+// Flags the order long-term by hand (see StandingOrders.manual); lit while the flag is on.
+// Shift+click gives the same state to every row between the last clicked one and this one.
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun LongTermToggle(
+    orderId: Long,
+    visibleIds: List<Long>,
+) {
+    val on = orderId in StandingOrders.manual.collectAsState().value
+    val scope = rememberCoroutineScope()
+    val window = LocalWindowInfo.current
+    Tip(stringResource(Res.string.tip_long_term)) {
+        IconButton(
+            modifier = Modifier.size(24.dp),
+            onClick = {
+                val ids = longTermRange(visibleIds, longTermAnchor, orderId, window.keyboardModifiers.isShiftPressed)
+                longTermAnchor = orderId
+                scope.launch(Dispatchers.IO) { StandingOrders.setManual(ids, !on) }
+            },
+        ) {
+            Icon(
+                Icons.Default.HourglassEmpty,
+                contentDescription = stringResource(Res.string.tip_long_term),
+                modifier = Modifier.size(15.dp),
+                tint = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+            )
+        }
+    }
+}
+
 // How far behind the best competing price ("+2.4%"), "top" when nothing beats it, and for a
 // standing buy order (see StandingOrders) its distance muted and unsigned.
 @Composable
@@ -430,6 +486,8 @@ internal fun BuyOrderRow(
     isActiveInGame: Boolean,
     onSelect: () -> Unit,
     onAction: () -> Unit,
+    // Order ids as the table shows them, for the long-term flag's Shift+click range.
+    visibleIds: List<Long> = emptyList(),
 ) {
     val order = metrics.order
     val comparison = metrics.comparison
@@ -547,6 +605,7 @@ internal fun BuyOrderRow(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
+        LongTermToggle(order.orderId, visibleIds)
         IconButton(modifier = Modifier.size(24.dp), onClick = onAction) {
             Icon(
                 Icons.Default.OpenInBrowser,

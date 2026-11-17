@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -260,11 +261,16 @@ internal fun OrdersSummaryBar(
     comparisons: Map<Pair<Int, Long>, MarketComparison> = emptyMap(),
 ) {
     val active = orders.filter { it.state == "active" }
+    // Read before the counts so flagging an order re-derives them.
+    val longTerm by StandingOrders.manual.collectAsState()
     val isBuy = active.firstOrNull()?.isBuyOrder ?: (inventory == null)
     val totalRemain = active.sumOf { it.volumeRemaining.toLong() }
     val totalEntered = active.sumOf { it.volumeTotal.toLong() }
     val beaten = active.count { it.isBeatenBy(comparisons[it.typeId to it.locationId]) }
-    val standing = if (isBuy) active.count { StandingOrders.isStanding(it.price, comparisons[it.typeId to it.locationId]?.bestBuy) } else 0
+    val standing =
+        active.count {
+            it.orderId in longTerm || (isBuy && StandingOrders.isStanding(it.price, comparisons[it.typeId to it.locationId]?.bestBuy))
+        }
     val expiring = active.count { it.timeLeftSeconds in 1 until 86400 }
     val relistFees = active.sumOf { it.relistFeesPaid }
     val expectedProfit =
@@ -291,7 +297,16 @@ internal fun OrdersSummaryBar(
             null,
             valueColor = UNDERCUT_COLOR.takeIf { beaten > 0 },
         )
-        if (isBuy) Kpi(stringResource(Res.string.s_standing), standing.toString(), null, null, null, Res.string.tip_o_distance_buy)
+        if (isBuy || standing > 0) {
+            Kpi(
+                stringResource(Res.string.s_standing),
+                standing.toString(),
+                null,
+                null,
+                null,
+                Res.string.tip_o_distance_buy.takeIf { isBuy },
+            )
+        }
         Kpi(
             stringResource(Res.string.s_volume),
             "${formatVolume(totalRemain)} / ${formatVolume(totalEntered)}",

@@ -140,7 +140,9 @@ object MarketWatchService {
                 // reachability the Orders screen applies — port isBuyOrderReachable here if
                 // ranged-buy false positives ever get reported.
                 val isBeaten =
-                    if (order.isBuyOrder) {
+                    if (StandingOrders.isManual(order.orderId)) {
+                        false
+                    } else if (order.isBuyOrder) {
                         val bestBuy = book.filter { it.isBuy() && (it.oid() ?: -1L) !in ownIds }.mapNotNull { it.price() }.maxOrNull()
                         bestBuy != null && bestBuy > livePrice && !StandingOrders.isStanding(livePrice, bestBuy)
                     } else {
