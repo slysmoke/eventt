@@ -61,25 +61,29 @@ private const val EXPIRED_HOLD_SWEEP_MILLIS = 10L * 60 * 1000
 // superseded or the order has expired; pending DMs that old are equally moot.
 private const val OUTBOX_MAX_AGE_SECONDS = 14L * 24 * 3600
 
-// All six checked against their NIP-11 documents (2026-07-16): free writes, NIP-9 (deletion)
-// and NIP-40 (expiration) supported — see docs/relay-nip-support.md.
+// All six advertise NIP-9 (deletion) and NIP-40 (expiration) with free writes; the three added on
+// 2026-11-17 also passed a real write+readback test of kinds 30735/1059/42/30315 — see
+// docs/relay-nip-support.md.
 private val DEFAULT_RELAYS =
     listOf(
-        "wss://nos.lol",
+        "wss://nostr.21crypto.ch",
         "wss://offchain.pub",
         "wss://relay.primal.net",
         "wss://relay.damus.io",
-        "wss://relay.nostr.info",
-        "wss://relay.wellorder.net",
+        "wss://nostr.azzamo.net",
+        "wss://relay.angor.io",
     )
 
-// Former defaults that turned out unusable for order storage (NIP-11 audit 2026-07-16):
-// relay.snort.social is an in-memory relay (supported_nips [1, 11] — no persistence, no NIP-40),
-// nostr.wine has restricted_writes + paid admission, so our publishes were silently rejected.
+// Former defaults that turned out unusable. 2026-07-16 NIP-11 audit: relay.snort.social is
+// in-memory (supported_nips [1, 11]), nostr.wine has paid restricted writes. 2026-11-17: nos.lol
+// and relay.wellorder.net are down, relay.nostr.info rejects every write ("not accepted").
 private val RETIRED_DEFAULT_RELAYS =
     mapOf(
         "wss://relay.snort.social" to "wss://relay.damus.io",
         "wss://nostr.wine" to "wss://offchain.pub",
+        "wss://nos.lol" to "wss://nostr.21crypto.ch",
+        "wss://relay.wellorder.net" to "wss://nostr.azzamo.net",
+        "wss://relay.nostr.info" to "wss://relay.angor.io",
     )
 
 /**
