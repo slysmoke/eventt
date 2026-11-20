@@ -13,13 +13,11 @@ A desktop trading toolkit for [EVE Online](https://www.eveonline.com/), built wi
 
 ## Screenshots
 
-![Item chart](Screenshot/item_chart.png)
-
 | | |
 |---|---|
-| ![Dashboard](Screenshot/dashboard.png) | ![Leaderboard](Screenshot/leaderboard.png) |
-| ![Analysis](Screenshot/analysis.png) | ![Assets](Screenshot/assets.png) |
-| ![Contracts](Screenshot/contracts.png) | |
+| ![Dashboard](Screenshot/dashboard.png) | ![Item chart](Screenshot/item_chart.png) |
+| ![Leaderboard](Screenshot/leaderboard.png) | ![Analysis](Screenshot/analysis.png) |
+| ![Assets](Screenshot/assets.png) | ![Contracts](Screenshot/contracts.png) |
 
 ## Features
 

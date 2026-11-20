@@ -13,13 +13,11 @@
 
 ## Скриншоты
 
-![График предмета](Screenshot/item_chart.png)
-
 | | |
 |---|---|
-| ![Dashboard](Screenshot/dashboard.png) | ![Leaderboard](Screenshot/leaderboard.png) |
-| ![Analysis](Screenshot/analysis.png) | ![Assets](Screenshot/assets.png) |
-| ![Contracts](Screenshot/contracts.png) | |
+| ![Dashboard](Screenshot/dashboard.png) | ![График предмета](Screenshot/item_chart.png) |
+| ![Leaderboard](Screenshot/leaderboard.png) | ![Analysis](Screenshot/analysis.png) |
+| ![Assets](Screenshot/assets.png) | ![Contracts](Screenshot/contracts.png) |
 
 ## Возможности
 
