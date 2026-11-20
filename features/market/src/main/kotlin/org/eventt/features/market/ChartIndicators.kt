@@ -115,6 +115,17 @@ internal fun vwapBandPrice(
     return if (sd > 0) v + z * sd else null
 }
 
+/**
+ * [vwapBandPrice] on the item's freshest daily history: where z = [z] sits today. Null without 28
+ * days of history. What a live z-score alert compares the current price with on every check; the
+ * history call is served from the ESI cache until its daily expiry, so one real request per item a day.
+ */
+fun liveZPrice(
+    typeId: Int,
+    regionId: Int,
+    z: Double,
+): Double? = vwapBandPrice(fetchHistory(typeId, regionId, "esi", Z_HISTORY_DAYS), z)
+
 // Latest smoothed z-score of daily averages vs their VWAP -- the right edge of the item chart's Z
 // pane. [history] is newest first, as fetchHistory returns it. Null without enough history.
 internal fun latestVwapZ(

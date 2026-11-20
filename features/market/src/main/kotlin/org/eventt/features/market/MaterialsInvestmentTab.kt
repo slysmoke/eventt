@@ -1294,15 +1294,17 @@ private fun ladderAlerts(
                 )
         }
     }
-    // Held position: one "lowest ask rose to where z = +1" alert -- the signal to go sell. Never
-    // below break-even, so a weak market can't call a sale at a loss; the take-profit target
-    // stands in when there isn't 28 days of history for a z-score.
+    // Held position: one "lowest ask rose to where z = +1" alert -- the signal to go sell. It is
+    // live: AlertMonitor re-derives the z = +1 price on every check, and the stored price is only
+    // the break-even floor, so a weak market can't call a sale at a loss. Without 28 days of
+    // history for a z-score it is a plain alert at the take-profit target instead.
     alloc.sellTarget?.takeIf { alloc.action != MaterialAction.SELL }?.let { tp ->
-        val st = maxOf(alloc.candidate.zSellPrice ?: tp.targetPrice, tp.breakEvenPrice)
+        val zTarget = Z_SELL.takeIf { alloc.candidate.zSellPrice != null }
+        val st = if (zTarget != null) tp.breakEvenPrice else maxOf(tp.targetPrice, tp.breakEvenPrice)
         val duplicate =
             existing.any {
                 !it.triggered && it.typeId == alloc.candidate.typeId && it.regionId == effRegion &&
-                    it.condition == "above" && it.orderType == "sell" &&
+                    it.condition == "above" && it.orderType == "sell" && it.zTarget == zTarget &&
                     kotlin.math.abs(it.targetPrice - st) < 0.01
             }
         if (!duplicate) {
@@ -1316,6 +1318,7 @@ private fun ladderAlerts(
                     orderType = "sell",
                     characterId = charId,
                     category = ALERT_CATEGORY_INVESTMENT,
+                    zTarget = zTarget,
                 )
         }
     }
@@ -1330,6 +1333,10 @@ private fun createAlerts(
 ): Int {
     val existing = runCatching { AlertDao.getAll() }.getOrDefault(emptyList())
     val alerts = allocs.flatMap { ladderAlerts(it, regionId, charId, existing) }
+    // A new live z alert replaces the item's older one: only its floor (break-even) can differ,
+    // and that means the position's cost has changed since.
+    val replaced = alerts.filter { it.zTarget != null }.map { it.typeId to it.regionId }.toSet()
+    AlertDao.deleteAll(existing.filter { it.zTarget != null && !it.triggered && (it.typeId to it.regionId) in replaced }.map { it.id })
     AlertDao.insertAll(alerts)
     return alerts.size
 }

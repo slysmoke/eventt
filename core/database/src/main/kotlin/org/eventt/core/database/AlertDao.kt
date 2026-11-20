@@ -31,8 +31,8 @@ object AlertDao {
             prepareStatement(
                 """
                 INSERT INTO price_alerts (type_id, type_name, target_price, condition_type, station_id, region_id, order_type, enabled, triggered,
-                    triggered_at, character_id, category)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    triggered_at, character_id, category, z_target)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent(),
                 java.sql.Statement.RETURN_GENERATED_KEYS,
             ).use { stmt ->
@@ -48,6 +48,7 @@ object AlertDao {
                 alert.triggeredAt?.let { stmt.setLong(10, it) } ?: stmt.setNull(10, java.sql.Types.INTEGER)
                 alert.characterId?.let { stmt.setInt(11, it) } ?: stmt.setNull(11, java.sql.Types.INTEGER)
                 stmt.setString(12, alert.category)
+                alert.zTarget?.let { stmt.setDouble(13, it) } ?: stmt.setNull(13, java.sql.Types.REAL)
                 stmt.executeUpdate()
                 stmt.generatedKeys.use { keys ->
                     if (keys.next()) keys.getInt(1) else 0
@@ -164,6 +165,7 @@ object AlertDao {
                     createdAt = getLong("created_at"),
                     characterId = getInt("character_id").takeIf { it != 0 },
                     category = getString("category") ?: ALERT_CATEGORY_GENERAL,
+                    zTarget = getDouble("z_target").takeIf { !wasNull() },
                 ),
             )
         }

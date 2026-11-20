@@ -234,6 +234,10 @@ data class PriceAlertModel(
     val characterId: Int? = null,
     // Which tool created it — the Alerts screen groups by this. See ALERT_CATEGORY_*.
     val category: String = ALERT_CATEGORY_GENERAL,
+    // Live z-score alert: fires when the price reaches the level where the item's z-score vs its
+    // 28-day VWAP equals this, re-derived from fresh history on every check. [targetPrice] is then
+    // only a floor the level never goes under (break-even). Null = a plain fixed-price alert.
+    val zTarget: Double? = null,
 )
 
 const val ALERT_CATEGORY_GENERAL = "general"

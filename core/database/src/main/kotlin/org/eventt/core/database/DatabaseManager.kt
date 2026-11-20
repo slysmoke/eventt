@@ -167,6 +167,8 @@ object DatabaseManager {
                 // `quantity` (-1/-2) instead of a real field, so it's captured here once and for all
                 // when the asset is fetched. See AssetModel.isBlueprintCopy.
                 "ALTER TABLE assets ADD COLUMN is_bpc INTEGER DEFAULT 0",
+                // Live z-score alerts (see PriceAlertModel.zTarget); null for fixed-price ones.
+                "ALTER TABLE price_alerts ADD COLUMN z_target REAL",
             )
         conn.createStatement().use { stmt ->
             migrations.forEach { sql ->
