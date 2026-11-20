@@ -423,10 +423,16 @@ internal fun ItemPriceChart(
     LaunchedEffect(typeId, regionId, alertRevision) {
         userLevels =
             withContext(Dispatchers.IO) {
-                runCatching { AlertDao.getEnabled() }.getOrDefault(emptyList()).filter {
-                    // Region 0 is AlertMonitor's default, The Forge.
-                    it.typeId == typeId && !it.triggered && (it.regionId.takeIf { r -> r > 0 } ?: THE_FORGE) == regionId
-                }
+                runCatching { AlertDao.getEnabled() }
+                    .getOrDefault(emptyList())
+                    .filter {
+                        // Region 0 is AlertMonitor's default, The Forge.
+                        it.typeId == typeId && !it.triggered && (it.regionId.takeIf { r -> r > 0 } ?: THE_FORGE) == regionId
+                    }.mapNotNull { a ->
+                        // A live z alert is drawn where it would fire today, not at its stored floor.
+                        val z = a.zTarget ?: return@mapNotNull a
+                        runCatching { liveZPrice(typeId, regionId, z) }.getOrNull()?.let { a.copy(targetPrice = maxOf(it, a.targetPrice)) }
+                    }
             }
     }
 

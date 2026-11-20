@@ -372,7 +372,7 @@ internal data class BacktestResult(
 private const val BACKTEST_ISK_PER_SIGNAL = 1_000_000.0
 
 // The z-score the sell alert watches for, and the backtest's z exit.
-private const val Z_SELL = 1.0
+internal const val Z_SELL = 1.0
 
 /**
  * Replays this tab's strategy over an item's own daily history: buy a fixed notional (+ broker

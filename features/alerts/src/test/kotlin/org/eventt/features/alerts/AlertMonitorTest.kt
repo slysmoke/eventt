@@ -171,4 +171,40 @@ class AlertMonitorTest {
 
             AlertMonitor.triggered.value.map { it.id } shouldContainExactlyInAnyOrder listOf(1, 2)
         }
+
+    @Test
+    fun `a live z alert fires at today's z level, never under its floor`() =
+        runTest {
+            // Floor (break-even) 5; the z = +1 price is 8 on the first check and 6 on the second.
+            every { AlertDao.getEnabled() } returns
+                listOf(PriceAlertModel(id = 7, typeId = 34, targetPrice = 5.0, condition = "above", orderType = "sell", zTarget = 1.0))
+            every { EsiClient.getMarketRegionOrders(any(), any(), any()) } returns listOf(order(7.0, isBuy = false))
+            every { AlertDao.markTriggered(7) } returns Unit
+            val real = AlertMonitor.zPrice
+            try {
+                AlertMonitor.zPrice = { _, _, _ -> 8.0 }
+                AlertMonitor.checkAlerts()
+                // Ask 7 is over the floor but under the level: quiet, and the level is published.
+                AlertMonitor.triggered.value.shouldBeEmpty()
+                AlertMonitor.levels.value[7] shouldBe 8.0
+
+                // The market cooled, the level came down to 6: the same ask now fires, at 6.
+                AlertMonitor.zPrice = { _, _, _ -> 6.0 }
+                AlertMonitor.checkAlerts()
+                AlertMonitor.triggered.value.map { it.targetPrice } shouldBe listOf(6.0)
+
+                // A level under the floor is held at the floor.
+                AlertMonitor.zPrice = { _, _, _ -> 3.0 }
+                AlertMonitor.checkAlerts()
+                AlertMonitor.levels.value[7] shouldBe 5.0
+
+                // No history for a z-score: nothing to compare with, so it stays quiet.
+                AlertMonitor.triggered.value.forEach { AlertMonitor.dismiss(it) }
+                AlertMonitor.zPrice = { _, _, _ -> null }
+                AlertMonitor.checkAlerts()
+                AlertMonitor.triggered.value.shouldBeEmpty()
+            } finally {
+                AlertMonitor.zPrice = real
+            }
+        }
 }

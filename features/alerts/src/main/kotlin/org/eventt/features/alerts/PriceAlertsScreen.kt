@@ -70,7 +70,8 @@ internal fun distancePct(
     quote: AlertMonitor.Quote?,
 ): Double? {
     val current = (if (alert.orderType == "buy") quote?.bid else quote?.ask)?.takeIf { it > 0 } ?: return null
-    return (alert.targetPrice - current) / current * 100.0
+    // NaN = a live z alert whose level isn't known yet.
+    return ((alert.targetPrice - current) / current * 100.0).takeIf { !it.isNaN() }
 }
 
 /** One item's alerts within a section, the nearest-to-firing active one first. */
@@ -112,6 +113,7 @@ fun PriceAlertsScreen() {
     var checking by remember { mutableStateOf(false) }
     val revision by AlertDao.revision.collectAsState()
     val quotes by AlertMonitor.quotes.collectAsState()
+    val levels by AlertMonitor.levels.collectAsState()
 
     // Keyed on AlertDao.revision: this screen stays mounted after its first visit, so alerts
     // created elsewhere (Market Analysis) or fired by AlertMonitor must push a reload themselves.
@@ -121,7 +123,10 @@ fun PriceAlertsScreen() {
     // Live prices for "distance to target" without waiting for the 5-minute poll.
     LaunchedEffect(Unit) { runCatching { AlertMonitor.checkNow() } }
 
-    val visible = alerts.filter { it.matches(statusFilter) && (query.isBlank() || it.typeName.contains(query, ignoreCase = true)) }
+    // Rows show a live z alert at the level it would fire at today (NaN until the first check has
+    // one); the stored price is only its floor. Editing goes back to the stored alert.
+    val shown = alerts.map { a -> if (a.zTarget != null) a.copy(targetPrice = levels[a.id] ?: Double.NaN) else a }
+    val visible = shown.filter { it.matches(statusFilter) && (query.isBlank() || it.typeName.contains(query, ignoreCase = true)) }
     val sections =
         listOf(
             Triple(
@@ -238,7 +243,7 @@ fun PriceAlertsScreen() {
                                 onChart = { chartFor = g },
                                 single = g.alerts.singleOrNull(),
                                 onToggleAlert = { a -> scope.launch(Dispatchers.IO) { AlertDao.setEnabled(a.id, !a.enabled) } },
-                                onEdit = { editing = it },
+                                onEdit = { e -> editing = alerts.find { it.id == e.id } },
                                 onDelete = { a -> scope.launch(Dispatchers.IO) { AlertDao.delete(a.id) } },
                             )
                         }
@@ -248,7 +253,7 @@ fun PriceAlertsScreen() {
                                     alert = a,
                                     quote = quote,
                                     onToggle = { scope.launch(Dispatchers.IO) { AlertDao.setEnabled(a.id, !a.enabled) } },
-                                    onEdit = { editing = a },
+                                    onEdit = { editing = alerts.find { it.id == a.id } },
                                     onDelete = { scope.launch(Dispatchers.IO) { AlertDao.delete(a.id) } },
                                 )
                             }
@@ -397,7 +402,12 @@ private fun SectionHeader(
 @Composable
 private fun conditionText(a: PriceAlertModel) =
     "${stringResource(if (a.orderType == "buy") Res.string.bid else Res.string.ask)} " +
-        "${if (a.condition == "above") "≥" else "≤"} ${formatPriceAbbr(a.targetPrice)}"
+        "${if (a.condition == "above") "≥" else "≤"} " +
+        listOfNotNull(
+            a.targetPrice.takeIf { !it.isNaN() }?.let { formatPriceAbbr(it) },
+            // Live z-score alert: the price beside it is today's level and moves with the market.
+            a.zTarget?.let { "z " + String.format(Locale.US, "%+.0f", it) },
+        ).joinToString(" · ")
 
 @Composable
 private fun DistanceText(
