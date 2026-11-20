@@ -19,7 +19,7 @@
 |---|---|
 | ![Dashboard](Screenshot/dashboard.png) | ![Leaderboard](Screenshot/leaderboard.png) |
 | ![Analysis](Screenshot/analysis.png) | ![Assets](Screenshot/assets.png) |
-| ![Wallet](Screenshot/wallet.png) | ![Contracts](Screenshot/contracts.png) |
+| ![Contracts](Screenshot/contracts.png) | |
 
 ## Возможности
 
