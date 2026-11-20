@@ -11,6 +11,16 @@ English | [Русский](README.ru.md) · **[User Wiki](docs/WIKI.md)** ([RU](
 
 A desktop trading toolkit for [EVE Online](https://www.eveonline.com/), built with Kotlin/JVM and Jetpack Compose for Desktop. It talks to CCP's ESI API (OAuth2 SSO) to pull your characters' orders, wallet, assets, and contracts, and layers market analysis, alerts, and a FIFO cost-basis/P&L engine on top.
 
+## Screenshots
+
+![Item chart](Screenshot/item_chart.png)
+
+| | |
+|---|---|
+| ![Dashboard](Screenshot/dashboard.png) | ![Leaderboard](Screenshot/leaderboard.png) |
+| ![Analysis](Screenshot/analysis.png) | ![Assets](Screenshot/assets.png) |
+| ![Wallet](Screenshot/wallet.png) | ![Contracts](Screenshot/contracts.png) |
+
 ## Features
 
 - **Dashboard** — a trading terminal for your whole book: net worth (wallet + buy-order escrow + items) with a P&L chart over 1W–ALL, period statistics (realized P&L, win rate, profit factor, margin, fees, drawdown), an orders panel with what needs attention, and Positions / Items / Counterparties / Stations / Trades tables; "Combine all" aggregates every character and corporation
@@ -38,14 +48,6 @@ Hover a column header or a filter to see what it means — every non-obvious one
 While the EVE server is down (daily downtime or an outage) the app shows cached data and pauses ESI requests until the server is back.
 
 See the **[User Wiki](docs/WIKI.md)** for a screen-by-screen guide and typical workflows.
-
-## Screenshots
-
-| | |
-|---|---|
-| ![Dashboard](Screenshot/dashboard.png) | ![Leaderboard](Screenshot/leaderboard.png) |
-| ![Assets](Screenshot/assets.png) | ![Wallet](Screenshot/wallet.png) |
-| ![Contracts](Screenshot/contracts.png) | ![Item chart](Screenshot/item_chart.png) |
 
 ## Requirements
 

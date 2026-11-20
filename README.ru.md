@@ -11,6 +11,16 @@
 
 Десктопный набор инструментов для торговли в [EVE Online](https://www.eveonline.com/) на Kotlin/JVM и Jetpack Compose for Desktop. Работает через ESI API (OAuth2 SSO): подтягивает ордера, кошелёк, ассеты и контракты твоих персонажей, а поверх — анализ рынка, алерты и FIFO-движок себестоимости и P&L.
 
+## Скриншоты
+
+![График предмета](Screenshot/item_chart.png)
+
+| | |
+|---|---|
+| ![Dashboard](Screenshot/dashboard.png) | ![Leaderboard](Screenshot/leaderboard.png) |
+| ![Analysis](Screenshot/analysis.png) | ![Assets](Screenshot/assets.png) |
+| ![Wallet](Screenshot/wallet.png) | ![Contracts](Screenshot/contracts.png) |
+
 ## Возможности
 
 - **Dashboard** — торговый терминал по всему портфелю: собственный капитал (кошелёк + эскроу buy-ордеров + предметы) с графиком P&L за 1W–ALL, статистика за период (реализованный P&L, win rate, profit factor, маржа, комиссии, просадка), панель ордеров с тем, что требует внимания, и таблицы Positions / Items / Counterparties / Stations / Trades; «Combine all» агрегирует всех персонажей и корпорации
@@ -38,14 +48,6 @@
 Пока сервер EVE недоступен (ежедневный даунтайм или авария), приложение показывает кешированные данные и приостанавливает запросы к ESI до его возвращения.
 
 Подробное описание всех экранов и сценариев — в **[вики](docs/WIKI.ru.md)**.
-
-## Скриншоты
-
-| | |
-|---|---|
-| ![Dashboard](Screenshot/dashboard.png) | ![Leaderboard](Screenshot/leaderboard.png) |
-| ![Assets](Screenshot/assets.png) | ![Wallet](Screenshot/wallet.png) |
-| ![Contracts](Screenshot/contracts.png) | ![График предмета](Screenshot/item_chart.png) |
 
 ## Требования
 
