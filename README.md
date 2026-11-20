@@ -18,7 +18,7 @@ A desktop trading toolkit for [EVE Online](https://www.eveonline.com/), built wi
 - **Chat** — opt-in public trader chat and a suggestions board over Nostr, with @mentions and a "Post as" character picker
 - **Characters** — manage linked EVE characters via SSO; act as a character or a corporation
 - **Market** — browse regional market orders side by side with market KPIs and price history (PLEX handled via its global market region); open any item's market window in game with one click
-- **Item chart** — a per-item trading terminal: candles with SMA 20/50, Bollinger bands, VWAP 28 and its z-score, your own buys/sells, a year of real per-station Adam4EVE fills, your position with a fee-inclusive break-even line, a margin ruler (Shift+drag), alert lines (Ctrl+click), and the live order book; right-click a row in Analysis, Orders or Alerts to open it
+- **Item chart** — a per-item trading terminal: candles with SMA 20/50, Bollinger bands, VWAP 28/42 and the z-score, your own buys/sells, a year of real per-station Adam4EVE fills, your position with a fee-inclusive break-even line, a margin ruler (Shift+drag), alert lines (Ctrl+click), and the live order book; right-click a row in Analysis, Orders or Alerts to open it
 - **Analysis** — station-trading and inter-region scanners (with a restock mode that sizes buys to your own sales pace at the destination) and hotkey-driven buy queues, plus **Long-Term Investment**: finds items trading well below their own normal price, splits a budget across them and builds a backtested buy-order ladder with z-score sell alerts (see the in-app Guide)
 - **Assets** — inventory by location and category with value and volume
 - **Wallet** — transaction journal with period KPIs, item / client / type breakdowns and P&L
@@ -43,10 +43,9 @@ See the **[User Wiki](docs/WIKI.md)** for a screen-by-screen guide and typical w
 
 | | |
 |---|---|
-| ![Dashboard](Screenshot/dashboard.png) | ![Analysis](Screenshot/analysis.png) |
-| ![Orders](Screenshot/orders.png) | ![Market browser](Screenshot/market_browser.png) |
-
-![Item chart](Screenshot/item_chart.png)
+| ![Dashboard](Screenshot/dashboard.png) | ![Leaderboard](Screenshot/leaderboard.png) |
+| ![Assets](Screenshot/assets.png) | ![Wallet](Screenshot/wallet.png) |
+| ![Contracts](Screenshot/contracts.png) | ![Item chart](Screenshot/item_chart.png) |
 
 ## Requirements
 
