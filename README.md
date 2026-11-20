@@ -1,5 +1,3 @@
-**[⬇ Download the latest release](https://github.com/slysmoke/eventt/releases/latest)**
-
 [![CI](https://github.com/slysmoke/eventt/actions/workflows/build.yml/badge.svg)](https://github.com/slysmoke/eventt/actions/workflows/build.yml)
 ![GitHub Release](https://img.shields.io/github/v/release/slysmoke/eventt)
 ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/slysmoke/eventt/total)
@@ -10,6 +8,8 @@
 # <img src="app/icons/icon.png" width="40" valign="middle" alt="App icon"> EVE Night Trade Tools
 
 English | [Русский](README.ru.md) · **[User Wiki](docs/WIKI.md)** ([RU](docs/WIKI.ru.md))
+
+**[⬇ Download the latest release](https://github.com/slysmoke/eventt/releases/latest)**
 
 A desktop trading toolkit for [EVE Online](https://www.eveonline.com/), built with Kotlin/JVM and Jetpack Compose for Desktop. It talks to CCP's ESI API (OAuth2 SSO) to pull your characters' orders, wallet, assets, and contracts, and layers market analysis, alerts, and a FIFO cost-basis/P&L engine on top.
 
