@@ -1,3 +1,5 @@
+**[⬇ Скачать последний релиз](https://github.com/slysmoke/eventt/releases/latest)**
+
 [![CI](https://github.com/slysmoke/eventt/actions/workflows/build.yml/badge.svg)](https://github.com/slysmoke/eventt/actions/workflows/build.yml)
 ![GitHub Release](https://img.shields.io/github/v/release/slysmoke/eventt)
 ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/slysmoke/eventt/total)
