@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import org.eventt.core.database.StaticDataDao
 import org.eventt.core.esi.EsiClient
+import org.eventt.core.model.AppLog
 import org.eventt.core.model.eveOutbidPrice
 import org.eventt.core.model.eveUndercutPrice
 import org.eventt.core.model.formatEveSigFigPrice
@@ -157,9 +158,12 @@ object PendingOrdersQueue {
         _currentOrderId.value = order.orderId
         scope.launch {
             runCatching { EsiClient.openMarketWindow(order.charId, order.typeId) }
-            val text = formatEveSigFigPrice(order.priceToSet)
-            val sel = StringSelection(text)
-            Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, sel)
+            // The clipboard can be unavailable (another app holds it, no display): a throw here
+            // would go uncaught in this background scope.
+            runCatching {
+                val sel = StringSelection(formatEveSigFigPrice(order.priceToSet))
+                Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, sel)
+            }.onFailure { AppLog.warn("Clipboard", "copy failed: ${it.message}") }
         }
     }
 }

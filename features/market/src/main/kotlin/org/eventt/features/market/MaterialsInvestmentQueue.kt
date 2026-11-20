@@ -8,8 +8,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import org.eventt.core.esi.EsiClient
 import org.eventt.core.model.formatEveSigFigPrice
-import java.awt.Toolkit
-import java.awt.datatransfer.StringSelection
 import java.util.concurrent.atomic.AtomicInteger
 
 // One rung of one selected item's buy ladder, already snapped to EVE's 4-sigfig price grid --
@@ -77,8 +75,7 @@ object MaterialsInvestmentQueue {
         if (phase == Phase.PRICE) {
             scope.launch {
                 item.charId?.let { runCatching { EsiClient.openMarketWindow(it, item.typeId) } }
-                val sel = StringSelection(formatEveSigFigPrice(item.price))
-                Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, sel)
+                copyToClipboard(formatEveSigFigPrice(item.price))
             }
             if (copyVolume) {
                 phase = Phase.VOLUME
@@ -87,8 +84,7 @@ object MaterialsInvestmentQueue {
             }
         } else {
             scope.launch {
-                val sel = StringSelection(item.qty.coerceAtLeast(1).toString())
-                Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, sel)
+                copyToClipboard(item.qty.coerceAtLeast(1).toString())
             }
             cursor.incrementAndGet()
             phase = Phase.PRICE
