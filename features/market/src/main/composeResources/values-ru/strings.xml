@@ -205,7 +205,7 @@ Ctrl+клик: линия-алерт (срабатывает, когда луч�
     <string name="kv_order_line">%1$s: ордер %2$s/%3$s</string>
     <string name="buy">Buy</string>
     <string name="sell">Sell</string>
-    <string name="position_footnote">* скользящая средняя себестоимость (сбрасывается при закрытии позиции), без комиссий; точный FIFO — на вкладке «Ордера». Комиссии: %1$s (налог + брокер).</string>
+    <string name="position_footnote">* скользящая средняя себестоимость (сбрасывается при закрытии позиции), без комиссий; точный FIFO — на вкладке «Ордера». P&amp;L и безубыточность учитывают комиссии: %2$s брокер при покупке, %1$s (налог + брокер) при продаже.</string>
     <string name="book_label">Стакан — %1$s</string>
     <string name="spread_line">спред %1$s (%2$s)</string>
     <string name="my_trades">Мои сделки</string>

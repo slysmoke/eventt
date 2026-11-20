@@ -205,7 +205,7 @@ Double-click: reset</string>
     <string name="kv_order_line">%1$s order %2$s/%3$s</string>
     <string name="buy">Buy</string>
     <string name="sell">Sell</string>
-    <string name="position_footnote">* moving-average cost (resets when the position closes), before fees; the Orders tab has exact FIFO. Fees: %1$s (tax + broker).</string>
+    <string name="position_footnote">* moving-average cost (resets when the position closes), before fees; the Orders tab has exact FIFO. P&amp;L and break-even add the fees: %2$s broker on the buy, %1$s (tax + broker) on the sale.</string>
     <string name="book_label">Book — %1$s</string>
     <string name="spread_line">spread %1$s (%2$s)</string>
     <string name="my_trades">My Trades</string>

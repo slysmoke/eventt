@@ -168,7 +168,14 @@ internal data class MyTrades(
     // but hollow — their price is another market's, not a point on this chart's book.
     val regionTransactions: List<WalletDao.RawTxRecord>,
     val regionOrders: List<ActiveOrderDao.ActiveOrderRecord>,
-)
+) {
+    // What a held unit really cost: the average buy price plus the broker fee its buy order paid.
+    val costWithFee: Double? get() = avgBuyPrice?.let { it * (1 + buyFeePct / 100) }
+
+    // Lowest sell price that returns that cost after sales tax + broker fee -- the same break-even
+    // the margin ruler and Materials Investment's sell alert floor use.
+    val breakEven: Double? get() = costWithFee?.let { it / (1 - sellFeePct / 100) }
+}
 
 // In corp view (corpId set) everything comes from the corporation's wallet, orders and hangars —
 // corp transactions are stored without a character_id — while fees stay the acting member's.
@@ -1102,8 +1109,7 @@ private fun TradingChart(
 
             // ── Price pane range: daily highs/lows plus any overlay that's within reason, so a
             // far-off stale order or cost line doesn't squash the actual price action flat.
-            // Lowest sell price that returns the average cost after sales tax + broker fee.
-            val breakEven = trades?.takeIf { it.qtyHeld > 0 }?.avgBuyPrice?.let { it / (1 - trades.sellFeePct / 100) }
+            val breakEven = trades?.takeIf { it.qtyHeld > 0 }?.breakEven
             val core =
                 data.rows.subList(iFrom, iTo + 1).filterNotNull().flatMap {
                     listOf(it.average, it.highest.takeIf { h -> h > 0 } ?: it.average, it.lowest.takeIf { l -> l > 0 } ?: it.average)
@@ -1719,7 +1725,7 @@ private fun PositionCard(
     ContentCard(stringResource(Res.string.my_position)) {
         KV(stringResource(Res.string.kv_held), formatVolume(t.qtyHeld))
         KV(stringResource(Res.string.kv_avg_buy), t.avgBuyPrice?.let { formatIsk(it) } ?: "—")
-        val cost = t.avgBuyPrice
+        val cost = t.costWithFee
         if (t.qtyHeld > 0 && cost != null) {
             val keep = 1.0 - t.sellFeePct / 100.0
             // Selling via a sell order just under the ask, net of sales tax + broker fee.
@@ -1756,7 +1762,7 @@ private fun PositionCard(
             }
         }
         Text(
-            stringResource(Res.string.position_footnote, pct(t.sellFeePct)),
+            stringResource(Res.string.position_footnote, pct(t.sellFeePct), pct(t.buyFeePct)),
             style = MaterialTheme.typography.labelSmall,
             color = AXIS_COLOR,
         )
