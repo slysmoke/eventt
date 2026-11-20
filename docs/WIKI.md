@@ -23,7 +23,7 @@ These work even while the EVE client has focus.
 
 | Hotkey | Action |
 |---|---|
-| **Ctrl+Z** | Next item of the active queue: on the Orders screen — cycles your own orders, on Analysis — the buy queue of the active tab (Station Trading, Inter-Region, or the Long-Term Investment ladder) |
+| **Ctrl+Z** | Next item of the active queue: on the Orders screen — cycles your own orders (long-term ones are skipped), on Analysis — the buy queue of the active tab (Station Trading, Inter-Region, or the Long-Term Investment ladder) |
 | **Ctrl+M** | Open/close the Trade Calc overlay at the cursor |
 
 Both can be rebound in **Settings → Global Hotkeys** to any Ctrl/Alt/Shift combination with a letter or F1–F12.
@@ -34,22 +34,26 @@ Both can be rebound in **Settings → Global Hotkeys** to any Ctrl/Alt/Shift com
 
 ### Dashboard
 
-Summary for the selected character/corporation:
+A trading terminal for the selected character/corporation:
 
-- **KPIs**: wallet balance, asset value, 30-day cash flow.
-- **Cash Flow** — money flow from the wallet journal (today / 7 days / 30-day income and expenses). Deliberately not called P&L: buying stock shows up as a big negative here even when the trade is profitable.
-- **Realized P&L (FIFO)** — profit counted only once a lot is actually sold, fees included. This is the real P&L.
-- **Daily Realized P&L — 30d** — realized profit per sell day as bars around a zero baseline; hovering shows the day and amount. Bars sum to the "Realized 30 days" card.
-- **Top Items — Realized 30d** — up to 5 most profitable and 5 most losing items over 30 days.
-- **Recent Transactions** — latest trades.
+- **Net worth & P&L** chart over 1W / 1M / 3M / 1Y / ALL. Net worth = wallet + buy-order escrow + items (assets at Jita sell plus items listed in sell orders). **Composition** stacks wallet, escrow and stock from zero; the P&L bars can be daily or per period. Escrow history is rebuilt from the wallet journal, item value is snapshotted daily.
+- **Statistics** for the range: realized P&L (FIFO, fees included) and its daily average, sell fills, win rate, profit factor, margin on cost, turnover, fees and their share, best / worst day, max drawdown, net worth change.
+- **Orders** panel: buy / sell counts, outbid, expiring within 48h, fills and ISK in the last 24h, and a **Needs attention** list. Standing (long-term) orders never show up there.
+- Tables: **Positions** (held stock at cost vs Jita sell, unrealized P&L, days held), **Items**, **Counterparties**, **Stations** (realized P&L per station) and **Trades**.
 
-The **Combine all** switch in the header aggregates everything across all characters and corporations at once (balances are summed per entity; ESI sync is skipped in this mode — it uses the locally accumulated data).
+The **Combine all** switch in the header aggregates everything across all characters and corporations at once (ESI sync is skipped in this mode — it uses the locally accumulated data).
 
 ### Leaderboard
 
-Opt-in trader leaderboard published over Nostr — self-reported, never independently verified against ESI data. Shows three ranked tables side by side (7 days / 30 days / 365 days), each listing every opted-in trader's *combined* realized P&L across all of their own local characters and corporations.
+Opt-in trader leaderboard published over Nostr — self-reported, never independently verified against ESI data. Each trader's entry is their *combined* figures across all of their own local characters and corporations: P&L and ROI for 7 / 30 / 365 days, and trade quality (win rate, margin, profit factor, sell fills, turnover) for the selected period. Traders inactive for the whole window are left out.
 
-To publish your own numbers, pick a character under **Publish as** at the top of the page — that character's identity signs and republishes your combined totals roughly every 2 hours. Switching the publisher (or setting it back to Off) removes your previous entry from everyone else's view right away. Off by default.
+To publish your own numbers, pick a character under **Publish as** — that character's identity signs and republishes your totals roughly every 2 hours. Switching the publisher (or setting it back to Off) withdraws your previous entry. **Share net worth** adds your net worth to the entry; it is off unless you turn it on. Off by default.
+
+**PLEX giveaways**: the organiser can run a giveaway among the traders on the board. The winner is drawn from the hash of a future Bitcoin block, so anyone can recompute the draw.
+
+### Chat
+
+A public trader chat over Nostr, opt-in (**Turn chat on**; you can leave any time). Two rooms: **General** and **Suggestions** — a board for app ideas with comments and votes; the organiser marks suggestions done. @mentions, a member list with online status, and a menu badge (a dot for new messages, a number for @mentions). **Post as** picks which character you write as, independent of the sidebar selection. Anyone on Nostr can read it.
 
 ### Characters
 
@@ -57,7 +61,8 @@ Add characters via EVE SSO, manage tokens, and pick the active context — a cha
 
 ### Market
 
-- **Browser** — find an item via the market-group tree or by name; regional order book and price history. PLEX is special-cased: it trades in a single global virtual region (ID 19000001), not per-region.
+- **Browser** — find an item via the market-group tree or by name; regional order book (sell and buy side by side) with market KPIs and price history. PLEX is special-cased: it trades in a single global virtual region (ID 19000001), not per-region.
+- **Open in game** buttons (here, in the item chart and on Alerts) open the item's market window in EVE — the selected character must be logged in.
 - Price alerts can be created from here as well.
 - The **History** tab is the item chart described below.
 
@@ -66,15 +71,16 @@ Add characters via EVE SSO, manage tokens, and pick the active context — a cha
 A trading terminal for one item. Opens from the chart icon next to an item name, or by right-clicking a row in Analysis, Orders or Alerts.
 
 - **Header**: best bid / ask, spread, and 1d / 7d / 30d change.
-- **Chart**: daily candles with range buttons (1M–All), mouse-wheel zoom and drag to pan, a crosshair with a value readout for the hovered day. Overlays you can toggle (remembered between sessions): average line, SMA 20, SMA 50, Bollinger bands, **My trades** (your buys ▲ and sells ▼ at the day's average price — hollow markers are fills in other regions), and **Adam4EVE** (a year of real per-side fills at the station). Volume bars and RSI 14 below. Solid lines mark the live bid/ask; dashed ones your cost basis and your open orders.
-- **Side panel**: market stats (median volume, 1-year high/low, 30-day volatility, order counts and depth), Adam4EVE fills per day, **My Position** (held quantity, average buy, P&L at the current ask, break-even ask, realized P&L, your open orders) and the live order book with your own orders starred.
+- **Chart**: daily candles with range buttons (1M–All), mouse-wheel zoom, drag to pan and vertical zoom, a crosshair with a value readout for the hovered day. Overlays you can toggle (remembered between sessions): average line, SMA 20, SMA 50, Bollinger bands, **VWAP 28**, **My trades** (your buys ▲ and sells ▼ — hollow markers are fills in other regions; in the Dashboard's All view, every character's and corp's), and **Adam4EVE** (a year of real per-side fills at the station). Volume bars and a **Z** pane below: how far the price sits from its 28-day VWAP in its own typical swings. Solid lines mark the live bid/ask; dashed ones your cost, **break-even** (BE — cost with the buy broker fee, plus sales tax and sell broker fee) and your open orders.
+- **Shift+drag** (or right-drag) — margin ruler: net margin and ISK profit after broker fee and sales tax between two prices. **Ctrl+click** — a price alert line; Ctrl+click it again to remove. Alert lines show your active alerts, live z alerts at today's level.
+- **Side panel**: market stats (median volume, 1-year high/low, 30-day volatility, order counts and depth), Adam4EVE fills per day, **My Position** (held quantity, average buy, P&L at the current ask and break-even, both with fees, realized P&L, your open orders) and the live order book with your own orders starred.
 
 ### Analysis
 
 Three tabs — two opportunity scanners and a long-term strategy:
 
 - **Station Trading** — finds items with a healthy margin between buy and sell orders at one station. Filters: region/station, item category, margin, traded volume, volume modifier. Results support drag-select and feed the Ctrl+Z queue: the first press opens the item's market window in-game and copies the buy price, the second copies the quantity to buy.
-- **Inter-Region** — cross-region hauling: five trade types (Sell→Buy instant, Sell→Sell Order, Buy Order→Buy, Buy→Sell, and Safe Buy→Sell with an "unattractive to outbid" source price). Computes shipping cost per m³, real profit by walking the order book (not just the single best price), the 7-day trend, and the deviation from the weekly average.
+- **Inter-Region** — cross-region hauling: five trade types (Sell→Buy instant, Sell→Sell Order, Buy Order→Buy, Buy→Sell, and Safe Buy→Sell with an "unattractive to outbid" source price). Computes shipping cost per m³, real profit by walking the order book (not just the single best price), the 7-day trend, and the deviation from the weekly average. **Restock** mode shows only items you already sell at the destination and sizes Qty to Buy to cover N days of your own sales there, less the stock you already hold.
 
 **Margin is net everywhere**: after broker fees and sales tax (Inter-Region also nets out shipping), relative to the sell price — the same figure the Trade Calc overlay shows, and what the "Margin %" filter compares against. The separate **ROI** column is the same net profit relative to the capital outlaid (buy price, plus shipping for Inter-Region).
 
@@ -87,10 +93,10 @@ With many candidates (>1000) the scanner switches to a bulk fetch of the whole r
 A slow strategy (weeks to months): buy items while they are unusually cheap compared with their own recent price, hold, and sell once the price recovers. The **Guide** button in the tab explains it in full; in short:
 
 1. Pick the region and, ideally, the **station** where you'll hold the stock — prices, holdings, your orders and your purchase history are then counted only there. Pick a category (Manufacture & Research › Materials is the default).
-2. Filters decide what counts as a dip: **Lookback d** (what "normal" means), **Min Discount %**, **Min/Max Volatility %**, **Exclude 1y Lows** (skip items in structural decline), and the price-spike filter.
+2. Filters decide what counts as a dip: **Lookback d** (what "normal" means), **Min Discount %**, **Min/Max Volatility %**, **Exclude 1y Lows** (skip items in structural decline), and **Max Z** (skip items not cheap against their 28-day VWAP).
 3. Money: **Budget** is your total target exposure including what you already hold; **Max Items**, **Max %/Item** and **Liquidity d** cap how much any one item can take.
-4. **Analyze** ranks items by real ISK opportunity. Each row shows an action (Buy / Buying / Wait / Sell / On sale), a **buy ladder** (price → ISK per rung; rungs the price has already fallen through merge into one at the live top bid, never above the market), a **sell target** (cost + take-profit, net of fees) and a **Backtest** of this exact strategy on the item's own history.
-5. Tick rows and press **Ctrl+Z** to place the ladder: first press opens the market window and copies the rung price, second copies the quantity. **Alerts** creates price alerts for the rungs and sell targets.
+4. **Analyze** ranks items by real ISK opportunity. Each row shows an action (Buy / Buying / Wait / Sell / On sale), a **buy ladder** (price → ISK per rung; rungs the price has already fallen through merge into one at the live top bid, never above the market), a **sell target** (cost + take-profit, net of fees) and a **Backtest** of this exact strategy on the item's own history, z-score exit included. **Wait** explains why on hover (position full, no budget share, or the bid isn't yet a ladder step under your cost); the Action chips filter by it. The ignore button hides an item and re-splits the budget without a re-scan.
+5. Tick rows and press **Ctrl+Z** to place the ladder: first press opens the market window and copies the rung price, second copies the quantity. **Alerts** creates price alerts for the rungs and, for stock you hold, a **live z-score sell alert**: it fires when the lowest ask reaches the price where z = +1, re-derived from fresh history on every check, never below your break-even.
 6. Items you hold always stay in the list, even when they no longer pass the filters.
 
 **Don't mix it with quick trading on the same item.** The tab averages the cost of *all* your buys and sells of an item, so a flip leaks into the investment: the average cost and sell target shift, flip stock counts as held and shrinks To Buy, and the Orders tab's FIFO attributes investment gains to the flip. Keep them apart with a separate character (best), a separate station selected here, or simply by not flipping what you invest in.
@@ -99,22 +105,24 @@ A slow strategy (weeks to months): buy items while they are unusually cheap comp
 
 Your active orders and everything around them. Tabs: **Sell / Buy / History / Inventory**.
 
+- **Distance to best**: each order shows how far it is from the best competing price.
 - **Beaten orders**: the app compares your price against the best competing one (sell — at the same station, buy — region-wide) and highlights beaten orders in orange; the header shows an "N beaten" counter. A background watcher covers **every** character's orders as each order book's ESI cache expires — notifications and the beaten counter on the sidebar's Orders item stay live even while you're on another tab or switched to another character.
 - **Competition**: a per-order verdict built from a week of order-book snapshots (one per ~5-min ESI tick): **Calm / Contested / Bot war**, with time-on-top %, distinct rivals, and median survival before being undercut. The bot verdict comes from coverage, not speed — near-instant re-undercuts spread across 16+ hours of the day is not a human sleep schedule. Hover the cell for a plain-words breakdown of every number.
-- **The Ctrl+Z queue**: cycles through your orders (beaten first), opens the market window in-game, and puts the beat price on the clipboard (±1 tick on EVE's 4-significant-figures grid). The cycle position is keyed to the order and survives data refreshes. The **only beaten** toggle restricts the cycle to beaten orders. Clicking an order row repositions the cycle onto it.
+- **Standing orders**: flag an order long-term (click its flag; drag or Ctrl/Shift-click to pick several rows) — it is no longer shown as beaten, notified about or cycled by Ctrl+Z, and stays out of the Dashboard's attention list. Buy orders at least the **Standing** threshold under the best bid count as dip orders automatically (off by default). **Hide standing** hides both kinds.
+- **The Ctrl+Z queue**: cycles through your orders (beaten first), opens the market window in-game, and puts the beat price on the clipboard (on EVE's 4-significant-figures grid; how many ticks to step past the best order is configurable). **One per item** visits only the most urgent order per item. The cycle position is keyed to the order and survives data refreshes. The **only beaten** toggle restricts the cycle to beaten orders. Clicking an order row repositions the cycle onto it.
 - **Notifications**: when an order becomes beaten — a system notification (tray, falling back to notify-send on Linux). Toggle with the bell next to Refresh Prices.
 - **Relist fees**: the app notices price changes on your orders via the public order book and tallies the modification fees paid, honoring the Advanced Broker Relations skill.
-- **Inventory** — FIFO stock: average cost basis (buy broker fee included), current sell price, profit/unit, realized P&L, and an **Age** column — how many days the oldest lot has been sitting (>30 days is highlighted).
+- **Inventory** — FIFO stock: average cost basis (buy broker fee included), current sell price, profit/unit, realized P&L, and an **Age** column — how many days the oldest lot has been sitting (>30 days is highlighted). **Manual purchases** books stock bought outside the market (contracts, loot) at your own cost.
 
 ### Wallet
 
-Wallet journal and transactions with daily breakdowns and operation types. Works for corporation wallets too (per division).
+Wallet journal and transactions with period KPIs and breakdowns by item, client and operation type. Works for corporation wallets too (per division).
 
 The **P&L** tab separates two things that are often confused: **Cash Flow** cards (wallet in minus wallet out — restock days look hugely negative here, by design) and **Realized P&L (FIFO)** cards — actual profit at the moment of sale. **Avg Margin (realized)** is total FIFO profit minus relist fees on completed orders, relative to the cost of the units sold; **Profitable Days** counts days that closed with positive realized profit out of days that had any sales at all. The chart plots daily realized profit, mirroring the Dashboard.
 
 ### Assets
 
-Character/corporation assets by location with estimated value.
+Character/corporation assets by location and category, with estimated value and volume.
 
 ### Alerts
 
@@ -122,11 +130,13 @@ Price alerts: the best buy or sell price in a region (The Forge by default; PLEX
 
 - Grouped into **Long-Term** (created from Long-Term Investment ladders and sell targets) and **General** sections, one row per item with all its alerts; filter by Active / Triggered / Disabled or by name, bulk-delete per section.
 - Columns show the next trigger, the live bid / ask and how far the price still has to move (**To go**, highlighted within 2%).
+- **Live z alerts** (from Long-Term Investment) show today's z = +1 level with a "z +1" mark; the stored price is only their break-even floor.
+- Each row can open the item's market window in game.
 - Triggered alerts land in the **alert center** — the bell in the top bar with a badge.
 
 ### Contracts
 
-Contract tracker: item exchange / courier / auction, statuses, contents value.
+Contract tracker: item exchange / courier / auction, statuses, contents value, KPIs, courier routes and counterparties.
 
 ### P2P Market
 
@@ -164,10 +174,12 @@ Under each price sits a clickable `beat …` line: re-copies the beat price if t
 
 A local, transparent, animated overlay page for OBS's Browser Source — for streaming a trading session. Enable it in **Settings → Stream Overlay**: Start/Stop, an accent color, and a checkbox to start it automatically when the app launches. Copy the shown URL (`http://127.0.0.1:8001/?accent=…`) into an OBS Browser Source.
 
-Two rows of live tiles, polled every couple of seconds:
+The panel has a fixed size per shown section, so the OBS source never needs resizing:
 
-- **Session** — elapsed time, trades and profit since the overlay was (re)started or reset, relists.
-- **Order book** (every local character/corp, a live snapshot, not session-scoped) — sell/buy order counts, beaten-order count, ISK tied up in orders, expected profit against current FIFO cost basis, and relist fees paid.
+- **P&L** for the chosen period — **Session**, **24 hours**, **7 days** or **30 days** (rolling, or from a fixed start date) — with a chart and ISK per hour / per day, win rate and revenue.
+- **Recent sales** — replayed one hour late: ESI delivers wallet transactions in hourly batches, so the delay lets them appear one at a time instead of all at once.
+- **Top items** — the six most profitable in the period.
+- **Order book** (every local character/corp, a live snapshot) — sell/buy order counts, beaten orders, ISK in orders, expected profit against FIFO cost, and relist fees.
 
 Local only — nothing here is reachable off the machine running it.
 
@@ -176,12 +188,13 @@ Local only — nothing here is reachable off the machine running it.
 ## How it works inside
 
 - **ESI cache**: three-state (FRESH / STALE / MISS) driven by the `Expires` header; a stale response is served immediately while the refresh runs in the background. All request progress is visible via the sync icon in the top bar.
+- **Server offline**: during EVE's daily downtime or an outage ESI requests are paused and retried every minute; the app keeps showing cached data.
 - **Error journal**: ESI and load failures aren't swallowed — an orange top-bar icon opens the list of recent errors (time, source, message).
 - **Updates**: the app checks GitHub releases and shows a one-click update banner.
 - **Marketlogs watcher**: the folder is polled periodically; a recognized export is imported and deleted.
 - **Background market watch**: an app-lifetime sweeper refreshes every character's/corp's own active-order list from ESI — not just whoever's on screen — alongside the public order books, as ESI caches expire. Competition history, relist detection, and beaten-order notifications keep working without the Orders screen open, and figures shown elsewhere (Leaderboard, OBS overlay) don't drift stale for characters nobody has looked at recently.
 - **Wallet sync**: every character's/corp's wallet journal and transactions are pulled in the background too — on launch, and again before every trader-leaderboard publish.
-- **Database**: SQLite (WAL); all access is serialized through a single-threaded dispatcher — no concurrent `SQLITE_BUSY`.
+- **Database**: SQLite (WAL); ESI market history older than 14 months is pruned on startup; all access is serialized through a single-threaded dispatcher — no concurrent `SQLITE_BUSY`.
 
 ---
 
@@ -197,4 +210,4 @@ Analysis → Inter-Region → pick the trade type and regions → sort by Net Pr
 Ctrl+M → copy an item name or an order row → prices, walls, and the beat price are on screen (and on the clipboard).
 
 **Long-term investing**
-Analysis → Long-Term Investment → pick a station preset and category → Analyze → tick the Buy rows → Ctrl+Z through the ladder in-game → Alerts for the rungs and sell targets → re-run Analyze every few days → when a row turns Sell, list the whole stack at or above the target.
+Analysis → Long-Term Investment → pick a station preset and category → Analyze → tick the Buy rows → Ctrl+Z through the ladder in-game → Alerts for the rungs and the z-score sell alert → re-run Analyze every few days → when a row turns Sell or the sell alert fires, list the whole stack in one order.
