@@ -233,6 +233,20 @@ internal fun CharacterOrder.undercutPrice(comp: MarketComparison?): Double {
     return beatPrice(base, isBuyOrder)
 }
 
+// Same rule the tables use for their long-term marker: flagged by hand, or a buy far enough under the bid.
+internal fun CharacterOrder.isStandingBy(comp: MarketComparison?): Boolean =
+    StandingOrders.isManual(orderId) || (isBuyOrder && StandingOrders.isStanding(price, comp?.bestBuy))
+
+// Which orders the Sell/Buy tables and the hotkey queue show: regular, long-term (standing) or all.
+internal enum class StandingFilter { REGULAR, LONG_TERM, ALL }
+
+internal fun StandingFilter.accepts(isStanding: Boolean) =
+    when (this) {
+        StandingFilter.REGULAR -> !isStanding
+        StandingFilter.LONG_TERM -> isStanding
+        StandingFilter.ALL -> true
+    }
+
 internal fun CharacterOrder.isBeatenBy(comp: MarketComparison?): Boolean =
     if (StandingOrders.isManual(orderId)) {
         false
@@ -348,8 +362,18 @@ fun OrdersScreen(context: ViewContext?) {
     var standingPct by remember { mutableStateOf(0.0) }
     LaunchedEffect(Unit) { standingPct = withContext(Dispatchers.IO) { StandingOrders.thresholdPct } }
     val longTerm by StandingOrders.manual.collectAsState()
-    var hideStanding by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { hideStanding = withContext(Dispatchers.IO) { StaticDataDao.getSetting(HIDE_STANDING_SETTING) == "true" } }
+    // Old boolean setting: "true" meant hide standing, i.e. regular only.
+    var standingFilter by remember { mutableStateOf(StandingFilter.ALL) }
+    LaunchedEffect(Unit) {
+        standingFilter =
+            withContext(Dispatchers.IO) {
+                when (StaticDataDao.getSetting(HIDE_STANDING_SETTING)) {
+                    "true" -> StandingFilter.REGULAR
+                    "long" -> StandingFilter.LONG_TERM
+                    else -> StandingFilter.ALL
+                }
+            }
+    }
 
     // Market comparison data — loaded after orders, shown as overbid indicators. Refreshed on
     // order load, via the manual "Refresh Prices" button, and automatically once the ESI cache
@@ -834,7 +858,7 @@ fun OrdersScreen(context: ViewContext?) {
     // Keep the global hotkey queue in sync with the active tab + market comparison data.
     // Tab 0 = sell orders only, Tab 1 = buy orders only, other tabs = all.
     // Beaten orders sort first so the most urgent ones cycle first.
-    LaunchedEffect(context, orders, marketComparisons, activeTab, issuerFilter, standingPct, longTerm) {
+    LaunchedEffect(context, orders, marketComparisons, activeTab, issuerFilter, standingPct, longTerm, standingFilter) {
         val cid = actingCharId ?: return@LaunchedEffect
         val tabFiltered =
             applyIssuerFilter(
@@ -846,11 +870,16 @@ fun OrdersScreen(context: ViewContext?) {
             )
         val pending =
             tabFiltered
-                // Hand-flagged long-term orders are not something to cycle through.
-                .filter { it.state == "active" && it.orderId !in longTerm }
+                .filter { it.state == "active" && standingFilter.accepts(it.isStandingBy(marketComparisons[it.typeId to it.locationId])) }
                 .map { order ->
                     val comp = marketComparisons[order.typeId to order.locationId]
-                    val isBeaten = order.isBeatenBy(comp)
+                    // Long-term orders are never "beaten"; cycling only them, rank by whether anyone sits ahead.
+                    val isBeaten =
+                        if (standingFilter == StandingFilter.LONG_TERM) {
+                            (distancePct(order.price, order.isBuyOrder, comp) ?: 0.0) > 0
+                        } else {
+                            order.isBeatenBy(comp)
+                        }
                     PendingOrder(
                         charId = cid,
                         orderId = order.orderId,
@@ -929,7 +958,7 @@ fun OrdersScreen(context: ViewContext?) {
                         1 -> orders.filter { it.isBuyOrder && it.state == "active" }
                         else -> orders.filter { it.state == "active" }
                     },
-                ).filter { it.orderId !in longTerm }
+                ).filter { standingFilter.accepts(it.isStandingBy(marketComparisons[it.typeId to it.locationId])) }
             val beatenCount = tabActive.count { it.isBeatenBy(marketComparisons[it.typeId to it.locationId]) }
             if (tabActive.isNotEmpty() && actingCharId != null) {
                 val hotkeyLabel by HotkeyBindings.queueLabel.collectAsState()
@@ -1057,9 +1086,18 @@ fun OrdersScreen(context: ViewContext?) {
                     Spacer(Modifier.weight(1f))
                     if (activeTab <= 1) {
                         Tip(stringResource(Res.string.tip_hide_standing)) {
-                            Segment(stringResource(Res.string.hide_standing), hideStanding) {
-                                hideStanding = !hideStanding
-                                scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(HIDE_STANDING_SETTING, hideStanding.toString()) }
+                            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                listOf(
+                                    StandingFilter.REGULAR to Res.string.standing_filter_regular,
+                                    StandingFilter.LONG_TERM to Res.string.standing_filter_long,
+                                    StandingFilter.ALL to Res.string.standing_filter_all,
+                                ).forEach { (f, label) ->
+                                    Segment(stringResource(label), standingFilter == f) {
+                                        standingFilter = f
+                                        val v = mapOf(StandingFilter.REGULAR to "true", StandingFilter.LONG_TERM to "long")[f] ?: "false"
+                                        scope.launch(Dispatchers.IO) { StaticDataDao.setSetting(HIDE_STANDING_SETTING, v) }
+                                    }
+                                }
                             }
                         }
                     }
@@ -1170,7 +1208,7 @@ fun OrdersScreen(context: ViewContext?) {
                                     competition = competitionStats,
                                     relistDiscountPct = relistDiscountPct,
                                     showBeatenOnly = showBeatenOnly,
-                                    hideStanding = hideStanding,
+                                    standingFilter = standingFilter,
                                     selectedOrderId = selectedOrderId,
                                     activeOrderId = activeOrderId,
                                     onSelect = { id -> selectedOrderId = if (selectedOrderId == id) null else id },
@@ -1186,7 +1224,7 @@ fun OrdersScreen(context: ViewContext?) {
                                     comparisons = marketComparisons,
                                     competition = competitionStats,
                                     showOverbidOnly = showOverbidOnly,
-                                    hideStanding = hideStanding,
+                                    standingFilter = standingFilter,
                                     marginRange = marginRange,
                                     standingPct = standingPct,
                                     selectedOrderId = selectedOrderId,

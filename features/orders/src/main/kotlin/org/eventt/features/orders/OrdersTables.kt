@@ -224,7 +224,7 @@ internal fun SellOrdersTable(
     activeOrderId: Long?,
     onSelect: (Long) -> Unit,
     onAction: (CharacterOrder) -> Unit,
-    hideStanding: Boolean = false,
+    standingFilter: StandingFilter = StandingFilter.ALL,
 ) {
     val longTerm by StandingOrders.manual.collectAsState()
     val metrics =
@@ -250,7 +250,7 @@ internal fun SellOrdersTable(
                 )
             }
         }
-    val visible = metrics.filter { (!showBeatenOnly || it.isBeaten) && !(hideStanding && it.isStanding) }
+    val visible = metrics.filter { (!showBeatenOnly || it.isBeaten) && standingFilter.accepts(it.isStanding) }
     val sorted = sortSellMetrics(visible, sortCol, sortDir)
 
     Column {
@@ -456,14 +456,14 @@ internal fun BuyOrdersTable(
     onSelect: (Long) -> Unit,
     onAction: (CharacterOrder) -> Unit,
     marginRange: Int = MarginRange.STATION,
-    hideStanding: Boolean = false,
+    standingFilter: StandingFilter = StandingFilter.ALL,
 ) {
     val longTerm by StandingOrders.manual.collectAsState()
     val metrics =
         remember(longTerm, orders, taxConfig, comparisons, competition, standingPct, marginRange) {
             orders.map { computeBuyMetrics(it, taxConfig, comparisons, competition, marginRange) }
         }
-    val visible = metrics.filter { (!showOverbidOnly || it.isOverbid) && !(hideStanding && it.isStanding) }
+    val visible = metrics.filter { (!showOverbidOnly || it.isOverbid) && standingFilter.accepts(it.isStanding) }
     val sorted = sortBuyMetrics(visible, sortCol, sortDir)
 
     Column {
