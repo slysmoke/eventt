@@ -11,6 +11,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -21,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.eventt.core.database.ActiveOrderDao
 import org.eventt.core.database.AlertDao
 import org.eventt.core.database.AppState
 import org.eventt.core.database.MarketDao
@@ -230,6 +233,11 @@ internal fun MarketBody(
     val sells = remember(allSells, hubOnly, hub) { if (hubOnly) allSells.filter { it.locationId == hub.stationId } else allSells }
     val buys = remember(allBuys, hubOnly, hub) { if (hubOnly) allBuys.filter { it.locationId == hub.stationId } else allBuys }
     val stats = remember(sells, buys, history) { marketStats(sells, buys, history, today) }
+    // Every character's (and corp's) cached active orders — tinted in the book. Reloaded with the book.
+    val mine by produceState(emptySet<Long>(), book) {
+        value =
+            withContext(Dispatchers.IO) { runCatching { ActiveOrderDao.getAll().mapTo(HashSet()) { it.orderId } }.getOrDefault(emptySet()) }
+    }
 
     Column(modifier.fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -254,8 +262,8 @@ internal fun MarketBody(
             Panel(null, Modifier.fillMaxWidth().weight(1f)) { HistoryChartView(history, type, hub.regionId, book) }
         } else {
             Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                BookPanel(stringResource(Res.string.sell_orders), sells, isBuy = false, Modifier.weight(1f), onAlert)
-                BookPanel(stringResource(Res.string.buy_orders), buys, isBuy = true, Modifier.weight(1f), onAlert)
+                BookPanel(stringResource(Res.string.sell_orders), sells, isBuy = false, Modifier.weight(1f), mine, onAlert)
+                BookPanel(stringResource(Res.string.buy_orders), buys, isBuy = true, Modifier.weight(1f), mine, onAlert)
             }
         }
     }
@@ -316,6 +324,7 @@ private fun BookPanel(
     orders: List<MarketOrder>,
     isBuy: Boolean,
     modifier: Modifier,
+    mine: Set<Long>,
     onAlert: (Double?) -> Unit,
 ) {
     val rows = remember(orders, isBuy) { stack(orders, isBuy) }
@@ -352,6 +361,7 @@ private fun BookPanel(
             defaultDesc = isBuy,
             key = { it.o.orderId },
             onClick = { onAlert(it.o.price) },
+            highlight = { it.o.orderId in mine },
         ) { r ->
             val left = r.o.expiresAt()?.let { Duration.between(now, it) }
             buildList {
