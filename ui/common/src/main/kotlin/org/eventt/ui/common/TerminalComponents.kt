@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.CircularProgressIndicator
@@ -290,8 +291,12 @@ fun <T> Table(
         Hint(empty)
         return
     }
+    val listState = rememberLazyListState()
+    // Keyed rows keep the old first row in view when the order changes (prices land, a re-sort),
+    // hiding whatever moved above it. Stay pinned to the top if we were there.
+    remember(sorted) { if (!listState.canScrollBackward) listState.requestScrollToItem(0) }
     Column(Modifier.fillMaxSize()) {
-        LazyColumn(Modifier.weight(1f)) {
+        LazyColumn(Modifier.weight(1f), listState) {
             items(sorted, key = key) { r ->
                 val tint = if (highlight(r)) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)) else Modifier
                 line(cells(r), modifier = tint.then(if (onClick != null) Modifier.clickable { onClick(r) } else Modifier))
