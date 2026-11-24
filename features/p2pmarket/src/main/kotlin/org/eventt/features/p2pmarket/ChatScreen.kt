@@ -120,9 +120,8 @@ fun ChatScreen() {
     }
     val id = me
     when {
-        joined == null -> {
-            Unit
-        }
+        // Still loading.
+        joined == null -> {}
 
         id == null -> {
             Hint(stringResource(Res.string.err_no_identity))

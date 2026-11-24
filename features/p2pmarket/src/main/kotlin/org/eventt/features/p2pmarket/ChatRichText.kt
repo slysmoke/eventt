@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import com.mohamedrejeb.richeditor.annotation.ExperimentalRichTextApi
 import com.mohamedrejeb.richeditor.model.HeadingStyle
 import com.mohamedrejeb.richeditor.model.RichTextState
 import com.mohamedrejeb.richeditor.model.rememberRichTextState
@@ -57,6 +58,7 @@ private fun RichTextState.themed(): RichTextState {
 }
 
 /** Read-only render of a suggestion's Markdown. */
+@OptIn(ExperimentalRichTextApi::class)
 @Composable
 internal fun MarkdownView(markdown: String) {
     val state = rememberRichTextState().themed()
