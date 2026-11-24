@@ -1,5 +1,6 @@
 package org.eventt.features.orders
 
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.eventt.core.database.CharacterDao
 import org.eventt.core.database.CorporationDao
 import org.eventt.core.database.StaticDataDao
@@ -17,6 +18,9 @@ import org.eventt.core.model.AppLog
  * lag behind reality between app launches.
  */
 object WalletSyncService {
+    /** Time of the last finished sync, so open screens (Dashboard) can re-read the DB. */
+    val synced = MutableStateFlow(0L)
+
     suspend fun syncCharacter(charId: Int) = sync(characterId = charId, corporationId = null, actingCharId = charId, isCorp = false)
 
     suspend fun syncCorporation(
@@ -123,6 +127,7 @@ object WalletSyncService {
         } catch (e: Exception) {
             AppLog.warn("WalletSync", "transactions ESI", e)
         }
+        synced.value = System.currentTimeMillis()
     }
 
     /**

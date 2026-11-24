@@ -20,6 +20,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eventt.core.database.*
@@ -47,6 +50,7 @@ private const val STACKED_SETTING = "dashboard.stacked"
 private const val TAB_SETTING = "dashboard.tab"
 private const val THE_FORGE = 10000002
 private const val JITA_44 = 60003760L
+private const val AUTO_REFRESH_MILLIS = 5L * 60 * 1000
 
 // Orders this close to expiring are flagged.
 private val EXPIRY_WARN = Duration.ofHours(48)
@@ -115,7 +119,24 @@ fun DashboardScreen(
     // keep skipping the call it already knows is denied.
     var retryNonce by remember { mutableStateOf(0) }
 
-    LaunchedEffect(context, refreshTrigger, combined, retryNonce) {
+    // Re-runs the sync below while the screen is open: on a timer, and whenever a background sync
+    // (startup wallet sync, MarketWatchService, LeaderboardPublisher) lands new data in the DB.
+    // Cheap: ESI calls inside are cache hits until their Expires passes, and the old snapshot
+    // stays on screen during the reload. Our own sync's signal arrives while isLoading, so it's skipped.
+    var tick by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(AUTO_REFRESH_MILLIS)
+            tick++
+        }
+    }
+    LaunchedEffect(Unit) {
+        merge(WalletSyncService.synced.drop(1), ActiveOrdersSyncService.synced.drop(1)).collect {
+            if (!isLoading) tick++
+        }
+    }
+
+    LaunchedEffect(context, refreshTrigger, combined, retryNonce, tick) {
         if (context == null) return@LaunchedEffect
         isLoading = true
         withContext(Dispatchers.IO) {
