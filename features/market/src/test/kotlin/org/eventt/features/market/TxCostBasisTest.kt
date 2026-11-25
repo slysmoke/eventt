@@ -44,4 +44,19 @@ class TxCostBasisTest {
         // 4*(130-100) + 16*(120 - (6*100+10*90)/16)
         b.realized shouldBe (120.0 + 16 * (120.0 - 1500.0 / 16) plusOrMinus 1e-9)
     }
+
+    @Test
+    fun `realized is net of fees while the average stays raw`() {
+        val b =
+            txCostBasis(
+                listOf(
+                    tx("2026-01-01", 10, 100.0, buy = true),
+                    tx("2026-01-02", 4, 130.0, buy = false),
+                ),
+                buyFeePct = 3.0,
+                sellFeePct = 7.5,
+            )
+        b.avgCost!! shouldBe (100.0 plusOrMinus 1e-9)
+        b.realized shouldBe (4 * (130.0 * 0.925 - 103.0) plusOrMinus 1e-9)
+    }
 }

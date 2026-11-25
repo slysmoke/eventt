@@ -103,7 +103,8 @@ internal data class MaterialFees(
 internal data class TxCostBasis(
     // Moving-average cost of what's still held from tracked buys; null when that's nothing.
     val avgCost: Double?,
-    // Gross (pre-fee) profit of every sell against the moving average at the time — all cycles.
+    // Profit of every sell against the moving average at the time — all cycles. Net of the given
+    // fees (gross when they're 0), the same convention as CostBasisService's FIFO.
     val realized: Double,
 )
 
@@ -113,19 +114,34 @@ internal data class TxCostBasis(
  * and its "avg buy" (and so break-even, sell target, realized) stayed anchored to the old price.
  * Sells beyond the tracked quantity (e.g. mined stock) don't touch the average.
  */
-internal fun txCostBasis(transactions: List<WalletDao.RawTxRecord>): TxCostBasis {
+internal fun txCostBasis(
+    transactions: List<WalletDao.RawTxRecord>,
+    // Broker fee on a buy, and sales tax + broker fee on a sell, in % — only [TxCostBasis.realized]
+    // uses them. A P2P trade pays neither.
+    buyFeePct: Double = 0.0,
+    sellFeePct: Double = 0.0,
+): TxCostBasis {
     var qty = 0L
     var avg = 0.0
+    // Same moving average, with the buy broker fee in: avg stays raw because callers add the fee
+    // themselves (MyTrades.costWithFee, fees.buyMultiplier).
+    var avgWithFee = 0.0
     var realized = 0.0
     for (t in transactions.sortedBy { it.date }) {
         if (t.isBuy) {
+            val withFee = if (t.isP2p) t.unitPrice else t.unitPrice * (1 + buyFeePct / 100)
             avg = (avg * qty + t.unitPrice * t.quantity) / (qty + t.quantity)
+            avgWithFee = (avgWithFee * qty + withFee * t.quantity) / (qty + t.quantity)
             qty += t.quantity
         } else {
             val matched = minOf(qty, t.quantity.toLong())
-            realized += (t.unitPrice - avg) * matched
+            val net = if (t.isP2p) t.unitPrice else t.unitPrice * (1 - sellFeePct / 100)
+            realized += (net - avgWithFee) * matched
             qty -= matched
-            if (qty == 0L) avg = 0.0
+            if (qty == 0L) {
+                avg = 0.0
+                avgWithFee = 0.0
+            }
         }
     }
     return TxCostBasis(avg.takeIf { qty > 0 }, realized)

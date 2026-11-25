@@ -190,7 +190,9 @@ internal fun loadMyTrades(
     val qChar = charId.takeIf { corpId == null && !combined }
     val qCorp = corpId.takeIf { !combined }
     val txs = WalletDao.getAllTransactions(qChar, qCorp).filter { it.typeId == typeId }
-    val basis = txCostBasis(txs)
+    val sellFeePct = StaticDataDao.getCharSalesTax(charId) + StaticDataDao.getCharBrokersFee(charId)
+    val buyFeePct = StaticDataDao.getCharBrokersFee(charId)
+    val basis = txCostBasis(txs, buyFeePct, sellFeePct)
     val openOrders =
         ActiveOrderDao
             .getAll(qChar, qCorp)
@@ -210,8 +212,8 @@ internal fun loadMyTrades(
         qtyHeld = held,
         avgBuyPrice = basis.avgCost,
         realizedPnl = basis.realized.takeIf { txs.any { !it.isBuy } },
-        sellFeePct = StaticDataDao.getCharSalesTax(charId) + StaticDataDao.getCharBrokersFee(charId),
-        buyFeePct = StaticDataDao.getCharBrokersFee(charId),
+        sellFeePct = sellFeePct,
+        buyFeePct = buyFeePct,
         transactions = txs,
         openOrders = openOrders,
         regionTransactions = txs.filter { regionOf(it.locationId).let { r -> r == null || r == regionId } },
