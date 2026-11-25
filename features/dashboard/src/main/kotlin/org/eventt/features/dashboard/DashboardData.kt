@@ -6,6 +6,8 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import org.eventt.core.database.ActiveOrderDao
 import org.eventt.core.database.AssetDao
+import org.eventt.core.database.CharacterDao
+import org.eventt.core.database.CorporationDao
 import org.eventt.core.database.ItemValueSnapshotDao
 import org.eventt.core.database.MarketTopSnapshotDao
 import org.eventt.core.database.StaticDataDao
@@ -442,7 +444,22 @@ internal fun loadSnapshot(
         actingCharId?.let {
             CostBasisService.TaxConfig(StaticDataDao.getCharSalesTax(it), StaticDataDao.getCharBrokersFee(it))
         } ?: CostBasisService.TaxConfig()
-    val fifo = CostBasisService.compute(qChar, qCorp, taxConfig)
+    val fifo =
+        if (qChar == null && qCorp == null) {
+            // Combined: each character's and tracked corp's own FIFO with its own fees, merged.
+            val characters = CharacterDao.getAll()
+
+            fun fees(charId: Int) =
+                CostBasisService.TaxConfig(StaticDataDao.getCharSalesTax(charId), StaticDataDao.getCharBrokersFee(charId))
+            val scopes =
+                characters.map { CostBasisService.Scope(it.id, null, fees(it.id)) } +
+                    CorporationDao.actingPairsForTracked(characters).map { (corpId, acting) ->
+                        CostBasisService.Scope(null, corpId, fees(acting))
+                    }
+            CostBasisService.computeCombined(scopes, taxConfig)
+        } else {
+            CostBasisService.compute(qChar, qCorp, taxConfig)
+        }
     val orders = loadOrderRows(qChar, qCorp)
     val typeIds = fifo.inventory.keys + fifo.realizedSells.map { it.typeId }
     // limit = -1 is SQLite for "no limit" — counterparties rank over the whole history.

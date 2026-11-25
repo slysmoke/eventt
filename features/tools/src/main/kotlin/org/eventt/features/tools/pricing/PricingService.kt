@@ -65,7 +65,11 @@ object PricingService {
         // locally-known character's and corp's transactions together.
         val fifo =
             if (characterId != null || corporationId != null) {
-                CostBasisService.compute(characterId = characterId, corporationId = corporationId)
+                CostBasisService.compute(
+                    characterId = characterId,
+                    corporationId = corporationId,
+                    taxConfig = CostBasisService.TaxConfig(salesTaxPct, brokerFeePct),
+                )
             } else {
                 null
             }

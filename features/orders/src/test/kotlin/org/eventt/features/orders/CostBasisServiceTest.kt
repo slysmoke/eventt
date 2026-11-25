@@ -9,6 +9,7 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
+import org.eventt.core.database.OrderHistoryDao
 import org.eventt.core.database.WalletDao
 import org.eventt.core.model.utcToLocalDateTime
 import org.eventt.features.orders.CostBasisService.FifoResult
@@ -342,5 +343,83 @@ class CostBasisServiceTest {
         val (profit, _) = CostBasisService.pnlForOrder(result, TYPE_ID, issuedDate = utcIssuedDate, filledQty = 5).shouldNotBeNull()
 
         profit should (50.0 plusOrMinus TOLERANCE)
+    }
+
+    @Test
+    fun `merge sums per-ledger results without pooling their lots`() {
+        fun part(
+            qty: Int,
+            cost: Double,
+            stock: Map<String, Double>,
+        ) = FifoResult(
+            inventory = mapOf(TYPE_ID to InventoryItem(TYPE_ID, "Tritanium", qty, cost / qty, cost, oldestLotDate = "2026-01-0$qty")),
+            realizedSells = emptyList(),
+            taxConfig = TaxConfig(),
+            stockCostByDay = stock,
+        )
+
+        val merged =
+            CostBasisService.merge(
+                listOf(
+                    part(1, 100.0, mapOf("2026-01-01" to 100.0)),
+                    part(3, 900.0, mapOf("2026-01-02" to 900.0)),
+                ),
+                TaxConfig(),
+            )
+
+        val item = merged.inventory.getValue(TYPE_ID)
+        item.remainingQty shouldBe 4
+        item.avgCostBasis should (250.0 plusOrMinus TOLERANCE)
+        item.oldestLotDate shouldBe "2026-01-01"
+        // Day 2: the first ledger carries its day-1 value forward.
+        merged.stockCostByDay shouldBe mapOf("2026-01-01" to 100.0, "2026-01-02" to 1000.0)
+    }
+
+    @Test
+    fun `instant trades matched to a duration-0 order pay no broker fee`() {
+        stubTransactions(
+            buy("2026-01-01T10:00:00", 10, 100.0),
+            sell("2026-01-02T10:00:00", 10, 200.0),
+        )
+
+        fun instantOrder(
+            localDate: String,
+            isBuy: Boolean,
+        ) = OrderHistoryDao.OrderHistoryRecord(
+            orderId = localDate.hashCode().toLong(),
+            typeId = TYPE_ID,
+            typeName = "Tritanium",
+            locationId = 0,
+            stationName = "",
+            price = 0.0,
+            volumeTotal = 10,
+            volumeRemaining = 0,
+            isBuyOrder = isBuy,
+            duration = 0,
+            // ESI's UTC `issued`, a second off the local-time fill.
+            issued =
+                java.time.LocalDateTime
+                    .parse(localDate)
+                    .plusSeconds(1)
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .toInstant()
+                    .toString(),
+            range = "station",
+            minVolume = 1,
+            state = "expired",
+            characterId = 1,
+        )
+        mockkObject(OrderHistoryDao)
+        try {
+            every { OrderHistoryDao.getAll(any(), any(), any(), any()) } returns
+                listOf(instantOrder("2026-01-01T10:00:00", isBuy = true), instantOrder("2026-01-02T10:00:00", isBuy = false))
+
+            val sell = CostBasisService.compute(characterId = 1).realizedSells.single()
+
+            sell.costBasis should (100.0 plusOrMinus TOLERANCE)
+            sell.profit should (10 * (200.0 * 0.92 - 100.0) plusOrMinus TOLERANCE)
+        } finally {
+            unmockkObject(OrderHistoryDao)
+        }
     }
 }

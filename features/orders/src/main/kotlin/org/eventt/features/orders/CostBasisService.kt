@@ -4,7 +4,10 @@ import org.eventt.core.database.InventoryAdjustmentDao
 import org.eventt.core.database.OrderHistoryDao
 import org.eventt.core.database.WalletDao
 import org.eventt.core.model.utcToLocalDateTime
+import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
 
 object CostBasisService {
     // Sales tax and broker fee rates for a character, loaded from settings.
@@ -17,6 +20,9 @@ object CostBasisService {
 
         // Multiplier applied to sell price to get net revenue (price − sales tax − broker fee).
         val sellMultiplier: Double = 1.0 - (salesTaxPct + brokerFeePct) / 100.0
+
+        // Selling straight into a buy order: sales tax only, no order to pay a broker fee on.
+        val instantSellMultiplier: Double = 1.0 - salesTaxPct / 100.0
     }
 
     data class InventoryItem(
@@ -114,19 +120,48 @@ object CostBasisService {
     // order's relist fees can't be pinned to the exact units it filled. Spread each closed order's
     // relist fees evenly across the units it filled, then average per type -- every buy/sell of
     // that type carries a representative share instead of the fee being lost (buy side) or handled
-    // ad hoc in just one summary number (sell side, as it used to be).
+    // ad hoc in just one summary number (sell side, as it used to be). Instant orders are left out:
+    // they're never relisted, and their units would only dilute the average.
     private fun relistPerUnitByType(
-        characterId: Int?,
-        corporationId: Int?,
+        history: List<OrderHistoryDao.OrderHistoryRecord>,
         isBuyOrder: Boolean,
     ): Map<Int, Double> =
-        OrderHistoryDao
-            .getAll(characterId = characterId, corporationId = corporationId, isBuyOrder = isBuyOrder, limit = 10_000)
+        history
+            .filter { it.isBuyOrder == isBuyOrder && it.duration > 0 }
             .groupBy { it.typeId }
             .mapNotNull { (typeId, orders) ->
                 val filled = orders.sumOf { it.volumeTotal - it.volumeRemaining }
                 if (filled <= 0) null else typeId to orders.sumOf { it.relistFeesPaid } / filled
             }.toMap()
+
+    // An instant trade (buying from a sell order, selling into a buy order) is an ESI order with
+    // duration 0, and it pays no broker fee -- checked against the wallet journal: none of 745 had
+    // a brokers_fee entry, while every regular order did. ESI doesn't link it to its transactions,
+    // so match on type, side and time: fills land up to ~4 s after `issued` (0-1 s for most; 5 s
+    // caught 745 of 746 instant orders on real data, with no regular-order fill mistaken for one).
+    // Transactions older than the order history ESI still returns (~90 days) can't be matched and
+    // keep the broker fee.
+    private const val INSTANT_MATCH_SECONDS = 5L
+
+    private data class TradeKey(
+        val typeId: Int,
+        val isBuy: Boolean,
+        val epochSecond: Long,
+    )
+
+    private fun instantTradeKeys(history: List<OrderHistoryDao.OrderHistoryRecord>): Set<TradeKey> =
+        history
+            .filter { it.duration == 0 }
+            .flatMap { o ->
+                val at = runCatching { Instant.parse(o.issued).epochSecond }.getOrNull() ?: return@flatMap emptyList()
+                (-INSTANT_MATCH_SECONDS..INSTANT_MATCH_SECONDS).map { TradeKey(o.typeId, o.isBuyOrder, at + it) }
+            }.toSet()
+
+    // Transaction dates are stored in local time (see WalletDao.insertTransaction).
+    private fun WalletDao.RawTxRecord.key(): TradeKey? =
+        runCatching { LocalDateTime.parse(date).atZone(ZoneId.systemDefault()).toEpochSecond() }
+            .getOrNull()
+            ?.let { TradeKey(typeId, isBuy, it) }
 
     private fun daysBetween(
         from: String,
@@ -144,8 +179,10 @@ object CostBasisService {
     ): FifoResult {
         val transactions = WalletDao.getAllTransactions(characterId, corporationId)
         val adjustments = InventoryAdjustmentDao.getAll(characterId, corporationId)
-        val buyRelistPerUnit = relistPerUnitByType(characterId, corporationId, isBuyOrder = true)
-        val sellRelistPerUnit = relistPerUnitByType(characterId, corporationId, isBuyOrder = false)
+        val history = OrderHistoryDao.getAll(characterId = characterId, corporationId = corporationId, limit = 100_000)
+        val buyRelistPerUnit = relistPerUnitByType(history, isBuyOrder = true)
+        val sellRelistPerUnit = relistPerUnitByType(history, isBuyOrder = false)
+        val instantKeys = instantTradeKeys(history)
 
         val lots = mutableMapOf<Int, ArrayDeque<Lot>>()
         val cycleStart = mutableMapOf<Int, String>()
@@ -164,13 +201,18 @@ object CostBasisService {
                 is LedgerEvent.Tx -> {
                     val tx = event.tx
                     typeNames[tx.typeId] = tx.typeName
+                    val instant = !tx.isP2p && tx.key() in instantKeys
                     if (tx.isBuy) {
                         // Store adjusted cost: price + broker fee paid to place the buy order, plus this
                         // type's average buy-side relist fee per unit (see relistPerUnitByType). Neither
                         // applies to a P2P trade — it's a direct exchange outside the market, with no
-                        // order (and so no broker fee/relists) behind it at all.
+                        // order (and so no broker fee/relists) behind it at all; an instant buy has an
+                        // order, but neither (see instantTradeKeys).
                         val adjustedCost =
-                            if (tx.isP2p) tx.unitPrice else tx.unitPrice * taxConfig.buyMultiplier + (buyRelistPerUnit[tx.typeId] ?: 0.0)
+                            when {
+                                tx.isP2p || instant -> tx.unitPrice
+                                else -> tx.unitPrice * taxConfig.buyMultiplier + (buyRelistPerUnit[tx.typeId] ?: 0.0)
+                            }
                         val queue = lots.getOrPut(tx.typeId) { ArrayDeque() }
                         if (queue.isEmpty()) cycleStart[tx.typeId] = tx.date
                         queue.addLast(Lot(tx.quantity, adjustedCost, tx.date))
@@ -197,12 +239,12 @@ object CostBasisService {
                             val cb = costConsumed / qtyMatched
                             // Net of tax/broker fee (sellMultiplier) and this type's average sell-side
                             // relist fee per unit (see relistPerUnitByType) — again, neither applies to a
-                            // P2P disposal.
+                            // P2P disposal, and an instant sell pays only the sales tax.
                             val netSellPrice =
-                                if (tx.isP2p) {
-                                    tx.unitPrice
-                                } else {
-                                    tx.unitPrice * taxConfig.sellMultiplier - (sellRelistPerUnit[tx.typeId] ?: 0.0)
+                                when {
+                                    tx.isP2p -> tx.unitPrice
+                                    instant -> tx.unitPrice * taxConfig.instantSellMultiplier
+                                    else -> tx.unitPrice * taxConfig.sellMultiplier - (sellRelistPerUnit[tx.typeId] ?: 0.0)
                                 }
                             val profit = qtyMatched * (netSellPrice - cb)
                             val margin = if (cb > 0) (netSellPrice - cb) / cb * 100.0 else 0.0
@@ -258,6 +300,62 @@ object CostBasisService {
                 }.filter { it.value.remainingQty > 0 }
 
         return FifoResult(inventory, realized, taxConfig, sellRelistPerUnit, writtenOffCost, stockCostByDay)
+    }
+
+    // One character's or corp's ledger, with its own fee settings.
+    data class Scope(
+        val characterId: Int?,
+        val corporationId: Int?,
+        val taxConfig: TaxConfig,
+    )
+
+    // Combined view of several characters/corps: FIFO runs per scope and the results are merged.
+    // compute(null, null) pools every ledger into one queue instead, so one character's sell can
+    // consume another character's lot (and everyone gets one character's fees).
+    fun computeCombined(
+        scopes: List<Scope>,
+        taxConfig: TaxConfig,
+    ): FifoResult = merge(scopes.map { compute(it.characterId, it.corporationId, it.taxConfig) }, taxConfig)
+
+    // [taxConfig] is only the merged result's display config (valuing stock at a sell price); each
+    // part's figures were already computed with its own.
+    internal fun merge(
+        parts: List<FifoResult>,
+        taxConfig: TaxConfig,
+    ): FifoResult {
+        val inventory =
+            parts
+                .flatMap { it.inventory.values }
+                .groupBy { it.typeId }
+                .mapValues { (_, items) ->
+                    val qty = items.sumOf { it.remainingQty }
+                    val cost = items.sumOf { it.totalCostBasis }
+                    items.first().copy(
+                        remainingQty = qty,
+                        avgCostBasis = if (qty > 0) cost / qty else 0.0,
+                        totalCostBasis = cost,
+                        oldestLotDate = items.mapNotNull { it.oldestLotDate }.minOrNull(),
+                        cycleStartDate = items.mapNotNull { it.cycleStartDate }.minOrNull(),
+                    )
+                }
+        // Each part's map is sparse (only days with an event, carrying forward in between), so sum
+        // every part's carried-forward value on the union of their days.
+        val stockCostByDay = linkedMapOf<String, Double>()
+        val last = DoubleArray(parts.size)
+        for (day in parts.flatMap { it.stockCostByDay.keys }.toSortedSet()) {
+            parts.forEachIndexed { i, p -> p.stockCostByDay[day]?.let { last[i] = it } }
+            stockCostByDay[day] = last.sum()
+        }
+        return FifoResult(
+            inventory = inventory,
+            realizedSells = parts.flatMap { it.realizedSells }.sortedBy { it.date },
+            taxConfig = taxConfig,
+            // ponytail: per-type relist averages from different ledgers don't combine exactly; last
+            // one wins. Only an order's own historyPnl reads it, and that's never a combined view.
+            sellRelistPerUnit = parts.fold(emptyMap()) { acc, p -> acc + p.sellRelistPerUnit },
+            writtenOffCost = parts.sumOf { it.writtenOffCost },
+            stockCostByDay = stockCostByDay,
+        )
     }
 
     // Returns realized profit and cost-weighted margin % for a specific fulfilled sell order,
