@@ -24,6 +24,7 @@
     <string name="req_active">активных: %1$s</string>
     <string name="req_done">готово: %1$s</string>
     <string name="req_from_cache">из кэша: %1$s</string>
+    <string name="req_showing_last">показаны последние %1$s</string>
     <string name="req_failed">ошибок: %1$s</string>
     <string name="all_requests_completed">Все запросы выполнены</string>
     <string name="no_requests">Нет запросов</string>

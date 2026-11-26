@@ -116,5 +116,9 @@ class RequestQueueManagerTest {
         f.httpCode shouldBe 500
         f.responseBody shouldBe "{\"error\":\"boom\"}"
         f.error shouldBe "ESI request failed: 500"
+        RequestQueueManager.trimmed.value shouldBe RequestQueueManager.Trimmed(done = 100, fromCache = 100)
+
+        RequestQueueManager.clearAll()
+        RequestQueueManager.trimmed.value shouldBe RequestQueueManager.Trimmed()
     }
 }

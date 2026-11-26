@@ -14,6 +14,15 @@ object RequestQueueManager {
     private val _requests = MutableStateFlow<List<QueuedRequest>>(emptyList())
     val requests: StateFlow<List<QueuedRequest>> = _requests.asStateFlow()
 
+    /** Completed entries trimmed off [requests] by the [MAX_COMPLETED] cap, so totals stay honest. */
+    data class Trimmed(
+        val done: Int = 0,
+        val fromCache: Int = 0,
+    )
+
+    private val _trimmed = MutableStateFlow(Trimmed())
+    val trimmed: StateFlow<Trimmed> = _trimmed.asStateFlow()
+
     @Synchronized
     fun enqueue(request: QueuedRequest) {
         _requests.value = _requests.value + request
@@ -41,23 +50,27 @@ object RequestQueueManager {
                     startTime = now,
                     endTime = now,
                 )
-        val excess = list.count { it.status == RequestStatus.COMPLETED } - MAX_COMPLETED
-        _requests.value = if (excess > 0) dropOldestCompleted(list, excess) else list
+        _requests.value = capCompleted(list)
     }
 
-    private fun dropOldestCompleted(
-        list: List<QueuedRequest>,
-        n: Int,
-    ): List<QueuedRequest> {
-        var toDrop = n
-        return list.filter { r ->
-            if (toDrop > 0 && r.status == RequestStatus.COMPLETED) {
-                toDrop--
-                false
-            } else {
-                true
+    private fun capCompleted(list: List<QueuedRequest>): List<QueuedRequest> {
+        var toDrop = list.count { it.status == RequestStatus.COMPLETED } - MAX_COMPLETED
+        if (toDrop <= 0) return list
+        var dropped = 0
+        var droppedCache = 0
+        val kept =
+            list.filter { r ->
+                if (toDrop > 0 && r.status == RequestStatus.COMPLETED) {
+                    toDrop--
+                    dropped++
+                    if (r.source == RequestSource.CACHE) droppedCache++
+                    false
+                } else {
+                    true
+                }
             }
-        }
+        _trimmed.value = _trimmed.value.let { Trimmed(it.done + dropped, it.fromCache + droppedCache) }
+        return kept
     }
 
     @Synchronized
@@ -96,22 +109,24 @@ object RequestQueueManager {
         responseBody: String? = null,
     ) {
         _requests.value =
-            _requests.value.map {
-                if (it.id == requestId) {
-                    // A request can be completed twice (status first, then the thrown exception's
-                    // message) — keep details from the first call instead of wiping them.
-                    it.copy(
-                        status = if (error != null) RequestStatus.FAILED else RequestStatus.COMPLETED,
-                        progress = 1f,
-                        endTime = System.currentTimeMillis(),
-                        error = error,
-                        httpCode = httpCode ?: it.httpCode,
-                        responseBody = responseBody?.take(MAX_BODY_CHARS) ?: it.responseBody,
-                    )
-                } else {
-                    it
-                }
-            }
+            capCompleted(
+                _requests.value.map {
+                    if (it.id == requestId) {
+                        // A request can be completed twice (status first, then the thrown exception's
+                        // message) — keep details from the first call instead of wiping them.
+                        it.copy(
+                            status = if (error != null) RequestStatus.FAILED else RequestStatus.COMPLETED,
+                            progress = 1f,
+                            endTime = System.currentTimeMillis(),
+                            error = error,
+                            httpCode = httpCode ?: it.httpCode,
+                            responseBody = responseBody?.take(MAX_BODY_CHARS) ?: it.responseBody,
+                        )
+                    } else {
+                        it
+                    }
+                },
+            )
     }
 
     /** Drops a request entirely -- for failures explained elsewhere (e.g. the server-offline banner). */
@@ -125,11 +140,13 @@ object RequestQueueManager {
     @Synchronized
     fun clearCompleted() {
         _requests.value = _requests.value.filter { it.status != RequestStatus.COMPLETED }
+        _trimmed.value = Trimmed()
     }
 
     @Synchronized
     fun clearAll() {
         _requests.value = emptyList()
+        _trimmed.value = Trimmed()
     }
 
     val totalRequests: Int get() = _requests.value.size

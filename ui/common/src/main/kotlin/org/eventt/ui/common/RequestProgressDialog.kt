@@ -64,11 +64,13 @@ fun RequestProgressDialog(onDismiss: () -> Unit) {
 
     val active = requests.filter { it.status == RequestStatus.QUEUED || it.status == RequestStatus.IN_PROGRESS }
     val failed = requests.filter { it.status == RequestStatus.FAILED }
-    val completed = requests.count { it.status == RequestStatus.COMPLETED }
-    val cacheHits = requests.count { it.source == RequestSource.CACHE }
+    // The list keeps only the newest completed entries; add back what the cap trimmed off.
+    val trimmed by RequestQueueManager.trimmed.collectAsState()
+    val completed = requests.count { it.status == RequestStatus.COMPLETED } + trimmed.done
+    val cacheHits = requests.count { it.source == RequestSource.CACHE } + trimmed.fromCache
     var filter by remember { mutableStateOf(RequestFilter.PENDING) }
     var expandedId by remember { mutableStateOf<String?>(null) }
-    val total = requests.size
+    val total = requests.size + trimmed.done
     val progress = RequestQueueManager.overallProgress
 
     AlertDialog(
@@ -98,8 +100,9 @@ fun RequestProgressDialog(onDismiss: () -> Unit) {
                         SummaryChip(stringResource(Res.string.req_failed, failed.size), negativeColor)
                     }
                     if (total > 0) {
+                        val counts = "$completed / $total"
                         Text(
-                            "$completed / $total",
+                            if (trimmed.done > 0) "$counts · ${stringResource(Res.string.req_showing_last, requests.size)}" else counts,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
                             modifier = Modifier.align(Alignment.CenterVertically),

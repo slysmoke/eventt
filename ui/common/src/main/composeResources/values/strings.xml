@@ -24,6 +24,7 @@
     <string name="req_active">%1$s active</string>
     <string name="req_done">%1$s done</string>
     <string name="req_from_cache">%1$s from cache</string>
+    <string name="req_showing_last">showing last %1$s</string>
     <string name="req_failed">%1$s failed</string>
     <string name="all_requests_completed">All requests completed</string>
     <string name="no_requests">No requests</string>
