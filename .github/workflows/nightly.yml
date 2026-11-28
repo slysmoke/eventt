@@ -31,14 +31,11 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      # jpackage needs a numeric version. Use the latest release's, so the in-app updater
-      # doesn't see the nightly as older than it.
-      - name: Set version from latest release
-        run: |
-          VERSION=$(gh release view --json tagName -q .tagName)
-          VERSION=${VERSION#v}
-          sed -i "s/^app\.version=.*/app.version=$VERSION/" gradle.properties
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+      # Take the version from gradle.properties, not the latest release: the "Bump version"
+      # push triggers this run before the tag's release job has published, so the latest
+      # release would still be the previous version.
+      - name: Read version
+        run: echo "VERSION=$(sed -n 's/^app\.version=//p' gradle.properties)" >> "$GITHUB_ENV"
 
       - name: Build distributable
         run: ./gradlew createDistributable
